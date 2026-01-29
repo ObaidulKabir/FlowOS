@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlowOS.Application\FlowOS.Application.csproj" />
+    <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
+    <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
+    <ProjectReference Include="..\FlowOS.Security\FlowOS.Security.csproj" />
+    <ProjectReference Include="..\FlowOS.StateMachines\FlowOS.StateMachines.csproj" />
+    <ProjectReference Include="..\FlowOS.Workflows\FlowOS.Workflows.csproj" />
+    <ProjectReference Include="..\FlowOS.Agents\FlowOS.Agents.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

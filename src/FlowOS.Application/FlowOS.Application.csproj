@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
+    <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
+    <ProjectReference Include="..\FlowOS.StateMachines\FlowOS.StateMachines.csproj" />
+    <ProjectReference Include="..\FlowOS.Workflows\FlowOS.Workflows.csproj" />
+    <ProjectReference Include="..\FlowOS.Security\FlowOS.Security.csproj" />
+    <ProjectReference Include="..\FlowOS.Agents\FlowOS.Agents.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
