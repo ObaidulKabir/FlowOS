@@ -190,7 +190,43 @@ The Admin API provides deep observability but **zero mutability**.
 
 ### Defining a Workflow (Configuration Data)
 
-While you can use C# to bootstrap, Definitions are fundamentally **data**.
+While you can use C# to bootstrap, Definitions are fundamentally **data**. FlowOS definitions are typically serialized as JSON.
+
+```json
+{
+  "name": "ExpenseApproval",
+  "version": 1,
+  "steps": [
+    {
+      "stepId": "Submit",
+      "stepType": "Command",
+      "nextSteps": {
+        "Submitted": "ManagerReview"
+      }
+    },
+    {
+      "stepId": "ManagerReview",
+      "stepType": "HumanTask",
+      "allowedRoles": [ "Manager" ],
+      "nextSteps": {
+        "Approved": "FinanceReview",
+        "Rejected": "End"
+      }
+    },
+    {
+      "stepId": "FinanceReview",
+      "stepType": "HumanTask",
+      "allowedRoles": [ "Finance" ],
+      "nextSteps": {
+        "Paid": "End"
+      }
+    }
+  ]
+}
+```
+
+### Bootstrap (C#)
+If you are bootstrapping via code (e.g., in tests or seeders):
 
 ```csharp
 var definition = new WorkflowDefinition(tenantId, "ExpenseApproval", 1);
@@ -200,18 +236,8 @@ definition.AddStep(new WorkflowStepDefinition("Submit", WorkflowStepType.Command
 {
     NextSteps = { { "Submitted", "ManagerReview" } }
 });
-
-// Step 2: Manager Review (Human Task)
-definition.AddStep(new WorkflowStepDefinition("ManagerReview", WorkflowStepType.HumanTask)
-{
-    AllowedRoles = { "Manager" },
-    NextSteps = { 
-        { "Approved", "FinanceReview" }, // Transition Triggered by 'Approved' event
-        { "Rejected", "End" }            // Transition Triggered by 'Rejected' event
-    }
-});
-
-definition.Publish(); // Freezes version 1
+// ...
+definition.Publish();
 ```
 
 ### Executing
