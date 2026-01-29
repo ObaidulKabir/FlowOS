@@ -8,5 +8,6 @@ public interface IEvent
     Guid TenantId { get; }
     DateTime Timestamp { get; }
     string EventType { get; }
+    Guid? CorrelationId { get; }
     int Version { get; }
 }

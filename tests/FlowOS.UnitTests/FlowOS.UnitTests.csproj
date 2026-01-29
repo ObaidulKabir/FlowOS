@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -23,6 +25,9 @@
     <ProjectReference Include="..\..\src\FlowOS.Events\FlowOS.Events.csproj" />
     <ProjectReference Include="..\..\src\FlowOS.StateMachines\FlowOS.StateMachines.csproj" />
     <ProjectReference Include="..\..\src\FlowOS.Security\FlowOS.Security.csproj" />
+    <ProjectReference Include="..\..\src\FlowOS.Workflows\FlowOS.Workflows.csproj" />
+    <ProjectReference Include="..\..\src\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\FlowOS.API\FlowOS.API.csproj" />
   </ItemGroup>
 
 </Project>

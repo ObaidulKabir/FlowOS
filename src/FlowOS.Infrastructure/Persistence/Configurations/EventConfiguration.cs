@@ -11,6 +11,10 @@ public class EventConfiguration : IEntityTypeConfiguration<DomainEvent>
     {
         builder.ToTable("Events");
 
+        // Use TPH Mapping for the abstract class DomainEvent
+        builder.HasDiscriminator<string>("Discriminator")
+            .HasValue<DomainEvent>("BaseEvent");
+
         builder.HasKey(e => e.EventId);
 
         builder.Property(e => e.EventType)
@@ -20,13 +24,11 @@ public class EventConfiguration : IEntityTypeConfiguration<DomainEvent>
         builder.Property(e => e.TenantId)
             .IsRequired();
 
-        // Metadata as JSONB
-        // Using System.Text.Json to serialize dictionary
         builder.Property(e => e.Metadata)
             .HasColumnType("jsonb")
             .HasConversion(
-                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
-                v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, string>()
             );
 
         builder.HasIndex(e => e.TenantId);

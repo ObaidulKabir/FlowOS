@@ -1,6 +1,6 @@
-@FlowOS.Api_HostAddress = http://localhost:5047
+@FlowOS.API_HostAddress = http://localhost:5183
 
-GET {{FlowOS.Api_HostAddress}}/weatherforecast/
+GET {{FlowOS.API_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###

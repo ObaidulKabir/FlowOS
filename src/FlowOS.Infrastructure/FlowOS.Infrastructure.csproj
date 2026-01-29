@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\FlowOS.Application\FlowOS.Application.csproj" />
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
     <ProjectReference Include="..\FlowOS.Security\FlowOS.Security.csproj" />

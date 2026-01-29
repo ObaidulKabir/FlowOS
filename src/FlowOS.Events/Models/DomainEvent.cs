@@ -10,6 +10,7 @@ public abstract class DomainEvent : IEvent
     public Guid TenantId { get; private set; }
     public DateTime Timestamp { get; private set; }
     public virtual string EventType { get; private set; }
+    public Guid? CorrelationId { get; private set; }
     public int Version { get; private set; }
     
     public Dictionary<string, string> Metadata { get; private set; }
@@ -22,6 +23,11 @@ public abstract class DomainEvent : IEvent
         EventType = eventType;
         Version = version;
         Metadata = new Dictionary<string, string>();
+    }
+
+    public void SetCorrelationId(Guid correlationId)
+    {
+        CorrelationId = correlationId;
     }
 
     public void AddMetadata(string key, string value)

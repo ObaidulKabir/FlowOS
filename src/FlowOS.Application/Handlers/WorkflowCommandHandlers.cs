@@ -1,0 +1,89 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using FlowOS.Workflows.Domain;
+using FlowOS.Infrastructure.Persistence;
+using MediatR;
+using FlowOS.Workflows.Engine;
+using FlowOS.StateMachines.Models;
+using Microsoft.EntityFrameworkCore;
+using FlowOS.Events.Models;
+using FlowOS.Application.Commands;
+
+namespace FlowOS.Application.Handlers;
+
+public class WorkflowCommandHandlers : 
+    IRequestHandler<StartWorkflowCommand, Guid>,
+    IRequestHandler<PublishEventCommand, bool>
+{
+    private readonly FlowOSDbContext _context;
+    private readonly WorkflowEngine _engine;
+
+    public WorkflowCommandHandlers(FlowOSDbContext context)
+    {
+        _context = context;
+        _engine = new WorkflowEngine();
+    }
+
+    public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
+    {
+        // 1. Create Instance
+        var instance = new WorkflowInstance(
+            request.TenantId,
+            request.WorkflowDefinitionId,
+            request.Version,
+            request.InitialStepId,
+            request.CorrelationId
+        );
+
+        // 2. Persist
+        _context.WorkflowInstances.Add(instance);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return instance.Id;
+    }
+
+    public async Task<bool> Handle(PublishEventCommand request, CancellationToken cancellationToken)
+    {
+        // 1. Load Workflow Instance
+        var instance = await _context.WorkflowInstances
+            .FirstOrDefaultAsync(w => w.Id == request.WorkflowInstanceId && w.TenantId == request.TenantId, cancellationToken);
+
+        if (instance == null) return false;
+
+        // 2. Load Definition
+        var definition = await _context.WorkflowDefinitions
+            .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
+            
+        if (definition == null) return false;
+
+        // 3. Create Event Wrapper (Concrete implementation needed for Engine)
+        // In a real app, we would persist this event too.
+        var domainEvent = new GenericDomainEvent(request.TenantId, request.EventType);
+        if (request.CorrelationId.HasValue)
+        {
+            domainEvent.SetCorrelationId(request.CorrelationId.Value);
+        }
+
+        // 4. Advance Workflow
+        var result = _engine.Advance(instance, definition, domainEvent, new FlowOS.StateMachines.Models.ExecutionContext());
+
+        if (result.Success)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Concrete event for runtime usage
+    private class GenericDomainEvent : DomainEvent
+    {
+        public override string EventType { get; }
+        public GenericDomainEvent(Guid tenantId, string eventType) : base(tenantId, eventType)
+        {
+            EventType = eventType;
+        }
+    }
+}
