@@ -32,20 +32,42 @@ FlowOS enforces all entity state changes through **State Machines**.
 
 A workflow **can never** bypass a state machine. If a workflow attempts an illegal transition, the State Machine Engine rejects it, and the workflow halts or errors.
 
-### Definition Structure
+### Definition Structure (JSON Configuration)
 State Machines are defined as data, typically loaded from persistence.
+
+```json
+{
+  "entityType": "Order",
+  "initialState": "Created",
+  "states": [ "Created", "PendingApproval", "Approved", "Rejected" ],
+  "transitions": [
+    {
+      "fromState": "Created",
+      "toState": "PendingApproval",
+      "triggerEventType": "Submit"
+    },
+    {
+      "fromState": "PendingApproval",
+      "toState": "Approved",
+      "triggerEventType": "Approve"
+    },
+    {
+      "fromState": "PendingApproval",
+      "toState": "Rejected",
+      "triggerEventType": "Reject"
+    }
+  ]
+}
+```
+
+### Bootstrap (C#)
 
 ```csharp
 var orderStateMachine = new StateMachineDefinition(
     entityType: "Order",
     initialState: "Created"
 );
-
-// Define Transitions
-orderStateMachine.AddTransition("Created", "Submit", "PendingApproval");
-orderStateMachine.AddTransition("PendingApproval", "Approve", "Approved");
-orderStateMachine.AddTransition("PendingApproval", "Reject", "Rejected");
-// Note: No transition from 'Rejected' to 'Approved'. This is legally impossible.
+// ...
 ```
 
 ### Invariant
@@ -64,6 +86,24 @@ Events are the atomic unit of truth in FlowOS.
 1.  **Command Events**: Intent to change state (e.g., `WorkflowStarted`).
 2.  **Fact Events**: Something happened (e.g., `TaskCompleted`, `AgentInsightGenerated`).
 3.  **State Events**: The system changed (e.g., `StateTransitioned`).
+
+### Event Payload Example (JSON)
+Events are serialized facts.
+
+```json
+{
+  "eventId": "a1b2c3d4-...",
+  "tenantId": "...",
+  "timestamp": "2023-10-27T10:00:00Z",
+  "eventType": "TaskCompleted",
+  "correlationId": "wf-instance-123",
+  "version": 1,
+  "metadata": {
+    "userId": "user-456",
+    "ipAddress": "192.168.1.1"
+  }
+}
+```
 
 ### Invariant
 > **Rule:** If it's not in the Event Log, it didn't happen. Replaying the Event Log must deterministically reconstruct the system state.
@@ -93,6 +133,21 @@ Policies are **Deny-Only** interceptors that run before the Engine.
 *   ✅ Check Time/Date
 *   ✅ Check Business Constraints
 *   ✅ Return `Allowed` or `Denied`
+
+### Policy Configuration (JSON)
+While evaluators are code, policy definitions (which policy applies where) are data.
+
+```json
+{
+  "policyId": "WeekendFreeze",
+  "name": "Weekend Operations Freeze",
+  "description": "Prevents approvals on weekends",
+  "evaluatorType": "FlowOS.Policies.WeekendFreezePolicy",
+  "configuration": {
+    "frozenDays": ["Saturday", "Sunday"]
+  }
+}
+```
 
 ### Strict Prohibitions
 *   ❌ **Cannot** Mutate State (No DB writes)
