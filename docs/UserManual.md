@@ -33,7 +33,9 @@ FlowOS enforces all entity state changes through **State Machines**.
 A workflow **can never** bypass a state machine. If a workflow attempts an illegal transition, the State Machine Engine rejects it, and the workflow halts or errors.
 
 ### Definition Structure (JSON Configuration)
-State Machines are defined as data, typically loaded from persistence.
+
+**Definition:** A State Machine defines the legal states and transitions for a business entity (e.g., "Order").
+**Principle:** It serves as the "System of Record". No workflow can move an entity to a state not defined here.
 
 ```json
 {
@@ -88,7 +90,9 @@ Events are the atomic unit of truth in FlowOS.
 3.  **State Events**: The system changed (e.g., `StateTransitioned`).
 
 ### Event Payload Example (JSON)
-Events are serialized facts.
+
+**Definition:** An event is an immutable record of something that happened in the system.
+**Principle:** Events are the "Source of Truth". System state is derived by replaying these events.
 
 ```json
 {
@@ -135,7 +139,9 @@ Policies are **Deny-Only** interceptors that run before the Engine.
 *   ✅ Return `Allowed` or `Denied`
 
 ### Policy Configuration (JSON)
-While evaluators are code, policy definitions (which policy applies where) are data.
+
+**Definition:** A Policy is a rule that governs whether a command is allowed to execute.
+**Principle:** Policies are "Deny-Only". They can prevent an action but cannot perform one.
 
 ```json
 {
@@ -243,9 +249,10 @@ The Admin API provides deep observability but **zero mutability**.
 
 ## 11. Quick Start (Configuration)
 
-### Defining a Workflow (Configuration Data)
+### Definition Structure (JSON Configuration)
 
-While you can use C# to bootstrap, Definitions are fundamentally **data**. FlowOS definitions are typically serialized as JSON.
+**Definition:** A Workflow Definition describes the sequence of steps and time-based orchestration.
+**Principle:** Workflows handle "When" things happen. They must align with the State Machine ("What" is legal).
 
 ```json
 {
