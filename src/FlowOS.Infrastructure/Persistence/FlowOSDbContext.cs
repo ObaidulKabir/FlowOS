@@ -1,5 +1,6 @@
 using FlowOS.Domain.Entities;
 using FlowOS.Events.Models;
+using FlowOS.Infrastructure.Persistence.ReadModels;
 using FlowOS.Workflows.Domain;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ public class FlowOSDbContext : DbContext
     public DbSet<DomainEvent> Events { get; set; }
     public DbSet<WorkflowInstance> WorkflowInstances { get; set; }
     public DbSet<WorkflowDefinition> WorkflowDefinitions { get; set; }
+    public DbSet<AgentInsightReadModel> AgentInsights { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options)
     {

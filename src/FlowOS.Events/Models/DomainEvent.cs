@@ -25,6 +25,8 @@ public abstract class DomainEvent : IEvent
         Metadata = new Dictionary<string, string>();
     }
 
+    protected DomainEvent() { }
+
     public void SetCorrelationId(Guid correlationId)
     {
         CorrelationId = correlationId;

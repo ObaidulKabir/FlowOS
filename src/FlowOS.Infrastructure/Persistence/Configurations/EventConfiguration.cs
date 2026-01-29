@@ -1,3 +1,4 @@
+using FlowOS.Agents.Events;
 using FlowOS.Events.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -13,7 +14,8 @@ public class EventConfiguration : IEntityTypeConfiguration<DomainEvent>
 
         // Use TPH Mapping for the abstract class DomainEvent
         builder.HasDiscriminator<string>("Discriminator")
-            .HasValue<DomainEvent>("BaseEvent");
+            .HasValue<TaskCompleted>("TaskCompleted")
+            .HasValue<AgentInsightGenerated>("AgentInsightGenerated");
 
         builder.HasKey(e => e.EventId);
 

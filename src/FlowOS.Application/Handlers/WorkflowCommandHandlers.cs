@@ -14,7 +14,8 @@ namespace FlowOS.Application.Handlers;
 
 public class WorkflowCommandHandlers : 
     IRequestHandler<StartWorkflowCommand, Guid>,
-    IRequestHandler<PublishEventCommand, bool>
+    IRequestHandler<PublishEventCommand, bool>,
+    IRequestHandler<CompleteTaskCommand, bool>
 {
     private readonly FlowOSDbContext _context;
     private readonly WorkflowEngine _engine;
@@ -70,6 +71,45 @@ public class WorkflowCommandHandlers :
 
         if (result.Success)
         {
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        return false;
+    }
+
+    public async Task<bool> Handle(CompleteTaskCommand request, CancellationToken cancellationToken)
+    {
+        // 1. Load Workflow Instance (Task is part of workflow)
+        var instance = await _context.WorkflowInstances
+            .FirstOrDefaultAsync(w => w.Id == request.WorkflowInstanceId && w.TenantId == request.TenantId, cancellationToken);
+
+        if (instance == null) return false;
+
+        // 2. Load Definition
+        var definition = await _context.WorkflowDefinitions
+            .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
+
+        if (definition == null) return false;
+
+        // 3. Create TaskCompleted Event
+        // In this phase, TaskId is the WorkflowInstanceId or the StepId. 
+        // We use the request.TaskId which correlates to what the UI sent.
+        var domainEvent = new TaskCompleted(request.TenantId, request.TaskId, Guid.Empty); // User ID should come from context, passed as Guid.Empty for now
+        
+        if (request.CorrelationId.HasValue)
+        {
+            domainEvent.SetCorrelationId(request.CorrelationId.Value);
+        }
+
+        // 4. Advance Workflow via Engine
+        // The Engine decides if "TaskCompleted" triggers a transition.
+        var result = _engine.Advance(instance, definition, domainEvent, new FlowOS.StateMachines.Models.ExecutionContext());
+
+        if (result.Success)
+        {
+            // 5. Persist Event & State
+            _context.Events.Add(domainEvent);
             await _context.SaveChangesAsync(cancellationToken);
             return true;
         }

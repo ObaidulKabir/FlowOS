@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\FlowOS.Workflows\FlowOS.Workflows.csproj" />
     <ProjectReference Include="..\..\src\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\FlowOS.API\FlowOS.API.csproj" />
+    <ProjectReference Include="..\..\src\FlowOS.Agents\FlowOS.Agents.csproj" />
   </ItemGroup>
 
 </Project>
