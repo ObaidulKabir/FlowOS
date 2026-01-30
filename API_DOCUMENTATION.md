@@ -48,6 +48,20 @@ Starts a new instance of a workflow definition.
 *   **Method**: `POST`
 *   **Request Body**: `application/json`
 
+You can start a workflow by **ID** OR by **Name**.
+
+**Option A: By Name (Recommended)**
+```json
+{
+  "tenantId": "uuid",
+  "workflowName": "OrderApprovalWorkflow",
+  "version": 1,
+  "initialStepId": "Start",
+  "correlationId": "uuid? (optional)"
+}
+```
+
+**Option B: By Definition ID**
 ```json
 {
   "tenantId": "uuid",
