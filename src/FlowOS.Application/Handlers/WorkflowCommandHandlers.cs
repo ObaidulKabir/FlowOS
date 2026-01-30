@@ -39,28 +39,59 @@ public class WorkflowCommandHandlers :
         }
         else if (!string.IsNullOrEmpty(request.WorkflowName))
         {
-            var def = await _context.WorkflowDefinitions
-                .AsNoTracking()
-                .FirstOrDefaultAsync(w => w.Name == request.WorkflowName 
-                    && w.Version == request.Version 
-                    && w.TenantId == request.TenantId, cancellationToken);
-            
-            if (def == null)
+            if (request.Version.HasValue)
             {
-                throw new ArgumentException($"Workflow definition '{request.WorkflowName}' v{request.Version} not found.");
+                var def = await _context.WorkflowDefinitions
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.Name == request.WorkflowName 
+                        && w.Version == request.Version.Value 
+                        && w.TenantId == request.TenantId, cancellationToken);
+                
+                if (def == null)
+                {
+                    throw new ArgumentException($"Workflow definition '{request.WorkflowName}' v{request.Version} not found.");
+                }
+                definitionId = def.Id;
             }
-            definitionId = def.Id;
+            else
+            {
+                // Resolve Latest Version
+                var def = await _context.WorkflowDefinitions
+                    .AsNoTracking()
+                    .Where(w => w.Name == request.WorkflowName && w.TenantId == request.TenantId)
+                    .OrderByDescending(w => w.Version)
+                    .FirstOrDefaultAsync(cancellationToken);
+                    
+                if (def == null)
+                {
+                    throw new ArgumentException($"No definition found for workflow '{request.WorkflowName}'.");
+                }
+                definitionId = def.Id;
+            }
         }
         else
         {
              throw new ArgumentException("Either WorkflowDefinitionId or WorkflowName must be provided.");
         }
 
+        // Fix: If we resolved definitionId but request.Version was null, we need to know the actual version for the Instance.
+        // The simplest way is to fetch the definition if we haven't already.
+        // Or better: when resolving definitionId, also capture the version.
+        
+        int actualVersion = request.Version ?? 1;
+        if (!request.Version.HasValue)
+        {
+             var def = await _context.WorkflowDefinitions
+                 .AsNoTracking()
+                 .FirstOrDefaultAsync(d => d.Id == definitionId, cancellationToken);
+             if (def != null) actualVersion = def.Version;
+        }
+
         // 1. Create Instance
         var instance = new WorkflowInstance(
             request.TenantId,
             definitionId,
-            request.Version,
+            actualVersion,
             request.InitialStepId,
             request.CorrelationId
         );

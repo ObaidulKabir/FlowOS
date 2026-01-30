@@ -34,4 +34,12 @@ public class Role
             Permissions.Add(permission);
         }
     }
+
+    public void AddCapability(Capability capability)
+    {
+        if (capability != null)
+        {
+            Permissions.Add(capability.Code);
+        }
+    }
 }

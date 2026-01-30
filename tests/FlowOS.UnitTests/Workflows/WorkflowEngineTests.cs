@@ -87,11 +87,8 @@ public class WorkflowEngineTests
 
     private class TestDomainEvent : FlowOS.Events.Models.DomainEvent
     {
-        public override string? EventType { get; protected set; }
-    private class TestDomainEvent(Guid tenantId, string eventType) : FlowOS.Events.Models.DomainEvent(tenantId, eventType)
+        public TestDomainEvent(Guid tenantId, string eventType) : base(tenantId, eventType)
         {
-            EventType = eventType ?? throw new ArgumentNullException(nameof(eventType));
         }
     }
-    // EventType is overridden as a getter-only property, so we pass eventType to the base constructor
 }

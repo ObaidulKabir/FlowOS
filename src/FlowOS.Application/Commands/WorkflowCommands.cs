@@ -1,18 +1,22 @@
 using System;
 using MediatR;
+using FlowOS.Application.Common.Attributes; // Add this
+using MediatR;
 using FlowOS.Application.Common.Interfaces;
 
 namespace FlowOS.Application.Commands;
 
+[RequiresCapability("workflow.start")]
 public record StartWorkflowCommand(
     Guid TenantId,
     Guid? WorkflowDefinitionId = null,
     string? WorkflowName = null,
-    int Version = 1,
+    int? Version = null,
     string InitialStepId = "Start",
     Guid? CorrelationId = null
 ) : IRequest<Guid>, IPolicySecuredCommand;
 
+[RequiresCapability("event.publish")]
 public record PublishEventCommand(
     Guid TenantId,
     Guid WorkflowInstanceId,

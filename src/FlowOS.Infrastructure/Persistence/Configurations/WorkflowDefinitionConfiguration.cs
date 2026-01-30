@@ -37,6 +37,11 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                 );
         });
 
+        // Current Index (Non-Unique)
         builder.HasIndex(w => w.TenantId);
+
+        // Unique Constraint for Versioning
+        builder.HasIndex(w => new { w.TenantId, w.Name, w.Version })
+            .IsUnique();
     }
 }

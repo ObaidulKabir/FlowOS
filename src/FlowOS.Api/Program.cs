@@ -9,8 +9,12 @@ using FlowOS.Application.Behaviors;
 
 using FlowOS.API.Filters;
 
-using FlowOS.Infrastructure.Services;
+using FlowOS.Application.Common.Interfaces;
+using FlowOS.Security.Interfaces; // Add this
+using FlowOS.Infrastructure.Services; // Ensure this is present
 using FlowOS.Core.Interfaces;
+
+using FlowOS.Api.Middleware; // Add this
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,6 +52,8 @@ builder.Services.AddDbContext<FlowOSDbContext>(options =>
 
 // Add Event Registry
 builder.Services.AddScoped<IEventRegistry, EventRegistry>();
+builder.Services.AddMemoryCache(); // Add this
+builder.Services.AddScoped<ICapabilityService, CapabilityService>();
 
 // Add MediatR
 builder.Services.AddMediatR(cfg => {
@@ -67,6 +73,9 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    
+    // Use Mock Auth for Development Testing
+    app.UseMiddleware<MockAuthMiddleware>();
 }
 
 app.MapControllers();
@@ -75,8 +84,8 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
-    // Ensure DB is created (in-memory)
-    context.Database.EnsureCreated();
+    // context.Database.EnsureCreated(); // Replaced with Migrate() for schema evolution
+    context.Database.Migrate();
     
     await DataSeeder.SeedAsync(context, scope.ServiceProvider, app.Environment);
 }
