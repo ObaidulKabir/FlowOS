@@ -1,0 +1,8 @@
+{
+  "eventId": "EVT-ORDER-REJECTED",
+  "name": "Order Rejected",
+  "description": "Triggered when a manager rejects an order.",
+  "entityType": "Order",
+  "category": "Decision",
+  "isTerminal": true
+}

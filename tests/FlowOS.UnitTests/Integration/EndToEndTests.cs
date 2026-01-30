@@ -76,6 +76,7 @@ public class EndToEndTests : IClassFixture<WebApplicationFactory<Program>>
             var command = new StartWorkflowCommand(
                 _tenantId, 
                 def.Id, 
+                null, // WorkflowName
                 def.Version, 
                 "Start", 
                 Guid.NewGuid()

@@ -20,7 +20,7 @@ public class WorkflowEngineTests
     private WorkflowDefinition CreateApprovalWorkflow()
     {
         var def = new WorkflowDefinition(_tenantId, "Approval");
-        
+
         // Step 1: Start -> Submit
         var step1 = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
         step1.NextSteps.Add("Submitted", "Review");
@@ -87,10 +87,11 @@ public class WorkflowEngineTests
 
     private class TestDomainEvent : FlowOS.Events.Models.DomainEvent
     {
-        public override string EventType { get; }
-        public TestDomainEvent(Guid tenantId, string eventType) : base(tenantId, eventType)
+        public override string? EventType { get; protected set; }
+    private class TestDomainEvent(Guid tenantId, string eventType) : FlowOS.Events.Models.DomainEvent(tenantId, eventType)
         {
-            EventType = eventType;
+            EventType = eventType ?? throw new ArgumentNullException(nameof(eventType));
         }
     }
+    // EventType is overridden as a getter-only property, so we pass eventType to the base constructor
 }

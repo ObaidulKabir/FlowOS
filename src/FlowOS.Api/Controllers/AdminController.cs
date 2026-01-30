@@ -40,17 +40,26 @@ public class AdminController : ControllerBase
         {
              // Locate config folder relative to execution
              // In Prod, this might be a mounted volume or specific path
-             var configRoot = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "flowos-config"); 
-             // Adjust path logic as needed for environment
-             if (!Directory.Exists(configRoot))
+             var potentialPaths = new[] 
              {
-                  // Try standard dev path
-                  configRoot = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "flowos-config");
+                 Path.Combine(Directory.GetCurrentDirectory(), "flowos-config"), // If running from root
+                 Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "flowos-config"), // If running from src/FlowOS.API
+                 Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "flowos-config") // From bin
+             };
+             
+             string configRoot = null;
+             foreach (var path in potentialPaths)
+             {
+                 if (Directory.Exists(path))
+                 {
+                     configRoot = path;
+                     break;
+                 }
              }
              
-             if (!Directory.Exists(configRoot))
+             if (configRoot == null || !Directory.Exists(configRoot))
              {
-                 return NotFound("Configuration directory not found.");
+                 return NotFound($"Configuration directory not found. Checked: {string.Join(", ", potentialPaths)}");
              }
 
              var logger = _serviceProvider.GetRequiredService<ILogger<ConfigurationLoader>>();

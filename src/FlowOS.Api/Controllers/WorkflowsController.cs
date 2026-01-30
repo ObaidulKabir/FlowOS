@@ -38,7 +38,9 @@ public class WorkflowsController : ControllerBase
     [HttpPost("start")]
     public async Task<IActionResult> StartWorkflow([FromBody] StartWorkflowCommand command)
     {
-        var id = await _mediator.Send(command);
+        var tenantId = _currentUser.TenantId;
+        var commandWithTenant = command with { TenantId = tenantId };
+        var id = await _mediator.Send(commandWithTenant);
         return Ok(new { WorkflowInstanceId = id });
     }
 

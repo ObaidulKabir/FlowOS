@@ -1,0 +1,45 @@
+{
+  "name": "OrderProcessing",
+  "version": 1,
+  "steps": [
+    {
+      "stepId": "Start",
+      "stepType": "Command",
+      "nextSteps": {
+        "Default": "CheckStock"
+      }
+    },
+    {
+      "stepId": "CheckStock",
+      "stepType": "Command",
+      "nextSteps": {
+        "Default": "ApproveOrder"
+      }
+    },
+    {
+      "stepId": "ApproveOrder",
+      "stepType": "HumanTask",
+      "nextSteps": {
+        "EVT-ORDER-APPROVED": "FulfillOrder",
+        "EVT-ORDER-REJECTED": "Rejected"
+      }
+    },
+    {
+      "stepId": "FulfillOrder",
+      "stepType": "Command",
+      "nextSteps": {
+        "Default": "End"
+      }
+    },
+    {
+      "stepId": "Rejected",
+      "stepType": "Command",
+      "nextSteps": {}
+    },
+    {
+      "stepId": "End",
+      "stepType": "Command",
+      "nextSteps": {}
+    }
+  ]
+}

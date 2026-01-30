@@ -196,6 +196,17 @@ public class AdminQueryHandlers :
                 break;
             default:
                 summary = $"Event: {evt.EventType}";
+                // Include generic metadata
+                if (evt.Metadata != null)
+                {
+                    foreach (var kvp in evt.Metadata)
+                    {
+                        if (!keyData.ContainsKey(kvp.Key))
+                        {
+                            keyData.Add(kvp.Key, kvp.Value);
+                        }
+                    }
+                }
                 break;
         }
 

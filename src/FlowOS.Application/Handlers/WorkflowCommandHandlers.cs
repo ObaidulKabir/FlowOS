@@ -31,10 +31,35 @@ public class WorkflowCommandHandlers :
 
     public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
     {
+        Guid definitionId;
+
+        if (request.WorkflowDefinitionId.HasValue)
+        {
+            definitionId = request.WorkflowDefinitionId.Value;
+        }
+        else if (!string.IsNullOrEmpty(request.WorkflowName))
+        {
+            var def = await _context.WorkflowDefinitions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.Name == request.WorkflowName 
+                    && w.Version == request.Version 
+                    && w.TenantId == request.TenantId, cancellationToken);
+            
+            if (def == null)
+            {
+                throw new ArgumentException($"Workflow definition '{request.WorkflowName}' v{request.Version} not found.");
+            }
+            definitionId = def.Id;
+        }
+        else
+        {
+             throw new ArgumentException("Either WorkflowDefinitionId or WorkflowName must be provided.");
+        }
+
         // 1. Create Instance
         var instance = new WorkflowInstance(
             request.TenantId,
-            request.WorkflowDefinitionId,
+            definitionId,
             request.Version,
             request.InitialStepId,
             request.CorrelationId
@@ -74,19 +99,57 @@ public class WorkflowCommandHandlers :
             
         if (definition == null) return false;
 
-        // 3. Create Event Wrapper (Concrete implementation needed for Engine)
-        // In a real app, we would persist this event too.
-        var domainEvent = new GenericDomainEvent(request.TenantId, request.EventType);
+        // 3. Create Event Wrapper
+        var domainEvent = new StandardEvent(request.TenantId, request.EventType);
+        
+        // Auto-link to Workflow Instance if not explicitly correlated
         if (request.CorrelationId.HasValue)
         {
             domainEvent.SetCorrelationId(request.CorrelationId.Value);
         }
+        else
+        {
+            // Default correlation to the target workflow instance
+            domainEvent.SetCorrelationId(request.WorkflowInstanceId);
+        }
+
+        // Handle Payload (Simple serialization for now)
+        if (request.Payload != null)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(request.Payload);
+            domainEvent.AddMetadata("Payload", json);
+        }
 
         // 4. Advance Workflow
+        // Check for Auto-Advance loops (Default transitions)
         var result = _engine.Advance(instance, definition, domainEvent, new FlowOS.StateMachines.Models.ExecutionContext());
 
         if (result.Success)
         {
+            // Persist the event that caused the transition
+            _context.Events.Add(domainEvent);
+
+            // If the new step has a "Default" transition, automatically advance
+            // Simple loop protection: limit to 5 auto-advances
+            int autoAdvanceLimit = 5;
+            while (autoAdvanceLimit > 0)
+            {
+                var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+                if (currentStep != null && currentStep.NextSteps.ContainsKey("Default"))
+                {
+                    // Create a dummy "Default" event
+                    var defaultEvent = new StandardEvent(request.TenantId, "Default");
+                    var autoResult = _engine.Advance(instance, definition, defaultEvent, new FlowOS.StateMachines.Models.ExecutionContext());
+                    
+                    if (!autoResult.Success) break; // Should not happen if config is correct
+                    autoAdvanceLimit--;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
             await _context.SaveChangesAsync(cancellationToken);
             return true;
         }
@@ -133,13 +196,5 @@ public class WorkflowCommandHandlers :
         return false;
     }
 
-    // Concrete event for runtime usage
-    private class GenericDomainEvent : DomainEvent
-    {
-        public override string EventType { get; }
-        public GenericDomainEvent(Guid tenantId, string eventType) : base(tenantId, eventType)
-        {
-            EventType = eventType;
-        }
-    }
+    // GenericDomainEvent removed in favor of StandardEvent
 }

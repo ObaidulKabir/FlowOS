@@ -15,7 +15,8 @@ public class EventConfiguration : IEntityTypeConfiguration<DomainEvent>
         // Use TPH Mapping for the abstract class DomainEvent
         builder.HasDiscriminator<string>("Discriminator")
             .HasValue<TaskCompleted>("TaskCompleted")
-            .HasValue<AgentInsightGenerated>("AgentInsightGenerated");
+            .HasValue<AgentInsightGenerated>("AgentInsightGenerated")
+            .HasValue<StandardEvent>("StandardEvent");
 
         builder.HasKey(e => e.EventId);
 

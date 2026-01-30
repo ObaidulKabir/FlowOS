@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Workflows.Domain; // Added
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -116,8 +117,41 @@ public class ConfigurationLoader
     
     private async Task LoadWorkflowsAsync(Guid tenantId)
     {
-        // Placeholder for Workflow Loading logic (similar structure)
-        // Ideally parses JSON to WorkflowDefinition entity
+        var path = Path.Combine(_configRoot, "workflows");
+        if (!Directory.Exists(path)) return;
+
+        foreach (var file in Directory.GetFiles(path, "*.json"))
+        {
+            var json = await File.ReadAllTextAsync(file);
+            var dto = JsonSerializer.Deserialize<WorkflowConfigDto>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (dto == null) continue;
+
+            // Check existence
+            var exists = await _context.WorkflowDefinitions.AnyAsync(w => w.Name == dto.Name && w.Version == dto.Version && w.TenantId == tenantId);
+            if (!exists)
+            {
+                var wf = new WorkflowDefinition(tenantId, dto.Name, dto.Version);
+
+                foreach (var s in dto.Steps)
+                {
+                    var step = new WorkflowStepDefinition(s.StepId, Enum.Parse<Workflows.Enums.WorkflowStepType>(s.StepType));
+                    if (s.NextSteps != null)
+                    {
+                        foreach (var ns in s.NextSteps)
+                        {
+                            step.NextSteps.Add(ns.Key, ns.Value);
+                        }
+                    }
+                    wf.AddStep(step);
+                }
+
+                wf.Publish();
+                _context.WorkflowDefinitions.Add(wf);
+                _logger.LogInformation($"Published Workflow: {dto.Name} v{dto.Version}");
+            }
+        }
+        await _context.SaveChangesAsync();
     }
 
     // DTOs for JSON deserialization
@@ -145,5 +179,19 @@ public class ConfigurationLoader
         public string FromState { get; set; } = string.Empty;
         public string ToState { get; set; } = string.Empty;
         public string EventId { get; set; } = string.Empty;
+    }
+
+    private class WorkflowConfigDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public int Version { get; set; }
+        public WorkflowStepConfigDto[] Steps { get; set; } = Array.Empty<WorkflowStepConfigDto>();
+    }
+
+    private class WorkflowStepConfigDto
+    {
+        public string StepId { get; set; } = string.Empty;
+        public string StepType { get; set; } = "Command";
+        public Dictionary<string, string> NextSteps { get; set; } = new();
     }
 }

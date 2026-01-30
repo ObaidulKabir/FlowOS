@@ -1,0 +1,5 @@
+{
+  "entityType": "Order",
+  "currentState": "Approved",
+  "eventType": "EVT-ORDER-APPROVED"
+}

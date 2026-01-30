@@ -1,0 +1,5 @@
+{
+  "entityType": "Order",
+  "currentState": "Shipped",
+  "eventType": "EVT-ORDER-APPROVED"
+}

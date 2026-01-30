@@ -1,0 +1,5 @@
+{
+  "entityType": "Order",
+  "currentState": "Pending",
+  "eventType": "EVT-ORDER-REJECTED"
+}

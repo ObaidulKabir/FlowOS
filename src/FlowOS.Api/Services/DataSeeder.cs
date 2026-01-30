@@ -33,19 +33,33 @@ public static class DataSeeder
         if (env.IsDevelopment())
         {
             // Locate config folder relative to execution
-            var configRoot = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "flowos-config"); 
-            // Adjust path if running from bin/Debug... for local dev, usually relative to project root or solution
-            if (!Directory.Exists(configRoot))
+            var potentialPaths = new[] 
             {
-                 // Try standard dev path
-                 configRoot = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "flowos-config");
+                Path.Combine(Directory.GetCurrentDirectory(), "flowos-config"), // If running from root
+                Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "flowos-config"), // If running from src/FlowOS.API
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "flowos-config") // From bin
+            };
+            
+            string configRoot = null;
+            foreach (var path in potentialPaths)
+            {
+                if (Directory.Exists(path))
+                {
+                    configRoot = path;
+                    break;
+                }
             }
 
-            if (Directory.Exists(configRoot))
+            if (configRoot != null && Directory.Exists(configRoot))
             {
                 var logger = serviceProvider.GetRequiredService<ILogger<ConfigurationLoader>>();
                 var loader = new ConfigurationLoader(context, logger, configRoot);
                 await loader.LoadAllAsync(DefaultTenantId);
+            }
+            else 
+            {
+                 var logger = serviceProvider.GetRequiredService<ILogger<ConfigurationLoader>>();
+                 logger.LogWarning("Could not find flowos-config directory. Tried: {Paths}", string.Join(", ", potentialPaths));
             }
         }
     }

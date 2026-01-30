@@ -1,0 +1,53 @@
+{
+  "name": "OrderProcessing",
+  "version": 1,
+  "description": "Standard order processing workflow",
+  "steps": [
+    {
+      "stepId": "Start",
+      "stepType": "Action",
+      "label": "Order Placed",
+      "nextSteps": {
+        "Default": "CheckStock"
+      }
+    },
+    {
+      "stepId": "CheckStock",
+      "stepType": "Action",
+      "label": "Check Stock",
+      "nextSteps": {
+        "Default": "ApproveOrder"
+      }
+    },
+    {
+      "stepId": "ApproveOrder",
+      "stepType": "UserTask",
+      "label": "Manual Approval",
+      "requiredRole": "Manager",
+      "nextSteps": {
+        "EVT-ORDER-APPROVED": "FulfillOrder",
+        "EVT-ORDER-REJECTED": "Rejected"
+      }
+    },
+    {
+      "stepId": "FulfillOrder",
+      "stepType": "Action",
+      "label": "Fulfill Order",
+      "nextSteps": {
+        "Default": "End"
+      }
+    },
+    {
+      "stepId": "Rejected",
+      "stepType": "End",
+      "label": "Order Rejected",
+      "nextSteps": {}
+    },
+    {
+      "stepId": "End",
+      "stepType": "End",
+      "label": "Order Completed",
+      "nextSteps": {}
+    }
+  ]
+}

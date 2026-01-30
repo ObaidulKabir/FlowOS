@@ -53,7 +53,8 @@ builder.Services.AddScoped<IEventRegistry, EventRegistry>();
 builder.Services.AddMediatR(cfg => {
     cfg.RegisterServicesFromAssemblies(
         typeof(FlowOS.Application.Commands.StartWorkflowCommand).Assembly,
-        typeof(FlowOS.Application.Handlers.WorkflowCommandHandlers).Assembly
+        typeof(FlowOS.Application.Handlers.WorkflowCommandHandlers).Assembly,
+        typeof(FlowOS.Application.Handlers.StateMachineQueryHandlers).Assembly // Ensure new handlers are registered
     );
     // Register Pipeline Behaviors
     cfg.AddOpenBehavior(typeof(PolicyEnforcementBehavior<,>));

@@ -6,9 +6,10 @@ namespace FlowOS.Application.Commands;
 
 public record StartWorkflowCommand(
     Guid TenantId,
-    Guid WorkflowDefinitionId,
-    int Version,
-    string InitialStepId,
+    Guid? WorkflowDefinitionId = null,
+    string? WorkflowName = null,
+    int Version = 1,
+    string InitialStepId = "Start",
     Guid? CorrelationId = null
 ) : IRequest<Guid>, IPolicySecuredCommand;
 

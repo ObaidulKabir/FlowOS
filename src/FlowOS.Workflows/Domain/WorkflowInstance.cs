@@ -32,7 +32,10 @@ public class WorkflowInstance
         CurrentStepId = initialStepId;
         Status = WorkflowInstanceStatus.Running;
         CorrelationId = correlationId;
+        CreatedAt = DateTime.UtcNow; // Initialize CreatedAt
     }
+
+    public DateTime CreatedAt { get; private set; } // Add CreatedAt property
 
     public void AdvanceTo(string nextStepId)
     {
