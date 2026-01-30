@@ -26,6 +26,14 @@ public class DenyAllPolicyProvider : IPolicyProvider
             new Policy { Name = "DenyAll", Description = "Deny all requests" }
         });
     }
+
+    public Task<IEnumerable<Policy>> GetAllPoliciesAsync()
+    {
+        return Task.FromResult<IEnumerable<Policy>>(new List<Policy>
+        {
+            new Policy { Name = "DenyAll", Description = "Deny all requests" }
+        });
+    }
 }
 
 public class PolicyEnforcementTests : IClassFixture<WebApplicationFactory<Program>>

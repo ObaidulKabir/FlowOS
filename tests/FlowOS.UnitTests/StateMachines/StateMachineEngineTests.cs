@@ -57,7 +57,7 @@ public class StateMachineEngineTests
 
         // Assert
         Assert.False(result.IsAllowed);
-        Assert.Contains("No transition defined", result.Reason);
+        Assert.Contains("not valid for current state", result.Reason);
     }
 
     [Fact]

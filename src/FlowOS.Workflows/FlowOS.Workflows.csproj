@@ -5,6 +5,7 @@
     <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
     <ProjectReference Include="..\FlowOS.StateMachines\FlowOS.StateMachines.csproj" />
     <ProjectReference Include="..\FlowOS.Security\FlowOS.Security.csproj" />
+    <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

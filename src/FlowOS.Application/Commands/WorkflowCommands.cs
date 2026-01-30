@@ -15,8 +15,9 @@ public record StartWorkflowCommand(
 public record PublishEventCommand(
     Guid TenantId,
     Guid WorkflowInstanceId,
-    string EventType,
-    Guid? CorrelationId = null
+    string EventType, // Can be legacy string or Event ID
+    Guid? CorrelationId = null,
+    object? Payload = null // Added Payload support
 ) : IRequest<bool>, IPolicySecuredCommand;
 
 public record CompleteTaskCommand(

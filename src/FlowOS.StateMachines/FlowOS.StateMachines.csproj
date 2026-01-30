@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
+    <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

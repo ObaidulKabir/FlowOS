@@ -1,0 +1,33 @@
+{
+  "name": "OrderApprovalWorkflow",
+  "version": 1,
+  "steps": [
+    {
+      "stepId": "Start",
+      "stepType": "Command",
+      "nextSteps": {
+        "Default": "ReviewStep"
+      }
+    },
+    {
+      "stepId": "ReviewStep",
+      "stepType": "HumanTask",
+      "nextSteps": {
+        "EVT-ORDER-APPROVED": "FinanceStep",
+        "EVT-ORDER-REJECTED": "EndStep"
+      }
+    },
+    {
+      "stepId": "FinanceStep",
+      "stepType": "Command",
+      "nextSteps": {
+        "Default": "EndStep"
+      }
+    },
+    {
+      "stepId": "EndStep",
+      "stepType": "Command",
+      "nextSteps": {}
+    }
+  ]
+}

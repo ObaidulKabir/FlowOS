@@ -12,6 +12,8 @@ public class FlowOSDbContext : DbContext
     public DbSet<DomainEvent> Events { get; set; }
     public DbSet<WorkflowInstance> WorkflowInstances { get; set; }
     public DbSet<WorkflowDefinition> WorkflowDefinitions { get; set; }
+    public DbSet<StateMachineDefinition> StateMachineDefinitions { get; set; } // Added for Admin Query
+    public DbSet<EventDefinition> EventDefinitions { get; set; }
     public DbSet<AgentInsightReadModel> AgentInsights { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options)

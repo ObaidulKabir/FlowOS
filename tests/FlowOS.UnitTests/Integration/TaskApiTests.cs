@@ -14,6 +14,11 @@ using FlowOS.Workflows.Enums;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
+using FlowOS.Infrastructure.Services;
+using FlowOS.Core.Interfaces;
+using Moq;
+using Microsoft.Extensions.Logging;
+
 namespace FlowOS.UnitTests.Integration;
 
 public class TaskApiTests
@@ -24,6 +29,11 @@ public class TaskApiTests
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         return new FlowOSDbContext(options);
+    }
+    
+    private IEventRegistry GetMockRegistry(FlowOSDbContext context)
+    {
+        return new EventRegistry(context, new Mock<ILogger<EventRegistry>>().Object);
     }
 
     [Fact]
@@ -87,7 +97,7 @@ public class TaskApiTests
         context.WorkflowInstances.Add(instance);
         await context.SaveChangesAsync();
 
-        var handler = new WorkflowCommandHandlers(context); // Uses real Engine, but no transitions defined for this dummy definition
+        var handler = new WorkflowCommandHandlers(context, GetMockRegistry(context)); // Uses real Engine, but no transitions defined for this dummy definition
 
         // Act
         var command = new Application.Commands.CompleteTaskCommand(tenantId, instance.Id, instance.Id);

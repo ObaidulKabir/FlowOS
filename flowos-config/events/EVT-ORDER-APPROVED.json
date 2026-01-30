@@ -1,0 +1,8 @@
+{
+  "eventId": "EVT-ORDER-APPROVED",
+  "name": "Order Approved",
+  "description": "Triggered when a manager approves an order.",
+  "entityType": "Order",
+  "category": "Decision",
+  "isTerminal": false
+}

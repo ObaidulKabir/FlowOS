@@ -14,5 +14,6 @@ public class AdminTransitionDto
 {
     public string FromState { get; set; } = string.Empty;
     public string ToState { get; set; } = string.Empty;
-    public string TriggerEvent { get; set; } = string.Empty;
+    public string TriggerEvent { get; set; } = string.Empty; // Legacy support
+    public string? EventId { get; set; } // New Event ID support
 }

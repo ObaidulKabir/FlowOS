@@ -10,7 +10,19 @@ using FlowOS.Workflows.Domain;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
+using System.Collections.Generic;
+using FlowOS.Security.Policies;
+
 namespace FlowOS.UnitTests.Admin;
+
+public class StubPolicyProvider : IPolicyProvider
+{
+    public Task<IEnumerable<Policy>> GetApplicablePoliciesAsync(PolicyContext context) => 
+        Task.FromResult<IEnumerable<Policy>>(new List<Policy>());
+        
+    public Task<IEnumerable<Policy>> GetAllPoliciesAsync() => 
+        Task.FromResult<IEnumerable<Policy>>(new List<Policy>());
+}
 
 public class AdminVisibilityTests
 {
@@ -53,7 +65,7 @@ public class AdminVisibilityTests
         await context.SaveChangesAsync();
 
         // Act
-        var handler = new AdminQueryHandlers(context);
+        var handler = new AdminQueryHandlers(context, new StubPolicyProvider());
         // Ensure tenantId matches (in test, we used same tenantId)
         var result = await handler.Handle(new GetAdminWorkflowDetailQuery(instance.Id, tenantId), CancellationToken.None);
 

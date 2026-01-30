@@ -26,7 +26,21 @@ public class GetAdminStateMachineQuery : IRequest<AdminStateMachineDto>
     }
 }
 
+public class GetAllAdminStateMachinesQuery : IRequest<List<AdminStateMachineDto>>
+{
+}
+
 public class GetAdminPoliciesQuery : IRequest<List<AdminPolicyDto>>
+{
+    public Guid TenantId { get; set; }
+}
+
+public class GetAdminEventsQuery : IRequest<List<AdminEventDefinitionDto>>
+{
+    public Guid TenantId { get; set; }
+}
+
+public class GetAdminWorkflowsQuery : IRequest<List<AdminWorkflowSummaryDto>>
 {
     public Guid TenantId { get; set; }
 }

@@ -1,0 +1,29 @@
+services:
+  flowos-api:
+    image: flowos-api
+    build:
+      context: .
+      dockerfile: src/FlowOS.Api/Dockerfile
+    ports:
+      - "5005:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
+    volumes:
+      - ./flowos-config:/app/flowos-config
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=flowos
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:

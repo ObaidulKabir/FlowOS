@@ -7,5 +7,7 @@ public class AdminPolicyDto
     public string PolicyName { get; set; } = string.Empty;
     public string Scope { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; } = true; // Added
+    public string DenyReasonTemplate { get; set; } = string.Empty; // Added
     public List<string> Rules { get; set; } = new();
 }

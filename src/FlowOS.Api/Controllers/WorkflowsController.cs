@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using FlowOS.Application.Commands;
+using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Queries;
+using FlowOS.Workflows.Enums;
 
 namespace FlowOS.API.Controllers;
 
@@ -10,11 +13,26 @@ public class WorkflowsController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ILogger<WorkflowsController> _logger;
+    private readonly ICurrentUser _currentUser; // Added to get TenantId
 
-    public WorkflowsController(IMediator mediator, ILogger<WorkflowsController> logger)
+    public WorkflowsController(IMediator mediator, ILogger<WorkflowsController> logger, ICurrentUser currentUser)
     {
         _mediator = mediator;
         _logger = logger;
+        _currentUser = currentUser;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetWorkflows([FromQuery] WorkflowInstanceStatus? status = WorkflowInstanceStatus.Running)
+    {
+        var tenantId = _currentUser.TenantId;
+        var query = new GetWorkflowsQuery 
+        { 
+            TenantId = tenantId,
+            Status = status 
+        };
+        var result = await _mediator.Send(query);
+        return Ok(result);
     }
 
     [HttpPost("start")]

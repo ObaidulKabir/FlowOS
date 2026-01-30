@@ -1,0 +1,13 @@
+{
+  "entityType": "Order",
+  "version": 1,
+  "initialState": "Pending",
+  "states": ["Pending", "Approved", "Rejected"],
+  "transitions": [
+    {
+      "fromState": "Pending",
+      "toState": "Approved",
+      "eventId": "EVT-ORDER-APPROVED"
+    }
+  ]
+}

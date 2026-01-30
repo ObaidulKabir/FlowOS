@@ -9,11 +9,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FlowOS.Application\FlowOS.Application.csproj" />
     <ProjectReference Include="..\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
+    <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
   </ItemGroup>
 
 </Project>

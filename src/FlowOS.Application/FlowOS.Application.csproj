@@ -7,6 +7,7 @@
     <ProjectReference Include="..\FlowOS.Workflows\FlowOS.Workflows.csproj" />
     <ProjectReference Include="..\FlowOS.Security\FlowOS.Security.csproj" />
     <ProjectReference Include="..\FlowOS.Agents\FlowOS.Agents.csproj" />
+    <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
     <ProjectReference Include="..\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -9,6 +9,7 @@ using FlowOS.StateMachines.Models;
 using Microsoft.EntityFrameworkCore;
 using FlowOS.Events.Models;
 using FlowOS.Application.Commands;
+using FlowOS.Core.Interfaces;
 
 namespace FlowOS.Application.Handlers;
 
@@ -19,10 +20,12 @@ public class WorkflowCommandHandlers :
 {
     private readonly FlowOSDbContext _context;
     private readonly WorkflowEngine _engine;
+    private readonly IEventRegistry _eventRegistry; // Added Registry
 
-    public WorkflowCommandHandlers(FlowOSDbContext context)
+    public WorkflowCommandHandlers(FlowOSDbContext context, IEventRegistry eventRegistry)
     {
         _context = context;
+        _eventRegistry = eventRegistry; // Injected
         _engine = new WorkflowEngine();
     }
 
@@ -46,6 +49,19 @@ public class WorkflowCommandHandlers :
 
     public async Task<bool> Handle(PublishEventCommand request, CancellationToken cancellationToken)
     {
+        // 0. Validate Event ID
+        // In Phase 1: We support legacy strings, so we only validate if it looks like an ID or we enforce it.
+        // For strictness, let's check if it exists in registry. If yes, it's valid.
+        // If no, we assume legacy string (warning logged ideally).
+        // BUT, if it IS a new ID, it MUST exist.
+        
+        var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
+        if (!isRegistered && request.EventType.StartsWith("EVT-"))
+        {
+             // It looks like an ID but doesn't exist -> Reject
+             return false;
+        }
+
         // 1. Load Workflow Instance
         var instance = await _context.WorkflowInstances
             .FirstOrDefaultAsync(w => w.Id == request.WorkflowInstanceId && w.TenantId == request.TenantId, cancellationToken);

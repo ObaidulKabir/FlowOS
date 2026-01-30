@@ -22,11 +22,23 @@ public class StateMachineEngine
         // 2. Find Matching Transition
         var transition = definition.Transitions.FirstOrDefault(t => 
             t.FromState == currentState && 
-            t.TriggerEventType == triggerEvent.EventType);
+            (t.EventId == triggerEvent.EventType || t.TriggerEventType == triggerEvent.EventType)); // Dual check for compatibility
 
         if (transition == null)
         {
-            return TransitionResult.Denied($"No transition defined from '{currentState}' for event '{triggerEvent.EventType}'.");
+            // Check if this event is defined ANYWHERE in this State Machine
+            var isKnownEvent = definition.Transitions.Any(t => 
+                t.EventId == triggerEvent.EventType || t.TriggerEventType == triggerEvent.EventType);
+            
+            if (isKnownEvent)
+            {
+                return TransitionResult.Denied($"Event '{triggerEvent.EventType}' is not valid for current state '{currentState}'.");
+            }
+            else
+            {
+                // Event is unknown to this SM -> Ignore it (allow Workflow to handle it)
+                return TransitionResult.Ignored($"Event '{triggerEvent.EventType}' is not defined in this State Machine.");
+            }
         }
 
         // 3. Constraint Validation (Placeholder for Part B)
