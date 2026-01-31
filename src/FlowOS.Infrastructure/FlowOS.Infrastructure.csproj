@@ -7,6 +7,7 @@
     <ProjectReference Include="..\FlowOS.StateMachines\FlowOS.StateMachines.csproj" />
     <ProjectReference Include="..\FlowOS.Workflows\FlowOS.Workflows.csproj" />
     <ProjectReference Include="..\FlowOS.Agents\FlowOS.Agents.csproj" />
+    <ProjectReference Include="..\FlowOS.Notifications\FlowOS.Notifications.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -15,6 +16,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
   </ItemGroup>
 

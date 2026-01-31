@@ -17,6 +17,8 @@ public class FlowOSDbContext : DbContext
     public DbSet<EventDefinition> EventDefinitions { get; set; }
     public DbSet<AgentInsightReadModel> AgentInsights { get; set; }
     public DbSet<Role> Roles { get; set; }
+    public DbSet<Policy> Policies { get; set; }
+    public DbSet<FlowOS.Notifications.Domain.Notification> Notifications { get; set; } // Add this
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 
@@ -24,5 +26,6 @@ public class FlowOSDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlowOSDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlowOS.Notifications.Domain.Notification).Assembly); // Apply Notifications config
     }
 }

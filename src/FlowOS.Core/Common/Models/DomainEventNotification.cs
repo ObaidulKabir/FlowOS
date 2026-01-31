@@ -1,7 +1,7 @@
 using FlowOS.Events.Abstractions;
 using MediatR;
 
-namespace FlowOS.Application.Common.Models;
+namespace FlowOS.Core.Common.Models;
 
 public class DomainEventNotification<TDomainEvent> : INotification 
     where TDomainEvent : IEvent

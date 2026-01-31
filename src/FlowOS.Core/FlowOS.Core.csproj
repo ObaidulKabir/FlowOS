@@ -2,6 +2,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
+    <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" /> <!-- Needed for IEvent -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="12.2.0" /> <!-- Needed for INotification -->
   </ItemGroup>
 
   <PropertyGroup>

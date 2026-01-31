@@ -1,8 +1,10 @@
 using MediatR;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces; // Changed namespace
 using FlowOS.Application.Common.Exceptions;
-using FlowOS.Security.Policies;
+using FlowOS.Application.Common.Interfaces; // Add this back for IPolicySecuredCommand
+using FlowOS.Core.Interfaces;
 using FlowOS.Security.Interfaces;
+using FlowOS.Security.Policies; // Keep this one
 using System.Threading;
 using System.Threading.Tasks;
 using System;

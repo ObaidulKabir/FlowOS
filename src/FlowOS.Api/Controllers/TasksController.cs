@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using FlowOS.Application.Commands;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces;
 using FlowOS.Application.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;

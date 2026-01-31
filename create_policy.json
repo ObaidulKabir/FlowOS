@@ -1,0 +1,4 @@
+{
+    "name": "DenyAll",
+    "conditionJson": "{ \"action\": \"Deny\" }"
+}

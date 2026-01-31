@@ -98,6 +98,35 @@ public class WorkflowCommandHandlers :
 
         // 2. Persist
         _context.WorkflowInstances.Add(instance);
+        // await _context.SaveChangesAsync(cancellationToken); // Delay save to include auto-advance updates
+
+        // 3. Auto-Advance from Start (if Default transition exists)
+        // We need the full definition loaded.
+        var fullDefinition = await _context.WorkflowDefinitions
+             .AsNoTracking()
+             .FirstOrDefaultAsync(d => d.Id == definitionId, cancellationToken);
+
+        if (fullDefinition != null)
+        {
+            int autoAdvanceLimit = 5;
+            while (autoAdvanceLimit > 0)
+            {
+                var currentStep = fullDefinition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+                if (currentStep != null && currentStep.NextSteps.ContainsKey("Default"))
+                {
+                    var defaultEvent = new StandardEvent(request.TenantId, "Default");
+                    var autoResult = _engine.Advance(instance, fullDefinition, defaultEvent, new FlowOS.StateMachines.Models.ExecutionContext());
+                    
+                    if (!autoResult.Success) break;
+                    autoAdvanceLimit--;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        
         await _context.SaveChangesAsync(cancellationToken);
 
         return instance.Id;

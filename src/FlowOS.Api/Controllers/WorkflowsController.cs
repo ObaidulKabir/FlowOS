@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using FlowOS.Application.Commands;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces;
 using FlowOS.Application.Queries;
 using FlowOS.Workflows.Enums;
 

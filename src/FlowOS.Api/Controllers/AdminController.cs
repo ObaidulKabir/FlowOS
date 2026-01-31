@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces;
 using FlowOS.Application.Queries.Admin;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.Infrastructure.Services;

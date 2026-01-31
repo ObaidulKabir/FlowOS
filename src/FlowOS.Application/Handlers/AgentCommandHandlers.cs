@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using FlowOS.Application.Commands;
-using FlowOS.Application.Common.Models; // For DomainEventNotification
+using FlowOS.Core.Common.Models; // For DomainEventNotification
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.Agents.Events;
 using Microsoft.EntityFrameworkCore;

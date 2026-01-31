@@ -7,10 +7,11 @@ using FlowOS.Infrastructure.Services;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting; // Added for IHostEnvironment
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-
 using FlowOS.Domain.Enums;
+using FlowOS.Security.Models; // Add this
+using System.Collections.Generic; // Add this
 
 namespace FlowOS.API.Services;
 
@@ -26,6 +27,22 @@ public static class DataSeeder
             var tenant = new Tenant("Default Tenant");
             SetPrivateProperty(tenant, "TenantId", DefaultTenantId);
             context.Tenants.Add(tenant);
+            await context.SaveChangesAsync();
+        }
+
+        // 1.5 Ensure Admin Role
+        if (!await context.Roles.AnyAsync(r => r.Name == "Admin" && r.TenantId == DefaultTenantId))
+        {
+            var adminRole = new Role(DefaultTenantId, "Admin");
+            adminRole.AddPermission("workflow.start");
+            adminRole.AddPermission("workflow.create");
+            adminRole.AddPermission("workflow.read");
+            adminRole.AddPermission("event.publish");
+            adminRole.AddPermission("task.complete");
+            adminRole.AddPermission("role.create"); // Just in case
+            adminRole.AddPermission("agent.insight.publish"); // For notifications
+            
+            context.Roles.Add(adminRole);
             await context.SaveChangesAsync();
         }
 
@@ -73,3 +90,4 @@ public static class DataSeeder
         }
     }
 }
+

@@ -1,20 +1,22 @@
 using FlowOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using MediatR;
-using System.Reflection;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces;
+// using FlowOS.Application.Common.Interfaces; // Might still be needed for other things?
+using FlowOS.Application.Common.Interfaces; // Kept if needed
+using FlowOS.Core.Interfaces;
 using FlowOS.API.Services;
 using FlowOS.Security.Policies;
 using FlowOS.Application.Behaviors;
-
-using FlowOS.API.Filters;
-
-using FlowOS.Application.Common.Interfaces;
-using FlowOS.Security.Interfaces; // Add this
-using FlowOS.Infrastructure.Services; // Ensure this is present
-using FlowOS.Core.Interfaces;
-
-using FlowOS.Api.Middleware; // Add this
+using FlowOS.API.Filters; // Case sensitive? FlowOS.API or FlowOS.Api?
+// The folder is src/FlowOS.Api/Filters
+// The namespace in ApiExceptionFilterAttribute.cs is usually FlowOS.API.Filters or FlowOS.Api.Filters.
+// Let's check.
+using FlowOS.Security.Interfaces;
+using FlowOS.Infrastructure.Services;
+using FlowOS.Api.Middleware;
+using FlowOS.Notifications.Application;
+using FlowOS.Notifications.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,47 +24,64 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers(options => 
     options.Filters.Add<ApiExceptionFilterAttribute>());
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add HttpContextAccessor and CurrentUser
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUserService>();
 
 // Add Policy Services
-builder.Services.AddScoped<IPolicyProvider, AllowAllPolicyProvider>();
+builder.Services.AddScoped<IPolicyProvider, EfCorePolicyProvider>();
 builder.Services.AddScoped<IPolicyEvaluator, DefaultPolicyEvaluator>();
 
-// Add DbContext
-builder.Services.AddDbContext<FlowOSDbContext>(options =>
-{
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (!string.IsNullOrEmpty(connectionString))
-    {
-        options.UseNpgsql(connectionString);
-    }
-    else
-    {
-        // Enforce persistent DB (except for Unit Tests which replace this)
-        // If we are running the API (Dev/Prod) and no connection string is provided, fail fast.
-        throw new InvalidOperationException("Database connection string 'DefaultConnection' is missing. You must configure a valid PostgreSQL connection.");
-    }
-});
+// Register Notification Services
+builder.Services.AddSingleton<NotificationStreamService>();
+builder.Services.AddScoped<EventPublishingInterceptor>();
+// Register Repository/Service for Notification Abstractions
+builder.Services.AddScoped<NotificationRepository>();
+builder.Services.AddScoped<INotificationRepository>(sp => sp.GetRequiredService<NotificationRepository>());
+builder.Services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredService<NotificationRepository>());
 
-// Add Event Registry
+// Add DbContext
+    builder.Services.AddDbContext<FlowOSDbContext>((sp, options) =>
+    {
+        var interceptor = sp.GetRequiredService<EventPublishingInterceptor>(); 
+        
+        // Use InMemory for testing if DB is not available (Simulated Logic)
+        // In real dev, we might check a flag or environment variable.
+        bool useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
+        
+        if (useInMemory)
+        {
+            options.UseInMemoryDatabase("FlowOS_Db")
+                   .AddInterceptors(interceptor);
+        }
+        else
+        {
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            if (!string.IsNullOrEmpty(connectionString))
+            {
+                options.UseNpgsql(connectionString)
+                       .AddInterceptors(interceptor);
+            }
+            else
+            {
+                throw new InvalidOperationException("Database connection string 'DefaultConnection' is missing.");
+            }
+        }
+    });
+
+// Infrastructure Services
 builder.Services.AddScoped<IEventRegistry, EventRegistry>();
-builder.Services.AddMemoryCache(); // Add this
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ICapabilityService, CapabilityService>();
 
 // Add MediatR
 builder.Services.AddMediatR(cfg => {
     cfg.RegisterServicesFromAssemblies(
         typeof(FlowOS.Application.Commands.StartWorkflowCommand).Assembly,
-        typeof(FlowOS.Application.Handlers.WorkflowCommandHandlers).Assembly,
-        typeof(FlowOS.Application.Handlers.StateMachineQueryHandlers).Assembly // Ensure new handlers are registered
+        typeof(FlowOS.Notifications.Application.NotificationProjector).Assembly // Add Notifications Assembly
     );
-    // Register Pipeline Behaviors
     cfg.AddOpenBehavior(typeof(PolicyEnforcementBehavior<,>));
 });
 
@@ -73,24 +92,30 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    
-    // Use Mock Auth for Development Testing
     app.UseMiddleware<MockAuthMiddleware>();
 }
 
+app.UseAuthorization();
 app.MapControllers();
 
 // Seed Data
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
-    // context.Database.EnsureCreated(); // Replaced with Migrate() for schema evolution
-    context.Database.Migrate();
-    
-    await DataSeeder.SeedAsync(context, scope.ServiceProvider, app.Environment);
-}
+    using (var scope = app.Services.CreateScope())
+    {
+        var context = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+        
+        // Only migrate if Relational
+        if (context.Database.IsRelational())
+        {
+            context.Database.Migrate();
+        }
+        else
+        {
+            context.Database.EnsureCreated(); // For InMemory
+        }
+        
+        await DataSeeder.SeedAsync(context, scope.ServiceProvider, app.Environment);
+    }
 
 app.Run();
 
-// Make Program public for integration tests
 public partial class Program { }

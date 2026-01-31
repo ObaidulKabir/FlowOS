@@ -2,8 +2,8 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
-using FlowOS.Application.Commands.Security;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Commands.Security; // CreateRoleCommand and AddCapabilityToRoleCommand
+using FlowOS.Core.Interfaces; // Changed namespace
 
 using Microsoft.EntityFrameworkCore;
 using FlowOS.Infrastructure.Persistence; // Quick fix access

@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using FlowOS.Agents.Events;
-using FlowOS.Application.Common.Models;
+using FlowOS.Core.Common.Models;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.Infrastructure.Persistence.ReadModels;
 using MediatR;

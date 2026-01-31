@@ -1,6 +1,12 @@
+using System;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using FlowOS.Application.Commands;
+// using FlowOS.Application.Common.Interfaces; // Removed if not needed, or keep if other interfaces are used
+using FlowOS.Core.Interfaces; // Changed namespace
+using FlowOS.Events.Models;
+using FlowOS.Infrastructure.Persistence;
 
 namespace FlowOS.API.Controllers;
 
@@ -25,12 +31,11 @@ public class EventsController : ControllerBase
         var tenantId = HttpContext.Request.Headers.TryGetValue("x-tenant-id", out var headerVal) 
              && Guid.TryParse(headerVal, out var tid) ? tid : command.TenantId;
         
-        // Better: Use ICurrentUser if available (it is not injected here yet)
-        // I'll assume command has it or rely on header
+        // Ensure command has the correct TenantId
+        var commandWithTenant = command with { TenantId = tenantId };
         
-        // Actually, let's just use the command as is but ensure we log if it fails
-        var result = await _mediator.Send(command);
-        if (!result) return BadRequest($"Event processing failed. Tenant: {command.TenantId}, Event: {command.EventType}, Instance: {command.WorkflowInstanceId}");
+        var result = await _mediator.Send(commandWithTenant);
+        if (!result) return BadRequest($"Event processing failed. Tenant: {tenantId}, Event: {command.EventType}, Instance: {command.WorkflowInstanceId}");
         return Ok("Event published");
     }
 }

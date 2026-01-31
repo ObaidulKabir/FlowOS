@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace FlowOS.Application.Common.Interfaces;
+namespace FlowOS.Core.Interfaces;
 
 public interface ICurrentUser
 {

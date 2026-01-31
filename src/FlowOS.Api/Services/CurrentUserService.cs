@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces; // Changed namespace
 using Microsoft.AspNetCore.Http;
 
 namespace FlowOS.API.Services;
