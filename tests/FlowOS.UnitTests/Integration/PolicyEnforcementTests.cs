@@ -36,12 +36,12 @@ public class DenyAllPolicyProvider : IPolicyProvider
     }
 }
 
-public class PolicyEnforcementTests : IClassFixture<WebApplicationFactory<Program>>
+public class PolicyEnforcementTests : IClassFixture<CustomWebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
 
-    public PolicyEnforcementTests(WebApplicationFactory<Program> factory)
+    public PolicyEnforcementTests(CustomWebApplicationFactory<Program> factory)
     {
         _factory = factory.WithWebHostBuilder(builder =>
         {
@@ -74,6 +74,10 @@ public class PolicyEnforcementTests : IClassFixture<WebApplicationFactory<Progra
     public async Task StartWorkflow_ShouldBeDenied_WhenPolicyDenies()
     {
         // Arrange
+        // Must send headers to trigger "DenyAll" policy instead of "Unauthorized" (401)
+        _client.DefaultRequestHeaders.Add("x-tenant-id", Guid.NewGuid().ToString());
+        _client.DefaultRequestHeaders.Add("X-Mock-Role", "User"); // Authenticated
+
         var command = new StartWorkflowCommand(
             TenantId: Guid.NewGuid(),
             WorkflowDefinitionId: Guid.NewGuid(),

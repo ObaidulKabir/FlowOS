@@ -79,6 +79,90 @@ public static class DataSeeder
                  logger.LogWarning("Could not find flowos-config directory. Tried: {Paths}", string.Join(", ", potentialPaths));
             }
         }
+
+        // 3. Seed WorkflowClass for Default Client (E2E Demo)
+        // Check if our demo client tenant has any WorkflowClasses, if not, create one.
+        var clientTenantId = Guid.Parse("22222222-2222-2222-2222-222222222222"); // Matches E2E tests / Dashboard default
+        
+        if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId))
+        {
+            var demoBp = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+            {
+                Events = new() 
+                { 
+                    new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
+                    new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" }
+                },
+                StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
+                {
+                    InitialState = "Draft",
+                    States = new() { "Draft", "Pending", "Approved" },
+                    Transitions = new() 
+                    {
+                        new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "Pending", EventId = "EVT-SUBMIT" },
+                        new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Approved", EventId = "EVT-APPROVE" }
+                    }
+                },
+                Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
+                {
+                    StartStepId = "Draft",
+                    Steps = new() 
+                    {
+                        new FlowOS.Domain.Blueprints.StepBlueprint 
+                        { 
+                            StepId = "Draft", 
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-SUBMIT", "Pending" } }
+                        },
+                        new FlowOS.Domain.Blueprints.StepBlueprint 
+                        { 
+                            StepId = "Pending", 
+                            StepType = "HumanTask",
+                            NextSteps = new() { { "EVT-APPROVE", "Approved" } }
+                        },
+                        new FlowOS.Domain.Blueprints.StepBlueprint 
+                        { 
+                            StepId = "Approved", 
+                            StepType = "Command",
+                            NextSteps = new() { { "Default", "END" } }
+                        }
+                    }
+                }
+            };
+
+            var demoWc = new WorkflowClass(clientTenantId, "ExpenseApproval", "1.0.0", demoBp);
+            context.WorkflowClasses.Add(demoWc);
+            
+            // Add a Public Template too
+            var publicBp = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint { /* minimal valid */ };
+             // Reuse valid logic
+             var bpValid = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+            {
+                Events = new() { new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-GO", Name = "Go" } },
+                StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint 
+                { 
+                    InitialState = "Start", States = new() { "Start", "End" }, 
+                    Transitions = new() { new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Start", ToState = "End", EventId = "EVT-GO" } } 
+                },
+                Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint 
+                { 
+                    StartStepId = "Start",
+                    Steps = new() 
+                    { 
+                        new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Start", StepType = "Command", NextSteps = new() { { "EVT-GO", "End" } } },
+                        new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "End", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
+                    } 
+                }
+            };
+            
+            var publicWc = new WorkflowClass(Guid.Empty, "GlobalTemplate", "1.0.0", bpValid);
+            publicWc.Publish();
+            publicWc.SubmitForReview();
+            publicWc.ApproveAsPublic();
+            context.WorkflowClasses.Add(publicWc);
+
+            await context.SaveChangesAsync();
+        }
     }
 
     private static void SetPrivateProperty(object obj, string propName, object value)

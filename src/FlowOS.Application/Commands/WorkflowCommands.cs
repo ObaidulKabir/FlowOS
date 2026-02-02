@@ -12,6 +12,7 @@ public record StartWorkflowCommand(
     Guid? WorkflowDefinitionId = null,
     string? WorkflowName = null,
     int? Version = null,
+    Guid WorkflowClassId = default, // Added for Completeness
     string InitialStepId = "Start",
     Guid? CorrelationId = null
 ) : IRequest<Guid>, IPolicySecuredCommand;

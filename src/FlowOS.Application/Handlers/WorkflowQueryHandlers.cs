@@ -10,7 +10,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FlowOS.Application.Handlers;
 
-public class WorkflowQueryHandlers : IRequestHandler<GetWorkflowsQuery, List<WorkflowSummaryDto>>
+public class WorkflowQueryHandlers : 
+    IRequestHandler<GetWorkflowsQuery, List<WorkflowSummaryDto>>,
+    IRequestHandler<GetWorkflowByIdQuery, WorkflowSummaryDto?>
 {
     private readonly FlowOSDbContext _context;
 
@@ -31,10 +33,24 @@ public class WorkflowQueryHandlers : IRequestHandler<GetWorkflowsQuery, List<Wor
         }
 
         var instances = await query
-            .OrderByDescending(w => w.Id) // Ideally CreatedAt, but Id GUID is not sortable by time usually. In MVP acceptable.
+            .OrderByDescending(w => w.Id) 
             .ToListAsync(cancellationToken);
 
-        return instances.Select(i => new WorkflowSummaryDto
+        return instances.Select(MapToDto).ToList();
+    }
+
+    public async Task<WorkflowSummaryDto?> Handle(GetWorkflowByIdQuery request, CancellationToken cancellationToken)
+    {
+        var instance = await _context.WorkflowInstances
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == request.Id && w.TenantId == request.TenantId, cancellationToken);
+
+        return instance == null ? null : MapToDto(instance);
+    }
+
+    private static WorkflowSummaryDto MapToDto(FlowOS.Workflows.Domain.WorkflowInstance i)
+    {
+        return new WorkflowSummaryDto
         {
             Id = i.Id,
             DefinitionId = i.WorkflowDefinitionId,
@@ -42,10 +58,7 @@ public class WorkflowQueryHandlers : IRequestHandler<GetWorkflowsQuery, List<Wor
             CurrentStepId = i.CurrentStepId,
             Status = i.Status.ToString(),
             CorrelationId = i.CorrelationId,
-            // CreatedAt is not on WorkflowInstance entity in Phase 1-6 yet, or it is? 
-            // Checking AdminWorkflowDetailDto mapping, it used First Event.
-            // For summary, we might leave it default or null if not available.
-            CreatedAt = DateTime.MinValue // Placeholder as Entity doesn't have CreatedAt
-        }).ToList();
+            CreatedAt = DateTime.MinValue
+        };
     }
 }

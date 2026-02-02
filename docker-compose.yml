@@ -14,6 +14,30 @@ services:
     depends_on:
       - postgres
 
+  flowos-dashboard:
+    image: flowos-dashboard
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_TARGET=http://flowos-api:8080
+    depends_on:
+      - flowos-api
+
+  flowos-mcp:
+    image: flowos-mcp
+    build:
+      context: .
+      dockerfile: src/FlowOS.MCP/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+    depends_on:
+      - postgres
+
   postgres:
     image: postgres:15-alpine
     environment:

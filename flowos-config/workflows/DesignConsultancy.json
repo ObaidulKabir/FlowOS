@@ -1,0 +1,35 @@
+{
+  "name": "DesignConsultancy",
+  "version": 1,
+  "steps": [
+    {
+      "stepId": "Start",
+      "stepType": "Command",
+      "nextSteps": {
+        "Default": "DesignTask"
+      }
+    },
+    {
+      "stepId": "DesignTask",
+      "stepType": "HumanTask",
+      "nextSteps": {
+        "TaskCompleted": "Review"
+      }
+    },
+    {
+      "stepId": "Review",
+      "stepType": "HumanTask",
+      "nextSteps": {
+        "EVT-DESIGN-APPROVED": "END",
+        "EVT-DESIGN-REJECTED": "Rejected"
+      }
+    },
+    {
+      "stepId": "Rejected",
+      "stepType": "Command",
+      "nextSteps": {
+          "Default": "END"
+      }
+    }
+  ]
+}

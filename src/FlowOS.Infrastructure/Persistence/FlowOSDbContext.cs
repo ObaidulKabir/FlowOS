@@ -18,6 +18,7 @@ public class FlowOSDbContext : DbContext
     public DbSet<AgentInsightReadModel> AgentInsights { get; set; }
     public DbSet<Role> Roles { get; set; }
     public DbSet<Policy> Policies { get; set; }
+    public DbSet<WorkflowClass> WorkflowClasses { get; set; } // Added WorkflowClass
     public DbSet<FlowOS.Notifications.Domain.Notification> Notifications { get; set; } // Add this
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }

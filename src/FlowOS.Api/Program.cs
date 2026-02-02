@@ -17,6 +17,7 @@ using FlowOS.Infrastructure.Services;
 using FlowOS.Api.Middleware;
 using FlowOS.Notifications.Application;
 using FlowOS.Notifications.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication; // Add this
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +30,10 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUserService>();
+
+// Add Authentication Scheme to prevent 500 errors on Challenge/Forbid
+builder.Services.AddAuthentication("Mock")
+    .AddScheme<AuthenticationSchemeOptions, MockAuthenticationHandler>("Mock", null);
 
 // Add Policy Services
 builder.Services.AddScoped<IPolicyProvider, EfCorePolicyProvider>();
@@ -76,6 +81,10 @@ builder.Services.AddScoped<IEventRegistry, EventRegistry>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ICapabilityService, CapabilityService>();
 
+// Governance Domain Services
+builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassValidator>();
+builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassManager>();
+
 // Add MediatR
 builder.Services.AddMediatR(cfg => {
     cfg.RegisterServicesFromAssemblies(
@@ -85,6 +94,18 @@ builder.Services.AddMediatR(cfg => {
     cfg.AddOpenBehavior(typeof(PolicyEnforcementBehavior<,>));
 });
 
+// Add CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowDashboard",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // Allow Vite Dashboard
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -92,9 +113,11 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseCors("AllowDashboard"); // Enable CORS for Dev
     app.UseMiddleware<MockAuthMiddleware>();
 }
 
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

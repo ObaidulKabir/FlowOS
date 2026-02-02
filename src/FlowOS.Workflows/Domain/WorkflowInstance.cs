@@ -9,6 +9,7 @@ public class WorkflowInstance
     public Guid TenantId { get; private set; }
     public Guid? CorrelationId { get; private set; }
     public Guid WorkflowDefinitionId { get; private set; }
+    public Guid WorkflowClassId { get; private set; } // Link to Governance Entity
     public int WorkflowVersion { get; private set; }
     public string CurrentStepId { get; private set; }
     public WorkflowInstanceStatus Status { get; private set; }
@@ -20,7 +21,7 @@ public class WorkflowInstance
         CurrentStepId = null!;
     }
 
-    public WorkflowInstance(Guid tenantId, Guid definitionId, int version, string initialStepId, Guid? correlationId = null)
+    public WorkflowInstance(Guid tenantId, Guid definitionId, Guid workflowClassId, int version, string initialStepId, Guid? correlationId = null)
     {
         if (string.IsNullOrWhiteSpace(initialStepId)) 
             throw new ArgumentNullException(nameof(initialStepId));
@@ -28,14 +29,16 @@ public class WorkflowInstance
         Id = Guid.NewGuid();
         TenantId = tenantId;
         WorkflowDefinitionId = definitionId;
+        WorkflowClassId = workflowClassId;
         WorkflowVersion = version;
         CurrentStepId = initialStepId;
         Status = WorkflowInstanceStatus.Running;
         CorrelationId = correlationId;
-        CreatedAt = DateTime.UtcNow; // Initialize CreatedAt
+        CreatedAt = DateTime.UtcNow; 
     }
 
-    public DateTime CreatedAt { get; private set; } // Add CreatedAt property
+    public DateTime CreatedAt { get; private set; } 
+    public DateTime? CompletedAt { get; private set; }
 
     public void AdvanceTo(string nextStepId)
     {
@@ -49,6 +52,7 @@ public class WorkflowInstance
     public void Complete()
     {
         Status = WorkflowInstanceStatus.Completed;
+        CompletedAt = DateTime.UtcNow;
     }
 
     public void Wait()

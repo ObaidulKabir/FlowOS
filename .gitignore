@@ -1,49 +1,33 @@
 # .NET Core
-project.lock.json
-project.fragment.lock.json
-artifacts/
-
-# Visual Studio Code
-.vscode/
-
-# Visual Studio
+bin/
+obj/
 .vs/
+.vscode/
+.idea/
 *.user
-*.userosscache
-*.sln.docstates
 *.suo
+*.pdb
 *.cache
 *.dll
-*.pdb
 *.exe
-*.obj
-*.cache
+appsettings.Development.json
+appsettings.Local.json
 
-# Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
+# Node.js / React
+node_modules/
+dist/
+build/
+.env
+.env.local
+.DS_Store
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# NuGet Packages
-*.nupkg
-# The packages folder can be ignored because of Package Restore
-**/[Pp]ackages/*
-# except build/, which is used as an MSBuild target.
-!**/[Pp]ackages/build/
-# Uncomment if necessary however generally it will be regenerated when needed
-#!**/[Pp]ackages/repositories.config
-# NuGet v3's project.json files produces more ignorable files
-*.nuget.props
-*.nuget.targets
+# Docker
+.docker/
 
-# TestResults
-TestResults/
+# FlowOS Specific
+flowos-config/secrets/
+.trae/

@@ -11,6 +11,7 @@ public class WorkflowDefinition
     public string Name { get; private set; }
     public int Version { get; private set; }
     public WorkflowStatus Status { get; private set; }
+    public string StartStepId { get; private set; } = string.Empty;
     
     public List<WorkflowStepDefinition> Steps { get; private set; }
 
@@ -20,7 +21,7 @@ public class WorkflowDefinition
         Steps = new List<WorkflowStepDefinition>();
     }
 
-    public WorkflowDefinition(Guid tenantId, string name, int version = 1)
+    public WorkflowDefinition(Guid tenantId, string name, int version = 1, string startStepId = "Start")
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
 
@@ -29,6 +30,7 @@ public class WorkflowDefinition
         Name = name;
         Version = version;
         Status = WorkflowStatus.Draft;
+        StartStepId = startStepId;
         Steps = new List<WorkflowStepDefinition>();
     }
 

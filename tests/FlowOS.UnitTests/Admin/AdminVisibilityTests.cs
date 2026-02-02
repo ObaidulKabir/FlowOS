@@ -48,7 +48,7 @@ public class AdminVisibilityTests
         context.WorkflowDefinitions.Add(definition);
 
         // 2. Instance
-        var instance = new WorkflowInstance(tenantId, definition.Id, 1, "Step1", instanceId);
+        var instance = new WorkflowInstance(tenantId, definition.Id, Guid.Empty, 1, "Step1", instanceId);
         context.WorkflowInstances.Add(instance);
 
         // 3. Events (Timeline)

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using FlowOS.Workflows.Domain;
+using FlowOS.Workflows.Enums;
 using FlowOS.Infrastructure.Persistence;
 using MediatR;
 using FlowOS.Workflows.Engine;
@@ -45,11 +46,12 @@ public class WorkflowCommandHandlers :
                     .AsNoTracking()
                     .FirstOrDefaultAsync(w => w.Name == request.WorkflowName 
                         && w.Version == request.Version.Value 
-                        && w.TenantId == request.TenantId, cancellationToken);
+                        && w.TenantId == request.TenantId
+                        && w.Status == WorkflowStatus.Published, cancellationToken);
                 
                 if (def == null)
                 {
-                    throw new ArgumentException($"Workflow definition '{request.WorkflowName}' v{request.Version} not found.");
+                    throw new ArgumentException($"Workflow definition '{request.WorkflowName}' v{request.Version} not found or not published.");
                 }
                 definitionId = def.Id;
             }
@@ -58,20 +60,44 @@ public class WorkflowCommandHandlers :
                 // Resolve Latest Version
                 var def = await _context.WorkflowDefinitions
                     .AsNoTracking()
-                    .Where(w => w.Name == request.WorkflowName && w.TenantId == request.TenantId)
+                    .Where(w => w.Name == request.WorkflowName 
+                        && w.TenantId == request.TenantId
+                        && w.Status == WorkflowStatus.Published)
                     .OrderByDescending(w => w.Version)
                     .FirstOrDefaultAsync(cancellationToken);
                     
                 if (def == null)
                 {
-                    throw new ArgumentException($"No definition found for workflow '{request.WorkflowName}'.");
+                    throw new ArgumentException($"No published definition found for workflow '{request.WorkflowName}'.");
                 }
                 definitionId = def.Id;
             }
         }
+        else if (request.WorkflowClassId != Guid.Empty)
+        {
+             var wc = await _context.WorkflowClasses
+                 .AsNoTracking()
+                 .FirstOrDefaultAsync(c => c.Id == request.WorkflowClassId, cancellationToken);
+             
+             if (wc == null) throw new ArgumentException($"WorkflowClass {request.WorkflowClassId} not found.");
+             
+             // Map Version string "1.0.0" to int 1. (Assuming Semantic Versioning Major)
+             // Or find exact match if stored differently.
+             // For now, use the Name and find the latest or specific version.
+             
+             int version = 1;
+             if (int.TryParse(wc.Version.Split('.')[0], out var v)) version = v;
+
+             var def = await _context.WorkflowDefinitions
+                 .AsNoTracking()
+                 .FirstOrDefaultAsync(d => d.Name == wc.Name && d.Version == version && d.TenantId == request.TenantId, cancellationToken);
+                 
+             if (def == null) throw new ArgumentException($"No definition found for class {wc.Name} v{wc.Version}");
+             definitionId = def.Id;
+        }
         else
         {
-             throw new ArgumentException("Either WorkflowDefinitionId or WorkflowName must be provided.");
+             throw new ArgumentException("Either WorkflowDefinitionId, WorkflowClassId, or WorkflowName must be provided.");
         }
 
         // Fix: If we resolved definitionId but request.Version was null, we need to know the actual version for the Instance.
@@ -91,6 +117,7 @@ public class WorkflowCommandHandlers :
         var instance = new WorkflowInstance(
             request.TenantId,
             definitionId,
+            request.WorkflowClassId, // Use passed WorkflowClassId (might be Guid.Empty if not provided in old DTO)
             actualVersion,
             request.InitialStepId,
             request.CorrelationId

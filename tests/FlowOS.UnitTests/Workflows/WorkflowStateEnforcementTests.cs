@@ -24,7 +24,7 @@ public class WorkflowStateEnforcementTests
     public void Advance_Should_Fail_If_StateMachine_Denies_Transition()
     {
         // 1. Setup Workflow
-        var wfDef = new WorkflowDefinition(_tenantId, "OrderProcess", 1);
+        var wfDef = new WorkflowDefinition(_tenantId, "OrderProcess", 1, "Start");
         wfDef.AddStep(new WorkflowStepDefinition("Start", WorkflowStepType.Command)
         {
             NextSteps = { { "Submit", "Review" } } // Workflow says: "Submit" event moves to "Review"
@@ -32,7 +32,7 @@ public class WorkflowStateEnforcementTests
         wfDef.AddStep(new WorkflowStepDefinition("Review", WorkflowStepType.HumanTask)); // Define Review step
         wfDef.Publish();
 
-        var wfInstance = new WorkflowInstance(_tenantId, wfDef.Id, 1, "Start", Guid.NewGuid());
+        var wfInstance = new WorkflowInstance(_tenantId, wfDef.Id, Guid.NewGuid(), 1, "Start");
 
         // 2. Setup State Machine (The Law)
         var smDef = new StateMachineDefinition(_tenantId, "Order", "Created");
@@ -72,7 +72,7 @@ public class WorkflowStateEnforcementTests
         wfDef.AddStep(new WorkflowStepDefinition("Review", WorkflowStepType.HumanTask));
         wfDef.Publish();
 
-        var wfInstance = new WorkflowInstance(_tenantId, wfDef.Id, 1, "Start", Guid.NewGuid());
+        var wfInstance = new WorkflowInstance(_tenantId, wfDef.Id, Guid.NewGuid(), 1, "Start");
 
         // 2. Setup State Machine
         var smDef = new StateMachineDefinition(_tenantId, "Order", "Created");

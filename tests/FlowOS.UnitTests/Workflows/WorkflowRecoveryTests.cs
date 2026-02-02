@@ -64,7 +64,7 @@ public class WorkflowRecoveryTests
         // 1. Simulate "Process A" - Create and Advance
         using (var context = new TestFlowOSDbContext(_dbOptions))
         {
-            var instance = new WorkflowInstance(tenantId, def.Id, def.Version, "Step1", correlationId);
+            var instance = new WorkflowInstance(tenantId, def.Id, Guid.Empty, def.Version, "Step1", correlationId);
             workflowId = instance.Id;
 
             // Advance to Step 2

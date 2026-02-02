@@ -15,39 +15,36 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
+using FlowOS.Security.Models; // For Role
 using FlowOS.UnitTests.Workflows; // For TestFlowOSDbContext
 
 namespace FlowOS.UnitTests.Integration;
 
-public class EndToEndTests : IClassFixture<WebApplicationFactory<Program>>
+public class EndToEndTests : IClassFixture<CustomWebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
     private readonly Guid _tenantId = Guid.NewGuid();
 
-    public EndToEndTests(WebApplicationFactory<Program> factory)
+    public EndToEndTests(CustomWebApplicationFactory<Program> factory)
     {
         _factory = factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
             {
-                // Instead of removing all descriptors (which might remove internal EF things),
-                // we'll try to just Add the new one. Since it's the last one added, it should take precedence.
-                // However, MediatR might have already captured the previous one? No, it resolves at runtime.
-                
-                // Let's remove ONLY the specific Context/Options
+                // ... (Keep existing DB setup)
                 var contextDescriptors = services.Where(d => d.ServiceType == typeof(FlowOSDbContext)).ToList();
                 foreach (var d in contextDescriptors) services.Remove(d);
 
                 var optionsDescriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<FlowOSDbContext>)).ToList();
                 foreach (var d in optionsDescriptors) services.Remove(d);
                 
-                // Add simple InMemory DB using the TEST context but registered as the REAL context
-                // Use Scoped lifetime explicitly to match EF Core default
+                var dbName = "FlowOS_E2E_" + Guid.NewGuid();
+
                 services.AddScoped<FlowOSDbContext>(provider => 
                 {
                     var options = new DbContextOptionsBuilder<FlowOSDbContext>()
-                        .UseInMemoryDatabase("FlowOS_E2E_" + Guid.NewGuid())
+                        .UseInMemoryDatabase(dbName)
                         .EnableSensitiveDataLogging()
                         .Options;
                     
@@ -61,35 +58,57 @@ public class EndToEndTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task StartWorkflow_ShouldReturnInstanceId()
     {
+        Guid workflowId;
+        int workflowVersion;
+
         // Arrange
-        // We need to seed a WorkflowDefinition first
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            
+            // Seed Role
+            var adminRole = new Role(_tenantId, "Admin");
+            adminRole.AddPermission("workflow.start");
+            db.Roles.Add(adminRole);
+
+            // Seed Workflow
             var def = new WorkflowDefinition(_tenantId, "IntegrationTestFlow");
-            def.AddStep(new WorkflowStepDefinition("Start", WorkflowStepType.Command));
+            var step = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+            step.NextSteps.Add("Default", "END");
+            def.AddStep(step);
             def.Publish();
             db.WorkflowDefinitions.Add(def);
-            await db.SaveChangesAsync();
-
-            // Act
-            var command = new StartWorkflowCommand(
-                _tenantId, 
-                def.Id, 
-                null, // WorkflowName
-                def.Version, 
-                "Start", 
-                Guid.NewGuid()
-            );
             
-            var response = await _client.PostAsJsonAsync("/api/workflows/start", command);
-
-            // Assert
-            response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<WorkflowStartResponse>();
-            Assert.NotNull(result);
-            Assert.NotEqual(Guid.Empty, result.WorkflowInstanceId);
+            await db.SaveChangesAsync();
+            
+            workflowId = def.Id;
+            workflowVersion = def.Version;
         }
+
+        // Setup Headers
+        _client.DefaultRequestHeaders.Remove("x-tenant-id");
+        _client.DefaultRequestHeaders.Add("x-tenant-id", _tenantId.ToString());
+        _client.DefaultRequestHeaders.Remove("X-Mock-Role");
+        _client.DefaultRequestHeaders.Add("X-Mock-Role", "Admin");
+
+        // Act
+        var command = new StartWorkflowCommand(
+            _tenantId, 
+            workflowId, 
+            null, 
+            workflowVersion, 
+            Guid.NewGuid(), // WorkflowClassId
+            "Start", 
+            Guid.NewGuid()
+        );
+        
+        var response = await _client.PostAsJsonAsync("/api/workflows/start", command);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<WorkflowStartResponse>();
+        Assert.NotNull(result);
+        Assert.NotEqual(Guid.Empty, result.WorkflowInstanceId);
     }
 
     private record WorkflowStartResponse(Guid WorkflowInstanceId);

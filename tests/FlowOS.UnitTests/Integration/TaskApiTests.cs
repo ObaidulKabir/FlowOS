@@ -48,7 +48,7 @@ public class TaskApiTests
         // 1. Seed Workflow (Task)
         // Need to use reflection or constructor if public. 
         // WorkflowInstance ctor is public.
-        var instance = new WorkflowInstance(tenantId, Guid.NewGuid(), 1, "ReviewStep", instanceId); // instanceId passed as correlationId
+        var instance = new WorkflowInstance(tenantId, Guid.NewGuid(), Guid.Empty, 1, "ReviewStep", instanceId); // instanceId passed as correlationId
         instance.Wait(); // Set to Waiting
         context.WorkflowInstances.Add(instance);
         await context.SaveChangesAsync();
@@ -93,7 +93,7 @@ public class TaskApiTests
         context.WorkflowDefinitions.Add(definition);
 
         var correlationId = Guid.NewGuid();
-        var instance = new WorkflowInstance(tenantId, definition.Id, 1, "ReviewStep", correlationId);
+        var instance = new WorkflowInstance(tenantId, definition.Id, Guid.Empty, 1, "ReviewStep", correlationId);
         context.WorkflowInstances.Add(instance);
         await context.SaveChangesAsync();
 

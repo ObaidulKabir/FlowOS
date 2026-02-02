@@ -312,3 +312,51 @@ POST /api/workflows/start
 # Complete Task (Emits 'TaskCompleted' event)
 POST /api/tasks/{id}/complete
 ```
+
+---
+
+## 12. 🔔 Notifications (User Awareness)
+
+Notifications are an **Out-of-Band** projection of the Event Log.
+
+### Philosophy
+*   **State is Authoritative**: The Workflow Engine (Database) is the single source of truth.
+*   **Notifications are Informational**: They are a derived view designed for human attention.
+*   **Isolation**: A failure to deliver a notification (e.g., email server down) **MUST NOT** rollback the core business transaction.
+
+### Mechanism
+1.  **Commit**: Transaction commits to DB (Event Log + State).
+2.  **Project**: An asynchronous (or post-commit) hook projects the Event into a `Notification` record.
+3.  **Broadcast**: The Notification is pushed to real-time channels (SSE, Websockets).
+
+### Guarantees
+*   **At-Least-Once**: You might receive duplicate notifications for the same event (idempotency side-effect).
+*   **Eventual Consistency**: Notification arrives ms/seconds after the state change.
+
+---
+
+## 13.  WorkflowClass Governance
+
+FlowOS introduces `WorkflowClass` as the strict unit of authoring and governance.
+
+### Core Concept
+A `WorkflowClass` is a versioned "Configuration Pack" that bundles:
+*   **Vocabulary** (Events)
+*   **Law** (State Machine)
+*   **Orchestration** (Workflow)
+*   **Governance** (Roles & Capabilities)
+
+### Lifecycle & Scope
+*   **Scopes**: `Private` (Tenant-only), `Shared` (Review), `Public` (Template).
+*   **Status**: `Draft` -> `Published` -> `Shared` -> `Public`.
+*   **Copy-to-Use**: Public templates are immutable. Tenants must **Copy** them (resetting version to v1) to use them.
+
+### Validation
+Server-side validation is mandatory and authoritative. It checks:
+*   **Structure**: Schema validity.
+*   **Consistency**: All references resolve.
+*   **Law**: Workflow respects State Machine.
+*   **Governance**: Roles/Capabilities declared.
+
+See [11 - WorkflowClass Authoring](sdk/11-workflow-class-authoring.md) for details.
+

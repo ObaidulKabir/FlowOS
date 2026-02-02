@@ -41,7 +41,7 @@ public class WorkflowEngineTests
     {
         // Arrange
         var def = CreateApprovalWorkflow();
-        var instance = new WorkflowInstance(_tenantId, def.Id, def.Version, "Start");
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, def.StartStepId);
         var evt = new TestDomainEvent(_tenantId, "Submitted");
 
         // Act
@@ -58,7 +58,7 @@ public class WorkflowEngineTests
     {
         // Arrange
         var def = CreateApprovalWorkflow();
-        var instance = new WorkflowInstance(_tenantId, def.Id, def.Version, "Review");
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Review");
         var evt = new TestDomainEvent(_tenantId, "Approved");
 
         // Act
@@ -74,7 +74,7 @@ public class WorkflowEngineTests
     {
         // Arrange
         var def = CreateApprovalWorkflow();
-        var instance = new WorkflowInstance(_tenantId, def.Id, def.Version, "Start");
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Start");
         var evt = new TestDomainEvent(_tenantId, "UnknownEvent");
 
         // Act
