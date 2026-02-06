@@ -85,7 +85,7 @@ public class Security_RoleCapability : IClassFixture<WebApplicationFactory<Progr
         _client.DefaultRequestHeaders.Remove("X-Mock-Role");
         _client.DefaultRequestHeaders.Add("X-Mock-Role", "Intern");
         
-        var startCommand = new StartWorkflowCommand(_tenantId, null, "SecureFlow", 1, "Start", Guid.NewGuid());
+        var startCommand = new StartWorkflowCommand(_tenantId, null, "SecureFlow", 1, Guid.Empty, "Start", Guid.NewGuid());
         var responseIntern = await _client.PostAsJsonAsync("/api/workflows/start", startCommand);
         
         // Assert: 403 Forbidden or 500 with PolicyViolationException
@@ -103,7 +103,7 @@ public class Security_RoleCapability : IClassFixture<WebApplicationFactory<Progr
         _client.DefaultRequestHeaders.Remove("X-Mock-Role");
         _client.DefaultRequestHeaders.Add("X-Mock-Role", "Manager");
         
-        var startCommand2 = new StartWorkflowCommand(_tenantId, null, "SecureFlow", 1, "Start", Guid.NewGuid());
+        var startCommand2 = new StartWorkflowCommand(_tenantId, null, "SecureFlow", 1, Guid.Empty, "Start", Guid.NewGuid());
         var responseManager = await _client.PostAsJsonAsync("/api/workflows/start", startCommand2);
         
         responseManager.EnsureSuccessStatusCode();

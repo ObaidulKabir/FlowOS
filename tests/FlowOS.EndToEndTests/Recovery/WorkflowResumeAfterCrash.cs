@@ -108,7 +108,7 @@ public class WorkflowResumeAfterCrash : IClassFixture<WebApplicationFactory<Prog
             }
 
             // Start Workflow
-            var startCommand = new StartWorkflowCommand(_tenantId, null, "DesignConsultancy", 1, "Start", Guid.NewGuid());
+            var startCommand = new StartWorkflowCommand(_tenantId, null, "DesignConsultancy", 1, Guid.Empty, "Start", Guid.NewGuid());
             var response = await clientA.PostAsJsonAsync("/api/workflows/start", startCommand);
             response.EnsureSuccessStatusCode();
             workflowId = (await response.Content.ReadFromJsonAsync<WorkflowStartResponse>()).WorkflowInstanceId;

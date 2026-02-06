@@ -45,13 +45,23 @@ public class PolicyEnforcementBehavior<TRequest, TResponse> : IPipelineBehavior<
             if (attribute != null)
             {
                 var userRoles = _currentUser.Roles ?? new List<string>();
+                
+                // DEBUG LOGGING
+                Console.WriteLine($"[PolicyEnforcement] Checking capability: {attribute.Capability}");
+                Console.WriteLine($"[PolicyEnforcement] User: {_currentUser.Id}, Roles: {string.Join(",", userRoles)}");
+                Console.WriteLine($"[PolicyEnforcement] Tenant: {tenantId}");
+
                 var capabilities = await _capabilityService.GetCapabilitiesAsync(tenantId, userRoles);
                 
+                Console.WriteLine($"[PolicyEnforcement] Resolved Capabilities: {string.Join(", ", capabilities)}");
+
                 if (!capabilities.Contains(attribute.Capability))
                 {
                     // Fail if user does not have the required capability
+                     Console.WriteLine($"[PolicyEnforcement] FAILED: Missing capability {attribute.Capability}");
                      throw new PolicyViolationException("CapabilityCheck", $"Missing required capability: {attribute.Capability}");
                 }
+                Console.WriteLine($"[PolicyEnforcement] PASSED: Has capability {attribute.Capability}");
             }
 
             // 2. Dynamic Policy Check

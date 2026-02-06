@@ -149,7 +149,7 @@ public class Workflow_CodeConfigParity : IClassFixture<WebApplicationFactory<Pro
         }
 
         // Attempt to start
-        var command = new StartWorkflowCommand(_tenantId, null, "UnpublishedWorkflow", 1, "Start", Guid.NewGuid());
+        var command = new StartWorkflowCommand(_tenantId, null, "UnpublishedWorkflow", 1, Guid.Empty, "Start", Guid.NewGuid());
         var response = await _client.PostAsJsonAsync("/api/workflows/start", command);
 
         Assert.False(response.IsSuccessStatusCode, "Should not start unpublished workflow");
@@ -219,7 +219,7 @@ public class Workflow_CodeConfigParity : IClassFixture<WebApplicationFactory<Pro
     // Helpers
     private async Task<Guid> StartWorkflow(string name, int version = 1)
     {
-        var command = new StartWorkflowCommand(_tenantId, null, name, version, "Start", Guid.NewGuid());
+        var command = new StartWorkflowCommand(_tenantId, null, name, version, Guid.Empty, "Start", Guid.NewGuid());
         var response = await _client.PostAsJsonAsync("/api/workflows/start", command);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<WorkflowStartResponse>();

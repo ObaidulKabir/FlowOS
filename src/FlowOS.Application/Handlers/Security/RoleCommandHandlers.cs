@@ -53,6 +53,9 @@ public class RoleCommandHandlers :
         // 2. Add Capability (Permission)
         role.AddPermission(request.CapabilityCode);
 
+        // Force update to ensure change tracking picks up the complex property change
+        _context.Entry(role).Property(r => r.Permissions).IsModified = true;
+        
         // 3. Save
         await _context.SaveChangesAsync(cancellationToken);
         return true;

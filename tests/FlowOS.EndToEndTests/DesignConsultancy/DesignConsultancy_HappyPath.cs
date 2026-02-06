@@ -123,6 +123,7 @@ public class DesignConsultancy_HappyPath : IClassFixture<WebApplicationFactory<P
             null, 
             "DesignConsultancy", 
             1, 
+            Guid.Empty,
             "Start", 
             Guid.NewGuid()
         );

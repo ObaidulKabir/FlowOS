@@ -9,7 +9,7 @@ A global policy "Weekend Freeze" (simulated as "DenyAll") is active. A user atte
 *Derived from: `tests/FlowOS.EndToEndTests/DesignConsultancy/DesignConsultancy_PolicyBlock.cs`*
 
 ```csharp
-var startCommand = new StartWorkflowCommand(tenantId, null, "DesignConsultancy", 1, "Start", Guid.NewGuid());
+var startCommand = new StartWorkflowCommand(tenantId, null, "DesignConsultancy", 1, Guid.Empty, "Start", Guid.NewGuid());
 var response = await client.PostAsJsonAsync("/api/workflows/start", startCommand);
 
 // Assert

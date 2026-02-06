@@ -54,8 +54,11 @@ public class TasksController : ControllerBase
         );
         
         var success = await _mediator.Send(command);
-        if (!success) return BadRequest("Could not complete task or task not found.");
+        if (!success) 
+        {
+             return BadRequest("Could not complete task or task not found.");
+        }
         
-        return Ok(new { success = true });
+        return Ok();
     }
 }

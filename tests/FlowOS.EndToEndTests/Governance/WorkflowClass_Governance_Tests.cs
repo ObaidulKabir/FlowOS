@@ -103,7 +103,7 @@ public class WorkflowClass_Governance_Tests : IClassFixture<WebApplicationFactor
                     Steps = new() 
                     { 
                         new StepBlueprint { StepId = "Start", StepType = "Command", NextSteps = new() { { "EVT-GO", "End" } } },
-                        new StepBlueprint { StepId = "End", StepType = "Command" }
+                        new StepBlueprint { StepId = "End", StepType = "End" }
                     } 
                 }
             };
@@ -152,7 +152,7 @@ public class WorkflowClass_Governance_Tests : IClassFixture<WebApplicationFactor
                     Steps = new() 
                     { 
                         new StepBlueprint { StepId = "Start", StepType = "Command", NextSteps = new() { { "EVT-GO", "End" } } },
-                        new StepBlueprint { StepId = "End", StepType = "Command" }
+                        new StepBlueprint { StepId = "End", StepType = "End" }
                     } 
                 }
             };

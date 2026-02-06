@@ -6,6 +6,8 @@ using FlowOS.Core.Interfaces;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Services;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Workflows.Domain;
+using FlowOS.Workflows.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -150,8 +152,73 @@ public class WorkflowClassesController : ControllerBase
             return BadRequest(new { Errors = result.Errors });
         }
 
+        // Compile and Persist Runtime Definition
+        try 
+        {
+            var definition = MapToRuntimeDefinition(wc);
+            
+            // Check if already exists (idempotency)
+            var existing = await _context.WorkflowDefinitions
+                .FirstOrDefaultAsync(d => d.Name == definition.Name && d.Version == definition.Version && d.TenantId == definition.TenantId);
+                
+            if (existing == null)
+            {
+                _context.WorkflowDefinitions.Add(definition);
+            }
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Error = $"Compilation failed: {ex.Message}" });
+        }
+
         await _context.SaveChangesAsync();
         return Ok(MapToDto(wc));
+    }
+
+    private WorkflowDefinition MapToRuntimeDefinition(WorkflowClass wc)
+    {
+        // 1. Version Parsing
+        int version = 1;
+        var versionStr = wc.Version;
+        if (!string.IsNullOrEmpty(versionStr))
+        {
+            if (versionStr.StartsWith("v", StringComparison.OrdinalIgnoreCase)) versionStr = versionStr.Substring(1);
+            var majorPart = versionStr.Split(new[] { '.', '-', '+' })[0];
+            if (int.TryParse(majorPart, out var v)) version = v;
+        }
+
+        // 2. Create Definition
+        var def = new WorkflowDefinition(
+            wc.TenantId, 
+            wc.Name, 
+            version, 
+            wc.Definition.Workflow.StartStepId
+        );
+
+        // 3. Add Steps
+        foreach (var stepBp in wc.Definition.Workflow.Steps)
+        {
+            if (!Enum.TryParse<WorkflowStepType>(stepBp.StepType, true, out var stepType))
+            {
+                // Try to handle "Action" as "Command" if needed, or throw
+                if (stepBp.StepType.Equals("Action", StringComparison.OrdinalIgnoreCase)) 
+                    stepType = WorkflowStepType.Command;
+                else
+                    throw new InvalidOperationException($"Invalid StepType '{stepBp.StepType}' in step '{stepBp.StepId}'");
+            }
+
+            var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType)
+            {
+                AllowedRoles = stepBp.RequiredRoles,
+                NextSteps = stepBp.NextSteps
+            };
+            def.AddStep(stepDef);
+        }
+        
+        // 4. Publish (Set Status)
+        def.Publish();
+
+        return def;
     }
 
     [HttpPost("{id}/submit")]
@@ -276,9 +343,9 @@ public class WorkflowClassesController : ControllerBase
         var wc = await _context.WorkflowClasses.FindAsync(id);
         if (wc == null) return NotFound();
 
-        // Allow copying if it's Public OR if it's my own (Create New Version / Clone)
-        if (wc.Scope != FlowOS.Domain.Enums.WorkflowClassScope.Public && wc.TenantId != _currentUser.TenantId)
-             return Forbid();
+        // Allow copying only if it's Public
+        if (wc.Scope != FlowOS.Domain.Enums.WorkflowClassScope.Public)
+             return BadRequest("Only Public WorkflowClasses can be copied.");
 
         if (request.NewTenantId != _currentUser.TenantId)
              return Forbid("Cannot copy to a different tenant.");

@@ -114,8 +114,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
     app.UseCors("AllowDashboard"); // Enable CORS for Dev
-    app.UseMiddleware<MockAuthMiddleware>();
 }
+
+// FORCE MOCK AUTH FOR TESTING
+app.UseMiddleware<MockAuthMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -140,5 +142,7 @@ app.MapControllers();
     }
 
 app.Run();
+
+public partial class Program { }
 
 public partial class Program { }

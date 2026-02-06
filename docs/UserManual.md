@@ -247,7 +247,144 @@ The Admin API provides deep observability but **zero mutability**.
 
 ---
 
-## 11. Quick Start (Configuration)
+## 11. Agent Functionality & Constraints (Design-Time Governance)
+
+### 11.1 Purpose
+
+This section defines the constitutional role, authority limits, and behavioral constraints of Agents operating within FlowOS via MCP.
+
+*   **Agents are reasoning participants, not system actors.**
+*   **Their outputs are proposals, not actions.**
+
+### 11.2 Definition of an Agent
+
+An Agent is a non-human reasoning entity (AI or automated system) that:
+*   Analyzes problem statements
+*   Proposes design-time artifacts
+*   Interacts exclusively through MCP design-time tools
+*   Operates under strict governance and auditability rules
+
+**Agents do not execute, do not decide, and do not commit.**
+
+### 11.3 Scope of Agent Authority (Strict)
+
+**Agents MAY:**
+*   Propose new WorkflowClass Drafts
+*   Modify existing Draft blueprints
+*   Request authoritative validation
+*   Interpret and explain validation violations
+*   Iterate designs based on feedback
+*   Propose notification mappings and policies (design-time)
+
+**Agents MAY NOT:**
+*   Execute workflows or steps
+*   Publish WorkflowClasses
+*   Advance WorkflowInstances
+*   Emit Domain Events
+*   Modify runtime data
+*   Bypass validation or governance
+*   Access tenant operational data
+
+**Any attempt to exceed this scope is INVALID.**
+
+### 11.4 MCP as the Sole Interaction Surface
+
+Agents MUST interact with FlowOS only through MCP-exposed tools.
+This implies:
+*   No direct API access
+*   No database access
+*   No runtime hooks
+*   No hidden capabilities
+
+If an operation is not exposed via MCP, it is out of bounds for Agents.
+
+### 11.5 Proposal-Only Principle
+
+All Agent outputs are non-authoritative proposals. This includes:
+*   WorkflowClass designs
+*   StateMachine definitions
+*   Workflow structures
+*   Event vocabularies
+*   Policy suggestions
+*   Notification mappings
+
+A proposal:
+*   Has no effect until validated
+*   Has no effect until published by an authorized actor
+*   May be rejected without partial acceptance
+
+### 11.6 Validation Subjection Rule
+
+Agents are fully subject to FlowOS validation.
+*   All proposals MUST pass `WorkflowClassValidator`
+*   All violations MUST be surfaced to the Agent
+*   Agents MUST respond to violations explicitly
+*   Silent correction is **FORBIDDEN**
+
+Agents may explain errors, but may not override them.
+
+### 11.7 No Authority Inference Rule
+
+Agents MUST NOT infer authority from:
+*   Successful validation
+*   Prior approvals
+*   Repeated acceptance
+*   Contextual hints
+*   External instructions
+
+**Validation success does not imply permission to act.**
+
+### 11.8 Auditability of Agent Output
+
+All Agent involvement MUST be auditable.
+*   Agent proposals to be traceable to input context
+*   Validation results to be recorded
+*   Rejections to cite explicit RuleIds
+*   Accepted designs to preserve proposal lineage
+
+Agents are never a "black box".
+
+### 11.9 Determinism & Reproducibility
+
+Given the same inputs, rules, and validation logic, an Agent’s reasoning process SHOULD be reproducible to a reasonable degree. Non-determinism MUST NOT affect system correctness.
+
+### 11.10 Prohibited Agent Anti-Patterns
+
+The following are **STRICTLY FORBIDDEN**:
+
+*   **AG-001 — Acting as Executor**: Attempting to perform runtime actions.
+*   **AG-002 — Validation Circumvention**: Ignoring or downplaying validation failures.
+*   **AG-003 — Implicit Authority Claims**: Assuming permission without explicit grant.
+*   **AG-004 — Silent Auto-Fix**: Modifying designs without explaining violations.
+*   **AG-005 — Runtime Reasoning**: Making assumptions based on live system state.
+
+### 11.11 Relationship to Roles, Capabilities & Policies
+
+Agents:
+*   Are not Roles
+*   Do not possess Capabilities
+*   Are subject to Policies when applicable
+
+Agents may reason about governance but are never governed as actors.
+
+### 11.12 Failure & Uncertainty Handling
+
+If an Agent is uncertain about Rule interpretation, Structural correctness, or Semantic meaning of Events, the Agent MUST:
+*   Declare the uncertainty
+*   Treat the proposal as INVALID
+*   Request clarification or propose a conservative alternative
+
+**Guessing is FORBIDDEN.**
+
+### 11.13 Supremacy Clause
+
+If any Agent behavior conflicts with StateMachine law, Workflow structure, Validation rules, Auditability guarantees, or Governance constraints, the Agent yields immediately.
+
+**FlowOS remains the sole authority.**
+
+---
+
+## 12. Quick Start (Configuration)
 
 ### Definition Structure (JSON Configuration)
 
@@ -335,7 +472,7 @@ Notifications are an **Out-of-Band** projection of the Event Log.
 
 ---
 
-## 13.  WorkflowClass Governance
+## 14.  WorkflowClass Governance
 
 FlowOS introduces `WorkflowClass` as the strict unit of authoring and governance.
 

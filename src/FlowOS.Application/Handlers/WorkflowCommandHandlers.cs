@@ -86,13 +86,27 @@ public class WorkflowCommandHandlers :
              // For now, use the Name and find the latest or specific version.
              
              int version = 1;
-             if (int.TryParse(wc.Version.Split('.')[0], out var v)) version = v;
+             var versionStr = wc.Version;
+             if (versionStr.StartsWith("v", StringComparison.OrdinalIgnoreCase)) versionStr = versionStr.Substring(1);
+             var majorPart = versionStr.Split(new[] { '.', '-', '+' })[0];
+             if (int.TryParse(majorPart, out var v)) version = v;
 
              var def = await _context.WorkflowDefinitions
                  .AsNoTracking()
                  .FirstOrDefaultAsync(d => d.Name == wc.Name && d.Version == version && d.TenantId == request.TenantId, cancellationToken);
                  
-             if (def == null) throw new ArgumentException($"No definition found for class {wc.Name} v{wc.Version}");
+             if (def == null) 
+             {
+                 // Fallback: Check if definition exists with any version for this name, to give better error
+                 var anyDef = await _context.WorkflowDefinitions
+                     .AsNoTracking()
+                     .FirstOrDefaultAsync(d => d.Name == wc.Name && d.TenantId == request.TenantId, cancellationToken);
+                 
+                 if (anyDef != null)
+                    throw new ArgumentException($"Definition found for {wc.Name} but version mismatch (Class: {wc.Version} -> {version}, Def: {anyDef.Version}). Ensure Publish creates the definition.");
+                 else
+                    throw new ArgumentException($"No definition found for class {wc.Name} (Version {wc.Version} -> {version}). Did you Publish the WorkflowClass?");
+             }
              definitionId = def.Id;
         }
         else

@@ -87,7 +87,7 @@ public class Notification_Idempotency : IClassFixture<WebApplicationFactory<Prog
         _client.DefaultRequestHeaders.Add("X-Mock-Role", "Admin");
 
         // 2. Start Workflow
-        var startCommand = new StartWorkflowCommand(_tenantId, null, "IdempotencyFlow", 1, "Start", Guid.NewGuid());
+        var startCommand = new StartWorkflowCommand(_tenantId, null, "IdempotencyFlow", 1, Guid.Empty, "Start", Guid.NewGuid());
         var startResponse = await _client.PostAsJsonAsync("/api/workflows/start", startCommand);
         startResponse.EnsureSuccessStatusCode();
         var workflowId = (await startResponse.Content.ReadFromJsonAsync<WorkflowStartResponse>()).WorkflowInstanceId;

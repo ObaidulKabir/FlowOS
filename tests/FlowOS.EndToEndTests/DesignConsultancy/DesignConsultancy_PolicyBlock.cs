@@ -98,7 +98,7 @@ public class DesignConsultancy_PolicyBlock : IClassFixture<WebApplicationFactory
         // But our evaluator is too simple.
         // So asserting StartWorkflow failure is valid for "Policy Denial".
         
-        var startCommand = new StartWorkflowCommand(_tenantId, null, "DesignConsultancy", 1, "Start", Guid.NewGuid());
+        var startCommand = new StartWorkflowCommand(_tenantId, null, "DesignConsultancy", 1, Guid.Empty, "Start", Guid.NewGuid());
         var startResponse = await _client.PostAsJsonAsync("/api/workflows/start", startCommand);
 
         // 3. Assert (Then)

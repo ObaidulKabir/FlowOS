@@ -14,6 +14,7 @@ var startCommand = new StartWorkflowCommand(
     null, // Let FlowOS find definition by name
     "DesignConsultancy", 
     1, // Version
+    Guid.Empty, // WorkflowClassId
     "Start", // Initial intent (entry point)
     Guid.NewGuid() // Correlation ID
 );

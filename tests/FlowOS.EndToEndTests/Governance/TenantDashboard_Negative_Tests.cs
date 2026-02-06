@@ -65,7 +65,11 @@ public class TenantDashboard_Negative_Tests : IClassFixture<WebApplicationFactor
             {
                 Events = new() { new EventBlueprint { EventId = "EVT-1", Name = "E1" } },
                 StateMachine = new StateMachineBlueprint { InitialState = "S1", States = new() { "S1" } },
-                Workflow = new WorkflowBlueprint { Steps = new() { new StepBlueprint { StepId = "S1" } } }
+                Workflow = new WorkflowBlueprint 
+                { 
+                    StartStepId = "S1",
+                    Steps = new() { new StepBlueprint { StepId = "S1", StepType = "End" } } 
+                }
             }
         };
         var resp = await _client.PostAsJsonAsync("/api/workflow-classes", draftReq);
@@ -80,7 +84,8 @@ public class TenantDashboard_Negative_Tests : IClassFixture<WebApplicationFactor
         
         // 1. Create & Publish
         var wc = await CreateDraftAsync("ToDelete");
-        await _client.PostAsync($"/api/workflow-classes/{wc.Id}/publish", null);
+        var pubResp = await _client.PostAsync($"/api/workflow-classes/{wc.Id}/publish", null);
+        pubResp.EnsureSuccessStatusCode();
 
         // 2. Attempt Delete
         var delResp = await _client.DeleteAsync($"/api/workflow-classes/{wc.Id}");
@@ -88,7 +93,7 @@ public class TenantDashboard_Negative_Tests : IClassFixture<WebApplicationFactor
         // 3. Assert Failure (BadRequest)
         Assert.Equal(HttpStatusCode.BadRequest, delResp.StatusCode);
         var msg = await delResp.Content.ReadAsStringAsync();
-        Assert.Contains("Only Drafts can be deleted", msg);
+        Assert.Contains("Only Drafts can be hard deleted", msg);
     }
 
     [Fact]

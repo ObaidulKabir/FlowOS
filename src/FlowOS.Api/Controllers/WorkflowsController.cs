@@ -1,14 +1,17 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using FlowOS.Application.Commands; // Add this
+using FlowOS.Application.Commands;
+using FlowOS.Application.Queries;
 using FlowOS.Application.DTOs.Workflows;
 using FlowOS.Core.Interfaces;
 using FlowOS.Infrastructure.Persistence;
-using MediatR; // Add this
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+
+using Microsoft.Extensions.Logging;
 
 namespace FlowOS.Api.Controllers;
 
@@ -19,13 +22,15 @@ public class WorkflowsController : ControllerBase
 {
     private readonly FlowOSDbContext _context;
     private readonly ICurrentUser _currentUser;
-    private readonly IMediator _mediator; // Add this
+    private readonly IMediator _mediator;
+    private readonly ILogger<WorkflowsController> _logger;
 
-    public WorkflowsController(FlowOSDbContext context, ICurrentUser currentUser, IMediator mediator)
+    public WorkflowsController(FlowOSDbContext context, ICurrentUser currentUser, IMediator mediator, ILogger<WorkflowsController> logger)
     {
         _context = context;
         _currentUser = currentUser;
         _mediator = mediator;
+        _logger = logger;
     }
 
     [HttpPost("start")]
@@ -78,5 +83,25 @@ public class WorkflowsController : ControllerBase
 
         var list = await query.OrderByDescending(w => w.CreatedAt).ToListAsync();
         return Ok(list);
+    }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(Guid id)
+    {
+        var tenantId = _currentUser.TenantId;
+
+        var query = new GetWorkflowByIdQuery 
+        { 
+            Id = id,
+            TenantId = tenantId 
+        };
+        
+        var result = await _mediator.Send(query);
+        if (result == null) 
+        {
+             _logger.LogWarning($"DEBUG: GetById Workflow {id} not found for Tenant {tenantId}");
+             return NotFound();
+        }
+        return Ok(result);
     }
 }

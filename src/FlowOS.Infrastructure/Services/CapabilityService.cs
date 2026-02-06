@@ -35,16 +35,22 @@ public class CapabilityService : ICapabilityService
             
             if (!_cache.TryGetValue(cacheKey, out HashSet<string>? rolePermissions))
             {
+                Console.WriteLine($"[CapabilityService] Cache miss for {cacheKey}");
                 var role = await _context.Roles
                     .AsNoTracking()
                     .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Name == roleName);
                 
                 rolePermissions = role?.Permissions ?? new HashSet<string>();
+                Console.WriteLine($"[CapabilityService] Loaded {rolePermissions.Count} permissions for role {roleName} (Tenant: {tenantId}): {string.Join(", ", rolePermissions)}");
                 
                 var cacheOptions = new MemoryCacheEntryOptions()
                     .SetAbsoluteExpiration(TimeSpan.FromMinutes(10)); // Cache for 10 mins
                 
                 _cache.Set(cacheKey, rolePermissions, cacheOptions);
+            }
+            else
+            {
+                Console.WriteLine($"[CapabilityService] Cache hit for {cacheKey}: {rolePermissions.Count} permissions");
             }
 
             if (rolePermissions != null)

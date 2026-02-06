@@ -26,6 +26,11 @@ public class EventsController : ControllerBase
     [HttpPost("publish")]
     public async Task<IActionResult> PublishEvent([FromBody] PublishEventCommand command)
     {
+        Console.WriteLine($"[EventsController] Received PublishEvent: {command.EventType}");
+        Console.WriteLine($"[EventsController] Headers: {string.Join(", ", HttpContext.Request.Headers.Keys)}");
+        Console.WriteLine($"[EventsController] x-tenant-id: {HttpContext.Request.Headers["x-tenant-id"]}");
+        Console.WriteLine($"[EventsController] X-Mock-Role: {HttpContext.Request.Headers["X-Mock-Role"]}");
+        
         // Add current user logic to ensure tenant security
         // Use HttpContext to get tenant if available
         var tenantId = HttpContext.Request.Headers.TryGetValue("x-tenant-id", out var headerVal) 
@@ -34,8 +39,17 @@ public class EventsController : ControllerBase
         // Ensure command has the correct TenantId
         var commandWithTenant = command with { TenantId = tenantId };
         
-        var result = await _mediator.Send(commandWithTenant);
-        if (!result) return BadRequest($"Event processing failed. Tenant: {tenantId}, Event: {command.EventType}, Instance: {command.WorkflowInstanceId}");
-        return Ok("Event published");
+        try
+        {
+            var result = await _mediator.Send(commandWithTenant);
+            if (!result) return BadRequest($"Event processing failed. Tenant: {tenantId}, Event: {command.EventType}, Instance: {command.WorkflowInstanceId}");
+            return Ok("Event published");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[EventsController] Exception: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            throw;
+        }
     }
 }

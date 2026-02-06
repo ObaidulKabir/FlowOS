@@ -12,5 +12,6 @@ public enum WorkflowStepType
     Command,
     HumanTask,
     Timer,
-    Decision
+    Decision,
+    End
 }

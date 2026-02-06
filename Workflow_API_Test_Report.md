@@ -1,48 +1,47 @@
 # Workflow API Test Report
 
-**Date:** 2026-01-31
+**Date:** 2026-02-06
 **Status:** PASSED
-**Scope:** Workflow Execution, Human Interaction, AI Agent Events
+**Scope:** E2E API Tests, Governance, Runtime, Human Tasks, Security
 
 ## 1. Summary
-We successfully implemented and verified the "Human & AI Interaction" layer of FlowOS. The system now supports:
-- **AI Agent Insights:** Agents can publish insights (`AgentInsightGenerated`) which are persisted and projected.
-- **Human Decisions:** Users can drive workflow transitions via specific events (`EVT-ORDER-APPROVED`).
-- **Auto-Advance:** Workflows correctly automate `Default` transitions.
+We have successfully expanded the E2E test coverage for FlowOS, validating critical governance rules, runtime execution, and human task management. The system now passes all comprehensive test suites.
 
 ## 2. Test Execution Log
 
-### A. Setup & Configuration
-- **Action:** Created `OrderProcessing` workflow definition via Config-as-Code (`flowos-config/workflows`).
-- **Result:** Published successfully.
-- **Verification:** `GET /api/admin/workflows` lists the definition.
+### A. E2E Runtime & Tasks (`FlowOS.E2E.Tests`)
+- **Scope:** Workflow instantiation, event publishing, auto-advancement, and human task completion.
+- **Results:**
+  - `RuntimeTests`: 4/4 Passed. Verified event-driven transitions and state machine integrity.
+  - `TasksTests`: 1/1 Passed. Verified `POST /api/tasks/{id}/complete` flow, ensuring correct state transitions upon task completion.
+- **Key Fixes:**
+  - Implemented missing `/api/tasks/{id}/complete` endpoint.
+  - Corrected `StartWorkflowCommand` constructor usage across all tests.
+  - Resolved `WorkflowsController` and `TasksController` dependency injection issues.
 
-### B. Workflow Start
-- **Action:** `POST /api/workflows/start`
-- **Result:** Instance created. Initial State: `Start`.
-- **Trigger:** `POST /api/events/publish` with `Default` event kicked off the Auto-Advance.
-- **Outcome:** Workflow moved `Start` -> `CheckStock` -> `ApproveOrder`.
-- **Status:** Waiting at `ApproveOrder` (HumanTask).
+### B. Governance & Lifecycle (`FlowOS.EndToEndTests`)
+- **Scope:** WorkflowClass authoring, versioning, publishing, and tenant isolation.
+- **Results:** 20/20 Passed.
+- **Key Scenarios Verified:**
+  - **Lifecycle:** Draft -> Published -> Deprecated.
+  - **Scope:** Private vs. Public workflows; enforcing copying rules for public templates.
+  - **Validation:** Preventing invalid blueprints (e.g., missing StartStepId, dead-end steps).
+  - **Security:** Tenant isolation enforced via `x-tenant-id` and `PolicyEnforcementBehavior`.
 
-### C. AI Agent Interaction
-- **Action:** `POST /api/agents/insight`
-- **Payload:** `{"agentId": "Risk-Analyzer-Bot-01", "insight": "High Risk Transaction"}`
-- **Result:** `200 OK`. Insight recorded.
-- **Verification:** `GET /api/admin/workflows/{id}/detail` (Manual check confirmed event persistence).
-
-### D. Human Decision (Approval)
-- **Action:** `POST /api/events/publish`
-- **Payload:** `{"eventType": "EVT-ORDER-APPROVED"}`
-- **Result:** `200 OK`. Event Published.
-- **Outcome:** Workflow advanced `ApproveOrder` -> `FulfillOrder` -> `End`.
-- **Final Status:** `End`.
+### C. Unit Tests (`FlowOS.UnitTests`)
+- **Scope:** Domain logic, handlers, and core services.
+- **Results:** 51/51 Passed.
+- **Verification:** Ensured that recent API changes (e.g., `StartWorkflowCommand` refactoring) did not regress core domain logic.
 
 ## 3. Key Findings & Decisions
 
-### Distinction between "Task Completion" and "Decisions"
-- **Linear Tasks:** Can use `POST /api/tasks/{id}/complete` (emits generic `TaskCompleted`).
-- **Decision Tasks:** MUST use `POST /api/events/publish` with specific outcome events (e.g., `EVT-ORDER-APPROVED`) because the State Machine transitions on Event Type.
-- **Action Item:** Updated `Human_AI_Interaction_Curl_Guide.md` to clarify this pattern.
+### API Consistency
+- **Endpoint Parity:** Ensured `WorkflowsController` and `TasksController` align with CQRS patterns using MediatR.
+- **Error Handling:** Standardized on `404 NotFound` for missing resources and `400 BadRequest` for domain validation failures.
+
+### Governance Enforcement
+- **Immutable Public Templates:** Validated that Public WorkflowClasses cannot be modified but can be copied to tenants.
+- **Draft-Only Deletion:** Enforced rule that only Draft workflows can be hard-deleted.
 
 ## 4. Conclusion
-The implementation is solid. The combination of **Workflow Engine**, **Event Registry**, and **Agent API** provides a robust foundation for building complex, interactive workflows.
+The FlowOS API is now robustly tested across E2E and Unit levels. The addition of Human Task completion tests closes a critical gap in the runtime verification loop. Governance tests ensure that the multi-tenant architecture remains secure and compliant.

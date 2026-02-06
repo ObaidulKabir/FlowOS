@@ -73,7 +73,11 @@ public class TenantDashboard_Simulation_Tests : IClassFixture<WebApplicationFact
                 // Minimal Valid
                 Events = new() { new EventBlueprint { EventId = "EVT-START", Name = "Start" } },
                 StateMachine = new StateMachineBlueprint { InitialState = "S1", States = new() { "S1" } },
-                Workflow = new WorkflowBlueprint { Steps = new() { new StepBlueprint { StepId = "S1" } } }
+                Workflow = new WorkflowBlueprint 
+                { 
+                    StartStepId = "S1",
+                    Steps = new() { new StepBlueprint { StepId = "S1", StepType = "End" } } 
+                }
             }
         };
         var createResp = await _client.PostAsJsonAsync("/api/workflow-classes", draftReq);
@@ -171,7 +175,11 @@ public class TenantDashboard_Simulation_Tests : IClassFixture<WebApplicationFact
             {
                  Events = new() { new EventBlueprint { EventId = "EVT-GLOBAL", Name = "Global" } },
                  StateMachine = new StateMachineBlueprint { InitialState = "S1", States = new() { "S1" } },
-                 Workflow = new WorkflowBlueprint { Steps = new() { new StepBlueprint { StepId = "S1" } } }
+                 Workflow = new WorkflowBlueprint 
+                 { 
+                     StartStepId = "S1",
+                     Steps = new() { new StepBlueprint { StepId = "S1", StepType = "End" } } 
+                 }
             };
             var pubTmpl = new FlowOS.Domain.Entities.WorkflowClass(Guid.Empty, "GlobalTemplate", "1.0.0", pubBp);
             pubTmpl.Publish();

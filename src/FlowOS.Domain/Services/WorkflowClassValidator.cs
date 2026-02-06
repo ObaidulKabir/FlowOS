@@ -101,7 +101,8 @@ public class WorkflowClassValidator
                  result.AddError("WF-COMP-004", "WorkflowCompleteness", $"Step '{step.StepId}' is unreachable from start", "Workflow");
                  
             // Check Exit Path (Strict Rule from Prompt)
-            if (step.NextSteps == null || !step.NextSteps.Any())
+            bool isEndStep = string.Equals(step.StepType, "End", StringComparison.OrdinalIgnoreCase);
+            if (!isEndStep && (step.NextSteps == null || !step.NextSteps.Any()))
             {
                 result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Step '{step.StepId}' has no exit path", "Workflow");
             }
