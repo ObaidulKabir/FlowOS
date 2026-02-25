@@ -1,0 +1,39 @@
+services:
+  # ─── FlowOS API ──────────────────────────────────────────────
+  flowos-api:
+    labels:
+      - "traefik.enable=true"
+      # Route /api/* to the API service
+      - "traefik.http.routers.flowos-api.rule=Host(`${FLOWOS_DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.flowos-api.entrypoints=web"
+      - "traefik.http.services.flowos-api.loadbalancer.server.port=8080"
+    networks:
+      - traefik-network
+    ports:
+      - "5005:8080"   # keep direct access or remove if Traefik is the only ingress
+
+  # ─── FlowOS Dashboard ───────────────────────────────────────
+  flowos-dashboard:
+    labels:
+      - "traefik.enable=true"
+      # Catch-all for the domain root (lower priority so /api takes precedence)
+      - "traefik.http.routers.flowos-dashboard.rule=Host(`${FLOWOS_DOMAIN}`)"
+      - "traefik.http.routers.flowos-dashboard.entrypoints=web"
+      - "traefik.http.routers.flowos-dashboard.priority=1"
+      - "traefik.http.services.flowos-dashboard.loadbalancer.server.port=80"
+    networks:
+      - traefik-network
+    ports:
+      - "${DASHBOARD_PORT:-3000}:80"
+
+  # ─── FlowOS MCP (Stdio – no HTTP routing) ───────────────────
+  flowos-mcp:
+    labels:
+      - "traefik.enable=false"
+    networks:
+      - traefik-network
+
+# ─── Networks ─────────────────────────────────────────────────
+networks:
+  traefik-network:
+    external: true
