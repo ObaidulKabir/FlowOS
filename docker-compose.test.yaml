@@ -20,11 +20,9 @@ services:
       - "traefik.http.routers.flowos-dashboard.rule=Host(`${FLOWOS_DOMAIN}`)"
       - "traefik.http.routers.flowos-dashboard.entrypoints=web"
       - "traefik.http.routers.flowos-dashboard.priority=1"
-      - "traefik.http.services.flowos-dashboard.loadbalancer.server.port=80"
+      - "traefik.http.services.flowos-dashboard.loadbalancer.server.port=5173"
     networks:
-      - traefik-network
-    ports:
-      - "${DASHBOARD_PORT:-3000}:80"
+      - traefik-network 
 
   # ─── FlowOS MCP (Stdio – no HTTP routing) ───────────────────
   flowos-mcp:
