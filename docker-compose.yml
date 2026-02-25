@@ -5,8 +5,8 @@ services:
       context: .
       dockerfile: src/FlowOS.Api/Dockerfile 
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
     volumes:
       - ./flowos-config:/app/flowos-config
 
@@ -16,7 +16,7 @@ services:
       context: .
       dockerfile: docker/dashboard.Dockerfile
     environment:
-      - VITE_API_TARGET=http://flowos-api:8080
+      - VITE_API_TARGET=${VITE_API_TARGET}
     depends_on:
       - flowos-api
 
@@ -26,7 +26,7 @@ services:
       context: .
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
     stdin_open: true # docker run -i
     tty: true        # docker run -t 
  
