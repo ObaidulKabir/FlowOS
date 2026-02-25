@@ -9,8 +9,6 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     volumes:
       - ./flowos-config:/app/flowos-config
-    depends_on:
-      - postgres
 
   flowos-dashboard:
     image: flowos-dashboard
@@ -30,18 +28,8 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     stdin_open: true # docker run -i
-    tty: true        # docker run -t
-    depends_on:
-      - postgres
-
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=flowos
-    volumes:
-      - db-data:/var/lib/postgresql/data
+    tty: true        # docker run -t 
+ 
 
 volumes:
   db-data:
