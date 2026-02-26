@@ -76,7 +76,7 @@ public class WorkflowClassesController : ControllerBase
 
         try 
         {
-            wc.UpdateDraft(request.Name, request.Definition);
+            wc.UpdateDraft(request.Name, request.Version, request.Definition);
             await _context.SaveChangesAsync();
             return Ok(MapToDto(wc));
         }

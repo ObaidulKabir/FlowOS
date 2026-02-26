@@ -35,6 +35,13 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                     d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
                     s => JsonSerializer.Deserialize<Dictionary<string, string>>(s, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
                 );
+
+            // Map Conditions dictionary
+            step.Property(s => s.Conditions)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => JsonSerializer.Deserialize<Dictionary<string, string>>(s, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
+                );
         });
 
         // Current Index (Non-Unique)

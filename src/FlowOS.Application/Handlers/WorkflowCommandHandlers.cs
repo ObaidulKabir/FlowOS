@@ -185,6 +185,7 @@ public class WorkflowCommandHandlers :
         var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
         if (!isRegistered && request.EventType.StartsWith("EVT-"))
         {
+             Console.WriteLine($"[Handler] Event '{request.EventType}' not registered for tenant {request.TenantId}");
              return false;
         }
 
@@ -192,13 +193,21 @@ public class WorkflowCommandHandlers :
         var instance = await _context.WorkflowInstances
             .FirstOrDefaultAsync(w => w.Id == request.WorkflowInstanceId && w.TenantId == request.TenantId, cancellationToken);
 
-        if (instance == null) return false;
+        if (instance == null) 
+        {
+            Console.WriteLine($"[Handler] Instance {request.WorkflowInstanceId} not found.");
+            return false;
+        }
 
         // 2. Load Definition
         var definition = await _context.WorkflowDefinitions
             .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
             
-        if (definition == null) return false;
+        if (definition == null) 
+        {
+            Console.WriteLine($"[Handler] Definition {instance.WorkflowDefinitionId} not found.");
+            return false;
+        }
 
         // 3. Create Event Wrapper
         var domainEvent = new StandardEvent(request.TenantId, request.EventType);
@@ -219,7 +228,27 @@ public class WorkflowCommandHandlers :
         }
 
         // 4. Advance Workflow
-        var result = _engine.Advance(instance, definition, domainEvent, new FlowOS.StateMachines.Models.ExecutionContext());
+        var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        
+        if (request.Payload != null)
+        {
+            try 
+            {
+                // Try to convert payload to Dictionary<string, object> for the Engine
+                var jsonString = System.Text.Json.JsonSerializer.Serialize(request.Payload);
+                var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(jsonString);
+                if (dict != null)
+                {
+                    context.Payload = dict;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Handler] Failed to parse payload for ExecutionContext: {ex.Message}");
+            }
+        }
+
+        var result = _engine.Advance(instance, definition, domainEvent, context);
 
         if (result.Success)
         {
