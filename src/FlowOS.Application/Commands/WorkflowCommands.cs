@@ -13,11 +13,11 @@ public record StartWorkflowCommand(
     string? WorkflowName = null,
     int? Version = null,
     Guid WorkflowClassId = default, // Added for Completeness
-    string InitialStepId = "Start",
+    string? InitialStepId = null,
     Guid? CorrelationId = null
 ) : IRequest<Guid>, IPolicySecuredCommand;
 
-[RequiresCapability("event.publish")]
+// [RequiresCapability("event.publish")] // Moved to Handler for dynamic check
 public record PublishEventCommand(
     Guid TenantId,
     Guid WorkflowInstanceId,

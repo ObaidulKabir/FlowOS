@@ -37,12 +37,14 @@ public class WorkflowsController : ControllerBase
     public async Task<IActionResult> Start([FromBody] StartWorkflowCommand command)
     {
         // Ensure TenantId matches context (Security)
-        if (command.TenantId != _currentUser.TenantId)
+        if (_currentUser.TenantId != Guid.Empty && command.TenantId != _currentUser.TenantId)
         {
-             // For testing, if command has tenantId, we might want to respect it if we are Admin, 
-             // but for now let's enforce consistency or override it.
-             // Best practice: Override it with authenticated user's tenant.
+             // If we have a valid current user tenant, use it.
              command = command with { TenantId = _currentUser.TenantId };
+        }
+        else if (_currentUser.TenantId == Guid.Empty && command.TenantId != Guid.Empty)
+        {
+            // Allow command to set tenant if user context is empty (e.g. initial setup or system call, though Authorize should catch this)
         }
 
         try 

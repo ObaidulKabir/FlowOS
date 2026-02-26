@@ -23,7 +23,14 @@ Recommended for separation of concerns and non-developer authoring.
       "stepId": "Start",
       "stepType": "Command",
       "nextSteps": {
-        "Default": "End"
+        "Default": "CheckAmount"
+      }
+    },
+    {
+      "stepId": "CheckAmount",
+      "stepType": "Decision",
+      "conditions": {
+        "Amount > 100": "End"
       }
     },
     {
@@ -42,8 +49,12 @@ var definition = new WorkflowDefinition(tenantId, "ParityWorkflow", 1);
 
 definition.AddStep(new WorkflowStepDefinition("Start", WorkflowStepType.Command) 
 { 
-    NextSteps = { { "Default", "End" } } 
+    NextSteps = { { "Default", "CheckAmount" } } 
 });
+
+var decision = new WorkflowStepDefinition("CheckAmount", WorkflowStepType.Decision);
+decision.Conditions.Add("Amount > 100", "End");
+definition.AddStep(decision);
 
 definition.AddStep(new WorkflowStepDefinition("End", WorkflowStepType.Command));
 

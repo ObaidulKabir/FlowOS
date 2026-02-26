@@ -24,6 +24,12 @@ public class MockAuthMiddleware
                 new Claim(ClaimTypes.Role, role.ToString())
             };
 
+            // Add Tenant ID claim if provided in header
+            if (context.Request.Headers.TryGetValue("x-tenant-id", out var tenantId))
+            {
+                claims.Add(new Claim("tenant_id", tenantId.ToString()));
+            }
+
             var identity = new ClaimsIdentity(claims, "Mock");
             context.User = new ClaimsPrincipal(identity);
         }

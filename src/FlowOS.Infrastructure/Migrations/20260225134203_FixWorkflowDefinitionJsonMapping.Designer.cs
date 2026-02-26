@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FlowOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,15 +13,18 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FlowOS.Infrastructure.Migrations
 {
     [DbContext(typeof(FlowOSDbContext))]
-    partial class FlowOSDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260225134203_FixWorkflowDefinitionJsonMapping")]
+    partial class FixWorkflowDefinitionJsonMapping
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "8.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "hstore");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("FlowOS.Domain.Entities.EventDefinition", b =>
@@ -529,9 +533,9 @@ namespace FlowOS.Infrastructure.Migrations
                                 .IsRequired()
                                 .HasColumnType("text[]");
 
-                            b1.Property<string>("NextSteps")
+                            b1.Property<Dictionary<string, string>>("NextSteps")
                                 .IsRequired()
-                                .HasColumnType("text");
+                                .HasColumnType("hstore");
 
                             b1.Property<string>("StepId")
                                 .IsRequired()

@@ -39,3 +39,25 @@ var response = await client.PostAsJsonAsync("/api/events/publish", rejectEvent);
 
 ## Important Note
 You did not tell FlowOS "Go to End" or "Go to Rejected". You only said "Design Approved" or "Design Rejected". FlowOS decided the destination.
+
+## Decisions via Rules (Decision Step)
+Sometimes, you want the **Workflow Engine** to make the decision based on data, rather than waiting for an external event.
+
+### Scenario
+If the **Amount > 100**, go to **Director Approval**. Otherwise, go to **Manager Approval**.
+
+### Implementation (JSON)
+Use the `Decision` step type with `Conditions`.
+
+```json
+{
+  "stepId": "CheckAmount",
+  "stepType": "Decision",
+  "conditions": {
+    "Amount > 100": "DirectorApproval",
+    "Amount <= 100": "ManagerApproval"
+  }
+}
+```
+
+The engine evaluates these rules against the event payload and automatically routes the workflow.

@@ -97,7 +97,17 @@ public class TaskApiTests
         context.WorkflowInstances.Add(instance);
         await context.SaveChangesAsync();
 
-        var handler = new WorkflowCommandHandlers(context, GetMockRegistry(context)); // Uses real Engine, but no transitions defined for this dummy definition
+
+        var mockCurrentUser = new Mock<ICurrentUser>();
+        mockCurrentUser.Setup(u => u.Id).Returns(Guid.NewGuid().ToString());
+        mockCurrentUser.Setup(u => u.TenantId).Returns(tenantId);
+        mockCurrentUser.Setup(u => u.Roles).Returns(new System.Collections.Generic.List<string>());
+
+        var mockCapabilityService = new Mock<FlowOS.Security.Interfaces.ICapabilityService>();
+        mockCapabilityService.Setup(c => c.GetCapabilitiesAsync(It.IsAny<Guid>(), It.IsAny<System.Collections.Generic.IEnumerable<string>>()))
+            .ReturnsAsync(new System.Collections.Generic.HashSet<string>());
+
+        var handler = new WorkflowCommandHandlers(context, GetMockRegistry(context), mockCurrentUser.Object, mockCapabilityService.Object); // Uses real Engine, but no transitions defined for this dummy definition
 
         // Act
         var command = new Application.Commands.CompleteTaskCommand(tenantId, instance.Id, instance.Id);

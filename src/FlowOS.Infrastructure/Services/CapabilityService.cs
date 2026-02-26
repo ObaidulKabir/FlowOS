@@ -43,8 +43,13 @@ public class CapabilityService : ICapabilityService
                 rolePermissions = role?.Permissions ?? new HashSet<string>();
                 Console.WriteLine($"[CapabilityService] Loaded {rolePermissions.Count} permissions for role {roleName} (Tenant: {tenantId}): {string.Join(", ", rolePermissions)}");
                 
+                // If role was not found in DB, don't cache empty permissions forever (maybe it's not seeded yet)
+                // But for now we cache it.
+                // FIX: If we just seeded it, it might not be committed if we are in the same scope, but here we are in a new request.
+                // However, if we are running in Memory, maybe it persists?
+                
                 var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(10)); // Cache for 10 mins
+                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(10)); // Short cache for dev
                 
                 _cache.Set(cacheKey, rolePermissions, cacheOptions);
             }

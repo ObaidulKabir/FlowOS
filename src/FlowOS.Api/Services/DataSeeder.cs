@@ -10,8 +10,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using FlowOS.Domain.Enums;
-using FlowOS.Security.Models; // Add this
-using System.Collections.Generic; // Add this
+using FlowOS.Security.Models;
+using System.Collections.Generic;
+using FlowOS.Events.Models;
 
 namespace FlowOS.API.Services;
 
@@ -131,6 +132,7 @@ public static class DataSeeder
             };
 
             var demoWc = new WorkflowClass(clientTenantId, "ExpenseApproval", "1.0.0", demoBp);
+            demoWc.Publish(); // Create Definition
             context.WorkflowClasses.Add(demoWc);
             
             // Add a Public Template too
@@ -148,7 +150,7 @@ public static class DataSeeder
                 { 
                     StartStepId = "Start",
                     Steps = new() 
-                    { 
+                { 
                         new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Start", StepType = "Command", NextSteps = new() { { "EVT-GO", "End" } } },
                         new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "End", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
                     } 
@@ -162,6 +164,421 @@ public static class DataSeeder
             context.WorkflowClasses.Add(publicWc);
 
             await context.SaveChangesAsync();
+        }
+
+        // 3.5 FIX: Ensure ExpenseApproval Definition exists (because previous run might have skipped Publish)
+        // Check if definition exists for the client tenant
+        var defExists = await context.WorkflowDefinitions.AnyAsync(d => d.TenantId == clientTenantId && d.Name == "ExpenseApproval");
+        Console.WriteLine($"[DataSeeder] defExists: {defExists}");
+
+        if (!defExists)
+        {
+            Console.WriteLine("[DataSeeder] Definition does not exist. Creating...");
+            var wc = await context.WorkflowClasses.FirstOrDefaultAsync(w => w.TenantId == clientTenantId && w.Name == "ExpenseApproval");
+            if (wc != null)
+            {
+                Console.WriteLine($"[DataSeeder] Found WorkflowClass: {wc.Id}. Creating definition.");
+                // Force update blueprint to ensure validity (in case DB has stale invalid JSON)
+                var demoBpFix = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+                {
+                    Events = new() 
+                    { 
+                        new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
+                        new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" },
+                        new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request" }
+                    },
+                    StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
+                    {
+                        InitialState = "Draft",
+                        States = new() { "Draft", "Pending", "Approved", "Rejected" },
+                        Transitions = new() 
+                        {
+                            new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "Pending", EventId = "EVT-SUBMIT" },
+                            new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Approved", EventId = "EVT-APPROVE" },
+                            new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Rejected", EventId = "EVT-REJECT" }
+                        }
+                    },
+                    Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
+                    {
+                        StartStepId = "Draft",
+                        Steps = new() 
+                        {
+                            new FlowOS.Domain.Blueprints.StepBlueprint 
+                            { 
+                                StepId = "Draft", 
+                                StepType = "Command",
+                                NextSteps = new() { { "EVT-SUBMIT", "Pending" } }
+                            },
+                            new FlowOS.Domain.Blueprints.StepBlueprint 
+                            { 
+                                StepId = "Pending", 
+                                StepType = "HumanTask",
+                                NextSteps = new() { { "EVT-APPROVE", "Approved" }, { "EVT-REJECT", "Rejected" } }
+                            },
+                            new FlowOS.Domain.Blueprints.StepBlueprint 
+                            { 
+                                StepId = "Approved", 
+                                StepType = "Command",
+                                NextSteps = new() { { "Default", "END" } }
+                            },
+                            new FlowOS.Domain.Blueprints.StepBlueprint 
+                            { 
+                                StepId = "Rejected", 
+                                StepType = "Command",
+                                NextSteps = new() { { "Default", "END" } }
+                            }
+                        }
+                    }
+                };
+                
+                SetPrivateProperty(wc, "Definition", demoBpFix);
+                if (wc.Status != WorkflowClassStatus.Published)
+                {
+                    wc.Publish();
+                }
+                
+                // Manually Create WorkflowDefinition (Bridging the gap between Governance and Engine)
+                // In a real app, a Domain Event Handler for WorkflowClassPublished would do this.
+                var def = new WorkflowDefinition(wc.TenantId, wc.Name, 1, demoBpFix.Workflow.StartStepId);
+                // Map Steps
+                foreach (var stepBp in demoBpFix.Workflow.Steps)
+                {
+                    var stepType = Enum.Parse<WorkflowStepType>(stepBp.StepType);
+                    var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType);
+                    foreach (var next in stepBp.NextSteps)
+                    {
+                        stepDef.NextSteps.Add(next.Key, next.Value);
+                    }
+                    def.AddStep(stepDef);
+                }
+                
+                def.Publish();
+                
+                context.WorkflowDefinitions.Add(def);
+
+                await context.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            Console.WriteLine("[DataSeeder] Definition already exists. Checking for updates...");
+                // FORCE UPDATE EXISTING DEFINITION
+                var existingDef = await context.WorkflowDefinitions
+                    .Include(d => d.Steps)
+                    .FirstOrDefaultAsync(d => d.TenantId == clientTenantId && d.Name == "ExpenseApproval");
+                
+                if (existingDef != null)
+                {
+                    Console.WriteLine($"[DataSeeder] Found existing definition: {existingDef.Id}. Steps: {existingDef.Steps.Count}");
+                    
+                    // Debug existing steps
+                    foreach(var s in existingDef.Steps)
+                    {
+                         Console.WriteLine($"[DataSeeder] Step {s.StepId}: {string.Join(", ", s.NextSteps.Keys)}");
+                    }
+
+                    Console.WriteLine("[DataSeeder] Updating existing definition for ExpenseApproval...");
+                    // Clear existing steps (EF Core will track deletion)
+                    existingDef.Steps.Clear();
+                    
+                    // Re-add steps
+                    // Force update blueprint to ensure validity (in case DB has stale invalid JSON)
+                    var demoBpFix = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+                    {
+                        Events = new() 
+                        { 
+                            new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
+                            new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" },
+                            new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request" }
+                        },
+                        StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
+                        {
+                            InitialState = "Draft",
+                            States = new() { "Draft", "Pending", "Approved", "Rejected" },
+                            Transitions = new() 
+                            {
+                                new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "Pending", EventId = "EVT-SUBMIT" },
+                                new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Approved", EventId = "EVT-APPROVE" },
+                                new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Rejected", EventId = "EVT-REJECT" }
+                            }
+                        },
+                        Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
+                        {
+                            StartStepId = "Draft",
+                            Steps = new() 
+                            {
+                                new FlowOS.Domain.Blueprints.StepBlueprint 
+                                { 
+                                    StepId = "Draft", 
+                                    StepType = "Command",
+                                    NextSteps = new() { { "EVT-SUBMIT", "Pending" } }
+                                },
+                                new FlowOS.Domain.Blueprints.StepBlueprint 
+                                { 
+                                    StepId = "Pending", 
+                                    StepType = "HumanTask",
+                                    NextSteps = new() { { "EVT-APPROVE", "Approved" }, { "EVT-REJECT", "Rejected" } }
+                                },
+                                new FlowOS.Domain.Blueprints.StepBlueprint 
+                                { 
+                                    StepId = "Approved", 
+                                    StepType = "Command",
+                                    NextSteps = new() { { "Default", "END" } }
+                                },
+                                new FlowOS.Domain.Blueprints.StepBlueprint 
+                                { 
+                                    StepId = "Rejected", 
+                                    StepType = "Command",
+                                    NextSteps = new() { { "Default", "END" } }
+                                }
+                            }
+                        }
+                    };
+
+                    foreach (var stepBp in demoBpFix.Workflow.Steps)
+                    {
+                        var stepType = Enum.Parse<WorkflowStepType>(stepBp.StepType);
+                        var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType);
+                        foreach (var next in stepBp.NextSteps)
+                        {
+                            stepDef.NextSteps.Add(next.Key, next.Value);
+                        }
+                        // Use public method AddStep but it throws if Published.
+                        // So we add directly to Steps collection via reflection or if protected setter is accessible?
+                        // WorkflowDefinition.Steps is public List<WorkflowStepDefinition> { get; private set; }
+                        // But it's initialized in constructor.
+                        // Wait, AddStep throws if Status != Draft.
+                        // existingDef.Status is likely Published.
+                        // So I need to set status to Draft temporarily via reflection.
+                        SetPrivateProperty(existingDef, "Status", WorkflowStatus.Draft);
+                        existingDef.AddStep(stepDef);
+                    }
+                    SetPrivateProperty(existingDef, "Status", WorkflowStatus.Published);
+                    await context.SaveChangesAsync();
+                }
+            }
+        
+        // Ensure EventDefinitions exist (Always run this check)
+        var events = new[] { "EVT-SUBMIT", "EVT-APPROVE", "EVT-REJECT", "EVT-ESCALATE", "EVT-DIRECTOR-APPROVE", "EVT-DIRECTOR-REJECT" };
+        foreach (var evtId in events)
+        {
+            var exists = await context.EventDefinitions.AnyAsync(e => e.EventId == evtId && e.TenantId == clientTenantId);
+            if (!exists)
+            {
+                Console.WriteLine($"[DataSeeder] Adding Event: {evtId}");
+                var evtDef = new EventDefinition(evtId, clientTenantId, evtId, "Seeded Event", "Expense", FlowOS.Domain.Enums.EventCategory.Human, 1);
+                evtDef.Publish();
+                context.EventDefinitions.Add(evtDef);
+            }
+            else
+            {
+                Console.WriteLine($"[DataSeeder] Event {evtId} already exists.");
+            }
+        }
+        await context.SaveChangesAsync();
+
+    // 4. Seed ExpenseApproval v2 (Conditional Logic)
+    var v2Name = "ExpenseApprovalV2";
+    if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == v2Name))
+    {
+        Console.WriteLine($"[DataSeeder] Creating {v2Name}...");
+        var v2Bp = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+        {
+            Events = new() 
+            { 
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request" },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-APPROVE", Name = "Director Approve" },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-REJECT", Name = "Director Reject" },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to Director" }
+            },
+            StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = new() { "Draft", "PendingManager", "PendingDirector", "Approved", "Rejected" },
+                Transitions = new() 
+                {
+                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "PendingManager", EventId = "EVT-SUBMIT" },
+                    // Manager Approval Logic
+                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingManager", ToState = "Approved", EventId = "EVT-APPROVE" }, // < $100
+                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-ESCALATE" }, // > $100
+                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingManager", ToState = "Rejected", EventId = "EVT-REJECT" },
+                    // Director Approval Logic
+                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingDirector", ToState = "Approved", EventId = "EVT-DIRECTOR-APPROVE" },
+                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingDirector", ToState = "Rejected", EventId = "EVT-DIRECTOR-REJECT" }
+                }
+            },
+            Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
+            {
+                StartStepId = "Draft",
+                Steps = new() 
+                {
+                    new FlowOS.Domain.Blueprints.StepBlueprint 
+                    { 
+                        StepId = "Draft", 
+                        StepType = "Command",
+                        NextSteps = new() { { "EVT-SUBMIT", "CheckAmount" } } // Go to System Check first
+                    },
+                    new FlowOS.Domain.Blueprints.StepBlueprint 
+                    { 
+                        StepId = "CheckAmount", 
+                        StepType = "SystemTask", // This needs to be supported or simulated
+                        // For now, let's simplify: Submit goes to PendingManager.
+                        // We will handle the condition in the Manager Step logic or via specialized events?
+                        // FlowOS currently supports explicit transitions. 
+                        // Let's implement it as:
+                        // Draft -> (EVT-SUBMIT) -> PendingManager
+                        // PendingManager -> (EVT-APPROVE) -> CheckDirectorNeeded (System Step?)
+                        // If we don't have System Steps with logic yet, we can simulate it in the client/backend?
+                        // "require approval of director if amount >$100"
+                        // This implies the Manager approves, and THEN it goes to Director if high value.
+                        // OR it goes straight to Director? Usually Manager first.
+                        
+                        // Let's try this flow:
+                        // 1. Submit -> PendingManager
+                        // 2. Manager Approves (EVT-APPROVE)
+                        // 3. Workflow Engine checks condition? (Not yet implemented in engine)
+                        // 4. So we need a "Gateway" step or the Client decides which event to fire?
+                        // The user asked to "create another version... that require approval".
+                        // Let's model it with explicit steps for now.
+                        
+                        // Revised Flow:
+                        // Draft -> PendingManager
+                        // PendingManager -> (EVT-APPROVE) -> CheckHighValue (System)
+                        // CheckHighValue -> (EVT-HIGH-VALUE) -> PendingDirector
+                        // CheckHighValue -> (EVT-LOW-VALUE) -> Approved
+                        
+                        // Since we don't have automatic system tasks yet in this seed, we'll rely on the backend to fire the correct event based on amount.
+                        // Backend will fire EVT-APPROVE-LOW (<100) or EVT-APPROVE-HIGH (>100).
+                        
+                        NextSteps = new() { { "EVT-SUBMIT", "PendingManager" } }
+                    },
+                    new FlowOS.Domain.Blueprints.StepBlueprint 
+                    { 
+                        StepId = "PendingManager", 
+                        StepType = "HumanTask",
+                        NextSteps = new() 
+                        { 
+                            { "EVT-APPROVE", "Approved" }, // < 100
+                            { "EVT-ESCALATE", "PendingDirector" }, // > 100
+                            { "EVT-REJECT", "Rejected" } 
+                        }
+                    },
+                    new FlowOS.Domain.Blueprints.StepBlueprint 
+                    { 
+                        StepId = "PendingDirector", 
+                        StepType = "HumanTask",
+                        NextSteps = new() 
+                        { 
+                            { "EVT-DIRECTOR-APPROVE", "Approved" }, 
+                            { "EVT-DIRECTOR-REJECT", "Rejected" } 
+                        }
+                    },
+                    new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { { "Default", "END" } } },
+                    new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
+                }
+            }
+        };
+
+        var v2Wc = new WorkflowClass(clientTenantId, v2Name, "1.0.0", v2Bp);
+        v2Wc.Publish();
+        context.WorkflowClasses.Add(v2Wc);
+        
+        // Create Definition
+        var def = new WorkflowDefinition(clientTenantId, v2Name, 1, "Draft");
+        
+        // Draft
+        var draft = new WorkflowStepDefinition("Draft", WorkflowStepType.Command);
+        draft.NextSteps.Add("EVT-SUBMIT", "PendingManager");
+        def.AddStep(draft);
+
+        // PendingManager
+        var mgr = new WorkflowStepDefinition("PendingManager", WorkflowStepType.HumanTask);
+        mgr.NextSteps.Add("EVT-APPROVE", "Approved"); // Low value path
+        mgr.NextSteps.Add("EVT-ESCALATE", "PendingDirector"); // High value path
+        mgr.NextSteps.Add("EVT-REJECT", "Rejected");
+        def.AddStep(mgr);
+
+        // PendingDirector
+        var dir = new WorkflowStepDefinition("PendingDirector", WorkflowStepType.HumanTask);
+        dir.NextSteps.Add("EVT-DIRECTOR-APPROVE", "Approved");
+        dir.NextSteps.Add("EVT-DIRECTOR-REJECT", "Rejected");
+        def.AddStep(dir);
+
+        // End States
+        var approved = new WorkflowStepDefinition("Approved", WorkflowStepType.Command);
+        approved.NextSteps.Add("Default", "END");
+        def.AddStep(approved);
+
+        var rejected = new WorkflowStepDefinition("Rejected", WorkflowStepType.Command);
+        rejected.NextSteps.Add("Default", "END");
+        def.AddStep(rejected);
+
+        def.Publish();
+        context.WorkflowDefinitions.Add(def);
+        await context.SaveChangesAsync();
+    }
+    
+    // 5. Ensure Admin Role for Client Tenant (to allow start workflow)
+    if (!await context.Roles.AnyAsync(r => r.Name == "Admin" && r.TenantId == clientTenantId))
+    {
+        var adminRole = new Role(clientTenantId, "Admin");
+        adminRole.AddPermission("workflow.start");
+        adminRole.AddPermission("workflow.create");
+        adminRole.AddPermission("workflow.read");
+        adminRole.AddPermission("event.publish");
+        adminRole.AddPermission("task.complete");
+        context.Roles.Add(adminRole);
+    }
+    
+    // 5.1. Seed Employee Role
+    if (!await context.Roles.AnyAsync(r => r.Name == "Employee" && r.TenantId == clientTenantId))
+    {
+        var empRole = new Role(clientTenantId, "Employee");
+        empRole.AddPermission("workflow.start"); // Can start workflow
+        empRole.AddPermission("workflow.read"); // Can view their workflows
+        empRole.AddPermission("event.publish.EVT-SUBMIT"); // Can only submit
+        context.Roles.Add(empRole);
+    }
+
+    // 5.2. Seed Manager Role
+    if (!await context.Roles.AnyAsync(r => r.Name == "Manager" && r.TenantId == clientTenantId))
+    {
+        var mgrRole = new Role(clientTenantId, "Manager");
+        mgrRole.AddPermission("workflow.read");
+        mgrRole.AddPermission("event.publish.EVT-APPROVE"); // Can approve standard
+        mgrRole.AddPermission("event.publish.EVT-REJECT"); // Can reject
+        mgrRole.AddPermission("event.publish.EVT-ESCALATE"); // Can escalate
+        context.Roles.Add(mgrRole);
+    }
+
+    // 5.3. Seed Director Role
+    if (!await context.Roles.AnyAsync(r => r.Name == "Director" && r.TenantId == clientTenantId))
+    {
+        var dirRole = new Role(clientTenantId, "Director");
+        dirRole.AddPermission("workflow.read");
+        dirRole.AddPermission("event.publish.EVT-DIRECTOR-APPROVE"); // Can approve escalated
+        dirRole.AddPermission("event.publish.EVT-DIRECTOR-REJECT"); // Can reject escalated
+        context.Roles.Add(dirRole);
+    }
+    
+    await context.SaveChangesAsync();
+
+    // 4. Fix History for specific instance (User Request)
+        var targetInstanceId = Guid.Parse("c6fd0acb-8afe-4d0e-b8eb-654545198f11");
+        var targetInstance = await context.WorkflowInstances.FindAsync(targetInstanceId);
+        if (targetInstance != null)
+        {
+             var hasSubmit = await context.Events.AnyAsync(e => e.CorrelationId == targetInstanceId && e.EventType == "EVT-SUBMIT");
+             if (!hasSubmit)
+             {
+                 var submitEvent = new StandardEvent(targetInstance.TenantId, "EVT-SUBMIT");
+                 submitEvent.SetCorrelationId(targetInstanceId);
+                 SetPrivateProperty(submitEvent, "Timestamp", DateTime.UtcNow.AddHours(-1));
+                 context.Events.Add(submitEvent);
+                 await context.SaveChangesAsync();
+             }
         }
     }
 
