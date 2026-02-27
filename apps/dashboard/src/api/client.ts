@@ -4,7 +4,7 @@ const API_BASE = '/api/workflow-classes';
 
 // Simulating a logged-in Tenant (matches the one in E2E tests for convenience)
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'; 
-const ROLE = 'Designer';
+const ROLE = 'Admin';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -14,6 +14,7 @@ const headers = {
 
 export const api = {
   list: async (scope?: WorkflowClassScope, status?: WorkflowClassStatus): Promise<WorkflowClass[]> => {
+    console.log('Fetching workflows with headers:', headers);
     const params = new URLSearchParams();
     if (scope !== undefined) params.append('scope', scope.toString());
     if (status !== undefined) params.append('status', status.toString());
