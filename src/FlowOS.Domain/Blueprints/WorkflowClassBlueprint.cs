@@ -53,6 +53,9 @@ public record StepBlueprint
     public string StepType { get; init; } = "Command"; // Enum mapped to string for blueprint
     public Dictionary<string, string> NextSteps { get; init; } = new();
     public List<string> RequiredRoles { get; init; } = new();
+    
+    // For Decision steps: Condition -> NextStepId
+    public Dictionary<string, string> Conditions { get; init; } = new();
 }
 
 // Governance Declarations

@@ -76,7 +76,7 @@ public class WorkflowClassesController : ControllerBase
 
         try 
         {
-            wc.UpdateDraft(request.Name, request.Definition);
+            wc.UpdateDraft(request.Name, request.Version, request.Definition);
             await _context.SaveChangesAsync();
             return Ok(MapToDto(wc));
         }
@@ -165,6 +165,38 @@ public class WorkflowClassesController : ControllerBase
             {
                 _context.WorkflowDefinitions.Add(definition);
             }
+
+            // Sync Event Definitions
+            if (wc.Definition?.Events != null)
+            {
+                foreach (var evtBp in wc.Definition.Events)
+                {
+                    var existingEvent = await _context.EventDefinitions
+                        .FirstOrDefaultAsync(e => e.EventId == evtBp.EventId && e.TenantId == wc.TenantId);
+                    
+                    if (existingEvent == null)
+                    {
+                        var entityType = !string.IsNullOrEmpty(wc.Definition.StateMachine?.EntityType) 
+                            ? wc.Definition.StateMachine.EntityType 
+                            : "Workflow";
+
+                        var newEvent = new EventDefinition(
+                            evtBp.EventId,
+                            wc.TenantId,
+                            !string.IsNullOrEmpty(evtBp.Name) ? evtBp.Name : evtBp.EventId,
+                            !string.IsNullOrEmpty(evtBp.Description) ? evtBp.Description : $"Event {evtBp.EventId}",
+                            entityType,
+                            evtBp.Category, // Enum
+                            1, // Version
+                            null, // Payload Schema
+                            evtBp.IsTerminal
+                        );
+                        
+                        newEvent.Publish(); // Auto-publish so it can be used
+                        _context.EventDefinitions.Add(newEvent);
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -210,7 +242,8 @@ public class WorkflowClassesController : ControllerBase
             var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType)
             {
                 AllowedRoles = stepBp.RequiredRoles,
-                NextSteps = stepBp.NextSteps
+                NextSteps = stepBp.NextSteps,
+                Conditions = stepBp.Conditions // Map Conditions
             };
             def.AddStep(stepDef);
         }

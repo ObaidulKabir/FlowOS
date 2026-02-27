@@ -118,7 +118,6 @@ if (app.Environment.IsDevelopment())
 
 // FORCE MOCK AUTH FOR TESTING
 app.UseMiddleware<MockAuthMiddleware>();
-
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

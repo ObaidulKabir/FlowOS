@@ -363,6 +363,10 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("StartStepId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
@@ -524,6 +528,10 @@ namespace FlowOS.Infrastructure.Migrations
                             b1.Property<List<string>>("AllowedRoles")
                                 .IsRequired()
                                 .HasColumnType("text[]");
+
+                            b1.Property<string>("Conditions")
+                                .IsRequired()
+                                .HasColumnType("text");
 
                             b1.Property<string>("NextSteps")
                                 .IsRequired()

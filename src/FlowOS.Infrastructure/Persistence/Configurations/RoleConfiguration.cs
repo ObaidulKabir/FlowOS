@@ -29,7 +29,7 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
 
         // Store Permissions as JSON with Value Comparer
         var comparer = new ValueComparer<HashSet<string>>(
-            (c1, c2) => c1.SequenceEqual(c2),
+            (c1, c2) => c1 == null && c2 == null ? true : (c1 == null || c2 == null ? false : c1.SetEquals(c2)), // Use SetEquals for HashSet
             c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
             c => new HashSet<string>(c));
 

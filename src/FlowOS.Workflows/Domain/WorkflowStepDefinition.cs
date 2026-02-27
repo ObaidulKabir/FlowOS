@@ -13,6 +13,11 @@ public class WorkflowStepDefinition
     // In Phase 1: Keys can be either legacy string events or new EventIds
     public Dictionary<string, string> NextSteps { get; set; } = new();
 
+    // Conditional Logic (For Decision Steps)
+    // Key: Condition Expression (e.g., "Payload.Amount > 100")
+    // Value: NextStepId
+    public Dictionary<string, string> Conditions { get; set; } = new();
+
     public WorkflowStepDefinition() { }
 
     public WorkflowStepDefinition(string stepId, WorkflowStepType type)

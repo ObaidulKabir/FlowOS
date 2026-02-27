@@ -1,0 +1,44 @@
+{
+  "name": "ExpenseApproval",
+  "version": "1.0.0",
+  "definition": {
+    "events": [
+      { "eventId": "EVT-SUBMIT", "name": "Submit Expense", "category": 1 },
+      { "eventId": "EVT-APPROVE", "name": "Approve Expense", "category": 1 }
+    ],
+    "stateMachine": {
+      "entityType": "Expense",
+      "initialState": "Draft",
+      "states": ["Draft", "Submitted", "Approved"],
+      "transitions": [
+        { "fromState": "Draft", "eventId": "EVT-SUBMIT", "toState": "Submitted" },
+        { "fromState": "Submitted", "eventId": "EVT-APPROVE", "toState": "Approved" }
+      ]
+    },
+    "workflow": {
+      "startStepId": "Submit",
+      "steps": [
+        {
+          "stepId": "Submit",
+          "stepType": "Command",
+          "nextSteps": { "EVT-SUBMIT": "ManagerReview" }
+        },
+        {
+          "stepId": "ManagerReview",
+          "stepType": "HumanTask",
+          "requiredRoles": ["Manager"],
+          "nextSteps": { "EVT-APPROVE": "End" }
+        },
+        {
+          "stepId": "End",
+          "stepType": "End",
+          "nextSteps": {}
+        }
+      ]
+    },
+    "roles": [
+        { "name": "Manager", "description": "Approver", "grantedCapabilities": [] }
+    ],
+    "capabilities": []
+  }
+}

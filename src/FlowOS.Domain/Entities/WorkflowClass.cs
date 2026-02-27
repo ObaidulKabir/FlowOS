@@ -147,7 +147,7 @@ public class WorkflowClass
         };
     }
 
-    public void UpdateDraft(string name, WorkflowClassBlueprint definition)
+    public void UpdateDraft(string name, string version, WorkflowClassBlueprint definition)
     {
         if (Status != WorkflowClassStatus.Draft)
             throw new InvalidOperationException("Only Drafts can be updated.");
@@ -156,6 +156,7 @@ public class WorkflowClass
         if (definition == null) throw new ArgumentNullException(nameof(definition));
 
         Name = name;
+        if (!string.IsNullOrWhiteSpace(version)) Version = version;
         Definition = definition;
     }
 

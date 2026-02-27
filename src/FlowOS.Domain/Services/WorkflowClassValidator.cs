@@ -91,6 +91,20 @@ public class WorkflowClassValidator
                         }
                     }
                 }
+
+                // Enqueue Decision paths
+                if (string.Equals(step.StepType, "Decision", StringComparison.OrdinalIgnoreCase) && step.Conditions != null)
+                {
+                    foreach (var next in step.Conditions.Values)
+                    {
+                        if (next == "END") continue;
+                        if (!reachableSteps.Contains(next) && stepIds.Contains(next))
+                        {
+                            reachableSteps.Add(next);
+                            queue.Enqueue(next);
+                        }
+                    }
+                }
             }
         }
 
@@ -102,7 +116,14 @@ public class WorkflowClassValidator
                  
             // Check Exit Path (Strict Rule from Prompt)
             bool isEndStep = string.Equals(step.StepType, "End", StringComparison.OrdinalIgnoreCase);
-            if (!isEndStep && (step.NextSteps == null || !step.NextSteps.Any()))
+            bool isDecision = string.Equals(step.StepType, "Decision", StringComparison.OrdinalIgnoreCase);
+
+            if (isDecision)
+            {
+                if (step.Conditions == null || !step.Conditions.Any())
+                    result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Decision Step '{step.StepId}' has no conditions", "Workflow");
+            }
+            else if (!isEndStep && (step.NextSteps == null || !step.NextSteps.Any()))
             {
                 result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Step '{step.StepId}' has no exit path", "Workflow");
             }
@@ -123,6 +144,16 @@ public class WorkflowClassValidator
                 {
                     if (eventKey != "Default" && !declaredEvents.Contains(eventKey))
                         result.AddError("CON-005", "Consistency", $"Step '{step.StepId}' references undeclared event '{eventKey}'", "Workflow");
+                }
+            }
+
+            // Check Decision Conditions targets
+            if (string.Equals(step.StepType, "Decision", StringComparison.OrdinalIgnoreCase) && step.Conditions != null)
+            {
+                foreach (var nextStepId in step.Conditions.Values)
+                {
+                    if (nextStepId != "END" && !stepIds.Contains(nextStepId))
+                        result.AddError("CON-004", "Consistency", $"Step '{step.StepId}' references unknown NextStep '{nextStepId}' in Conditions", "Workflow");
                 }
             }
         }

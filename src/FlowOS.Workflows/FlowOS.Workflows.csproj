@@ -8,6 +8,10 @@
     <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.Linq.Dynamic.Core" Version="1.7.1" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

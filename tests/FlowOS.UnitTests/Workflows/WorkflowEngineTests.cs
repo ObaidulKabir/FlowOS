@@ -85,6 +85,75 @@ public class WorkflowEngineTests
         Assert.Contains("No transition defined", result.Message);
     }
 
+    [Fact]
+    public void Advance_DecisionStep_ShouldRouteBasedOnCondition()
+    {
+        // Arrange
+        var def = new WorkflowDefinition(_tenantId, "DecisionFlow");
+
+        // Start -> CheckAmount
+        var step1 = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+        step1.NextSteps.Add("Submit", "CheckAmount");
+        def.AddStep(step1);
+
+        // CheckAmount (Decision) -> HighValue / LowValue
+        var decision = new WorkflowStepDefinition("CheckAmount", WorkflowStepType.Decision);
+        // Using simple "Key > Value" syntax supported by our naive evaluator
+        decision.Conditions.Add("Amount > 100", "HighValue"); 
+        decision.Conditions.Add("Amount <= 100", "LowValue");
+        def.AddStep(decision);
+
+        def.AddStep(new WorkflowStepDefinition("HighValue", WorkflowStepType.Command));
+        def.AddStep(new WorkflowStepDefinition("LowValue", WorkflowStepType.Command));
+        
+        def.Publish();
+
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Start");
+        var evt = new TestDomainEvent(_tenantId, "Submit");
+        
+        // Context with Payload
+        var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        context.Payload = new Dictionary<string, object> { { "Amount", 150 } };
+
+        // Act
+        var result = _engine.Advance(instance, def, evt, context);
+
+        // Assert
+        Assert.True(result.Success);
+        // Should jump from Start -> CheckAmount -> HighValue
+        Assert.Equal("HighValue", instance.CurrentStepId);
+    }
+
+    [Fact]
+    public void Advance_DecisionStep_LowValue_ShouldRouteCorrectly()
+    {
+        // Arrange
+        var def = new WorkflowDefinition(_tenantId, "DecisionFlow");
+        var step1 = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+        step1.NextSteps.Add("Submit", "CheckAmount");
+        def.AddStep(step1);
+
+        var decision = new WorkflowStepDefinition("CheckAmount", WorkflowStepType.Decision);
+        decision.Conditions.Add("Amount > 100", "HighValue"); 
+        decision.Conditions.Add("Amount <= 100", "LowValue");
+        def.AddStep(decision);
+
+        def.AddStep(new WorkflowStepDefinition("HighValue", WorkflowStepType.Command));
+        def.AddStep(new WorkflowStepDefinition("LowValue", WorkflowStepType.Command));
+        def.Publish();
+
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Start");
+        var evt = new TestDomainEvent(_tenantId, "Submit");
+        var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        context.Payload = new Dictionary<string, object> { { "Amount", 50 } };
+
+        // Act
+        _engine.Advance(instance, def, evt, context);
+
+        // Assert
+        Assert.Equal("LowValue", instance.CurrentStepId);
+    }
+
     private class TestDomainEvent : FlowOS.Events.Models.DomainEvent
     {
         public TestDomainEvent(Guid tenantId, string eventType) : base(tenantId, eventType)

@@ -7,6 +7,7 @@ This document demonstrates how an AI model interacts with the FlowOS MCP Server 
 The AI connects to the MCP server and lists available tools.
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -17,6 +18,7 @@ The AI connects to the MCP server and lists available tools.
 ```
 
 **Response:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -48,6 +50,7 @@ The AI connects to the MCP server and lists available tools.
 The AI constructs a `WorkflowClassBlueprint` based on the user's requirements ("Leave Approval").
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -95,6 +98,7 @@ The AI constructs a `WorkflowClassBlueprint` based on the user's requirements ("
 ```
 
 **Response:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -116,6 +120,7 @@ The AI constructs a `WorkflowClassBlueprint` based on the user's requirements ("
 The AI checks if the draft is valid according to FlowOS laws.
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -131,6 +136,7 @@ The AI checks if the draft is valid according to FlowOS laws.
 ```
 
 **Response (Validation Failure):**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -152,6 +158,7 @@ The AI checks if the draft is valid according to FlowOS laws.
 The AI interprets the error and updates the draft to include the missing step.
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -184,6 +191,7 @@ The AI interprets the error and updates the draft to include the missing step.
 ## 3. Forking a Public Template
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -200,6 +208,7 @@ The AI interprets the error and updates the draft to include the missing step.
 ```
 
 **Response:**
+
 ```json
 {
   "result": {

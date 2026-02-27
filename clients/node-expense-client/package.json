@@ -1,0 +1,13 @@
+{
+  "name": "flowos-expense-client",
+  "version": "1.0.0",
+  "description": "Simple CLI client for FlowOS ExpenseApproval workflow",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "demo": "node demo.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
