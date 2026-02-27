@@ -81,15 +81,13 @@ export default function ExpenseList({ expenses, onStatusUpdate, currentRole }) {
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-xs text-gray-400">ID: {expense.workflow_instance_id}</span>
                   <span className="text-gray-300">|</span>
-                  <a
-                    href={`http://localhost:3000/api/expenses/${expense.id}/history`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-700 hover:underline flex items-center gap-1 text-xs"
+                  <button
+                    onClick={() => handleViewHistory(expense.id)}
+                    className="text-blue-500 hover:text-blue-700 hover:underline flex items-center gap-1 text-xs bg-transparent border-none cursor-pointer"
                   >
                     <FileText size={12} />
-                    View History (JSON)
-                  </a>
+                    View History
+                  </button>
                 </div>
               </div>
               

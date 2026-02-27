@@ -259,6 +259,29 @@ async function handleExpenseActionLogic(res, row, eventType, newStatus, mockRole
     }
 }
 
+// Get Expense History
+app.get('/api/expenses/:id/history', (req, res) => {
+    const { id } = req.params;
+    
+    db.get('SELECT * FROM expenses WHERE id = ?', [id], async (err, row) => {
+      if (err || !row) return res.status(404).json({ error: 'Expense not found' });
+      
+      try {
+          // Use Admin API to get full history/timeline
+          const response = await axios.get(`${FLOWOS_API_URL}/admin/workflows/${row.workflow_instance_id}`, {
+              headers: {
+                  'x-tenant-id': TENANT_ID,
+                  'X-Mock-Role': req.mockRole
+              }
+          });
+          res.json(response.data);
+      } catch (error) {
+          console.error('History Fetch Error:', error.response?.data || error.message);
+          res.status(500).json({ error: 'Failed to fetch workflow history' });
+      }
+    });
+  });
+
 app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
   await getWorkflowClassId();
