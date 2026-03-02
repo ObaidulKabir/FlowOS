@@ -22,5 +22,10 @@ public class AgentInsightGenerated : DomainEvent
     }
 
     // For EF Core
-    private AgentInsightGenerated() { }
+    private AgentInsightGenerated() 
+    {
+        AgentId = null!;
+        Insight = null!;
+        ContextObjective = null!;
+    }
 }

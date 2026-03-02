@@ -35,8 +35,8 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
 
         builder.Property(r => r.Permissions)
             .HasConversion(
-                v => JsonSerializer.Serialize(v.ToList(), (JsonSerializerOptions)null),
-                v => new HashSet<string>(JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions)null) ?? new List<string>())
+                v => JsonSerializer.Serialize(v.ToList(), new JsonSerializerOptions()),
+                v => new HashSet<string>(JsonSerializer.Deserialize<List<string>>(v, new JsonSerializerOptions()) ?? new List<string>())
             )
             .Metadata.SetValueComparer(comparer);
     }

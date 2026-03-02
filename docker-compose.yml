@@ -15,6 +15,9 @@ services:
     build:
       context: .
       dockerfile: docker/dashboard.Dockerfile
+    ports:
+      - "3000:3000"
+    command: npm run dev -- --host --port 3000
     environment:
       - VITE_API_TARGET=${VITE_API_TARGET}
     depends_on:

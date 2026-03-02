@@ -55,7 +55,7 @@ public class Security_RoleCapability : IClassFixture<WebApplicationFactory<Progr
             
             // Define Roles
             // "Manager" has "workflow.start"
-            if (!await db.Roles.AnyAsync(r => r.Name == "Manager"))
+            if (!await db.Roles.AnyAsync(r => r.Name == "Manager" && r.TenantId == _tenantId))
             {
                 var managerRole = new Role(_tenantId, "Manager");
                 managerRole.AddPermission("workflow.start");
@@ -63,7 +63,7 @@ public class Security_RoleCapability : IClassFixture<WebApplicationFactory<Progr
             }
 
             // "Intern" has NO permissions
-            if (!await db.Roles.AnyAsync(r => r.Name == "Intern"))
+            if (!await db.Roles.AnyAsync(r => r.Name == "Intern" && r.TenantId == _tenantId))
             {
                 var internRole = new Role(_tenantId, "Intern");
                 db.Roles.Add(internRole);
@@ -73,7 +73,10 @@ public class Security_RoleCapability : IClassFixture<WebApplicationFactory<Progr
             var def = new FlowOS.Workflows.Domain.WorkflowDefinition(_tenantId, "SecureFlow");
             def.AddStep(new FlowOS.Workflows.Domain.WorkflowStepDefinition("Start", FlowOS.Workflows.Enums.WorkflowStepType.Command) { NextSteps = new() });
             def.Publish();
-            db.WorkflowDefinitions.Add(def);
+            if (!await db.WorkflowDefinitions.AnyAsync(d => d.TenantId == _tenantId && d.Name == "SecureFlow"))
+            {
+                db.WorkflowDefinitions.Add(def);
+            }
             
             await db.SaveChangesAsync();
         }
