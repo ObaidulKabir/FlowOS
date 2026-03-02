@@ -22,6 +22,7 @@ public record EventBlueprint
     public string Description { get; init; } = string.Empty;
     public EventCategory Category { get; init; } = EventCategory.System;
     public bool IsTerminal { get; init; }
+    public string? PayloadSchema { get; init; } // Added: JSON Schema for validation
 }
 
 // Law

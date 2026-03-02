@@ -10,6 +10,7 @@ public enum WorkflowStatus
 public enum WorkflowStepType
 {
     Command,
+    SystemTask, // Added for explicit system tasks
     HumanTask,
     Timer,
     Decision,

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.Json; // Added for JSON validation
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Validation;
 
@@ -39,6 +40,22 @@ public class WorkflowClassValidator
         // Events declared vs used
         var declaredEvents = bp.Events.Select(e => e.EventId).ToHashSet();
         
+        // NEW: Validate Event Schemas
+        foreach (var evt in bp.Events)
+        {
+            if (!string.IsNullOrWhiteSpace(evt.PayloadSchema))
+            {
+                try
+                {
+                    JsonDocument.Parse(evt.PayloadSchema);
+                }
+                catch (JsonException)
+                {
+                    result.AddError("EVT-SCHEMA-001", "Events", $"Event '{evt.EventId}' has invalid JSON Schema", "Events");
+                }
+            }
+        }
+
         // Check State Machine transitions
         foreach (var t in bp.StateMachine.Transitions)
         {
@@ -117,15 +134,36 @@ public class WorkflowClassValidator
             // Check Exit Path (Strict Rule from Prompt)
             bool isEndStep = string.Equals(step.StepType, "End", StringComparison.OrdinalIgnoreCase);
             bool isDecision = string.Equals(step.StepType, "Decision", StringComparison.OrdinalIgnoreCase);
+            bool isCommand = string.Equals(step.StepType, "Command", StringComparison.OrdinalIgnoreCase);
+            bool isSystem = string.Equals(step.StepType, "SystemTask", StringComparison.OrdinalIgnoreCase);
 
-            if (isDecision)
+            if (isEndStep)
+            {
+                if (step.NextSteps != null && step.NextSteps.Any())
+                    result.AddError("WF-STRUCT-005", "WorkflowStructure", $"End Step '{step.StepId}' should not have NextSteps", "Workflow");
+            }
+            else if (isDecision)
             {
                 if (step.Conditions == null || !step.Conditions.Any())
                     result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Decision Step '{step.StepId}' has no conditions", "Workflow");
+                
+                // Decisions should ideally have a Default/Else path or cover all cases?
+                // Hard to check completeness of logic, but let's check structure.
             }
-            else if (!isEndStep && (step.NextSteps == null || !step.NextSteps.Any()))
+            else if (isCommand || isSystem)
             {
-                result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Step '{step.StepId}' has no exit path", "Workflow");
+                // Commands/System Tasks typically have a "Default" transition (auto-advance) or event triggers?
+                // Actually, "Command" usually means "Execute Command -> Auto Advance".
+                // So it should have NextSteps["Default"] or similar.
+                if (step.NextSteps == null || !step.NextSteps.Any())
+                    result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Step '{step.StepId}' ({step.StepType}) has no exit path", "Workflow");
+            }
+            else // HumanTask, Timer, etc.
+            {
+                if (step.NextSteps == null || !step.NextSteps.Any())
+                {
+                    result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Step '{step.StepId}' has no exit path", "Workflow");
+                }
             }
         }
 
