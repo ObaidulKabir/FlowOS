@@ -22,15 +22,18 @@ public class WorkflowClassesController : ControllerBase
     private readonly FlowOSDbContext _context;
     private readonly WorkflowClassManager _manager;
     private readonly ICurrentUser _currentUser;
+    private readonly FlowOS.Domain.Validation.IWorkflowJsonLinter _linter;
 
     public WorkflowClassesController(
         FlowOSDbContext context,
         WorkflowClassManager manager,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        FlowOS.Domain.Validation.IWorkflowJsonLinter linter)
     {
         _context = context;
         _manager = manager;
         _currentUser = currentUser;
+        _linter = linter;
     }
 
     // Helper to map Entity to DTO
@@ -57,13 +60,24 @@ public class WorkflowClassesController : ControllerBase
         var tenantId = _currentUser.TenantId;
         if (tenantId == Guid.Empty) return Unauthorized("TenantId is missing.");
 
-        // Create Entity
-        var workflowClass = new WorkflowClass(tenantId, request.Name, request.Version, request.Definition);
+        try 
+        {
+            // Create Entity
+            var workflowClass = new WorkflowClass(tenantId, request.Name, request.Version, request.Definition);
 
-        _context.WorkflowClasses.Add(workflowClass);
-        await _context.SaveChangesAsync();
+            _context.WorkflowClasses.Add(workflowClass);
+            await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetById), new { id = workflowClass.Id }, MapToDto(workflowClass));
+            return CreatedAtAction(nameof(GetById), new { id = workflowClass.Id }, MapToDto(workflowClass));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
@@ -296,6 +310,16 @@ public class WorkflowClassesController : ControllerBase
         var result = _manager.ValidateOnly(wc);
         // We return OK with the result, even if invalid, because "Validate" action succeeded (it ran).
         return Ok(result);
+    }
+
+    [HttpPost("lint")]
+    public IActionResult Lint([FromBody] LintRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.JsonContent))
+            return BadRequest("JsonContent is required.");
+
+        var errors = _linter.Lint(request.JsonContent);
+        return Ok(errors);
     }
 
     [HttpPost("{id}/deprecate")]

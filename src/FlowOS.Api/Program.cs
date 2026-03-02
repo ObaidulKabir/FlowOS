@@ -14,6 +14,7 @@ using FlowOS.API.Filters; // Case sensitive? FlowOS.API or FlowOS.Api?
 // Let's check.
 using FlowOS.Security.Interfaces;
 using FlowOS.Infrastructure.Services;
+using FlowOS.Domain.Validation;
 using FlowOS.Api.Middleware;
 using FlowOS.Notifications.Application;
 using FlowOS.Notifications.Infrastructure.Persistence;
@@ -83,6 +84,7 @@ builder.Services.AddScoped<ICapabilityService, CapabilityService>();
 
 // Governance Domain Services
 builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassValidator>();
+builder.Services.AddScoped<IWorkflowJsonLinter, WorkflowJsonLinter>();
 builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassManager>();
 
 // Add MediatR

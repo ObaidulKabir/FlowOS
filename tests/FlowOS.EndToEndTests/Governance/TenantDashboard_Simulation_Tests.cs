@@ -206,5 +206,20 @@ public class TenantDashboard_Simulation_Tests : IClassFixture<WebApplicationFact
         Assert.Equal("GlobalTemplate", copyResult.Name);
         Assert.Equal(WorkflowClassStatus.Draft, copyResult.Status);
         Assert.Equal(_tenantId, copyResult.TenantId);
+        // ---------------------------------------------------------
+        // 5. ERROR HANDLING: Create Invalid Draft
+        // ---------------------------------------------------------
+        var invalidDraftReq = new CreateWorkflowClassRequest
+        {
+            Name = null!, // Invalid
+            Version = "0.1.0",
+            Definition = new WorkflowClassBlueprint()
+        };
+        var invalidResp = await _client.PostAsJsonAsync("/api/workflow-classes", invalidDraftReq);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, invalidResp.StatusCode);
+        
+        var errorJson = await invalidResp.Content.ReadAsStringAsync();
+        // Since we return BadRequest(new { Error = ex.Message }), the property is "Error" or "error" depending on serialization
+        Assert.True(errorJson.Contains("Error", StringComparison.OrdinalIgnoreCase) || errorJson.Contains("error", StringComparison.OrdinalIgnoreCase));
     }
 }

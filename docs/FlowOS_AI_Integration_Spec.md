@@ -85,6 +85,27 @@ A single unit of work.
 }
 ```
 
+### 2.6. RoleBlueprint (Governance)
+Defines the actors and their permissions within the workflow.
+
+```json
+{
+  "name": "String (Role Name, e.g., 'Manager')",
+  "description": "String (Description of the role's responsibility)",
+  "grantedCapabilities": [ "String (Capability Code, e.g., 'event.publish.EVT-APPROVE')" ]
+}
+```
+
+### 2.7. CapabilityBlueprint
+Defines custom capabilities if needed, though standard system capabilities are often sufficient.
+
+```json
+{
+  "code": "String (Unique Code)",
+  "description": "String"
+}
+```
+
 ---
 
 ## 3. Operational Rules & Validation
@@ -110,6 +131,15 @@ FlowOS enforces strict validation. AI models must ensure generated blueprints co
 ### 3.3. Data Validation
 *   **PayloadSchema**: If provided, it must be a valid JSON Schema object.
     *   *Example*: `"{ \"type\": \"object\", \"properties\": { \"amount\": { \"type\": \"number\" } } }"`
+
+### 3.4. Role & Capability Rules
+*   **Least Privilege**: Roles should only be granted capabilities required for the steps they are assigned to.
+*   **Capability Format**:
+    *   Standard Format: `resource.action` (e.g., `workflow.read`).
+    *   Event Specific: `event.publish.{EventId}` (e.g., `event.publish.EVT-APPROVE`).
+*   **Validation**:
+    *   If a `HumanTask` requires a role, that role **MUST** have the capability to publish the events listed in the step's `NextSteps`.
+    *   Example: If `PendingManager` step transitions on `EVT-APPROVE`, the `Manager` role must have `event.publish.EVT-APPROVE`.
 
 ---
 

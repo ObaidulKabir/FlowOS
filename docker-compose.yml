@@ -3,12 +3,16 @@ services:
     image: flowos-api
     build:
       context: .
-      dockerfile: src/FlowOS.Api/Dockerfile 
+      dockerfile: src/FlowOS.Api/Dockerfile
+    ports:
+      - "5005:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
-      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     volumes:
       - ./flowos-config:/app/flowos-config
+    depends_on:
+      - postgres
 
   flowos-dashboard:
     image: flowos-dashboard
@@ -19,7 +23,7 @@ services:
       - "3000:3000"
     command: npm run dev -- --host --port 3000
     environment:
-      - VITE_API_TARGET=${VITE_API_TARGET}
+      - VITE_API_TARGET=http://flowos-api:8080
     depends_on:
       - flowos-api
 
@@ -29,10 +33,22 @@ services:
       context: .
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
-      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     stdin_open: true # docker run -i
-    tty: true        # docker run -t 
- 
+    tty: true        # docker run -t
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=flowos
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
 
 volumes:
   db-data:
