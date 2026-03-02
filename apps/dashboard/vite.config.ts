@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  
   server: {
     port: 5173,
     host: true, // Needed for Docker
@@ -12,6 +13,11 @@ export default defineConfig({
         target: process.env.VITE_API_TARGET || 'http://localhost:5183', // Updated default to match current backend
         changeOrigin: true,
       }
-    }
+    },
+    allowedHosts: [
+    'flowos.gkibria121.com',
+    'localhost',
+    '127.0.0.1'
+  ],
   }
 })
