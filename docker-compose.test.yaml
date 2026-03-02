@@ -1,6 +1,15 @@
 services:
   # ─── FlowOS API ──────────────────────────────────────────────
   flowos-api:
+    image: flowos-api
+    build:
+      context: .
+      dockerfile: src/FlowOS.Api/Dockerfile 
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
+    volumes:
+      - ./flowos-config:/app/flowos-config 
     labels:
       - "traefik.enable=true"
       # Route /api/* to the API service
@@ -14,6 +23,16 @@ services:
 
   # ─── FlowOS Dashboard ───────────────────────────────────────
   flowos-dashboard:
+    image: flowos-dashboard
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile 
+    command: npm run dev -- --host --port 3000
+    environment:
+      - VITE_API_TARGET=${VITE_API_TARGET}
+    depends_on:
+      - flowos-api
+
     labels:
       - "traefik.enable=true"
       # Catch-all for the domain root (lower priority so /api takes precedence)
@@ -26,6 +45,14 @@ services:
 
   # ─── FlowOS MCP (Stdio – no HTTP routing) ───────────────────
   flowos-mcp:
+    image: flowos-mcp
+    build:
+      context: .
+      dockerfile: src/FlowOS.MCP/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t 
     labels:
       - "traefik.enable=false"
     networks:
