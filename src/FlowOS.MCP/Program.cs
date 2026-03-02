@@ -126,7 +126,7 @@ namespace FlowOS.MCP
                 async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.ForkPublic(args)));
         }
 
-        private async Task<CallToolResult> ExecuteScopedAsync<T>(Func<T, Task<CallToolResult>> action)
+        private async Task<CallToolResult> ExecuteScopedAsync<T>(Func<T, Task<CallToolResult>> action) where T : notnull
         {
             using var scope = _serviceProvider.CreateScope();
             var tool = scope.ServiceProvider.GetRequiredService<T>();

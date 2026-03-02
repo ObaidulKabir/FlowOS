@@ -72,7 +72,7 @@ namespace FlowOS.MCP.Tools
                 var blueprint = blueprintJson.ToObject<WorkflowClassBlueprint>();
                 if (blueprint == null) return Error("Invalid blueprint format");
 
-                workflowClass.UpdateDraft(name ?? workflowClass.Name, blueprint);
+                workflowClass.UpdateDraft(name ?? workflowClass.Name, workflowClass.Version, blueprint);
                 await _dbContext.SaveChangesAsync();
 
                 return Success(new { id = workflowClass.Id, status = workflowClass.Status.ToString(), message = "Draft updated successfully" });

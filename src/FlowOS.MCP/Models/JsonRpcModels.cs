@@ -10,13 +10,13 @@ namespace FlowOS.MCP.Models
         public string JsonRpc { get; set; } = "2.0";
 
         [JsonProperty("id")]
-        public object Id { get; set; }
+        public object? Id { get; set; }
 
         [JsonProperty("method")]
-        public string Method { get; set; }
+        public string Method { get; set; } = string.Empty;
 
         [JsonProperty("params")]
-        public JObject Params { get; set; }
+        public JObject? Params { get; set; }
     }
 
     public class JsonRpcResponse
@@ -25,13 +25,13 @@ namespace FlowOS.MCP.Models
         public string JsonRpc { get; set; } = "2.0";
 
         [JsonProperty("id")]
-        public object Id { get; set; }
+        public object? Id { get; set; }
 
         [JsonProperty("result", NullValueHandling = NullValueHandling.Ignore)]
-        public object Result { get; set; }
+        public object? Result { get; set; }
 
         [JsonProperty("error", NullValueHandling = NullValueHandling.Ignore)]
-        public JsonRpcError Error { get; set; }
+        public JsonRpcError? Error { get; set; }
     }
 
     public class JsonRpcError
@@ -40,31 +40,31 @@ namespace FlowOS.MCP.Models
         public int Code { get; set; }
 
         [JsonProperty("message")]
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
 
         [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
-        public object Data { get; set; }
+        public object? Data { get; set; }
     }
 
     public class McpTool
     {
         [JsonProperty("name")]
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         [JsonProperty("description")]
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
 
         [JsonProperty("inputSchema")]
-        public object InputSchema { get; set; }
+        public object? InputSchema { get; set; }
     }
 
     public class CallToolParams
     {
         [JsonProperty("name")]
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         [JsonProperty("arguments")]
-        public JObject Arguments { get; set; }
+        public JObject? Arguments { get; set; }
     }
 
     public class CallToolResult
@@ -82,6 +82,6 @@ namespace FlowOS.MCP.Models
         public string Type { get; set; } = "text";
 
         [JsonProperty("text")]
-        public string Text { get; set; }
+        public string Text { get; set; } = string.Empty;
     }
 }
