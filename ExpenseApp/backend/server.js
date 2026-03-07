@@ -6,7 +6,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = 3000;
+const PORT = 3001;
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -27,7 +27,7 @@ db.serialize(() => {
 });
 
 // FlowOS Configuration
-const FLOWOS_API_URL = 'http://localhost:5183/api';
+const FLOWOS_API_URL = 'http://localhost:5005/api';
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'; // Matches DataSeeder Demo Client
 const DEFAULT_MOCK_ROLE = 'Admin'; 
 
@@ -255,7 +255,10 @@ async function handleExpenseActionLogic(res, row, eventType, newStatus, mockRole
         
     } catch (error) {
             console.error(`Action ${eventType} Error:`, error.response?.data || error.message);
-            res.status(500).json({ error: `Failed to ${eventType}` });
+            res.status(500).json({ 
+                error: `Failed to ${eventType}`, 
+                details: error.response?.data || error.message 
+            });
     }
 }
 

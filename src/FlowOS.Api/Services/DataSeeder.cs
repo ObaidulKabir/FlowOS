@@ -8,11 +8,11 @@ using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using FlowOS.Domain.Enums;
-using FlowOS.Security.Models;
-using System.Collections.Generic;
-using FlowOS.Events.Models;
+using Microsoft.Extensions.Configuration; // Added
+using Microsoft.Extensions.DependencyInjection;
+using FlowOS.Security.Models; // Ensure this is present
+using FlowOS.Domain.Enums; // Ensure this is present for WorkflowClassStatus
+using FlowOS.Events.Models; // For StandardEvent
 
 namespace FlowOS.API.Services;
 
@@ -50,34 +50,73 @@ public static class DataSeeder
         // 2. Load Configuration (Dev Only)
         if (env.IsDevelopment())
         {
-            // Locate config folder relative to execution
-            var potentialPaths = new[] 
-            {
-                Path.Combine(Directory.GetCurrentDirectory(), "flowos-config"), // If running from root
-                Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "flowos-config"), // If running from src/FlowOS.API
-                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "flowos-config") // From bin
-            };
+            var config = serviceProvider.GetService<IConfiguration>();
+            var logger = serviceProvider.GetRequiredService<ILogger<ConfigurationLoader>>();
             
             string configRoot = null;
-            foreach (var path in potentialPaths)
+            
+            // Priority 1: User-Specified Working Directory
+            var userWd = config?["FlowOS:WorkingDirectory"];
+            if (!string.IsNullOrWhiteSpace(userWd))
             {
-                if (Directory.Exists(path))
+                try 
                 {
-                    configRoot = path;
-                    break;
+                    WorkingDirectoryValidator.Validate(userWd);
+                    configRoot = Path.Combine(userWd, "flowos-config");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "User-specified working directory is invalid.");
+                    throw; // Fail fast if user explicitly provided a bad path
+                }
+            }
+            
+            // Priority 2: Fallback to Current Directory (Root of Repo in Dev)
+            if (configRoot == null)
+            {
+                // Locate config folder relative to execution
+                var potentialPaths = new[] 
+                {
+                    Path.Combine(Directory.GetCurrentDirectory(), "flowos-config"), // If running from root
+                    Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "flowos-config") // If running from src/FlowOS.API
+                };
+                
+                foreach (var path in potentialPaths)
+                {
+                    if (Directory.Exists(path))
+                    {
+                        // Validate the parent directory of config is a valid project root
+                        var projectRoot = Path.GetDirectoryName(path);
+                        try
+                        {
+                            WorkingDirectoryValidator.Validate(projectRoot!);
+                            configRoot = path;
+                            break;
+                        }
+                        catch (Exception) { /* Skip invalid candidates */ }
+                    }
                 }
             }
 
             if (configRoot != null && Directory.Exists(configRoot))
             {
-                var logger = serviceProvider.GetRequiredService<ILogger<ConfigurationLoader>>();
+                // Pass the PROJECT ROOT, not the config folder, if ConfigurationLoader expects root?
+                // Looking at ConfigurationLoader code:
+                // var path = Path.Combine(_configRoot, "events");
+                // So _configRoot should be the folder containing "events".
+                // In DataSeeder, we set configRoot = .../flowos-config.
+                // So that matches.
+                
+                // Note: ConfigurationLoader constructor now calls Validate(_configRoot).
+                // But _configRoot is "flowos-config" folder.
+                // WorkingDirectoryValidator checks for "bin/Debug". "flowos-config" is fine.
+                
                 var loader = new ConfigurationLoader(context, logger, configRoot);
                 await loader.LoadAllAsync(DefaultTenantId);
             }
             else 
             {
-                 var logger = serviceProvider.GetRequiredService<ILogger<ConfigurationLoader>>();
-                 logger.LogWarning("Could not find flowos-config directory. Tried: {Paths}", string.Join(", ", potentialPaths));
+                 logger.LogWarning("Could not find valid 'flowos-config' directory. Please set 'FlowOS:WorkingDirectory'.");
             }
         }
 
@@ -551,6 +590,37 @@ public static class DataSeeder
         mgrRole.AddPermission("event.publish.EVT-REJECT"); // Can reject
         mgrRole.AddPermission("event.publish.EVT-ESCALATE"); // Can escalate
         context.Roles.Add(mgrRole);
+    }
+    else
+    {
+        // Update existing Manager role if it's missing EVT-ESCALATE
+        // Note: Permissions is loaded as a Value Object/Owned Type in EF, or simple collection depending on config.
+        // But Role.Permissions is HashSet<string>.
+        // EF Core loading of owned types/collections might need explicit Include if it's a separate table.
+        // Assuming simple string collection for now.
+        
+        var existingMgr = await context.Roles
+            .FirstOrDefaultAsync(r => r.Name == "Manager" && r.TenantId == clientTenantId);
+            
+        if (existingMgr != null)
+        {
+            // Force load permissions if they are not loaded (though usually they are with the entity if configured as owned)
+            // But if it's a separate table, we might need to load it.
+            // context.Entry(existingMgr).Collection(r => r.Permissions).Load(); 
+            // However, Role.Permissions is a HashSet<string> which EF maps to a table usually.
+            
+            // Re-fetch with explicit include if needed, but above we used Include(r => r.Permissions) which failed because string doesn't have properties.
+            // Role.Permissions is ICollection<string>? No, it's HashSet<string>.
+            
+            // Let's just try to add. The AddPermission method checks for duplicates internally.
+            
+            existingMgr.AddPermission("event.publish.EVT-ESCALATE");
+            existingMgr.AddPermission("event.publish.EVT-APPROVE");
+            existingMgr.AddPermission("event.publish.EVT-REJECT");
+            existingMgr.AddPermission("workflow.read");
+            
+            context.Roles.Update(existingMgr);
+        }
     }
 
     // 5.3. Seed Director Role

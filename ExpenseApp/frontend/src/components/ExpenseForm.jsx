@@ -12,7 +12,7 @@ export default function ExpenseForm({ onExpenseAdded }) {
     
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:3000/api/expenses', {
+      const res = await axios.post('http://localhost:3001/api/expenses', {
         amount: parseFloat(amount),
         description
       });

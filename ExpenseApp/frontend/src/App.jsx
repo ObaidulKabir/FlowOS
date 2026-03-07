@@ -19,7 +19,7 @@ function App() {
 
   const fetchExpenses = async () => {
     try {
-      const res = await axios.get('http://localhost:3000/api/expenses');
+      const res = await axios.get('http://localhost:3001/api/expenses');
       setExpenses(res.data);
     } catch (err) {
       console.error(err);

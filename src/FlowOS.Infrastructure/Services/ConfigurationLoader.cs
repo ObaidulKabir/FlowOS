@@ -21,6 +21,9 @@ public class ConfigurationLoader
     {
         _context = context;
         _logger = logger;
+        
+        // Enforce Working Directory Definition
+        WorkingDirectoryValidator.Validate(configRoot);
         _configRoot = configRoot;
     }
 

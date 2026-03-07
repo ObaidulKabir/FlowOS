@@ -9,11 +9,11 @@ export default function ExpenseList({ expenses, onStatusUpdate, currentRole }) {
 
   const handleAction = async (id, action) => {
     try {
-      const res = await axios.post(`http://localhost:3000/api/expenses/${id}/${action}`);
+      const res = await axios.post(`http://localhost:3001/api/expenses/${id}/${action}`);
       onStatusUpdate(res.data);
     } catch (err) {
       console.error(err);
-      alert(`Failed to ${action}`);
+      alert(`Failed to ${action}: ` + (err.response?.data?.details?.error || err.response?.data?.error || err.message));
     }
   };
 
@@ -40,7 +40,7 @@ export default function ExpenseList({ expenses, onStatusUpdate, currentRole }) {
     setSelectedHistory(null);
     try {
       console.log('Fetching history from backend...');
-      const res = await axios.get(`http://localhost:3000/api/expenses/${id}/history`);
+      const res = await axios.get(`http://localhost:3001/api/expenses/${id}/history`);
       console.log('History received:', res.data);
       setSelectedHistory(res.data);
     } catch (err) {
