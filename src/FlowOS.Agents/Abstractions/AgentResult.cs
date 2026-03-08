@@ -7,6 +7,7 @@ public class AgentResult
     public bool Success { get; set; }
     public string? Insight { get; set; }
     public Dictionary<string, object> StructuredData { get; set; } = new();
+    public List<SuggestedAction> SuggestedActions { get; set; } = new();
     public string? FailureReason { get; set; }
 
     public static AgentResult FromInsight(string insight, Dictionary<string, object>? data = null)
@@ -16,6 +17,16 @@ public class AgentResult
             Success = true,
             Insight = insight,
             StructuredData = data ?? new Dictionary<string, object>()
+        };
+    }
+
+    public static AgentResult WithActions(string insight, List<SuggestedAction> actions)
+    {
+        return new AgentResult
+        {
+            Success = true,
+            Insight = insight,
+            SuggestedActions = actions
         };
     }
 

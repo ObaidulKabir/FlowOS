@@ -48,6 +48,7 @@ namespace FlowOS.MCP
                     services.AddScoped<GovernanceTools>();
                     services.AddScoped<InfoTools>();
                     services.AddScoped<AnalysisTools>();
+                    services.AddScoped<AgentTools>(); // Added AgentTools
 
                     // Hosted Service to run the MCP Loop
                     services.AddHostedService<McpHostedService>();
@@ -95,6 +96,7 @@ namespace FlowOS.MCP
             var governance = scope.ServiceProvider.GetRequiredService<GovernanceTools>();
             var info = scope.ServiceProvider.GetRequiredService<InfoTools>();
             var analysis = scope.ServiceProvider.GetRequiredService<AnalysisTools>();
+            var agent = scope.ServiceProvider.GetRequiredService<AgentTools>();
 
             // We need to wrap the handler to create a scope per request if the tool relies on Scoped services like DbContext
             
@@ -104,6 +106,13 @@ namespace FlowOS.MCP
 
             _registry.Register("list_public_workflowclasses", "List all Public WorkflowClasses", null, 
                 async (args) => await ExecuteScopedAsync<InfoTools>(t => t.ListPublic(args)));
+
+            // Agent Tools
+            _registry.Register("list_available_agents", "List all available AI Agents and their capabilities", null,
+                async (args) => await ExecuteScopedAsync<AgentTools>(t => t.ListAvailableAgents(args)));
+
+            _registry.Register("suggest_agent_action", "Get suggested actions from an agent for a workflow instance", null,
+                async (args) => await ExecuteScopedAsync<AgentTools>(t => t.SuggestAgentAction(args)));
 
             // Analysis Tools
             _registry.Register("explain_validation_violation", "Explain a validation error code and provide hints", null,
