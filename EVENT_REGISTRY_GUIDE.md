@@ -98,7 +98,9 @@ new WorkflowStepDefinition("Review") {
     POST /api/events/publish
     {
       "eventType": "EVT-ORDER-APPROVED",
-      ...
+      "payload": {
+        "Amount": 500
+      }
     }
     ```
 

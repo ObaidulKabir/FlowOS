@@ -165,7 +165,12 @@ Publishes an event to a running workflow instance, potentially triggering state 
   "tenantId": "uuid",
   "workflowInstanceId": "uuid",
   "eventType": "string",
-  "correlationId": "uuid? (optional)"
+  "correlationId": "uuid? (optional)",
+  "payload": {
+    "Amount": 1000,
+    "Category": "IT",
+    "Reason": "Urgent upgrade"
+  }
 }
 ```
 

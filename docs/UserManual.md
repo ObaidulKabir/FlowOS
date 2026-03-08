@@ -183,11 +183,17 @@ FlowOS supports AI Agents under strict containment rules ("MCP-style").
 
 ### Agent Contract
 1.  **Input**: `AgentContext` (Read-only snapshot of Tenant, Entity, Workflow State).
-2.  **Output**: `AgentResult` (Insight string, Structured Data).
+2.  **Output**: `AgentResult` (Insight string, Structured Data, **Suggested Actions**).
 3.  **Side Effects**: **None**.
 
-### Insight Projection
+### Insight Projection & Smart Actions
 Agents emit `AgentInsightGenerated` events. These are recorded in history but **do not** trigger state transitions directly.
+
+*   **Insights**: Descriptive analysis (e.g., "High Risk").
+*   **Suggested Actions**: Actionable proposals (e.g., "Suggest Escalate").
+    *   These appear in the UI as **Smart Actions** buttons.
+    *   A human user must click "Confirm" to execute the suggested event.
+
 *   **Correct**: "Agent suggests Approval (90%)". Human/Rule reads this and acts.
 *   **Incorrect**: Agent calls `Approve()`. (Impossible in FlowOS).
 

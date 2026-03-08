@@ -1943,16 +1943,18 @@ Their outputs are proposals, not actions.**
 - **Interpret and explain validation violations**
 - **Iterate designs based on feedback**
 - **Propose notification mappings and policies (design-time)**
+- **Inspect runtime context (read-only) via `AgentContext`**
+- **Propose `SuggestedActions` for workflow instances**
 
 **Agents MAY NOT:**
 
 - **Execute workflows or steps**
 - **Publish WorkflowClasses**
-- **Advance WorkflowInstances**
-- **Emit Domain Events**
+- **Advance WorkflowInstances directly**
+- **Emit Domain Events directly**
 - **Modify runtime data**
 - **Bypass validation or governance**
-- **Access tenant operational data**
+- **Access tenant operational data without authorization**
 
 **Any attempt to exceed this scope is INVALID.**
 

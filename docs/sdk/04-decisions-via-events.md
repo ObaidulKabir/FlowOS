@@ -55,9 +55,31 @@ Use the `Decision` step type with `Conditions`.
   "stepType": "Decision",
   "conditions": {
     "Amount > 100": "DirectorApproval",
-    "Amount <= 100": "ManagerApproval"
+    "Amount <= 100": "ManagerApproval",
+    "Category == 'IT'": "ITReview"
+  },
+  "nextSteps": {
+    "Default": "ManagerApproval"
   }
 }
 ```
 
 The engine evaluates these rules against the event payload and automatically routes the workflow.
+
+### Supported Expressions
+FlowOS currently supports simple binary comparisons:
+*   `Key > Value`
+*   `Key < Value`
+*   `Key >= Value`
+*   `Key <= Value`
+*   `Key == Value`
+
+Example Payload:
+```json
+{
+  "Amount": 150,
+  "Category": "Hardware"
+}
+```
+
+If no condition matches, the engine follows the `Default` transition defined in `nextSteps`. For more details, see [Payload Evaluation Guide](../PayloadEvaluation.md).
