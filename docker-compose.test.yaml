@@ -67,11 +67,15 @@ services:
     command: sh -c "npm install && npm start"
     environment:
       - EXPENSE_APP_FLOWOS_API_URL=http://flowos-api:8080/api
-    ports:
-      - "3001:3001"
+ 
     networks:
       - traefik-network
-
+    labels:
+      - "traefik.enable=true"
+      # Catch-all for the domain root (lower priority so /api takes precedence)
+      - "traefik.http.routers.expense-backend.rule=Host(`expense-app.gkibria121.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.expense-backend.entrypoints=web" 
+      - "traefik.http.services.expense-backend.loadbalancer.server.port=3001"  
   # ─── Expense App Frontend ─────────────────────────────────────
   expense-frontend:
     image: node:20-alpine
@@ -80,12 +84,15 @@ services:
       - ./ExpenseApp/frontend:/app
     command: sh -c "npm install && npm run dev"
     environment:
-      - VITE_EXPENSE_APP_API_URL=http://localhost:3001
-    ports:
-      - "3002:3002"
+      - VITE_EXPENSE_APP_API_URL=https://expense-app.gkibria121.com
     networks:
       - traefik-network
-
+    labels:
+      - "traefik.enable=true"
+      # Catch-all for the domain root (lower priority so /api takes precedence)
+      - "traefik.http.routers.expense-frontend.rule=Host(`expense-app.gkibria121.com`)"
+      - "traefik.http.routers.expense-frontend.entrypoints=web" 
+      - "traefik.http.services.expense-frontend.loadbalancer.server.port=3002"  
 # ─── Networks ─────────────────────────────────────────────────
 networks:
   traefik-network:
