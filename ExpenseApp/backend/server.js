@@ -12,7 +12,12 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Database Setup
-const db = new sqlite3.Database('./expenses.db');
+const fs = require('fs');
+const dbDir = '/app/db';
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+const db = new sqlite3.Database(`${dbDir}/expenses.db`);
 
 db.serialize(() => {
   db.run(`
