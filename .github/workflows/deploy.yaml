@@ -28,7 +28,7 @@ jobs:
           ssh -A -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.APP_PATH }}
-            git pull origin main
+            git reset --hard origin/main
             docker compose down
             docker compose  -f  docker-compose.test.yaml up -d --build
           EOF
