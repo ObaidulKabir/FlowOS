@@ -9,10 +9,11 @@ export default function ExpenseForm({ onExpenseAdded }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!amount || !description) return;
-    
+
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:3001/api/expenses', {
+      const apiUrl = import.meta.env.VITE_EXPENSE_APP_API_URL || 'http://localhost:3001';
+      const res = await axios.post(`${apiUrl}/api/expenses`, {
         amount: parseFloat(amount),
         description
       });
