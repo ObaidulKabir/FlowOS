@@ -28,6 +28,7 @@ jobs:
           ssh -A -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             set -e
             cd ${{ secrets.APP_PATH }}
+            git fetch origin
             git reset --hard origin/main
             git pull
             docker compose down
