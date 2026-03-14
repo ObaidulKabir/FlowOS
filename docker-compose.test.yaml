@@ -18,8 +18,6 @@ services:
       - "traefik.http.services.flowos-api.loadbalancer.server.port=8080"
     networks:
       - traefik-network
-    ports:
-      - "5005:8080"   # keep direct access or remove if Traefik is the only ingress
 
   # ─── FlowOS Dashboard ───────────────────────────────────────
   flowos-dashboard:
