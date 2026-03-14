@@ -39,7 +39,7 @@ services:
       - "traefik.http.routers.flowos-dashboard.rule=Host(`${FLOWOS_DOMAIN}`)"
       - "traefik.http.routers.flowos-dashboard.entrypoints=web"
       - "traefik.http.routers.flowos-dashboard.priority=1"
-      - "traefik.http.services.flowos-dashboard.loadbalancer.server.port=5173"
+      - "traefik.http.services.flowos-dashboard.loadbalancer.server.port=3000"
     networks:
       - traefik-network 
 
