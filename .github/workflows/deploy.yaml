@@ -29,6 +29,7 @@ jobs:
             set -e
             cd ${{ secrets.APP_PATH }}
             git reset --hard origin/main
+            git pull
             docker compose down
             docker compose  -f  docker-compose.test.yaml up -d --build
           EOF
