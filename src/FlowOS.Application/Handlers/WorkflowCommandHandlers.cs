@@ -79,15 +79,21 @@ public class WorkflowCommandHandlers :
                 fullDefinition = await _context.WorkflowDefinitions
                     .AsNoTracking()
                     .Where(w => w.Name == request.WorkflowName 
-                        && w.TenantId == request.TenantId
-                        && w.Status == WorkflowStatus.Published)
+                        && w.TenantId == request.TenantId) // Removed Status check from here to allow diagnosis
                     .OrderByDescending(w => w.Version)
                     .FirstOrDefaultAsync(cancellationToken);
                     
                 if (fullDefinition == null)
                 {
-                    throw new ArgumentException($"No published definition found for workflow '{request.WorkflowName}'.");
+                    throw new ArgumentException($"No definition found for workflow '{request.WorkflowName}'. Ensure it is Published.");
                 }
+                
+                // Now check status if needed (Runtime definitions usually are considered published if they exist, but let's be safe)
+                if (fullDefinition.Status != WorkflowStatus.Published)
+                {
+                     throw new ArgumentException($"Workflow definition '{request.WorkflowName}' v{fullDefinition.Version} is in status '{fullDefinition.Status}', not Published.");
+                }
+
                 definitionId = fullDefinition.Id;
             }
         }
@@ -119,7 +125,13 @@ public class WorkflowCommandHandlers :
                  if (anyDef != null)
                     throw new ArgumentException($"Definition found for {wc.Name} but version mismatch (Class: {wc.Version} -> {version}, Def: {anyDef.Version}). Ensure Publish creates the definition.");
                  else
-                    throw new ArgumentException($"No definition found for class {wc.Name} (Version {wc.Version} -> {version}). Did you Publish the WorkflowClass?");
+                 {
+                    // Fallback 2: Check if there's a Published WorkflowClass but no Definition (Compilation failed or skipped)
+                    if (wc.Status == Domain.Enums.WorkflowClassStatus.Published)
+                        throw new ArgumentException($"WorkflowClass '{wc.Name}' is Published but no Runtime Definition exists. Please re-publish to generate the definition.");
+                    else
+                        throw new ArgumentException($"No definition found for class '{wc.Name}'. The class is in status '{wc.Status}' - it must be Published to start.");
+                 }
              }
              definitionId = fullDefinition.Id;
         }
