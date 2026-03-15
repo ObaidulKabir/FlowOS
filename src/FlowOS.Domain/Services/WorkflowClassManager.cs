@@ -15,6 +15,28 @@ public class WorkflowClassManager
         _validator = validator;
     }
 
+    /// <summary>
+    /// Creates a new Draft WorkflowClass with initial validation.
+    /// </summary>
+    /// <param name="workflowClass">The draft workflow class to create.</param>
+    /// <returns>Validation result. If invalid, the draft should not be persisted.</returns>
+    public ValidationResult CreateDraft(WorkflowClass workflowClass)
+    {
+        // 1. Basic Validation (Structure, Completeness)
+        // Even a draft should have a valid structure to be useful.
+        // We allow some looseness (e.g. maybe not all roles assigned), 
+        // but the graph integrity (transitions to known steps) should be sound to prevent runtime crashes if tested.
+        
+        var result = _validator.Validate(workflowClass);
+        
+        // If validation fails, we return the errors.
+        // The caller (Application Layer) should decide whether to block creation or allow "Invalid Draft".
+        // FlowOS Philosophy: "Law before Work" -> Invalid definitions should typically be rejected or flagged as "Needs Repair".
+        // For strictness, we return the result.
+        
+        return result;
+    }
+
     public ValidationResult Publish(WorkflowClass workflowClass)
     {
         // 1. Validate

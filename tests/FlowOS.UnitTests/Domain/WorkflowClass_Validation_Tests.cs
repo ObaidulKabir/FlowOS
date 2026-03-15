@@ -172,5 +172,55 @@ namespace FlowOS.UnitTests.Domain
         wc.Publish();
         Assert.Equal(WorkflowClassStatus.Published, wc.Status);
     }
+    
+    [Fact]
+    public void CreateDraft_WithUnknownNextStep_ShouldReturnErrors()
+    {
+        // Arrange
+        var validator = new FlowOS.Domain.Services.WorkflowClassValidator();
+        var manager = new FlowOS.Domain.Services.WorkflowClassManager(validator);
+
+        var invalidBp = new WorkflowClassBlueprint
+        {
+            StateMachine = new StateMachineBlueprint 
+            { 
+                InitialState = "Created", 
+                States = new List<string> { "Created", "Working" } 
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Created",
+                Steps = new List<StepBlueprint>
+                {
+                    new StepBlueprint 
+                    { 
+                        StepId = "Created", 
+                        StepType = "Command",
+                        NextSteps = new Dictionary<string, string> { { "EVT-WORKING", "Working" } }
+                    },
+                    new StepBlueprint 
+                    { 
+                        StepId = "Working", 
+                        StepType = "HumanTask",
+                        NextSteps = new Dictionary<string, string> { { "EVT-FINISHED", "Finished" } } // "Finished" step is missing
+                    }
+                }
+            },
+            Events = new List<EventBlueprint> 
+            { 
+                new EventBlueprint { EventId = "EVT-WORKING" },
+                new EventBlueprint { EventId = "EVT-FINISHED" }
+            }
+        };
+
+        var wc = new WorkflowClass(Guid.NewGuid(), "BadDraft", "0.1.0", invalidBp);
+
+        // Act
+        var result = manager.CreateDraft(wc);
+
+        // Assert
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == "CON-004" && e.Message.Contains("'Finished'"));
+    }
 }
 }

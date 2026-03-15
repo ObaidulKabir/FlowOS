@@ -54,13 +54,6 @@ public class WorkflowClass
             throw new InvalidOperationException($"Cannot publish from state {Status}.");
         
         // Strict Validation (Self-Enforcement)
-        // Since Entity should not depend on Service, typically we inject the validator or pass it as method argument.
-        // However, for this fix to be "Authoritative" and "Domain-Centric" without changing all call sites immediately,
-        // and given the simple architecture, I will instantiate the validator here or (better)
-        // follow pure DDD: Validate() should be called by the Application Service (Manager).
-        // BUT, the test `wc.Publish()` expects the exception. This implies the Entity enforces it.
-        // So I will invoke the validator inside the Entity.
-        
         var validator = new WorkflowClassValidator();
         var result = validator.Validate(this);
         

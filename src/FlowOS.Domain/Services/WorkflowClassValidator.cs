@@ -170,6 +170,7 @@ public class WorkflowClassValidator
         // 3. Check Workflow Steps (Consistency)
         foreach (var step in bp.Workflow.Steps)
         {
+            // Validate step existence for all transitions
             if (step.NextSteps != null)
             {
                 foreach (var nextStepId in step.NextSteps.Values)
