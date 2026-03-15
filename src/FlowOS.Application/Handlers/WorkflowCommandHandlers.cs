@@ -134,11 +134,34 @@ public class WorkflowCommandHandlers :
              actualVersion = fullDefinition.Version;
         }
 
-        string startStep = request.InitialStepId ?? "Start";
-        if (string.IsNullOrEmpty(request.InitialStepId) && fullDefinition != null && !string.IsNullOrEmpty(fullDefinition.StartStepId))
+        // --- FIX: Resolve Start Step Correctly ---
+        string startStep = "Start";
+        
+        if (fullDefinition != null && !string.IsNullOrEmpty(fullDefinition.StartStepId))
         {
-             startStep = fullDefinition.StartStepId;
+            // Default to Definition's Start Step
+            startStep = fullDefinition.StartStepId;
         }
+
+        if (!string.IsNullOrEmpty(request.InitialStepId))
+        {
+             // Override if user explicitly requested (and it exists)
+             if (fullDefinition != null && fullDefinition.Steps.Any(s => s.StepId == request.InitialStepId))
+             {
+                 startStep = request.InitialStepId;
+             }
+             else if (fullDefinition != null)
+             {
+                 throw new ArgumentException($"Requested initial step '{request.InitialStepId}' not found in definition.");
+             }
+        }
+        
+        // Final Safety Check
+        if (fullDefinition != null && !fullDefinition.Steps.Any(s => s.StepId == startStep))
+        {
+             throw new ArgumentException($"Resolved Start Step '{startStep}' not found in definition '{fullDefinition.Name}'.");
+        }
+        // -----------------------------------------
 
         // 1. Create Instance
         var instance = new WorkflowInstance(
