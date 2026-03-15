@@ -19,7 +19,8 @@ function App() {
 
   const fetchExpenses = async () => {
     try {
-      const res = await axios.get('http://localhost:3001/api/expenses');
+      const apiUrl = import.meta.env.VITE_EXPENSE_APP_API_URL || 'http://localhost:3001';
+      const res = await axios.get(`${apiUrl}/api/expenses`);
       setExpenses(res.data);
     } catch (err) {
       console.error(err);
@@ -37,7 +38,7 @@ function App() {
   };
 
   const handleStatusUpdate = (updatedExpense) => {
-      setExpenses(expenses.map(e => e.id === updatedExpense.id ? updatedExpense : e));
+    setExpenses(expenses.map(e => e.id === updatedExpense.id ? updatedExpense : e));
   };
 
   return (
@@ -45,10 +46,10 @@ function App() {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800">FlowOS Expense Approval</h1>
-          
+
           <div className="flex items-center gap-2 bg-white p-2 rounded shadow-sm">
             <span className="text-sm text-gray-500 font-medium">Simulate Role:</span>
-            <select 
+            <select
               value={currentRole}
               onChange={(e) => setCurrentRole(e.target.value)}
               className="border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 p-1 bg-gray-50"
@@ -60,12 +61,12 @@ function App() {
             </select>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-1">
             <ExpenseForm onExpenseAdded={handleExpenseAdded} />
           </div>
-          
+
           <div className="md:col-span-2">
             {loading ? (
               <p>Loading...</p>

@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3001,
-    allowedHosts: ["localhost", "flowos.gkibria121.com"], // Allow both localhost and Docker host
+    allowedHosts: ["localhost", "expense-app.gkibria121.com"], // Allow both localhost and Docker host
   },
 });
