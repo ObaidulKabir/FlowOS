@@ -2175,6 +2175,84 @@ Their outputs are proposals, not actions.**
 
 **✅ End of Section 11 — Agent Functionality & Constraints**
 
+**Section 12 — MCP Tool Reference**
+
+**12.1 Purpose**
+
+This section lists the specific tools exposed to AI Agents via the Model Context Protocol (MCP).
+These tools enable agents to perform their design-time and diagnostic duties within the constitutional boundaries.
+
+**12.2 Governance Tools (`FlowOS.MCP.Tools.GovernanceTools`)**
+
+These tools allow Agents to propose and manage design artifacts. **Strict validation is enforced.**
+
+| Tool Name | Arguments | Description |
+| --- | --- | --- |
+| **CreateDraft** | `name`, `version`, `blueprint`, `tenantId` | Creates a new WorkflowClass Draft. **Fails if validation fails.** |
+| **UpdateDraft** | `id`, `blueprint`, `name` (opt) | Updates an existing Draft. **Fails if validation fails.** |
+| **ValidateDraft** | `id` | Runs authoritative validation on a Draft without modifying it. Returns errors if any. |
+| **ForkPublic** | `publicId`, `tenantId` | Creates a private Draft copy of a Public Template. |
+
+**12.3 Analysis Tools (`FlowOS.MCP.Tools.AnalysisTools`)**
+
+These tools provide reasoning support, explanations, and advisory linting.
+
+| Tool Name | Arguments | Description |
+| --- | --- | --- |
+| **ExplainValidationViolation** | `code`, `context` (json) | Returns a human-readable explanation and design hint for a specific error code (e.g., VAL-WF-002). |
+| **LintDraftWorkflowClass** | `id` | Runs **Advisory Linting** checks (orphaned events, complexity, naming quality). Non-blocking. |
+
+**12.4 Agent Tools (`FlowOS.MCP.Tools.AgentTools`)**
+
+These tools allow Agents to discover other agents and simulate their actions for proposal purposes.
+
+| Tool Name | Arguments | Description |
+| --- | --- | --- |
+| **ListAvailableAgents** | _none_ | Lists registered specialized agents (e.g., "RiskAnalyzer") and their capabilities. |
+| **SuggestAgentAction** | `workflowInstanceId`, `agentId` | Simulates an agent's execution context (using simulated or real payload) and returns a **SuggestedAction** proposal. |
+
+**12.5 Info Tools (`FlowOS.MCP.Tools.InfoTools`)**
+
+Read-only discovery tools for schema and public templates.
+
+| Tool Name | Arguments | Description |
+| --- | --- | --- |
+| **DescribeSchema** | _none_ | Returns the JSON schema for `WorkflowClassBlueprint`. |
+| **ListPublic** | _none_ | Lists available Public Workflow Templates. |
+
+**✅ End of Section 12 — MCP Tool Reference**
+
+**Section 13 — Payload Evaluation & Conditions**
+
+**13.1 Purpose**
+
+FlowOS supports data-driven decisions within workflows.
+Conditions allow `Decision` steps to evaluate the **Payload** of the event that triggered the transition (or the accumulated context).
+
+**13.2 Syntax (C# Expression)**
+
+Conditions are defined as string expressions evaluated at runtime using `DynamicExpresso`.
+
+**Examples:**
+
+- `Amount > 1000`
+- `Category == "Travel"`
+- `RiskScore >= 0.8 && Amount > 500`
+
+**13.3 Context Variables**
+
+The evaluation context exposes:
+
+- **Payload Properties**: Directly accessible by name (e.g., `Amount`).
+- **Global Helpers**: (Future expansion)
+
+**13.4 Design-Time Validation**
+
+- Agents **SHOULD** ensure condition syntax is valid C#.
+- Agents **SHOULD** ensure referenced properties exist in the Event's `PayloadSchema` (if defined).
+
+**✅ End of Section 13 — Payload Evaluation & Conditions**
+
 **List Of API**
 
 \### Admin API
