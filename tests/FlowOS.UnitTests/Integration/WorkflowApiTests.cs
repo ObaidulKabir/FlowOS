@@ -194,7 +194,22 @@ public class WorkflowApiTests : IClassFixture<CustomWebApplicationFactory<Progra
             Definition = new WorkflowClassBlueprint
             {
                 StateMachine = new StateMachineBlueprint { InitialState = "S1", States = new List<string> { "S1" } },
-                Workflow = new WorkflowBlueprint { StartStepId = "S1", Steps = new List<StepBlueprint> { new StepBlueprint { StepId = "S1", StepType = "Command" } } }
+                Workflow = new WorkflowBlueprint 
+                { 
+                    StartStepId = "S1", 
+                    Steps = new List<StepBlueprint> 
+                    { 
+                        new StepBlueprint 
+                        { 
+                            StepId = "S1", 
+                            StepType = "Command",
+                            RequiredRoles = new List<string> { "Admin" },
+                            NextSteps = new Dictionary<string, string> { { "EVT-DONE", "END" } }
+                        } 
+                    } 
+                },
+                Events = new List<EventBlueprint> { new EventBlueprint { EventId = "EVT-DONE", Name = "Done" } },
+                Roles = new List<RoleBlueprint> { new RoleBlueprint { Name = "Admin" } }
             }
         };
 
@@ -215,8 +230,29 @@ public class WorkflowApiTests : IClassFixture<CustomWebApplicationFactory<Progra
         {
             Name = "VersioningTest",
             Version = "1.0.0",
-            Definition = new WorkflowClassBlueprint { StateMachine = new StateMachineBlueprint { InitialState = "S1", States = new List<string> { "S1" } }, Workflow = new WorkflowBlueprint { StartStepId = "S1", Steps = new List<StepBlueprint> { new StepBlueprint { StepId = "S1", StepType = "Command" } } } }
+            Definition = new WorkflowClassBlueprint 
+            { 
+                StateMachine = new StateMachineBlueprint { InitialState = "S1", States = new List<string> { "S1" } }, 
+                Workflow = new WorkflowBlueprint 
+                { 
+                    StartStepId = "S1", 
+                    Steps = new List<StepBlueprint> 
+                    { 
+                        new StepBlueprint 
+                        { 
+                            StepId = "S1", 
+                            StepType = "Command",
+                            RequiredRoles = new List<string> { "Admin" },
+                            NextSteps = new Dictionary<string, string> { { "EVT-DONE", "END" } }
+                        } 
+                    } 
+                },
+                Events = new List<EventBlueprint> { new EventBlueprint { EventId = "EVT-DONE", Name = "Done" } },
+                Roles = new List<RoleBlueprint> { new RoleBlueprint { Name = "Admin" } }
+            }
         });
+        
+        createResp.EnsureSuccessStatusCode(); // Ensure v1 created successfully
         var v1 = await createResp.Content.ReadFromJsonAsync<WorkflowClassResponseDto>();
         await _client.PostAsync($"/api/workflow-classes/{v1.Id}/publish", null);
 

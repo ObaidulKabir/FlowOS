@@ -497,9 +497,11 @@ A `WorkflowClass` is a versioned "Configuration Pack" that bundles:
 ### Validation
 Server-side validation is mandatory and authoritative. It checks:
 *   **Structure**: Schema validity.
-*   **Consistency**: All references resolve.
+*   **Consistency**: All references resolve (e.g., `CON-004` checks that transitions point to valid steps).
 *   **Law**: Workflow respects State Machine.
 *   **Governance**: Roles/Capabilities declared.
+
+**Important:** Validation runs during **Draft Creation** (to prevent broken graphs) and again at **Publish** time (for strict compliance).
 
 See [11 - WorkflowClass Authoring](sdk/11-workflow-class-authoring.md) for details.
 

@@ -44,6 +44,15 @@ namespace FlowOS.MCP.Tools
 
                 var workflowClass = new WorkflowClass(tenantId, name, version, blueprint);
 
+                // Use Manager to ensure consistent validation logic (e.g. CON-004)
+                var manager = new WorkflowClassManager(_validator);
+                var validationResult = manager.CreateDraft(workflowClass);
+
+                if (!validationResult.IsValid)
+                {
+                    return Error($"Validation Failed: {string.Join(", ", validationResult.Errors.Select(e => e.Message))}");
+                }
+
                 _dbContext.WorkflowClasses.Add(workflowClass);
                 await _dbContext.SaveChangesAsync();
 
@@ -73,6 +82,14 @@ namespace FlowOS.MCP.Tools
                 if (blueprint == null) return Error("Invalid blueprint format");
 
                 workflowClass.UpdateDraft(name ?? workflowClass.Name, workflowClass.Version, blueprint);
+                
+                // Enforce strict validation on updates too
+                var validationResult = _validator.Validate(workflowClass);
+                if (!validationResult.IsValid)
+                {
+                    return Error($"Validation Failed: {string.Join(", ", validationResult.Errors.Select(e => e.Message))}");
+                }
+
                 await _dbContext.SaveChangesAsync();
 
                 return Success(new { id = workflowClass.Id, status = workflowClass.Status.ToString(), message = "Draft updated successfully" });

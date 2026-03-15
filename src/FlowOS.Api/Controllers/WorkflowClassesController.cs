@@ -65,6 +65,13 @@ public class WorkflowClassesController : ControllerBase
             // Create Entity
             var workflowClass = new WorkflowClass(tenantId, request.Name, request.Version, request.Definition);
 
+            // Use Manager to enforce validation
+            var validationResult = _manager.CreateDraft(workflowClass);
+            if (!validationResult.IsValid)
+            {
+                return BadRequest(new { Errors = validationResult.Errors });
+            }
+
             _context.WorkflowClasses.Add(workflowClass);
             await _context.SaveChangesAsync();
 
@@ -91,6 +98,11 @@ public class WorkflowClassesController : ControllerBase
         try 
         {
             wc.UpdateDraft(request.Name, request.Version, request.Definition);
+            
+            // Enforce validation
+            var result = _manager.ValidateOnly(wc);
+            if (!result.IsValid) return BadRequest(new { Errors = result.Errors });
+
             await _context.SaveChangesAsync();
             return Ok(MapToDto(wc));
         }

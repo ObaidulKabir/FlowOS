@@ -1990,16 +1990,17 @@ Their outputs are proposals, not actions.**
 - **Has no effect until published by an authorized actor**
 - **May be rejected without partial acceptance**
 
-**11.6 Validation Subjection Rule**
+**11.6 Validation Subjection Rule (Strict Enforcement)**
 
 **Agents are fully subject to FlowOS validation.**
 
 **This means:**
 
-- **All proposals MUST pass WorkflowClassValidator**
-- **All violations MUST be surfaced to the Agent**
-- **Agents MUST respond to violations explicitly**
-- **Silent correction is FORBIDDEN**
+- **Draft Creation and Updates are strictly validated by the kernel.**
+- **The System REJECTS any invalid Draft proposal immediately.**
+- **All violations are returned as structured errors to the Agent.**
+- **Agents MUST handle these errors and propose corrected designs.**
+- **Silent correction is FORBIDDEN.**
 
 **Agents may explain errors, but may not override them.**
 

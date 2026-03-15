@@ -17,7 +17,7 @@ var startCommand = new StartWorkflowCommand(
     "DesignConsultancy", 
     1, // Version
     Guid.Empty, // WorkflowClassId
-    "Start", // Initial intent (entry point)
+    null, // OPTIONAL: Initial Step ID (null = use definition default)
     Guid.NewGuid() // Correlation ID
 );
 
@@ -30,8 +30,11 @@ var workflowId = result.WorkflowInstanceId;
 
 1. **Validation**: FlowOS checked if "DesignConsultancy" v1 exists.
 2. **Policy Check**: FlowOS verified if you have `workflow.start` permission.
-3. **Execution**: The workflow started at "Start" step.
-4. **Auto-Advance**: Since "Start" had a default transition, it automatically moved to "DesignTask".
+3. **Resolution**: FlowOS resolved the start step.
+   - If `initialStepId` was null, it used the definition's default (e.g., "Start").
+   - If provided, it validated that the step exists in the definition.
+4. **Execution**: The workflow started.
+5. **Auto-Advance**: Since "Start" had a default transition, it automatically moved to "DesignTask".
 
 ## Verification
 

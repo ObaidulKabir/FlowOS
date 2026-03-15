@@ -8,14 +8,32 @@ This guide explains how to interact with the FlowOS Workflow API using `curl`.
 - Tenant ID: `11111111-1111-1111-1111-111111111111` (Default)
 
 ## 1. Start a Workflow
+To start an instance of the `OrderApprovalWorkflow`.
 
-To start an instance of the `OrderApprovalWorkflow`. We start at `ReviewStep` to simulate a human task scenario.
+**Note:** You can omit `initialStepId` to use the default start step defined in the Workflow Class.
 
 ```bash
 curl -X POST "http://localhost:5005/api/workflows/start" \
 -H "Content-Type: application/json" \
 -H "x-tenant-id: 11111111-1111-1111-1111-111111111111" \
--d '{"workflowName": "OrderApprovalWorkflow", "version": 1, "initialStepId": "ReviewStep"}'
+-d '{
+  "tenantId": "11111111-1111-1111-1111-111111111111",
+  "workflowName": "OrderApprovalWorkflow", 
+  "version": 1
+}'
+```
+
+**Optional:** To start at a specific step (e.g., skipping to `ReviewStep` for testing):
+```bash
+curl -X POST "http://localhost:5005/api/workflows/start" \
+-H "Content-Type: application/json" \
+-H "x-tenant-id: 11111111-1111-1111-1111-111111111111" \
+-d '{
+  "tenantId": "11111111-1111-1111-1111-111111111111",
+  "workflowName": "OrderApprovalWorkflow", 
+  "version": 1, 
+  "initialStepId": "ReviewStep"
+}'
 ```
 
 **Response:**

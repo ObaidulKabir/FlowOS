@@ -36,10 +36,21 @@ public record StepBlueprint
 }
 ```
 
+## Validation Rules (Strict)
+
+FlowOS enforces validation at both **Draft Creation** and **Publish** time.
+
+*   **Structural Integrity**: All fields must be present.
+*   **Consistency (CON-004)**: Every transition (NextStep) must point to a valid `StepId` defined in the `Workflow.Steps` array.
+*   **Completeness**: The `StartStepId` must exist.
+*   **Law**: The Workflow cannot violate the State Machine boundaries (transitions must be declared).
+
+*Example Error:* `CON-004: Step 'Working' references unknown NextStep 'Finished'` (You forgot to define the 'Finished' step).
+
 ## Governance Flow
 
-1. **Draft**: You edit the blueprint.
-2. **Publish**: The system validates integrity (Consistency, Law, Governance). If valid, it becomes **Private/Published**.
+1. **Draft**: You edit the blueprint. Basic validation runs on save.
+2. **Publish**: The system re-validates integrity. If valid, it becomes **Private/Published**.
 3. **Deploy**: You compile the Published class into the Runtime Engine to start instances.
 
 ## Sharing

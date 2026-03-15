@@ -236,3 +236,47 @@ Retrieves comprehensive details about a workflow instance, including its timelin
   ]
 }
 ```
+
+---
+
+## 5. Workflow Classes (Design)
+Endpoints for authoring and managing workflow blueprints.
+
+### Create Draft
+Creates a new Workflow Class in Draft status. **Strict validation is enforced.**
+
+*   **URL**: `/api/workflow-classes`
+*   **Method**: `POST`
+*   **Request Body**: `application/json`
+
+```json
+{
+  "name": "ExpenseApproval",
+  "version": "1.0.0",
+  "definition": { ... } // WorkflowClassBlueprint
+}
+```
+
+*   **Response**:
+    *   `201 Created`: If the draft is valid.
+    *   `400 Bad Request`: If validation fails (returns list of errors).
+
+### Update Draft
+Updates an existing Draft. **Strict validation is enforced.**
+
+*   **URL**: `/api/workflow-classes/{id}`
+*   **Method**: `PUT`
+*   **Request Body**: `application/json`
+
+*   **Response**:
+    *   `200 OK`: If update is valid.
+    *   `400 Bad Request`: If validation fails.
+
+### Publish
+Promotes a Draft to Published status (Immutable).
+
+*   **URL**: `/api/workflow-classes/{id}/publish`
+*   **Method**: `POST`
+*   **Response**:
+    *   `200 OK`: Successfully published.
+    *   `400 Bad Request`: If validation fails.
