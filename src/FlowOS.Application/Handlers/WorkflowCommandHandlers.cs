@@ -217,11 +217,13 @@ public class WorkflowCommandHandlers :
         }
 
         // 0.1 Validate Event ID
+        // NOTE: Only validate if it follows the strict EVT- pattern, otherwise allow custom events for now to avoid blocking ad-hoc workflows
         var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
-        if (!isRegistered && request.EventType.StartsWith("EVT-"))
+        if (!isRegistered && request.EventType.StartsWith("EVT-", StringComparison.OrdinalIgnoreCase))
         {
              Console.WriteLine($"[Handler] Event '{request.EventType}' not registered for tenant {request.TenantId}");
-             return false;
+             // return false; // Don't silently fail, throw exception for better feedback
+             throw new ArgumentException($"Event '{request.EventType}' is not registered.");
         }
 
         // 1. Load Workflow Instance
@@ -296,8 +298,12 @@ public class WorkflowCommandHandlers :
             await _context.SaveChangesAsync(cancellationToken);
             return true;
         }
-
-        return false;
+        else 
+        {
+            // Log the reason for failure
+            Console.WriteLine($"[Handler] Advance failed. Current Step: {instance.CurrentStepId}, Event: {request.EventType}. Reason: {result.FailureReason}");
+            throw new InvalidOperationException($"Workflow transition failed: {result.FailureReason}");
+        }
     }
 
     public async Task<bool> Handle(CompleteTaskCommand request, CancellationToken cancellationToken)
