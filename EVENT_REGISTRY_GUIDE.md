@@ -105,8 +105,9 @@ new WorkflowStepDefinition("Review") {
     ```
 
 2.  **Validation Logic**:
-    *   **Strict Check**: If the event string starts with `EVT-`, the system **verifies it exists** in the Registry. If missing, the request is rejected (400 Bad Request).
-    *   **Legacy Support**: If the string does *not* start with `EVT-` (e.g., "Approved"), it is currently allowed but logs a warning (Phase 1).
+    *   **Strict Check**: If the event string starts with `EVT-`, the system **verifies it exists** in the Registry. If missing, the request is rejected with an `ArgumentException` which the API maps to a `400 Bad Request` with a specific detail message ("Event '{eventType}' is not registered").
+    *   **Transition Validation**: Even if an event is registered, if the current step does not define a transition for that event, the engine will reject it, resulting in a `400 Bad Request` detailing that the transition failed for the given step and event.
+    *   **Legacy/System Support**: If the string does *not* start with `EVT-` (e.g., "StartTodo"), it bypasses the strict registry check and relies entirely on the workflow engine's transition rules. This is useful for internal system tasks or rapid prototyping.
 
 ---
 

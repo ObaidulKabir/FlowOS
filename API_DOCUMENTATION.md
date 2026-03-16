@@ -176,7 +176,7 @@ Publishes an event to a running workflow instance, potentially triggering state 
 
 *   **Response**:
     *   `200 OK`: `"Event published"`
-    *   `400 Bad Request`: If processing failed.
+    *   `400 Bad Request`: If processing failed (e.g., event not registered, or transition invalid for current step). Returned as RFC 7807 Problem Details.
 
 ---
 
