@@ -5,6 +5,7 @@ public class WorkflowAdvanceResult
     public bool Success { get; }
     public string Message { get; }
     public string? NewStepId { get; }
+    public string? FailureReason => !Success ? Message : null; // Added alias for better readability
 
     private WorkflowAdvanceResult(bool success, string message, string? newStepId)
     {

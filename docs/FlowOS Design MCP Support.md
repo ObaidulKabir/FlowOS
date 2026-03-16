@@ -530,6 +530,14 @@ A Step **MUST NOT** terminate without:
 - Emitting an Event, or
 - Explicitly declaring completion
 
+**WF-007 — Decision Completeness**
+
+A Decision Step **MUST** define at least one condition.
+
+**WF-008 — HumanTask Completeness**
+
+A HumanTask Step **MUST** define at least one exit path (nextSteps or conditions).
+
 **WF-006 — No State Encoding**
 
 A Workflow **MUST NOT**:
@@ -565,6 +573,13 @@ Reuse **MUST NOT** alter Event meaning.
 Events **MUST NOT** represent commands or intentions.
 
 They represent **facts only**.
+
+**EV-005 — Naming Convention**
+
+Domain Events **SHOULD** be prefixed with `EVT-` (e.g., `EVT-Leave-Approved`).
+
+- Events with `EVT-` prefix are strictly validated against the Event Registry.
+- Events without `EVT-` prefix are permitted for system tasks but **SHOULD NOT** be used for core domain logic.
 
 **3.6 Governance Rules (GOV)**
 
@@ -785,6 +800,8 @@ WorkflowClass {
 - **nextSteps values MUST reference defined StepIds or "END"**
 - **conditions keys MUST be valid expressions (e.g. "Amount > 100")**
 - **conditions values MUST reference defined StepIds or "END"**
+- **Decision steps MUST have at least one condition defined**
+- **HumanTask steps MUST have at least one nextStep or condition defined**
 - **Steps MUST NOT reference States**
 
 **Note:  
@@ -913,6 +930,8 @@ At minimum, authoritative validation **MUST** verify:
 5.  StateMachine and Workflow remain independent
 6.  All Events used are defined
 7.  No unreachable States or Steps exist
+8.  Decision steps have conditions defined
+9.  HumanTask steps have valid exit paths defined
 
 If **any** check fails, the design is **INVALID**.
 
