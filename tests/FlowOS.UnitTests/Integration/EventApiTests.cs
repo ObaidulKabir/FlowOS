@@ -216,5 +216,41 @@ public class EventApiTests : IClassFixture<CustomWebApplicationFactory<Program>>
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Contains("not registered", problem.Detail);
+    }
+
+    [Fact]
+    public async Task PublishEvent_WhenTransitionFails_ShouldReturnBadRequest_WithReason()
+    {
+        // Arrange
+        // Create a workflow that is stuck in a step with NO transitions
+        var (instanceId, _) = await SeedWorkflowAsync("StepLow"); // StepLow has no next steps in SeedWorkflowAsync
+
+        // Grant Permission
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            var role = await db.Roles.FirstOrDefaultAsync(r => r.TenantId == _tenantId && r.Name == "Admin");
+            if (role != null)
+            {
+                role.Permissions.Add("event.publish.EVT-NEXT"); // Allow EVT-NEXT even if it won't work
+                await db.SaveChangesAsync();
+            }
+        }
+
+        var command = new PublishEventCommand(_tenantId, instanceId, "EVT-NEXT", Guid.NewGuid(), null);
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/events/publish", command);
+
+        // Assert
+        // Should be 400 because we map InvalidOperationException to 400 in Filter
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        
+        var problem = await response.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Contains("transition failed", problem.Detail); // "Workflow transition failed: No transition defined..."
     }
 }
