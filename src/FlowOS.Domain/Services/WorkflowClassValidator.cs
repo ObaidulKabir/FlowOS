@@ -13,6 +13,12 @@ public class WorkflowClassValidator
         var result = new ValidationResult();
         var bp = workflowClass.Definition;
 
+        if (bp == null)
+        {
+            result.AddError("STR-000", "Structural", "Definition is required", "Metadata");
+            return result;
+        }
+
         // 1. Structural Validation
         if (string.IsNullOrWhiteSpace(workflowClass.Name))
             result.AddError("STR-001", "Structural", "Name is required", "Metadata");
@@ -228,6 +234,22 @@ public class WorkflowClassValidator
         {
             // No tenant secrets? (Hard to check content, but we check structure)
             // No Policies (Policy definitions are not even in the blueprint, which is good)
+        }
+        
+        // NEW: Step Structure Validation per Type
+        foreach (var step in bp.Workflow.Steps)
+        {
+            if (string.Equals(step.StepType, "Decision", StringComparison.OrdinalIgnoreCase))
+            {
+                if (step.Conditions == null || !step.Conditions.Any())
+                    result.AddError("WF-VAL-001", "StepValidation", $"Decision Step '{step.StepId}' must have at least one condition", "Steps");
+            }
+            else if (string.Equals(step.StepType, "HumanTask", StringComparison.OrdinalIgnoreCase))
+            {
+                // Human Tasks should usually have explicit event transitions or a default completion path
+                if ((step.NextSteps == null || !step.NextSteps.Any()) && (step.Conditions == null || !step.Conditions.Any()))
+                     result.AddError("WF-VAL-002", "StepValidation", $"HumanTask Step '{step.StepId}' must have defined NextSteps", "Steps");
+            }
         }
 
         return result;
