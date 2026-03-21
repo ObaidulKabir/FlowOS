@@ -62,29 +62,19 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> List()
+    public async Task<IActionResult> List([FromQuery] FlowOS.Workflows.Enums.WorkflowInstanceStatus? status)
     {
         var tenantId = _currentUser.TenantId;
         if (tenantId == Guid.Empty) return Unauthorized();
 
-        // Join Workflows with WorkflowClasses to get the Name
-        var query = from w in _context.WorkflowInstances
-                    join wc in _context.WorkflowClasses on w.WorkflowClassId equals wc.Id
-                    where w.TenantId == tenantId
-                    select new WorkflowInstanceResponseDto
-                    {
-                        WorkflowId = w.Id, // w.Id is the InstanceId
-                        WorkflowClassId = w.WorkflowClassId,
-                        WorkflowClassName = wc.Name,
-                        CorrelationId = w.CorrelationId.HasValue ? w.CorrelationId.Value.ToString() : string.Empty,
-                        CurrentStep = w.CurrentStepId,
-                        Status = w.Status.ToString(),
-                        CreatedAt = w.CreatedAt,
-                        CompletedAt = w.CompletedAt
-                    };
-
-        var list = await query.OrderByDescending(w => w.CreatedAt).ToListAsync();
-        return Ok(list);
+        var query = new GetWorkflowsQuery 
+        { 
+            TenantId = tenantId,
+            Status = status
+        };
+        
+        var result = await _mediator.Send(query);
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
