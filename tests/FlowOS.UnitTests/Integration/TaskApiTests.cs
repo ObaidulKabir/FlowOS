@@ -6,6 +6,7 @@ using FlowOS.Core.Common.Models;
 using FlowOS.Application.DTOs;
 using FlowOS.Application.EventHandlers;
 using FlowOS.Application.Handlers;
+using FlowOS.Application.Commands;
 using FlowOS.Application.Queries;
 using FlowOS.Events.Models;
 using FlowOS.Infrastructure.Persistence;
@@ -110,7 +111,7 @@ public class TaskApiTests
         var handler = new WorkflowCommandHandlers(context, GetMockRegistry(context), mockCurrentUser.Object, mockCapabilityService.Object); // Uses real Engine, but no transitions defined for this dummy definition
 
         // Act
-        var command = new Application.Commands.CompleteTaskCommand(tenantId, instance.Id, instance.Id);
+        var command = new FlowOS.Application.Commands.CompleteTaskCommand(tenantId, instance.Id, instance.Id);
         var success = await handler.Handle(command, CancellationToken.None);
 
         // Assert
