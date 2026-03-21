@@ -23,10 +23,11 @@ public class WorkflowQueryHandlers :
 
     public async Task<List<WorkflowSummaryDto>> Handle(GetWorkflowsQuery request, CancellationToken cancellationToken)
     {
-        var query = from w in _context.WorkflowInstances
-                    join wc in _context.WorkflowClasses on w.WorkflowClassId equals wc.Id
+        var query = from w in _context.WorkflowInstances.AsNoTracking()
+                    join wc in _context.WorkflowClasses.AsNoTracking() on w.WorkflowClassId equals wc.Id into wcGroup
+                    from wc in wcGroup.DefaultIfEmpty()
                     where w.TenantId == request.TenantId
-                    select new { w, wc.Name };
+                    select new { w, Name = wc != null ? wc.Name : "Unknown" };
 
         if (request.Status.HasValue)
         {
@@ -56,15 +57,16 @@ public class WorkflowQueryHandlers :
 
     public async Task<WorkflowSummaryDto?> Handle(GetWorkflowByIdQuery request, CancellationToken cancellationToken)
     {
-        var result = await (from w in _context.WorkflowInstances
-                            join wc in _context.WorkflowClasses on w.WorkflowClassId equals wc.Id
+        var result = await (from w in _context.WorkflowInstances.AsNoTracking()
+                            join wc in _context.WorkflowClasses.AsNoTracking() on w.WorkflowClassId equals wc.Id into wcGroup
+                            from wc in wcGroup.DefaultIfEmpty()
                             where w.Id == request.Id && w.TenantId == request.TenantId
                             select new WorkflowSummaryDto
                             {
                                 Id = w.Id,
                                 WorkflowId = w.Id,
                                 WorkflowClassId = w.WorkflowClassId,
-                                WorkflowClassName = wc.Name,
+                                WorkflowClassName = wc != null ? wc.Name : "Unknown",
                                 DefinitionId = w.WorkflowDefinitionId,
                                 Version = w.WorkflowVersion,
                                 CurrentStepId = w.CurrentStepId,
