@@ -18,7 +18,7 @@ public class WorkflowClass
     public DateTime? PublishedAt { get; internal set; }
     
     // Lineage Metadata
-    public Guid? PreviousVersionId { get; private set; }
+    public Guid? PreviousVersionId { get; internal set; }
 
     // The Configuration Pack (Immutable after publish)
     public WorkflowClassBlueprint Definition { get; private set; }
@@ -47,39 +47,6 @@ public class WorkflowClass
     }
 
     // Lifecycle Transitions (Strict)
-
-    public WorkflowClass CreateCopyForTenant(Guid newTenantId)
-    {
-        // Allow copy if Public OR if it's my own (Create New Version)
-        // Since this is Domain, we don't know "who" is asking unless we pass it.
-        // But the check "Status == Public" was for the "Copy Public Template" use case.
-        // For "Create New Version", the caller (Controller) verifies ownership.
-        // So we can relax this check or make it conditional.
-        // Actually, creating a copy is a valid domain operation regardless of status, provided permission is checked.
-        
-        // Reset versioning if new tenant, otherwise keep or increment?
-        // If copying to SAME tenant, it's a Clone/New Version.
-        
-        var copy = new WorkflowClass(newTenantId, Name, "1.0.0", Definition)
-        {
-            Scope = WorkflowClassScope.Private,
-            Status = WorkflowClassStatus.Draft
-        };
-        return copy;
-    }
-
-    public WorkflowClass CreateNewVersion(string version)
-    {
-        if (string.IsNullOrWhiteSpace(version)) throw new ArgumentNullException(nameof(version));
-        
-        // Create a new Draft copy with the specified version
-        return new WorkflowClass(TenantId, Name, version, Definition)
-        {
-            Scope = WorkflowClassScope.Private,
-            Status = WorkflowClassStatus.Draft,
-            PreviousVersionId = this.Id // Track lineage
-        };
-    }
 
     public void UpdateDraft(string name, string version, WorkflowClassBlueprint definition)
     {

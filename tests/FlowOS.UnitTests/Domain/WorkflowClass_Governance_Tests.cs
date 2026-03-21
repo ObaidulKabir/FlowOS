@@ -108,7 +108,8 @@ namespace FlowOS.UnitTests.Domain
             var wc = CreateValidDraft();
             new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
             
-            var newVersion = wc.CreateNewVersion("1.1.0");
+            var versionManager = new FlowOS.Domain.Services.WorkflowClassVersionManager();
+            var newVersion = versionManager.CreateNewVersion(wc, "1.1.0");
             
             Assert.Equal(wc.Name, newVersion.Name);
             Assert.Equal("1.1.0", newVersion.Version);
@@ -126,7 +127,8 @@ namespace FlowOS.UnitTests.Domain
             
             // Attempt to mutate published definition directly (simulated by new version)
             // Real immutability is enforced by the fact that CreateNewVersion returns a NEW object
-            var v2 = wc.CreateNewVersion("1.1.0");
+            var versionManager = new FlowOS.Domain.Services.WorkflowClassVersionManager();
+            var v2 = versionManager.CreateNewVersion(wc, "1.1.0");
             
             Assert.NotSame(wc, v2);
             Assert.NotEqual(wc.Id, v2.Id);

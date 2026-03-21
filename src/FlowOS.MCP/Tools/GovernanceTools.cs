@@ -139,7 +139,8 @@ namespace FlowOS.MCP.Tools
                 if (publicWc == null) return Error("Public WorkflowClass not found");
                 if (publicWc.Scope != WorkflowClassScope.Public) return Error("WorkflowClass is not Public");
 
-                var copy = publicWc.CreateCopyForTenant(tenantId);
+                var versionManager = new FlowOS.Domain.Services.WorkflowClassVersionManager();
+                var copy = versionManager.CreateCopyForTenant(publicWc, tenantId);
                 
                 _dbContext.WorkflowClasses.Add(copy);
                 await _dbContext.SaveChangesAsync();

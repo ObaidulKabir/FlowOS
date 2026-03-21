@@ -21,17 +21,20 @@ public class WorkflowClassesController : ControllerBase
 {
     private readonly FlowOSDbContext _context;
     private readonly IWorkflowClassManager _manager;
+    private readonly IWorkflowClassVersionManager _versionManager;
     private readonly ICurrentUser _currentUser;
     private readonly FlowOS.Domain.Validation.IWorkflowJsonLinter _linter;
 
     public WorkflowClassesController(
         FlowOSDbContext context,
         IWorkflowClassManager manager,
+        IWorkflowClassVersionManager versionManager,
         ICurrentUser currentUser,
         FlowOS.Domain.Validation.IWorkflowJsonLinter linter)
     {
         _context = context;
         _manager = manager;
+        _versionManager = versionManager;
         _currentUser = currentUser;
         _linter = linter;
     }
@@ -421,7 +424,7 @@ public class WorkflowClassesController : ControllerBase
 
         try 
         {
-            var copy = wc.CreateCopyForTenant(request.NewTenantId);
+            var copy = _versionManager.CreateCopyForTenant(wc, request.NewTenantId);
             
             // If cloning my own, user might want to set a new version or name, but for now we just copy as Draft.
             // UI can let them rename it.
@@ -458,7 +461,7 @@ public class WorkflowClassesController : ControllerBase
             newVersionString = wc.Version + ".1";
         }
 
-        var newVersion = wc.CreateNewVersion(newVersionString);
+        var newVersion = _versionManager.CreateNewVersion(wc, newVersionString);
         
         _context.WorkflowClasses.Add(newVersion);
         await _context.SaveChangesAsync();

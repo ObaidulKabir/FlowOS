@@ -49,7 +49,7 @@ public class WorkflowClass_Governance_Tests : IClassFixture<WebApplicationFactor
     {
         using (var scope = _factory.Services.CreateScope())
         {
-            var manager = scope.ServiceProvider.GetRequiredService<WorkflowClassManager>();
+            var manager = scope.ServiceProvider.GetRequiredService<IWorkflowClassManager>();
             var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
 
             // 1. Create Invalid Draft (Missing Name, Invalid Transition)
@@ -86,7 +86,7 @@ public class WorkflowClass_Governance_Tests : IClassFixture<WebApplicationFactor
     {
         using (var scope = _factory.Services.CreateScope())
         {
-            var manager = scope.ServiceProvider.GetRequiredService<WorkflowClassManager>();
+            var manager = scope.ServiceProvider.GetRequiredService<IWorkflowClassManager>();
             
             // 1. Create Valid Draft
             var bp = new WorkflowClassBlueprint
@@ -166,7 +166,8 @@ public class WorkflowClass_Governance_Tests : IClassFixture<WebApplicationFactor
 
             // Copy to Tenant
             var newTenantId = Guid.NewGuid();
-            var copy = template.CreateCopyForTenant(newTenantId);
+            var versionManager = new FlowOS.Domain.Services.WorkflowClassVersionManager();
+            var copy = versionManager.CreateCopyForTenant(template, newTenantId);
 
             // Assert Copy
             Assert.Equal(newTenantId, copy.TenantId);
