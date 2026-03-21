@@ -3,7 +3,7 @@ using FlowOS.Workflows.Enums;
 
 namespace FlowOS.Workflows.Domain;
 
-public class WorkflowInstance
+public class WorkflowInstance : IWorkflowInstance
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
@@ -13,17 +13,17 @@ public class WorkflowInstance
     public int WorkflowVersion { get; private set; }
     public string CurrentStepId { get; private set; }
     public WorkflowInstanceStatus Status { get; private set; }
-    
+
     // Orchestration state only - not business data
-    
-    protected WorkflowInstance() 
+
+    protected WorkflowInstance()
     {
         CurrentStepId = null!;
     }
 
     public WorkflowInstance(Guid tenantId, Guid definitionId, Guid workflowClassId, int version, string initialStepId, Guid? correlationId = null)
     {
-        if (string.IsNullOrWhiteSpace(initialStepId)) 
+        if (string.IsNullOrWhiteSpace(initialStepId))
             throw new ArgumentNullException(nameof(initialStepId));
 
         Id = Guid.NewGuid();
@@ -34,17 +34,17 @@ public class WorkflowInstance
         CurrentStepId = initialStepId;
         Status = WorkflowInstanceStatus.Running;
         CorrelationId = correlationId;
-        CreatedAt = DateTime.UtcNow; 
+        CreatedAt = DateTime.UtcNow;
     }
 
-    public DateTime CreatedAt { get; private set; } 
+    public DateTime CreatedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
 
     public void AdvanceTo(string nextStepId)
     {
         if (Status == WorkflowInstanceStatus.Completed || Status == WorkflowInstanceStatus.Failed)
             throw new InvalidOperationException("Cannot advance a terminated workflow.");
-            
+
         CurrentStepId = nextStepId;
         Status = WorkflowInstanceStatus.Running;
     }

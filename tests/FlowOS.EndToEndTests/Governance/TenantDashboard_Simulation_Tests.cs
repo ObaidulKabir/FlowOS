@@ -182,9 +182,10 @@ public class TenantDashboard_Simulation_Tests : IClassFixture<WebApplicationFact
                  }
             };
             var pubTmpl = new FlowOS.Domain.Entities.WorkflowClass(Guid.Empty, "GlobalTemplate", "1.0.0", pubBp);
-            pubTmpl.Publish();
-            pubTmpl.SubmitForReview();
-            pubTmpl.ApproveAsPublic();
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            manager.Publish(pubTmpl);
+            manager.SubmitForReview(pubTmpl);
+            manager.ApproveAsPublic(pubTmpl);
             db.WorkflowClasses.Add(pubTmpl);
             await db.SaveChangesAsync();
             publicId = pubTmpl.Id;

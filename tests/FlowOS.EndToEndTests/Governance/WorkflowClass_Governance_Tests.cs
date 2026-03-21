@@ -159,9 +159,10 @@ public class WorkflowClass_Governance_Tests : IClassFixture<WebApplicationFactor
 
             var template = new WorkflowClass(Guid.Empty, "PublicTemplate", "1.0.0", bpValid);
             // Force status to Public via Reflection or just run the lifecycle (cleaner)
-            template.Publish();
-            template.SubmitForReview();
-            template.ApproveAsPublic();
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            manager.Publish(template);
+            manager.SubmitForReview(template);
+            manager.ApproveAsPublic(template);
 
             // Copy to Tenant
             var newTenantId = Guid.NewGuid();

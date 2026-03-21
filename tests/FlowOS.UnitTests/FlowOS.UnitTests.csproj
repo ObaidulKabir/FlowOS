@@ -32,4 +32,11 @@
     <ProjectReference Include="..\..\src\FlowOS.Agents\FlowOS.Agents.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\flowos-config\**">
+      <Link>flowos-config\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

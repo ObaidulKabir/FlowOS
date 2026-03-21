@@ -52,7 +52,7 @@ namespace FlowOS.UnitTests.Domain
         public void Delete_Published_Fails()
         {
             var wc = CreateValidDraft();
-            wc.Publish(); // Transition to Published
+            new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);; // Transition to Published
             
             var ex = Assert.Throws<InvalidOperationException>(() => wc.Delete(hasInstances: false));
             Assert.Contains("GOV-DEL-001", ex.Message);
@@ -62,7 +62,7 @@ namespace FlowOS.UnitTests.Domain
         public void Abandon_Published_Succeeds()
         {
             var wc = CreateValidDraft();
-            wc.Publish();
+            new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
             
             wc.Abandon(wc.TenantId);
             
@@ -81,9 +81,9 @@ namespace FlowOS.UnitTests.Domain
         public void Abandon_Public_ByTenant_Fails()
         {
             var wc = CreateValidDraft();
-            wc.Publish();
-            wc.SubmitForReview();
-            wc.ApproveAsPublic(); // Scope is Public now
+            new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
+            new FlowOS.Domain.Services.WorkflowClassManager().SubmitForReview(wc);;
+            new FlowOS.Domain.Services.WorkflowClassManager().ApproveAsPublic(wc);; // Scope is Public now
             
             var ex = Assert.Throws<InvalidOperationException>(() => wc.Abandon(Guid.NewGuid())); // Random tenant
             Assert.Contains("GOV-ABN-001", ex.Message);
@@ -93,9 +93,9 @@ namespace FlowOS.UnitTests.Domain
         public void Abandon_Public_ByAdmin_Succeeds()
         {
             var wc = CreateValidDraft();
-            wc.Publish();
-            wc.SubmitForReview();
-            wc.ApproveAsPublic();
+            new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
+            new FlowOS.Domain.Services.WorkflowClassManager().SubmitForReview(wc);;
+            new FlowOS.Domain.Services.WorkflowClassManager().ApproveAsPublic(wc);;
             
             wc.Abandon(Guid.Empty); // Admin
             
@@ -106,7 +106,7 @@ namespace FlowOS.UnitTests.Domain
         public void CreateNewVersion_CreatesDraftWithNewVersion()
         {
             var wc = CreateValidDraft();
-            wc.Publish();
+            new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
             
             var newVersion = wc.CreateNewVersion("1.1.0");
             
@@ -122,7 +122,7 @@ namespace FlowOS.UnitTests.Domain
         public void CreateNewVersion_Immutability_RegressionGuard()
         {
             var wc = CreateValidDraft();
-            wc.Publish();
+            new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
             
             // Attempt to mutate published definition directly (simulated by new version)
             // Real immutability is enforced by the fact that CreateNewVersion returns a NEW object

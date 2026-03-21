@@ -85,7 +85,7 @@ builder.Services.AddScoped<ICapabilityService, CapabilityService>();
 // Governance Domain Services
 builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassValidator>();
 builder.Services.AddScoped<IWorkflowJsonLinter, WorkflowJsonLinter>();
-builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassManager>();
+builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassManager, FlowOS.Domain.Services.WorkflowClassManager>();
 
 // Add MediatR
 builder.Services.AddMediatR(cfg => {

@@ -132,7 +132,7 @@ public class WorkflowApiTests : IClassFixture<CustomWebApplicationFactory<Progra
                 }
             };
             wc = new WorkflowClass(_tenantId, "RunnableClass", "1.0.0", bp);
-            wc.Publish();
+            new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
             db.WorkflowClasses.Add(wc);
             
             // Seed Admin Role for "workflow.start" capability

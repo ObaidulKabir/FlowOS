@@ -12,10 +12,10 @@ public class WorkflowClass
     public Guid TenantId { get; private set; }
     public string Name { get; private set; }
     public string Version { get; private set; } // e.g. "1.0.0"
-    public WorkflowClassScope Scope { get; private set; }
-    public WorkflowClassStatus Status { get; private set; }
+    public WorkflowClassScope Scope { get; internal set; }
+    public WorkflowClassStatus Status { get; internal set; }
     public DateTime CreatedAt { get; private set; }
-    public DateTime? PublishedAt { get; private set; }
+    public DateTime? PublishedAt { get; internal set; }
     
     // Lineage Metadata
     public Guid? PreviousVersionId { get; private set; }
@@ -48,65 +48,6 @@ public class WorkflowClass
 
     // Lifecycle Transitions (Strict)
 
-    public void Publish()
-    {
-        if (Status != WorkflowClassStatus.Draft)
-            throw new InvalidOperationException($"Cannot publish from state {Status}.");
-        
-        // Strict Validation (Self-Enforcement)
-        var validator = new WorkflowClassValidator();
-        var result = validator.Validate(this);
-        
-        if (!result.IsValid)
-        {
-            var errors = string.Join("; ", result.Errors.Select(e => $"{e.Code}: {e.Message}"));
-            throw new InvalidOperationException($"Validation failed: {errors}");
-        }
-        
-        Status = WorkflowClassStatus.Published;
-        PublishedAt = DateTime.UtcNow;
-    }
-
-    public void SubmitForReview()
-    {
-        if (Status != WorkflowClassStatus.Published)
-            throw new InvalidOperationException("Must be Published (Private) before submitting for review.");
-        
-        Scope = WorkflowClassScope.Shared;
-        Status = WorkflowClassStatus.Shared;
-    }
-
-    public void WithdrawSubmission()
-    {
-        if (Status != WorkflowClassStatus.Shared)
-            throw new InvalidOperationException("Only Shared (Under Review) classes can be withdrawn.");
-        
-        // Revert to Private/Published
-        Scope = WorkflowClassScope.Private;
-        Status = WorkflowClassStatus.Published;
-    }
-
-    public void ApproveAsPublic()
-    {
-        if (Status != WorkflowClassStatus.Shared)
-            throw new InvalidOperationException("Must be Shared before becoming Public.");
-        
-        Scope = WorkflowClassScope.Public;
-        Status = WorkflowClassStatus.Public;
-        
-        // Public templates should not have TenantId (conceptually), but for storage we might keep the "Owner" TenantId
-        // or set it to Guid.Empty (System). 
-        // Prompt says: "Public: no policies, no tenant IDs".
-        // Let's assume the "Template" copy might have Guid.Empty, or we just ignore TenantId during Copy.
-    }
-
-    public void Deprecate()
-    {
-        if (Status == WorkflowClassStatus.Deprecated) return;
-        
-        Status = WorkflowClassStatus.Deprecated;
-    }
-    
     public WorkflowClass CreateCopyForTenant(Guid newTenantId)
     {
         // Allow copy if Public OR if it's my own (Create New Version)

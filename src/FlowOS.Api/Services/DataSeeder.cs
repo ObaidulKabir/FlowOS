@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration; // Added
 using Microsoft.Extensions.DependencyInjection;
 using FlowOS.Security.Models; // Ensure this is present
 using FlowOS.Domain.Enums; // Ensure this is present for WorkflowClassStatus
+using FlowOS.Domain.Services; // For WorkflowClassManager
 using FlowOS.Events.Models; // For StandardEvent
 
 namespace FlowOS.API.Services;
@@ -170,8 +171,10 @@ public static class DataSeeder
                 }
             };
 
+            var manager = new WorkflowClassManager();
+
             var demoWc = new WorkflowClass(clientTenantId, "ExpenseApproval", "1.0.0", demoBp);
-            demoWc.Publish(); // Create Definition
+            manager.Publish(demoWc); // Create Definition
             context.WorkflowClasses.Add(demoWc);
             
             // Add a Public Template too
@@ -197,9 +200,9 @@ public static class DataSeeder
             };
             
             var publicWc = new WorkflowClass(Guid.Empty, "GlobalTemplate", "1.0.0", bpValid);
-            publicWc.Publish();
-            publicWc.SubmitForReview();
-            publicWc.ApproveAsPublic();
+            manager.Publish(publicWc);
+            manager.SubmitForReview(publicWc);
+            manager.ApproveAsPublic(publicWc);
             context.WorkflowClasses.Add(publicWc);
 
             await context.SaveChangesAsync();
@@ -273,7 +276,8 @@ public static class DataSeeder
                 SetPrivateProperty(wc, "Definition", demoBpFix);
                 if (wc.Status != WorkflowClassStatus.Published)
                 {
-                    wc.Publish();
+                    var manager = new WorkflowClassManager();
+                    manager.Publish(wc);
                 }
                 
                 // Manually Create WorkflowDefinition (Bridging the gap between Governance and Engine)
@@ -521,7 +525,8 @@ public static class DataSeeder
         };
 
         var v2Wc = new WorkflowClass(clientTenantId, v2Name, "1.0.0", v2Bp);
-        v2Wc.Publish();
+        var manager2 = new WorkflowClassManager();
+        manager2.Publish(v2Wc);
         context.WorkflowClasses.Add(v2Wc);
         
         // Create Definition

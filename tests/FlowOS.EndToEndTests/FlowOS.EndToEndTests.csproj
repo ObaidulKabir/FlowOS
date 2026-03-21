@@ -26,4 +26,11 @@
     <ProjectReference Include="..\..\src\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\flowos-config\**">
+      <Link>flowos-config\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

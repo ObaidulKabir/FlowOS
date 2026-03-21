@@ -32,8 +32,10 @@ namespace FlowOS.UnitTests.Domain
             var wc = new WorkflowClass(Guid.NewGuid(), "BadWorkflow", "1.0.0", invalidBp);
 
             // Act & Assert
-            var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-            Assert.Contains("Validation failed", ex.Message);
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            var result = manager.Publish(wc);
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, e => e.Message.Contains("Step ID cannot be empty"));
         }
         [Fact]
         public void Publish_DecoupledWorkflow_ShouldSucceed()
@@ -64,7 +66,8 @@ namespace FlowOS.UnitTests.Domain
             var wc = new WorkflowClass(Guid.NewGuid(), "DecoupledWorkflow", "1.0.0", validBp);
 
             // Act
-            wc.Publish();
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            manager.Publish(wc);
 
             // Assert
             Assert.Equal(WorkflowClassStatus.Published, wc.Status);
@@ -86,8 +89,10 @@ namespace FlowOS.UnitTests.Domain
                 }
             };
             var wc = new WorkflowClass(Guid.NewGuid(), "BadWf", "1.0.0", invalidBp);
-            var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-            Assert.Contains("WF-COMP-000", ex.Message);
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            var result = manager.Publish(wc);
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, e => e.Message.Contains("WF-COMP-000") || e.Code.Contains("WF-COMP-000"));
         }
     [Fact]
     public void Publish_WorkflowWithUnreachableSteps_ShouldThrow()
@@ -106,8 +111,10 @@ namespace FlowOS.UnitTests.Domain
             }
         };
         var wc = new WorkflowClass(Guid.NewGuid(), "BadWf", "1.0.0", invalidBp);
-        var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-        Assert.Contains("WF-COMP-004", ex.Message);
+        var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+        var result = manager.Publish(wc);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Message.Contains("WF-COMP-004") || e.Code.Contains("WF-COMP-004"));
     }
 
     [Fact]
@@ -127,8 +134,10 @@ namespace FlowOS.UnitTests.Domain
             }
         };
         var wc = new WorkflowClass(Guid.NewGuid(), "BadWf", "1.0.0", invalidBp);
-        var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-        Assert.Contains("CON-005", ex.Message);
+        var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+        var result = manager.Publish(wc);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Message.Contains("CON-005") || e.Code.Contains("CON-005"));
     }
 
     [Fact]
@@ -148,8 +157,10 @@ namespace FlowOS.UnitTests.Domain
             Workflow = new WorkflowBlueprint { StartStepId = "Start", Steps = new List<StepBlueprint> { new StepBlueprint { StepId = "Start", StepType = "Command" } } }
         };
         var wc = new WorkflowClass(Guid.NewGuid(), "BadWf", "1.0.0", invalidBp);
-        var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-        Assert.Contains("CON-003", ex.Message);
+        var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+        var result = manager.Publish(wc);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Message.Contains("CON-003") || e.Code.Contains("CON-003"));
     }
 
     [Fact]
@@ -169,7 +180,8 @@ namespace FlowOS.UnitTests.Domain
             }
         };
         var wc = new WorkflowClass(Guid.NewGuid(), "DecoupledWf", "1.0.0", validBp);
-        wc.Publish();
+        var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+        manager.Publish(wc);
         Assert.Equal(WorkflowClassStatus.Published, wc.Status);
     }
     

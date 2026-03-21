@@ -20,13 +20,13 @@ namespace FlowOS.Api.Controllers;
 public class WorkflowClassesController : ControllerBase
 {
     private readonly FlowOSDbContext _context;
-    private readonly WorkflowClassManager _manager;
+    private readonly IWorkflowClassManager _manager;
     private readonly ICurrentUser _currentUser;
     private readonly FlowOS.Domain.Validation.IWorkflowJsonLinter _linter;
 
     public WorkflowClassesController(
         FlowOSDbContext context,
-        WorkflowClassManager manager,
+        IWorkflowClassManager manager,
         ICurrentUser currentUser,
         FlowOS.Domain.Validation.IWorkflowJsonLinter linter)
     {

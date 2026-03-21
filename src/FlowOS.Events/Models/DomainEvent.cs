@@ -9,6 +9,7 @@ public abstract class DomainEvent : IEvent
     public Guid EventId { get; private set; }
     public Guid TenantId { get; private set; }
     public DateTime Timestamp { get; private set; }
+    // EventType is set by derived classes to ensure strong typing and consistency
     public virtual string EventType { get; private set; }
     public Guid? CorrelationId { get; private set; }
     public int Version { get; private set; }

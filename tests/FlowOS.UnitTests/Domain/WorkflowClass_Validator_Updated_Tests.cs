@@ -35,8 +35,10 @@ namespace FlowOS.UnitTests.Domain
             };
 
             var wc = new WorkflowClass(Guid.NewGuid(), "BadSchemaWf", "1.0.0", invalidBp);
-            var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-            Assert.Contains("EVT-SCHEMA-001", ex.Message);
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            var result = manager.Publish(wc);
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, e => e.Code == "EVT-SCHEMA-001" || e.Message.Contains("EVT-SCHEMA-001"));
         }
 
         [Fact]
@@ -65,7 +67,8 @@ namespace FlowOS.UnitTests.Domain
             };
 
             var wc = new WorkflowClass(Guid.NewGuid(), "GoodSchemaWf", "1.0.0", validBp);
-            wc.Publish();
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            manager.Publish(wc);
             Assert.Equal(WorkflowClassStatus.Published, wc.Status);
         }
 
@@ -91,8 +94,10 @@ namespace FlowOS.UnitTests.Domain
             };
 
             var wc = new WorkflowClass(Guid.NewGuid(), "BadCommandWf", "1.0.0", invalidBp);
-            var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-            Assert.Contains("WF-COMP-002", ex.Message);
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            var result = manager.Publish(wc);
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, e => e.Message.Contains("WF-COMP-002") || e.Code.Contains("WF-COMP-002"));
         }
 
         [Fact]
@@ -118,8 +123,10 @@ namespace FlowOS.UnitTests.Domain
             };
 
             var wc = new WorkflowClass(Guid.NewGuid(), "BadEndWf", "1.0.0", invalidBp);
-            var ex = Assert.Throws<InvalidOperationException>(() => wc.Publish());
-            Assert.Contains("WF-STRUCT-005", ex.Message);
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            var result = manager.Publish(wc);
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, e => e.Message.Contains("WF-STRUCT-005") || e.Code.Contains("WF-STRUCT-005"));
         }
 
         [Fact]
@@ -144,7 +151,8 @@ namespace FlowOS.UnitTests.Domain
             };
 
             var wc = new WorkflowClass(Guid.NewGuid(), "SystemTaskWf", "1.0.0", validBp);
-            wc.Publish();
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            manager.Publish(wc);
             Assert.Equal(WorkflowClassStatus.Published, wc.Status);
         }
     }

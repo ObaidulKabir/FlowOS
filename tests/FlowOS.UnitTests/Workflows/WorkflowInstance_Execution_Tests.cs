@@ -61,7 +61,7 @@ public class WorkflowInstance_Execution_Tests
         };
 
         var wc = new WorkflowClass(_tenantId, "ExpenseRequest", "1.0.0", bp);
-        wc.Publish();
+        new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
 
         // 2. Runtime: Convert to Definition (Simulating Loader/Mapper)
         var def = MapToDefinition(wc);
@@ -225,7 +225,7 @@ public class WorkflowInstance_Execution_Tests
         };
 
         var wc = new WorkflowClass(_tenantId, "RecoveryFlow", "1.0.0", bp);
-        wc.Publish();
+        new FlowOS.Domain.Services.WorkflowClassManager().Publish(wc);;
         var def = MapToDefinition(wc);
         return (wc, def);
     }

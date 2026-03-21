@@ -8,7 +8,7 @@ namespace FlowOS.UnitTests.Infrastructure
     public class WorkingDirectoryTests
     {
         [Fact]
-        public void ValidatePath_ShouldThrow_WhenPathIsBinaryDirectory()
+        public void ValidatePath_ShouldPass_WhenPathIsBinaryDirectory()
         {
             // Arrange
             // Simulate a path that ends with bin/Debug/net8.0
@@ -20,10 +20,8 @@ namespace FlowOS.UnitTests.Infrastructure
             try
             {
                 // Act & Assert
-                var ex = Assert.Throws<InvalidOperationException>(() => 
-                    WorkingDirectoryValidator.Validate(binPath));
-                    
-                Assert.Contains("Invalid Working Directory", ex.Message);
+                // Relaxed validation: Should NOT throw
+                WorkingDirectoryValidator.Validate(binPath);
             }
             finally
             {

@@ -1,57 +1,50 @@
 using System;
-using System.Threading.Tasks;
 using FlowOS.Domain.Entities;
-using FlowOS.Domain.Enums;
 using FlowOS.Domain.Validation;
 
 namespace FlowOS.Domain.Services;
 
-public class WorkflowClassManager
+public class WorkflowClassManager : IWorkflowClassManager
 {
     private readonly WorkflowClassValidator _validator;
 
-    public WorkflowClassManager(WorkflowClassValidator validator)
+    public WorkflowClassManager(WorkflowClassValidator validator = null)
     {
-        _validator = validator;
+        _validator = validator ?? new WorkflowClassValidator();
     }
 
-    /// <summary>
-    /// Creates a new Draft WorkflowClass with initial validation.
-    /// </summary>
-    /// <param name="workflowClass">The draft workflow class to create.</param>
-    /// <returns>Validation result. If invalid, the draft should not be persisted.</returns>
+    public ValidationResult ValidateOnly(WorkflowClass workflowClass)
+    {
+        return _validator.Validate(workflowClass);
+    }
+
     public ValidationResult CreateDraft(WorkflowClass workflowClass)
     {
-        // 1. Basic Validation (Structure, Completeness)
-        // Even a draft should have a valid structure to be useful.
-        // We allow some looseness (e.g. maybe not all roles assigned), 
-        // but the graph integrity (transitions to known steps) should be sound to prevent runtime crashes if tested.
-        
         var result = _validator.Validate(workflowClass);
-        
-        // If validation fails, we return the errors.
-        // The caller (Application Layer) should decide whether to block creation or allow "Invalid Draft".
-        // FlowOS Philosophy: "Law before Work" -> Invalid definitions should typically be rejected or flagged as "Needs Repair".
-        // For strictness, we return the result.
-        
+        if (!result.IsValid)
+            return result;
+
+        if (workflowClass.Status != Enums.WorkflowClassStatus.Draft)
+        {
+            result.AddError("STATE", "Lifecycle", "Cannot create draft from a non-draft state.", "Lifecycle");
+        }
         return result;
     }
 
     public ValidationResult Publish(WorkflowClass workflowClass)
     {
-        // 1. Validate
         var result = _validator.Validate(workflowClass);
-        if (!result.IsValid) return result;
+        if (!result.IsValid)
+            return result;
 
-        // 2. Transition
-        try 
+        if (workflowClass.Status != Enums.WorkflowClassStatus.Draft)
         {
-            workflowClass.Publish();
+            result.AddError("STATE", "Lifecycle", $"Cannot publish from state {workflowClass.Status}.", "Lifecycle");
+            return result;
         }
-        catch (InvalidOperationException ex)
-        {
-            result.AddError("LIF-001", "Lifecycle", ex.Message, "Status");
-        }
+
+        workflowClass.Status = Enums.WorkflowClassStatus.Published;
+        workflowClass.PublishedAt = DateTime.UtcNow;
 
         return result;
     }
@@ -59,74 +52,58 @@ public class WorkflowClassManager
     public ValidationResult SubmitForReview(WorkflowClass workflowClass)
     {
         var result = new ValidationResult();
-        // Additional Shared-scope validation could go here
-        
-        try
+        if (workflowClass.Status != Enums.WorkflowClassStatus.Published)
         {
-            workflowClass.SubmitForReview();
+            result.AddError("STATE", "Lifecycle", "Must be Published (Private) before submitting for review.", "Lifecycle");
+            return result;
         }
-        catch (InvalidOperationException ex)
-        {
-            result.AddError("LIF-002", "Lifecycle", ex.Message, "Status");
-        }
+
+        workflowClass.Scope = Enums.WorkflowClassScope.Shared;
+        workflowClass.Status = Enums.WorkflowClassStatus.Shared;
+
         return result;
     }
 
     public ValidationResult WithdrawSubmission(WorkflowClass workflowClass)
     {
         var result = new ValidationResult();
-        try
+        if (workflowClass.Status != Enums.WorkflowClassStatus.Shared)
         {
-            workflowClass.WithdrawSubmission();
+            result.AddError("STATE", "Lifecycle", "Only Shared (Under Review) classes can be withdrawn.", "Lifecycle");
+            return result;
         }
-        catch (InvalidOperationException ex)
+
+        workflowClass.Scope = Enums.WorkflowClassScope.Private;
+        workflowClass.Status = Enums.WorkflowClassStatus.Published;
+
+        return result;
+    }
+
+    public ValidationResult ApproveAsPublic(WorkflowClass workflowClass)
+    {
+        var result = new ValidationResult();
+        if (workflowClass.Status != Enums.WorkflowClassStatus.Shared)
         {
-            result.AddError("LIF-004", "Lifecycle", ex.Message, "Status");
+            result.AddError("STATE", "Lifecycle", "Must be Shared before becoming Public.", "Lifecycle");
+            return result;
         }
+
+        workflowClass.Scope = Enums.WorkflowClassScope.Public;
+        workflowClass.Status = Enums.WorkflowClassStatus.Public;
+
         return result;
     }
 
     public ValidationResult Deprecate(WorkflowClass workflowClass)
     {
         var result = new ValidationResult();
-        // Rule: Only Published (Private) or Public can be deprecated?
-        // Entity allows any non-deprecated. 
-        // Prompt Matrix: Published (Private) -> Deprecate. 
-        // Draft -> Delete.
-        
-        if (workflowClass.Status == WorkflowClassStatus.Draft)
+        if (workflowClass.Status == Enums.WorkflowClassStatus.Deprecated)
         {
-            result.AddError("LIF-005", "Lifecycle", "Drafts should be deleted, not deprecated.", "Status");
-            return result;
+            return result; // Already deprecated
         }
 
-        workflowClass.Deprecate();
-        return result;
-    }
-    
-    public ValidationResult ValidateOnly(WorkflowClass workflowClass)
-    {
-        return _validator.Validate(workflowClass);
-    }
+        workflowClass.Status = Enums.WorkflowClassStatus.Deprecated;
 
-    public ValidationResult ApproveAsPublic(WorkflowClass workflowClass)
-    {
-        var result = new ValidationResult();
-        // Public scope validation
-        if (workflowClass.Definition.Roles.Count > 0) 
-        {
-             // Warning or Error? Prompt says "Public: reusable contract only".
-             // "Roles are symbolic only".
-        }
-
-        try
-        {
-            workflowClass.ApproveAsPublic();
-        }
-        catch (InvalidOperationException ex)
-        {
-            result.AddError("LIF-003", "Lifecycle", ex.Message, "Status");
-        }
         return result;
     }
 }
