@@ -13,6 +13,7 @@ using FlowOS.Events.Models;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.Security.Interfaces;
 using FlowOS.Workflows.Domain;
+using FlowOS.Workflows.Enums;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
@@ -58,7 +59,7 @@ public class WorkflowCommandHandlersTests : IDisposable
         // Arrange
         var tenantId = Guid.NewGuid();
         var definition = new WorkflowDefinition(tenantId, "TestWF", 1, "Start");
-        definition.AddStep(new WorkflowStepDefinition("Start", FlowOS.Workflows.Enums.WorkflowStepType.Command));
+        definition.AddStep(new WorkflowStepDefinition("Start", WorkflowStepType.Command));
         definition.Publish();
         _context.WorkflowDefinitions.Add(definition);
         await _context.SaveChangesAsync();

@@ -248,7 +248,8 @@ public class WorkflowCommandHandlers :
 
         // 3. Create Event Wrapper
         var domainEvent = new StandardEvent(request.TenantId, request.EventType);
-        
+        // Set CorrelationId on event to link it to the workflow instance and any external entities.
+        // Prefer request.CorrelationId if provided, otherwise use WorkflowInstanceId for traceability.
         if (request.CorrelationId.HasValue)
         {
             domainEvent.SetCorrelationId(request.CorrelationId.Value);
@@ -345,13 +346,15 @@ public class WorkflowCommandHandlers :
 
         return false;
     }
-
+    /// Helper method to auto-advance through "Default" transitions, with a safeguard limit to prevent infinite loops
     private void RunAutoAdvance(WorkflowInstance instance, WorkflowDefinition definition, Guid tenantId)
     {
         int autoAdvanceLimit = 5;
         while (autoAdvanceLimit > 0)
         {
+            //pick the current step from the definition
             var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+            //if there's a "Default" transition, advance automatically
             if (currentStep != null && currentStep.NextSteps.ContainsKey("Default"))
             {
                 var defaultEvent = new StandardEvent(tenantId, "Default");

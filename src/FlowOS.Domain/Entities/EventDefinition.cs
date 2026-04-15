@@ -14,12 +14,12 @@ public class EventDefinition
     public EventCategory Category { get; private set; }
     public StateMachineStatus Status { get; private set; } // Added Status
     public string? PayloadSchema { get; private set; } // Optional JSON Schema
-    public bool IsTerminal { get; private set; }
-    
+    public bool IsTerminal { get; private set; } // Indicates if this event is a terminal event in the state machine
+
     public DateTime CreatedAt { get; private set; }
 
     // EF Core Constructor
-    protected EventDefinition() 
+    protected EventDefinition()
     {
         EventId = null!;
         Name = null!;
@@ -28,12 +28,12 @@ public class EventDefinition
     }
 
     public EventDefinition(
-        string eventId, 
-        Guid tenantId, 
-        string name, 
-        string description, 
-        string entityType, 
-        EventCategory category, 
+        string eventId,
+        Guid tenantId,
+        string name,
+        string description,
+        string entityType,
+        EventCategory category,
         int version = 1,
         string? payloadSchema = null,
         bool isTerminal = false)

@@ -420,7 +420,7 @@ public class WorkflowClassesController : ControllerBase
              return BadRequest("Only Public WorkflowClasses can be copied.");
 
         if (request.NewTenantId != _currentUser.TenantId)
-             return Forbid("Cannot copy to a different tenant.");
+             return StatusCode(403, "Cannot copy to a different tenant.");
 
         try 
         {

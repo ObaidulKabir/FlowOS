@@ -7,7 +7,9 @@ public class WorkflowInstance : IWorkflowInstance
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
+    // Optional CorrelationId to link to external business entities or processes (e.g., OrderId, UserId)
     public Guid? CorrelationId { get; private set; }
+    // Immutable properties captured at creation time
     public Guid WorkflowDefinitionId { get; private set; }
     public Guid WorkflowClassId { get; private set; } // Link to Governance Entity
     public int WorkflowVersion { get; private set; }

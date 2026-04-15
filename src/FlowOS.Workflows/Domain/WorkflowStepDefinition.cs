@@ -7,6 +7,7 @@ public class WorkflowStepDefinition
 {
     public string StepId { get; set; } = string.Empty;
     public WorkflowStepType StepType { get; set; }
+    // Optional: Roles allowed to execute this step (for Command/UserTask steps)
     public List<string> AllowedRoles { get; set; } = new();
     
     // Maps EventType (or EventId) -> NextStepId

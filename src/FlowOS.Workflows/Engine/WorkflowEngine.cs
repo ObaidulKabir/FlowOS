@@ -33,7 +33,8 @@ public class WorkflowEngine : IWorkflowEngine
 
         if (instance.WorkflowVersion != definition.Version)
             return WorkflowAdvanceResult.Failed("Version mismatch.");
-
+        //picking the current step from the instance's CurrentStepId,
+        //which is set to "Start" when the workflow is initiated.
         var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
         if (currentStep == null)
             return WorkflowAdvanceResult.Failed($"Current step '{instance.CurrentStepId}' not found in definition.");

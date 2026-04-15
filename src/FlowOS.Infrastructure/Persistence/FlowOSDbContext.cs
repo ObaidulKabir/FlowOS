@@ -4,6 +4,7 @@ using FlowOS.Workflows.Domain; // Re-add this
 using FlowOS.Infrastructure.Persistence.ReadModels;
 using FlowOS.Security.Models;
 using Microsoft.EntityFrameworkCore;
+using FlowOS.Notifications.Domain;
 
 namespace FlowOS.Infrastructure.Persistence;
 
@@ -19,7 +20,7 @@ public class FlowOSDbContext : DbContext
     public DbSet<Role> Roles { get; set; }
     public DbSet<Policy> Policies { get; set; }
     public DbSet<WorkflowClass> WorkflowClasses { get; set; } // Added WorkflowClass
-    public DbSet<FlowOS.Notifications.Domain.Notification> Notifications { get; set; } // Add this
+    public DbSet<Notification> Notifications { get; set; } // Add this
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 
