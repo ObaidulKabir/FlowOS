@@ -2,17 +2,16 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using FlowOS.Application.Commands;
 using FlowOS.Domain.Entities;
-using FlowOS.Infrastructure.Persistence;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Engine;
 using System.Linq;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Interfaces;
 using FlowOS.Security.Interfaces;
-using FlowOS.Domain.Enums;
+using FlowOS.Domain.ValueObjects;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
 using FlowOS.Events.Models;
@@ -25,47 +24,43 @@ public class WorkflowCommandHandlers :
     IRequestHandler<PublishEventCommand, bool>,
     IRequestHandler<CompleteTaskCommand, bool>
 {
-    private readonly FlowOSDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly WorkflowEngine _engine;
     private readonly IEventRegistry _eventRegistry;
     private readonly ICurrentUser _currentUser;
     private readonly ICapabilityService _capabilityService;
 
     public WorkflowCommandHandlers(
-        FlowOSDbContext context, 
+        IUnitOfWork unitOfWork, 
         IEventRegistry eventRegistry,
         ICurrentUser currentUser,
-        ICapabilityService capabilityService)
+        ICapabilityService capabilityService,
+        WorkflowEngine engine)
     {
-        _context = context;
+        _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
-        _engine = new WorkflowEngine();
+        _engine = engine;
         _currentUser = currentUser;
         _capabilityService = capabilityService;
     }
 
     public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
     {
-        WorkflowDefinition fullDefinition = null;
+        WorkflowDefinition? fullDefinition = null;
         Guid definitionId;
 
         if (request.WorkflowDefinitionId.HasValue)
         {
             definitionId = request.WorkflowDefinitionId.Value;
-            fullDefinition = await _context.WorkflowDefinitions
-                .AsNoTracking()
-                .FirstOrDefaultAsync(d => d.Id == definitionId, cancellationToken);
+            fullDefinition = await _unitOfWork.WorkflowDefinitions
+                .GetByIdAsNoTrackingAsync(definitionId, cancellationToken);
         }
         else if (!string.IsNullOrEmpty(request.WorkflowName))
         {
             if (request.Version.HasValue)
             {
-                fullDefinition = await _context.WorkflowDefinitions
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(w => w.Name == request.WorkflowName 
-                        && w.Version == request.Version.Value 
-                        && w.TenantId == request.TenantId
-                        && w.Status == WorkflowStatus.Published, cancellationToken);
+                fullDefinition = await _unitOfWork.WorkflowDefinitions
+                    .GetPublishedByNameAndVersionAsync(request.WorkflowName, request.Version.Value, request.TenantId, cancellationToken);
                 
                 if (fullDefinition == null)
                 {
@@ -76,19 +71,14 @@ public class WorkflowCommandHandlers :
             else
             {
                 // Resolve Latest Version
-                fullDefinition = await _context.WorkflowDefinitions
-                    .AsNoTracking()
-                    .Where(w => w.Name == request.WorkflowName 
-                        && w.TenantId == request.TenantId) // Removed Status check from here to allow diagnosis
-                    .OrderByDescending(w => w.Version)
-                    .FirstOrDefaultAsync(cancellationToken);
+                fullDefinition = await _unitOfWork.WorkflowDefinitions
+                    .GetLatestByNameAsync(request.WorkflowName, request.TenantId, cancellationToken);
                     
                 if (fullDefinition == null)
                 {
                     throw new ArgumentException($"No definition found for workflow '{request.WorkflowName}'. Ensure it is Published.");
                 }
                 
-                // Now check status if needed (Runtime definitions usually are considered published if they exist, but let's be safe)
                 if (fullDefinition.Status != WorkflowStatus.Published)
                 {
                      throw new ArgumentException($"Workflow definition '{request.WorkflowName}' v{fullDefinition.Version} is in status '{fullDefinition.Status}', not Published.");
@@ -99,34 +89,25 @@ public class WorkflowCommandHandlers :
         }
         else if (request.WorkflowClassId != Guid.Empty)
         {
-             var wc = await _context.WorkflowClasses
-                 .AsNoTracking()
-                 .FirstOrDefaultAsync(c => c.Id == request.WorkflowClassId, cancellationToken);
+             var wc = await _unitOfWork.WorkflowClasses
+                 .GetByIdAsNoTrackingAsync(request.WorkflowClassId, cancellationToken);
              
              if (wc == null) throw new ArgumentException($"WorkflowClass {request.WorkflowClassId} not found.");
              
-             int version = 1;
-             var versionStr = wc.Version;
-             if (versionStr.StartsWith("v", StringComparison.OrdinalIgnoreCase)) versionStr = versionStr.Substring(1);
-             var majorPart = versionStr.Split(new[] { '.', '-', '+' })[0];
-             if (int.TryParse(majorPart, out var v)) version = v;
+             int version = WorkflowVersion.Parse(wc.Version).RuntimeVersion;
 
-             fullDefinition = await _context.WorkflowDefinitions
-                 .AsNoTracking()
-                 .FirstOrDefaultAsync(d => d.Name == wc.Name && d.Version == version && d.TenantId == request.TenantId, cancellationToken);
+             fullDefinition = await _unitOfWork.WorkflowDefinitions
+                 .GetByNameAndVersionAsync(wc.Name, version, request.TenantId, cancellationToken);
                  
              if (fullDefinition == null) 
              {
-                 // Fallback: Check if definition exists with any version for this name, to give better error
-                 var anyDef = await _context.WorkflowDefinitions
-                     .AsNoTracking()
-                     .FirstOrDefaultAsync(d => d.Name == wc.Name && d.TenantId == request.TenantId, cancellationToken);
+                 var anyDef = await _unitOfWork.WorkflowDefinitions
+                     .GetAnyByNameAsync(wc.Name, request.TenantId, cancellationToken);
                  
                  if (anyDef != null)
                     throw new ArgumentException($"Definition found for {wc.Name} but version mismatch (Class: {wc.Version} -> {version}, Def: {anyDef.Version}). Ensure Publish creates the definition.");
                  else
                  {
-                    // Fallback 2: Check if there's a Published WorkflowClass but no Definition (Compilation failed or skipped)
                     if (wc.Status == Domain.Enums.WorkflowClassStatus.Published)
                         throw new ArgumentException($"WorkflowClass '{wc.Name}' is Published but no Runtime Definition exists. Please re-publish to generate the definition.");
                     else
@@ -151,13 +132,11 @@ public class WorkflowCommandHandlers :
         
         if (fullDefinition != null && !string.IsNullOrEmpty(fullDefinition.StartStepId))
         {
-            // Default to Definition's Start Step
             startStep = fullDefinition.StartStepId;
         }
 
         if (!string.IsNullOrEmpty(request.InitialStepId))
         {
-             // Override if user explicitly requested (and it exists)
              if (fullDefinition != null && fullDefinition.Steps.Any(s => s.StepId == request.InitialStepId))
              {
                  startStep = request.InitialStepId;
@@ -168,40 +147,35 @@ public class WorkflowCommandHandlers :
              }
         }
         
-        // Final Safety Check
         if (fullDefinition != null && !fullDefinition.Steps.Any(s => s.StepId == startStep))
         {
              throw new ArgumentException($"Resolved Start Step '{startStep}' not found in definition '{fullDefinition.Name}'.");
         }
         // -----------------------------------------
 
-        // 1. Create Instance
         var instance = new WorkflowInstance(
             request.TenantId,
             definitionId,
-            request.WorkflowClassId, // Use passed WorkflowClassId (might be Guid.Empty if not provided in old DTO)
+            request.WorkflowClassId,
             actualVersion,
             startStep,
             request.CorrelationId
         );
 
-        // 2. Persist
-        _context.WorkflowInstances.Add(instance);
+        _unitOfWork.WorkflowInstances.Add(instance);
 
-        // 3. Auto-Advance from Start (if Default transition exists)
         if (fullDefinition != null)
         {
             RunAutoAdvance(instance, fullDefinition, request.TenantId);
         }
         
-        await _context.SaveChangesAsync(cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return instance.Id;
     }
 
     public async Task<bool> Handle(PublishEventCommand request, CancellationToken cancellationToken)
     {
-        // 0. Dynamic Permission Check
         var requiredCapability = $"event.publish.{request.EventType}";
         var userRoles = _currentUser.Roles ?? new List<string>();
         
@@ -216,19 +190,15 @@ public class WorkflowCommandHandlers :
              throw new FlowOS.Application.Common.Exceptions.PolicyViolationException("EventPermission", $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
         }
 
-        // 0.1 Validate Event ID
-        // NOTE: Only validate if it follows the strict EVT- pattern, otherwise allow custom events for now to avoid blocking ad-hoc workflows
         var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
         if (!isRegistered && request.EventType.StartsWith("EVT-", StringComparison.OrdinalIgnoreCase))
         {
              Console.WriteLine($"[Handler] Event '{request.EventType}' not registered for tenant {request.TenantId}");
-             // return false; // Don't silently fail, throw exception for better feedback
              throw new ArgumentException($"Event '{request.EventType}' is not registered.");
         }
 
-        // 1. Load Workflow Instance
-        var instance = await _context.WorkflowInstances
-            .FirstOrDefaultAsync(w => w.Id == request.WorkflowInstanceId && w.TenantId == request.TenantId, cancellationToken);
+        var instance = await _unitOfWork.WorkflowInstances
+            .GetByIdAsync(request.WorkflowInstanceId, request.TenantId, cancellationToken);
 
         if (instance == null) 
         {
@@ -236,9 +206,8 @@ public class WorkflowCommandHandlers :
             return false;
         }
 
-        // 2. Load Definition
-        var definition = await _context.WorkflowDefinitions
-            .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
+        var definition = await _unitOfWork.WorkflowDefinitions
+            .GetByIdAsync(instance.WorkflowDefinitionId, cancellationToken);
             
         if (definition == null) 
         {
@@ -246,10 +215,7 @@ public class WorkflowCommandHandlers :
             return false;
         }
 
-        // 3. Create Event Wrapper
         var domainEvent = new StandardEvent(request.TenantId, request.EventType);
-        // Set CorrelationId on event to link it to the workflow instance and any external entities.
-        // Prefer request.CorrelationId if provided, otherwise use WorkflowInstanceId for traceability.
         if (request.CorrelationId.HasValue)
         {
             domainEvent.SetCorrelationId(request.CorrelationId.Value);
@@ -265,14 +231,12 @@ public class WorkflowCommandHandlers :
             domainEvent.AddMetadata("Payload", json);
         }
 
-        // 4. Advance Workflow
         var context = new FlowOS.StateMachines.Models.ExecutionContext();
         
         if (request.Payload != null)
         {
             try 
             {
-                // Try to convert payload to Dictionary<string, object> for the Engine
                 var jsonString = System.Text.Json.JsonSerializer.Serialize(request.Payload);
                 var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(jsonString);
                 if (dict != null)
@@ -290,18 +254,13 @@ public class WorkflowCommandHandlers :
 
         if (result.Success)
         {
-            // Persist the event that caused the transition
-            _context.Events.Add(domainEvent);
-
-            // Check for Auto-Advance loops (Default transitions)
+            _unitOfWork.Events.Add(domainEvent);
             RunAutoAdvance(instance, definition, request.TenantId);
-
-            await _context.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
         else 
         {
-            // Log the reason for failure
             Console.WriteLine($"[Handler] Advance failed. Current Step: {instance.CurrentStepId}, Event: {request.EventType}. Reason: {result.FailureReason}");
             throw new InvalidOperationException($"Workflow transition failed: {result.FailureReason}");
         }
@@ -309,19 +268,16 @@ public class WorkflowCommandHandlers :
 
     public async Task<bool> Handle(CompleteTaskCommand request, CancellationToken cancellationToken)
     {
-        // 1. Load Workflow Instance (Task is part of workflow)
-        var instance = await _context.WorkflowInstances
-            .FirstOrDefaultAsync(w => w.Id == request.WorkflowInstanceId && w.TenantId == request.TenantId, cancellationToken);
+        var instance = await _unitOfWork.WorkflowInstances
+            .GetByIdAsync(request.WorkflowInstanceId, request.TenantId, cancellationToken);
 
         if (instance == null) return false;
 
-        // 2. Load Definition
-        var definition = await _context.WorkflowDefinitions
-            .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
+        var definition = await _unitOfWork.WorkflowDefinitions
+            .GetByIdAsync(instance.WorkflowDefinitionId, cancellationToken);
 
         if (definition == null) return false;
 
-        // 3. Create TaskCompleted Event
         var domainEvent = new TaskCompleted(request.TenantId, request.TaskId, Guid.Empty);
         
         if (request.CorrelationId.HasValue)
@@ -329,32 +285,25 @@ public class WorkflowCommandHandlers :
             domainEvent.SetCorrelationId(request.CorrelationId.Value);
         }
 
-        // 4. Advance Workflow via Engine
         var result = _engine.Advance(instance, definition, domainEvent, new FlowOS.StateMachines.Models.ExecutionContext());
 
         if (result.Success)
         {
-            // 5. Persist Event & State
-            _context.Events.Add(domainEvent);
-
-            // Check for Auto-Advance loops (Default transitions)
+            _unitOfWork.Events.Add(domainEvent);
             RunAutoAdvance(instance, definition, request.TenantId);
-
-            await _context.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
 
         return false;
     }
-    /// Helper method to auto-advance through "Default" transitions, with a safeguard limit to prevent infinite loops
+
     private void RunAutoAdvance(WorkflowInstance instance, WorkflowDefinition definition, Guid tenantId)
     {
         int autoAdvanceLimit = 5;
         while (autoAdvanceLimit > 0)
         {
-            //pick the current step from the definition
             var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
-            //if there's a "Default" transition, advance automatically
             if (currentStep != null && currentStep.NextSteps.ContainsKey("Default"))
             {
                 var defaultEvent = new StandardEvent(tenantId, "Default");

@@ -1,7 +1,7 @@
 using System;
-using System.Collections.Generic;
 using MediatR;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Security.Models;
 
 namespace FlowOS.Application.Commands.Security;
 
@@ -21,3 +21,5 @@ public record AssignRoleToUserCommand(
     Guid RoleId,
     string UserId
 ) : IRequest<bool>, IPolicySecuredCommand;
+
+public record GetRoleByIdQuery(Guid TenantId, Guid Id) : IRequest<Role?>;

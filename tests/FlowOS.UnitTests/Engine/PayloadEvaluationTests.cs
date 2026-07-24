@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlowOS.Workflows.Engine;
+using FlowOS.StateMachines.Engine;
 using Xunit;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
@@ -17,7 +18,7 @@ namespace FlowOS.UnitTests.Engine
 
         public PayloadEvaluationTests()
         {
-            _engine = new WorkflowEngine();
+            _engine = new WorkflowEngine(new StateMachineEngine());
         }
 
         private (WorkflowInstance, WorkflowDefinition) CreateScenario(string condition, string targetStep)

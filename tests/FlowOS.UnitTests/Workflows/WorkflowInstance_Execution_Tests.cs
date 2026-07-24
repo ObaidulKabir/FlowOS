@@ -6,6 +6,7 @@ using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.ValueObjects; // Added for StateTransition
 using FlowOS.StateMachines.Models;
+using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Engine;
 using FlowOS.Workflows.Enums;
@@ -20,7 +21,7 @@ public class WorkflowInstance_Execution_Tests
 
     public WorkflowInstance_Execution_Tests()
     {
-        _engine = new WorkflowEngine();
+        _engine = new WorkflowEngine(new StateMachineEngine());
     }
 
     [Fact]

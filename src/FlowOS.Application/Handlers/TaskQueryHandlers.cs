@@ -2,55 +2,41 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.DTOs;
 using FlowOS.Application.Queries;
-using FlowOS.Infrastructure.Persistence;
 using FlowOS.Workflows.Enums;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace FlowOS.Application.Handlers;
 
 public class TaskQueryHandlers : 
     IRequestHandler<GetTasksQuery, List<TaskDto>>,
-    IRequestHandler<GetTaskByIdQuery, TaskDto>
+    IRequestHandler<GetTaskByIdQuery, TaskDto?>
 {
-    private readonly FlowOSDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public TaskQueryHandlers(FlowOSDbContext context)
+    public TaskQueryHandlers(IUnitOfWork unitOfWork)
     {
-        _context = context;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<List<TaskDto>> Handle(GetTasksQuery request, CancellationToken cancellationToken)
     {
-        // Query waiting workflows
-        var query = _context.WorkflowInstances
-            .AsNoTracking()
-            .Where(w => w.Status == WorkflowInstanceStatus.Waiting);
-
-        if (request.TenantId.HasValue)
-        {
-            query = query.Where(w => w.TenantId == request.TenantId.Value);
-        }
-
-        var workflows = await query.ToListAsync(cancellationToken);
+        var workflows = await _unitOfWork.WorkflowInstances
+            .ListByStatusAsync(WorkflowInstanceStatus.Waiting, request.TenantId, cancellationToken);
         
-        // Fetch insights for these workflows
         var workflowIds = workflows.Select(w => w.Id).ToList();
-        var insights = await _context.AgentInsights
-            .AsNoTracking()
-            .Where(i => workflowIds.Contains(i.WorkflowInstanceId))
-            .ToListAsync(cancellationToken);
+        var insights = await _unitOfWork.AgentInsights
+            .ListByWorkflowInstanceIdsAsync(workflowIds, cancellationToken);
 
-        // Map to DTOs
-        var result = workflows.Select(w => new TaskDto
+        return workflows.Select(w => new TaskDto
         {
             TaskId = w.Id,
             WorkflowId = w.WorkflowDefinitionId,
             CurrentStep = w.CurrentStepId,
             Status = w.Status.ToString(),
-            RequiredRole = "User", // TODO: Lookup from definition or step config
+            RequiredRole = "User",
             AgentInsights = insights
                 .Where(i => i.WorkflowInstanceId == w.Id)
                 .Select(i => new AgentInsightDto
@@ -62,23 +48,18 @@ public class TaskQueryHandlers :
                 })
                 .ToList()
         }).ToList();
-
-        return result;
     }
 
-    public async Task<TaskDto> Handle(GetTaskByIdQuery request, CancellationToken cancellationToken)
+    public async Task<TaskDto?> Handle(GetTaskByIdQuery request, CancellationToken cancellationToken)
     {
-        var workflow = await _context.WorkflowInstances
-            .AsNoTracking()
-            .FirstOrDefaultAsync(w => w.Id == request.TaskId, cancellationToken);
+        var workflow = await _unitOfWork.WorkflowInstances
+            .GetByIdAsNoTrackingAsync(request.TaskId, request.TenantId, cancellationToken);
 
         if (workflow == null)
-            return null; // Or throw NotFoundException
+            return null;
 
-        var insights = await _context.AgentInsights
-            .AsNoTracking()
-            .Where(i => i.WorkflowInstanceId == request.TaskId)
-            .ToListAsync(cancellationToken);
+        var insights = await _unitOfWork.AgentInsights
+            .ListByWorkflowInstanceIdAsync(request.TaskId, cancellationToken);
 
         return new TaskDto
         {
@@ -86,7 +67,7 @@ public class TaskQueryHandlers :
             WorkflowId = workflow.WorkflowDefinitionId,
             CurrentStep = workflow.CurrentStepId,
             Status = workflow.Status.ToString(),
-            RequiredRole = "User", // TODO: Real lookup
+            RequiredRole = "User",
             AgentInsights = insights.Select(i => new AgentInsightDto
             {
                 AgentId = i.AgentId,

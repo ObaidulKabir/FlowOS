@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\FlowOS.Application\FlowOS.Application.csproj" />
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
     <ProjectReference Include="..\FlowOS.Security\FlowOS.Security.csproj" />
@@ -17,6 +18,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
   </ItemGroup>

@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using FlowOS.Application.DTOs;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.Handlers;
 using FlowOS.Application.Queries;
 using FlowOS.Domain.Entities;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Persistence.Repositories;
 using FlowOS.Workflows.Domain;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -26,7 +22,8 @@ public class WorkflowQueryHandlersTests : IDisposable
             .Options;
             
         _context = new FlowOSDbContext(options);
-        _handler = new WorkflowQueryHandlers(_context);
+        IUnitOfWork unitOfWork = new UnitOfWork(_context);
+        _handler = new WorkflowQueryHandlers(unitOfWork);
     }
 
     public void Dispose()

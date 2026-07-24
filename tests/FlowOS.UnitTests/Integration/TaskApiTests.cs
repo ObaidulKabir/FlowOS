@@ -10,8 +10,11 @@ using FlowOS.Application.Commands;
 using FlowOS.Application.Queries;
 using FlowOS.Events.Models;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Persistence.Repositories;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
+using FlowOS.Workflows.Engine;
+using FlowOS.StateMachines.Engine;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -55,15 +58,16 @@ public class TaskApiTests
         await context.SaveChangesAsync();
 
         // 2. Simulate Agent Insight Event -> Projector
-        var projector = new AgentInsightProjector(context);
+        var unitOfWork = new UnitOfWork(context);
+        var projector = new AgentInsightProjector(unitOfWork);
         var insightEvent = new AgentInsightGenerated(tenantId, "agent-001", "Risk is high", "Risk Assessment");
         insightEvent.SetCorrelationId(instance.Id); // Correlation to workflow ID (which is the Task ID)
 
         await projector.Handle(new DomainEventNotification<AgentInsightGenerated>(insightEvent), CancellationToken.None);
 
         // Act
-        var handler = new TaskQueryHandlers(context);
-        var result = await handler.Handle(new GetTaskByIdQuery(instance.Id), CancellationToken.None);
+        var handler = new TaskQueryHandlers(unitOfWork);
+        var result = await handler.Handle(new GetTaskByIdQuery(instance.Id, tenantId), CancellationToken.None);
 
         // Assert
         Assert.NotNull(result);
@@ -108,7 +112,7 @@ public class TaskApiTests
         mockCapabilityService.Setup(c => c.GetCapabilitiesAsync(It.IsAny<Guid>(), It.IsAny<System.Collections.Generic.IEnumerable<string>>()))
             .ReturnsAsync(new System.Collections.Generic.HashSet<string>());
 
-        var handler = new WorkflowCommandHandlers(context, GetMockRegistry(context), mockCurrentUser.Object, mockCapabilityService.Object); // Uses real Engine, but no transitions defined for this dummy definition
+        var handler = new WorkflowCommandHandlers(new UnitOfWork(context), GetMockRegistry(context), mockCurrentUser.Object, mockCapabilityService.Object, new WorkflowEngine(new StateMachineEngine()));
 
         // Act
         var command = new FlowOS.Application.Commands.CompleteTaskCommand(tenantId, instance.Id, instance.Id);

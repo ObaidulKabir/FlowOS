@@ -1,8 +1,9 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using MediatR;
-using FlowOS.Application.Commands; // PublishAgentInsightCommand IS here.
+using FlowOS.Application.Commands;
 using FlowOS.Agents.Events;
 using FlowOS.Core.Interfaces;
 using FlowOS.Application.Common.Interfaces;
@@ -11,6 +12,7 @@ namespace FlowOS.Api.Controllers;
 
 [ApiController]
 [Route("api/agents")]
+[Authorize]
 public class AgentsController : ControllerBase
 {
     private readonly IMediator _mediator;

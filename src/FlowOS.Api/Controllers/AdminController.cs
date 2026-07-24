@@ -1,68 +1,36 @@
-using FlowOS.Core.Interfaces;
+using FlowOS.Application.Commands.Admin;
 using FlowOS.Application.Queries.Admin;
-using FlowOS.Infrastructure.Persistence;
-using FlowOS.Infrastructure.Services;
+using FlowOS.Core.Interfaces;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowOS.API.Controllers;
 
 [ApiController]
 [Route("api/admin")]
-// [Authorize(Roles = "Admin")] // TODO: Add real auth
+[Authorize(Roles = "Admin")]
 public class AdminController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly FlowOSDbContext _context;
 
-    public AdminController(IMediator mediator, ICurrentUser currentUser, IServiceProvider serviceProvider, FlowOSDbContext context)
+    public AdminController(IMediator mediator, ICurrentUser currentUser)
     {
         _mediator = mediator;
         _currentUser = currentUser;
-        _serviceProvider = serviceProvider;
-        _context = context;
     }
 
     [HttpPost("config/publish")]
     public async Task<IActionResult> PublishConfig()
     {
-        // This endpoint manually triggers config loading
-        // Suitable for Prod deployment pipelines
-        
-        try 
+        try
         {
-             // Locate config folder relative to execution
-             // In Prod, this might be a mounted volume or specific path
-             var potentialPaths = new[] 
-             {
-                 Path.Combine(Directory.GetCurrentDirectory(), "flowos-config"), // If running from root
-                 Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "flowos-config"), // If running from src/FlowOS.API
-                 Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "flowos-config") // From bin
-             };
-             
-             string configRoot = null;
-             foreach (var path in potentialPaths)
-             {
-                 if (Directory.Exists(path))
-                 {
-                     configRoot = path;
-                     break;
-                 }
-             }
-             
-             if (configRoot == null || !Directory.Exists(configRoot))
-             {
-                 return NotFound($"Configuration directory not found. Checked: {string.Join(", ", potentialPaths)}");
-             }
+            var result = await _mediator.Send(new PublishConfigurationCommand(_currentUser.TenantId));
+            if (!result.FoundConfigRoot)
+                return NotFound(result.Message);
 
-             var logger = _serviceProvider.GetRequiredService<ILogger<ConfigurationLoader>>();
-             var loader = new ConfigurationLoader(_context, logger, configRoot);
-             
-             await loader.LoadAllAsync(_currentUser.TenantId);
-             
-             return Ok("Configuration published successfully.");
+            return Ok(result.Message);
         }
         catch (Exception ex)
         {
@@ -73,58 +41,44 @@ public class AdminController : ControllerBase
     [HttpGet("workflows")]
     public async Task<IActionResult> GetWorkflows()
     {
-        var tenantId = _currentUser.TenantId;
-        var query = new GetAdminWorkflowsQuery { TenantId = tenantId };
-        var result = await _mediator.Send(query);
+        var result = await _mediator.Send(new GetAdminWorkflowsQuery { TenantId = _currentUser.TenantId });
         return Ok(result);
     }
 
     [HttpGet("workflows/{id}")]
     public async Task<IActionResult> GetWorkflowDetail(Guid id)
     {
-        var tenantId = _currentUser.TenantId;
-        var query = new GetAdminWorkflowDetailQuery(id, tenantId);
-        var result = await _mediator.Send(query);
-        
+        var result = await _mediator.Send(new GetAdminWorkflowDetailQuery(id, _currentUser.TenantId));
         if (result == null) return NotFound();
-        
         return Ok(result);
     }
 
     [HttpGet("state-machines")]
     public async Task<IActionResult> GetAllStateMachines()
     {
-        var query = new GetAllAdminStateMachinesQuery();
-        var result = await _mediator.Send(query);
+        var result = await _mediator.Send(new GetAllAdminStateMachinesQuery());
         return Ok(result);
     }
 
     [HttpGet("state-machines/{entityType}")]
     public async Task<IActionResult> GetStateMachine(string entityType)
     {
-        var query = new GetAdminStateMachineQuery(entityType);
-        var result = await _mediator.Send(query);
-        
+        var result = await _mediator.Send(new GetAdminStateMachineQuery(entityType));
         if (result == null) return NotFound();
-        
         return Ok(result);
     }
 
     [HttpGet("policies")]
     public async Task<IActionResult> GetPolicies()
     {
-        var tenantId = _currentUser.TenantId;
-        var query = new GetAdminPoliciesQuery { TenantId = tenantId };
-        var result = await _mediator.Send(query);
+        var result = await _mediator.Send(new GetAdminPoliciesQuery { TenantId = _currentUser.TenantId });
         return Ok(result);
     }
 
     [HttpGet("events")]
     public async Task<IActionResult> GetEvents()
     {
-        var tenantId = _currentUser.TenantId;
-        var query = new GetAdminEventsQuery { TenantId = tenantId };
-        var result = await _mediator.Send(query);
+        var result = await _mediator.Send(new GetAdminEventsQuery { TenantId = _currentUser.TenantId });
         return Ok(result);
     }
 }

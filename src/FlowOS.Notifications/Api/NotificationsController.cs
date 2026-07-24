@@ -27,6 +27,7 @@ namespace FlowOS.Notifications.Api;
 
 [ApiController]
 [Route("api/notifications")]
+[Microsoft.AspNetCore.Authorization.Authorize]
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationQueryService _queryService; // Use abstraction

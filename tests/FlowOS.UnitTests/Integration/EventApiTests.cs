@@ -143,10 +143,8 @@ public class EventApiTests : IClassFixture<CustomWebApplicationFactory<Program>>
 
         var response = await _client.PostAsJsonAsync("/api/events/publish", command);
 
-        // Assert
-        Assert.False(response.IsSuccessStatusCode); 
-        // We expect 500 (Unhandled Exception) or 403 (Forbidden)
-        // Since PolicyViolationException is thrown, unless we have Exception Middleware, it will be 500.
+        // Assert - PolicyViolationException is mapped to 403 by ApiExceptionFilterAttribute.
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

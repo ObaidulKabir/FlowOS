@@ -9,29 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
-    <!-- Notification Projector needs MediatR and Common Models -->
-    <!-- <ProjectReference Include="..\FlowOS.Application\FlowOS.Application.csproj" /> -->
-    <!-- Removed FlowOS.Application reference to break circular dependency -->
-    <!-- We need to copy/reference necessary models or move them to a shared kernel -->
-    <!-- But FlowOS.Application contains DomainEventNotification<T> which is used by Projector. -->
-    <!-- And FlowOS.Application depends on FlowOS.Infrastructure. -->
-    <!-- And FlowOS.Infrastructure depends on FlowOS.Notifications. -->
-    <!-- Cycle: Notifications -> Application -> Infrastructure -> Notifications -->
-    
-    <!-- Solution: Move DomainEventNotification<T> to FlowOS.Events or FlowOS.Core (Common) -->
-    <!-- For now, we will add FlowOS.Core reference if it contains what we need. -->
-    <!-- But DomainEventNotification is in FlowOS.Application.Common.Models. -->
-    
-    <!-- We must refactor DomainEventNotification to FlowOS.Core or FlowOS.Events to break the cycle. -->
-    <!-- Or make FlowOS.Notifications independent of FlowOS.Application. -->
-    
-    <!-- Let's check where DomainEventNotification is defined. It is in Application. -->
-    <!-- If we move it to FlowOS.Events, we solve part of the problem. -->
-    <!-- But Notifications also needs MediatR handlers which are in Application? No, Projector IS a handler. -->
-    
-    <!-- If we remove Application ref, we lose DomainEventNotification. -->
-    
-    <!-- Let's add FlowOS.Core reference and we will move DomainEventNotification there. -->
     <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
   </ItemGroup>
 

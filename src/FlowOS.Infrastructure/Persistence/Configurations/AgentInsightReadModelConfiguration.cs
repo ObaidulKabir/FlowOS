@@ -1,4 +1,4 @@
-using FlowOS.Infrastructure.Persistence.ReadModels;
+using FlowOS.Application.ReadModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

@@ -4,15 +4,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FlowOS.Agents.Events;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.DTOs.Admin;
 using FlowOS.Application.Queries.Admin;
 using FlowOS.Events.Models;
-using FlowOS.Infrastructure.Persistence;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
-
 using FlowOS.Domain.Entities;
-using FlowOS.Security.Policies; // Add this
+using FlowOS.Security.Policies;
 
 namespace FlowOS.Application.Handlers.Admin;
 
@@ -22,37 +20,25 @@ public class AdminQueryHandlers :
     IRequestHandler<GetAllAdminStateMachinesQuery, List<AdminStateMachineDto>>,
     IRequestHandler<GetAdminPoliciesQuery, List<AdminPolicyDto>>,
     IRequestHandler<GetAdminEventsQuery, List<AdminEventDefinitionDto>>,
-    IRequestHandler<GetAdminWorkflowsQuery, List<AdminWorkflowSummaryDto>> // Added Workflow List Handler
+    IRequestHandler<GetAdminWorkflowsQuery, List<AdminWorkflowSummaryDto>>
 {
-    private readonly FlowOSDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IPolicyProvider _policyProvider;
 
-    public AdminQueryHandlers(FlowOSDbContext context, IPolicyProvider policyProvider)
+    public AdminQueryHandlers(IUnitOfWork unitOfWork, IPolicyProvider policyProvider)
     {
-        _context = context;
+        _unitOfWork = unitOfWork;
         _policyProvider = policyProvider;
     }
 
     public async Task<List<AdminWorkflowSummaryDto>> Handle(GetAdminWorkflowsQuery request, CancellationToken cancellationToken)
     {
-        var instances = await _context.WorkflowInstances
-            .AsNoTracking()
-            .Where(w => w.TenantId == request.TenantId)
-            .OrderByDescending(w => w.Id) // or CreatedAt if available
-            .ToListAsync(cancellationToken);
+        var instances = await _unitOfWork.WorkflowInstances
+            .ListByTenantAsync(request.TenantId, cancellationToken);
 
-        // Optimization: Fetch definition names in bulk or assume consistency?
-        // For simple list, we can fetch definitions or just map what we have.
-        // Let's do a simple join-like lookup or just load definition name if EF navigation property exists (it doesn't in clean DDD often).
-        // For MVP, we'll fetch definition names separately or rely on frontend to map IDs.
-        // Or better, let's just fetch IDs for now to keep it fast.
-        
-        // Actually, let's try to get Definition Names.
         var defIds = instances.Select(i => i.WorkflowDefinitionId).Distinct().ToList();
-        var definitions = await _context.WorkflowDefinitions
-            .AsNoTracking()
-            .Where(d => defIds.Contains(d.Id))
-            .ToDictionaryAsync(d => d.Id, d => d.Name, cancellationToken);
+        var definitions = await _unitOfWork.WorkflowDefinitions
+            .GetNamesByIdsAsync(defIds, cancellationToken);
 
         return instances.Select(i => new AdminWorkflowSummaryDto
         {
@@ -68,16 +54,13 @@ public class AdminQueryHandlers :
 
     public async Task<List<AdminEventDefinitionDto>> Handle(GetAdminEventsQuery request, CancellationToken cancellationToken)
     {
-        var events = await _context.EventDefinitions
-            .AsNoTracking()
-            .Where(e => e.TenantId == request.TenantId)
-            .OrderBy(e => e.EventId)
-            .ToListAsync(cancellationToken);
+        var events = await _unitOfWork.EventDefinitions
+            .ListByTenantAsync(request.TenantId, cancellationToken);
 
         return events.Select(e => new AdminEventDefinitionDto
         {
             EventId = e.EventId,
-            DisplayName = e.Name, // Fixed from DisplayName to Name
+            DisplayName = e.Name,
             Description = e.Description,
             EntityType = e.EntityType,
             Category = e.Category.ToString()
@@ -93,29 +76,25 @@ public class AdminQueryHandlers :
             PolicyName = p.Name,
             Scope = p.Scope,
             Description = p.Description,
-            IsEnabled = true, // Simplified for this provider
+            IsEnabled = true,
             DenyReasonTemplate = "Action denied by policy",
-            Rules = new List<string> { "Allow All" } // Placeholder
+            Rules = new List<string> { "Allow All" }
         }).ToList();
     }
 
     public async Task<AdminStateMachineDto> Handle(GetAdminStateMachineQuery request, CancellationToken cancellationToken)
     {
-        var definition = await _context.StateMachineDefinitions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(sm => sm.EntityType == request.EntityType, cancellationToken); // Assuming EntityType is unique for now or latest
+        var definition = await _unitOfWork.StateMachines
+            .GetByEntityTypeAsync(request.EntityType, cancellationToken);
 
-        if (definition == null) return null;
+        if (definition == null) return null!;
 
         return MapToStateMachineDto(definition);
     }
     
     public async Task<List<AdminStateMachineDto>> Handle(GetAllAdminStateMachinesQuery request, CancellationToken cancellationToken)
     {
-         var definitions = await _context.StateMachineDefinitions
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
+         var definitions = await _unitOfWork.StateMachines.ListAllAsync(cancellationToken);
          return definitions.Select(MapToStateMachineDto).ToList();
     }
 
@@ -130,39 +109,26 @@ public class AdminQueryHandlers :
             {
                 FromState = t.FromState,
                 ToState = t.ToState,
-                TriggerEvent = t.TriggerEventType, // Legacy
-                EventId = t.EventId // New
+                TriggerEvent = t.TriggerEventType,
+                EventId = t.EventId
             }).ToList()
         };
     }
 
     public async Task<AdminWorkflowDetailDto> Handle(GetAdminWorkflowDetailQuery request, CancellationToken cancellationToken)
     {
-        var instance = await _context.WorkflowInstances
-            .AsNoTracking()
-            .FirstOrDefaultAsync(w => w.Id == request.WorkflowInstanceId && w.TenantId == request.TenantId, cancellationToken);
+        var instance = await _unitOfWork.WorkflowInstances
+            .GetByIdAsNoTrackingAsync(request.WorkflowInstanceId, request.TenantId, cancellationToken);
 
-        if (instance == null) return null;
+        if (instance == null) return null!;
 
-        var definition = await _context.WorkflowDefinitions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
+        var definition = await _unitOfWork.WorkflowDefinitions
+            .GetByIdAsNoTrackingAsync(instance.WorkflowDefinitionId, cancellationToken);
 
-        // Fetch Raw Events - In a real system this might be a separate event store query
-        // We use correlation ID or explicit linking. 
-        // For Phase 1-6, we assume events have CorrelationId = WorkflowInstanceId or similar.
-        // EF Core 8+ can handle simple IS checks but complexities arise. We fetch by correlation ID first.
-        var events = await _context.Events
-            .AsNoTracking()
-            .Where(e => e.CorrelationId == request.WorkflowInstanceId)
-            .OrderBy(e => e.Timestamp)
-            .ToListAsync(cancellationToken);
-            
-        // Also try to find TaskCompleted events if they are not correlated (though they should be)
-        // For this demo, we assume strict correlation.
+        var events = await _unitOfWork.Events
+            .ListByCorrelationIdAsync(request.WorkflowInstanceId, cancellationToken);
 
-        // Map to Timeline
-        var timeline = events.Select(e => MapToTimeline(e)).ToList();
+        var timeline = events.Select(MapToTimeline).ToList();
 
         return new AdminWorkflowDetailDto
         {
@@ -196,7 +162,6 @@ public class AdminQueryHandlers :
                 break;
             default:
                 summary = $"Event: {evt.EventType}";
-                // Include generic metadata
                 if (evt.Metadata != null)
                 {
                     foreach (var kvp in evt.Metadata)

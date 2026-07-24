@@ -2,9 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using FlowOS.Application.Commands.Security;
-using FlowOS.Infrastructure.Persistence;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Security.Models;
 
 namespace FlowOS.Application.Handlers.Security;
@@ -12,66 +11,55 @@ namespace FlowOS.Application.Handlers.Security;
 public class RoleCommandHandlers : 
     IRequestHandler<CreateRoleCommand, Guid>,
     IRequestHandler<AddCapabilityToRoleCommand, bool>,
-    IRequestHandler<AssignRoleToUserCommand, bool>
+    IRequestHandler<AssignRoleToUserCommand, bool>,
+    IRequestHandler<GetRoleByIdQuery, Role?>
 {
-    private readonly FlowOSDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public RoleCommandHandlers(FlowOSDbContext context)
+    public RoleCommandHandlers(IUnitOfWork unitOfWork)
     {
-        _context = context;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<Guid> Handle(CreateRoleCommand request, CancellationToken cancellationToken)
     {
-        // 1. Check if role exists
-        var exists = await _context.Roles
-            .AnyAsync(r => r.TenantId == request.TenantId && r.Name == request.RoleName, cancellationToken);
+        var exists = await _unitOfWork.Roles
+            .ExistsByNameAsync(request.TenantId, request.RoleName, cancellationToken);
 
         if (exists)
         {
             throw new InvalidOperationException($"Role '{request.RoleName}' already exists.");
         }
 
-        // 2. Create Role
         var role = new Role(request.TenantId, request.RoleName);
 
-        // 3. Persist
-        _context.Roles.Add(role);
-        await _context.SaveChangesAsync(cancellationToken);
+        _unitOfWork.Roles.Add(role);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return role.Id;
     }
 
     public async Task<bool> Handle(AddCapabilityToRoleCommand request, CancellationToken cancellationToken)
     {
-        // 1. Fetch Role
-        var role = await _context.Roles
-            .FirstOrDefaultAsync(r => r.Id == request.RoleId && r.TenantId == request.TenantId, cancellationToken);
+        var role = await _unitOfWork.Roles
+            .GetByIdAsync(request.RoleId, request.TenantId, cancellationToken);
 
         if (role == null) return false;
 
-        // 2. Add Capability (Permission)
         role.AddPermission(request.CapabilityCode);
-
-        // Force update to ensure change tracking picks up the complex property change
-        _context.Entry(role).Property(r => r.Permissions).IsModified = true;
+        _unitOfWork.Roles.MarkPermissionsModified(role);
         
-        // 3. Save
-        await _context.SaveChangesAsync(cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    public async Task<bool> Handle(AssignRoleToUserCommand request, CancellationToken cancellationToken)
+    public Task<bool> Handle(AssignRoleToUserCommand request, CancellationToken cancellationToken)
     {
-        // In a real system, we would have a UserRole mapping table.
-        // For FlowOS Phase 1, we assume Identity Provider handles user-role mapping,
-        // OR we store it in a local User table.
-        // Given ICurrentUser gets roles from Claims, this command might need to update 
-        // an external IDP or a local 'UserRoles' table if we are managing auth locally.
-        
-        // TODO: Implement User-Role assignment persistence.
-        // For now, we will just return true to simulate success as we focus on Role definition.
-        
-        return await Task.FromResult(true);
+        // User↔role assignment is not persisted yet (no user-role store in the domain model).
+        throw new NotSupportedException(
+            "Assigning roles to users is not implemented. Roles are currently resolved from auth claims (e.g. X-Mock-Role).");
     }
+
+    public Task<Role?> Handle(GetRoleByIdQuery request, CancellationToken cancellationToken)
+        => _unitOfWork.Roles.GetByIdAsync(request.Id, request.TenantId, cancellationToken);
 }

@@ -2,40 +2,38 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using FlowOS.Agents.Events;
+using FlowOS.Application.Common.Interfaces.Persistence;
+using FlowOS.Application.ReadModels;
 using FlowOS.Core.Common.Models;
-using FlowOS.Infrastructure.Persistence;
-using FlowOS.Infrastructure.Persistence.ReadModels;
 using MediatR;
 
 namespace FlowOS.Application.EventHandlers;
 
 public class AgentInsightProjector : INotificationHandler<DomainEventNotification<AgentInsightGenerated>>
 {
-    private readonly FlowOSDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public AgentInsightProjector(FlowOSDbContext context)
+    public AgentInsightProjector(IUnitOfWork unitOfWork)
     {
-        _context = context;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task Handle(DomainEventNotification<AgentInsightGenerated> notification, CancellationToken cancellationToken)
     {
         var evt = notification.DomainEvent;
 
-        // Create Read Model entry
         var readModel = new AgentInsightReadModel
         {
             Id = Guid.NewGuid(),
             TenantId = evt.TenantId,
-            WorkflowInstanceId = evt.CorrelationId ?? Guid.Empty, // Assuming CorrelationId is the WorkflowInstanceId
+            WorkflowInstanceId = evt.CorrelationId ?? Guid.Empty,
             AgentId = evt.AgentId,
             Insight = evt.Insight,
             ContextObjective = evt.ContextObjective,
             CreatedAt = evt.Timestamp
         };
 
-        // Note: In a real system, we might want to ensure idempotency here
-        _context.AgentInsights.Add(readModel);
-        await _context.SaveChangesAsync(cancellationToken);
+        _unitOfWork.AgentInsights.Add(readModel);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }

@@ -1,7 +1,7 @@
+using FlowOS.Application.ReadModels;
 using FlowOS.Domain.Entities;
 using FlowOS.Events.Models; // Re-add this
 using FlowOS.Workflows.Domain; // Re-add this
-using FlowOS.Infrastructure.Persistence.ReadModels;
 using FlowOS.Security.Models;
 using Microsoft.EntityFrameworkCore;
 using FlowOS.Notifications.Domain;

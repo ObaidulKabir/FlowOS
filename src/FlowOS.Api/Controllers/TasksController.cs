@@ -4,12 +4,14 @@ using FlowOS.Application.Commands;
 using FlowOS.Core.Interfaces;
 using FlowOS.Application.Queries;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowOS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class TasksController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -35,7 +37,7 @@ public class TasksController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetTask(Guid id)
     {
-        var query = new GetTaskByIdQuery(id);
+        var query = new GetTaskByIdQuery(id, _currentUser.TenantId);
         var result = await _mediator.Send(query);
         if (result == null) return NotFound();
         return Ok(result);

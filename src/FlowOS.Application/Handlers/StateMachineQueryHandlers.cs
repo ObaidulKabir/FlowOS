@@ -1,32 +1,29 @@
 using System.Threading;
 using System.Threading.Tasks;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.DTOs;
 using FlowOS.Application.Queries;
 using FlowOS.Events.Models;
-using FlowOS.Infrastructure.Persistence;
 using FlowOS.StateMachines.Engine;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace FlowOS.Application.Handlers;
 
 public class StateMachineQueryHandlers : IRequestHandler<ValidateStateMachineTransitionQuery, ValidateTransitionResult>
 {
-    private readonly FlowOSDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly StateMachineEngine _engine;
 
-    public StateMachineQueryHandlers(FlowOSDbContext context)
+    public StateMachineQueryHandlers(IUnitOfWork unitOfWork, StateMachineEngine engine)
     {
-        _context = context;
-        _engine = new StateMachineEngine();
+        _unitOfWork = unitOfWork;
+        _engine = engine;
     }
 
     public async Task<ValidateTransitionResult> Handle(ValidateStateMachineTransitionQuery request, CancellationToken cancellationToken)
     {
-        // 1. Load Definition
-        var definition = await _context.StateMachineDefinitions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.EntityType == request.EntityType && s.TenantId == request.TenantId, cancellationToken);
+        var definition = await _unitOfWork.StateMachines
+            .GetByEntityTypeAndTenantAsync(request.EntityType, request.TenantId, cancellationToken);
 
         if (definition == null)
         {
@@ -38,10 +35,8 @@ public class StateMachineQueryHandlers : IRequestHandler<ValidateStateMachineTra
             };
         }
 
-        // 2. Create Dummy Event
         var domainEvent = new StandardEvent(request.TenantId, request.EventType);
 
-        // 3. Validate
         var result = _engine.ValidateTransition(
             definition,
             request.CurrentState,
@@ -57,6 +52,4 @@ public class StateMachineQueryHandlers : IRequestHandler<ValidateStateMachineTra
             ResultType = result.ResultType.ToString()
         };
     }
-
-    // GenericDomainEvent removed
 }

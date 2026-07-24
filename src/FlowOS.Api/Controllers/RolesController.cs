@@ -1,35 +1,31 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using MediatR;
-using FlowOS.Application.Commands.Security; // CreateRoleCommand and AddCapabilityToRoleCommand
-using FlowOS.Core.Interfaces; // Changed namespace
-
-using Microsoft.EntityFrameworkCore;
-using FlowOS.Infrastructure.Persistence; // Quick fix access
+using FlowOS.Application.Commands.Security;
+using FlowOS.Core.Interfaces;
 
 namespace FlowOS.Api.Controllers;
 
 [ApiController]
 [Route("api/roles")]
+[Authorize(Roles = "Admin")]
 public class RolesController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
-    private readonly FlowOSDbContext _context; // Direct DB access for debug/read
 
-    public RolesController(IMediator mediator, ICurrentUser currentUser, FlowOSDbContext context)
+    public RolesController(IMediator mediator, ICurrentUser currentUser)
     {
         _mediator = mediator;
         _currentUser = currentUser;
-        _context = context;
     }
 
     [HttpPost]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
     {
-        var tenantId = _currentUser.TenantId;
-        var command = new CreateRoleCommand(tenantId, request.RoleName);
+        var command = new CreateRoleCommand(_currentUser.TenantId, request.RoleName);
         var id = await _mediator.Send(command);
         return CreatedAtAction(nameof(GetRole), new { id }, new { id });
     }
@@ -37,8 +33,7 @@ public class RolesController : ControllerBase
     [HttpPost("{id}/capabilities")]
     public async Task<IActionResult> AddCapability(Guid id, [FromBody] AddCapabilityRequest request)
     {
-        var tenantId = _currentUser.TenantId;
-        var command = new AddCapabilityToRoleCommand(tenantId, id, request.CapabilityCode);
+        var command = new AddCapabilityToRoleCommand(_currentUser.TenantId, id, request.CapabilityCode);
         var success = await _mediator.Send(command);
         
         if (!success) return NotFound();
@@ -48,7 +43,7 @@ public class RolesController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetRole(Guid id)
     {
-        var role = await _context.Roles.FirstOrDefaultAsync(r => r.Id == id);
+        var role = await _mediator.Send(new GetRoleByIdQuery(_currentUser.TenantId, id));
         if (role == null) return NotFound();
         return Ok(role);
     }

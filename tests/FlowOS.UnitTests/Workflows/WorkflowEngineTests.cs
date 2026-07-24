@@ -1,4 +1,5 @@
 using FlowOS.StateMachines.Models;
+using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Engine;
 using FlowOS.Workflows.Enums;
@@ -14,7 +15,7 @@ public class WorkflowEngineTests
 
     public WorkflowEngineTests()
     {
-        _engine = new WorkflowEngine();
+        _engine = new WorkflowEngine(new StateMachineEngine());
     }
 
     private WorkflowDefinition CreateApprovalWorkflow()

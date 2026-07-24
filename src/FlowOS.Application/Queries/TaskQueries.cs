@@ -11,12 +11,14 @@ public class GetTasksQuery : IRequest<List<TaskDto>>
     public string? Assignee { get; set; } // Optional filter
 }
 
-public class GetTaskByIdQuery : IRequest<TaskDto>
+public class GetTaskByIdQuery : IRequest<TaskDto?>
 {
-    public Guid TaskId { get; set; }
-    
-    public GetTaskByIdQuery(Guid taskId)
+    public Guid TaskId { get; }
+    public Guid TenantId { get; }
+
+    public GetTaskByIdQuery(Guid taskId, Guid tenantId)
     {
         TaskId = taskId;
+        TenantId = tenantId;
     }
 }

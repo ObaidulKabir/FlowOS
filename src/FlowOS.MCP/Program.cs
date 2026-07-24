@@ -1,145 +1,139 @@
+using FlowOS.Application.Behaviors;
+using FlowOS.Application.Commands.Governance;
+using FlowOS.Core.Interfaces;
 using FlowOS.Domain.Services;
+using FlowOS.Domain.Validation;
+using FlowOS.Infrastructure;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Services;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
 using FlowOS.MCP.Tools;
+using FlowOS.Security.Interfaces;
+using FlowOS.Security.Policies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
 
-namespace FlowOS.MCP
+namespace FlowOS.MCP;
+
+class Program
 {
-    class Program
+    static async Task Main(string[] args)
     {
-        static async Task Main(string[] args)
-        {
-            var host = Host.CreateDefaultBuilder(args)
-                .ConfigureServices((context, services) =>
+        var host = Host.CreateDefaultBuilder(args)
+            .ConfigureServices((context, services) =>
+            {
+                services.AddDbContext<FlowOSDbContext>((serviceProvider, options) =>
                 {
-                    // Infrastructure
-                    services.AddDbContext<FlowOSDbContext>((serviceProvider, options) =>
-                    {
-                        var configuration = serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
-                        var connectionString = configuration.GetConnectionString("DefaultConnection");
+                    var configuration = serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+                    var connectionString = configuration["ConnectionStrings:DefaultConnection"];
 
-                        if (!string.IsNullOrEmpty(connectionString))
-                        {
-                            options.UseNpgsql(connectionString);
-                        }
-                        else
-                        {
-                            options.UseInMemoryDatabase("FlowOS_MCP_Db");
-                        }
-                    });
+                    if (!string.IsNullOrEmpty(connectionString))
+                        options.UseNpgsql(connectionString);
+                    else
+                        options.UseInMemoryDatabase("FlowOS_MCP_Db");
+                });
 
-                    // Domain Services
-                    services.AddScoped<WorkflowClassValidator>();
-                    services.AddScoped<WorkflowClassManager>(); // If needed, or use DbContext directly for Drafts
-                    
-                    // MCP Services
-                    services.AddSingleton<IToolRegistry, ToolRegistry>();
-                    services.AddSingleton<McpServer>();
+                services.AddFlowOSPersistence();
+                services.AddMemoryCache();
+                services.AddScoped<ICurrentUser, McpCurrentUser>();
+                services.AddScoped<ICapabilityService, CapabilityService>();
+                services.AddScoped<IPolicyProvider, EfCorePolicyProvider>();
+                services.AddScoped<IPolicyEvaluator, DefaultPolicyEvaluator>();
+                services.AddScoped<WorkflowClassValidator>();
+                services.AddScoped<IWorkflowJsonLinter, WorkflowJsonLinter>();
+                services.AddScoped<IWorkflowClassManager, WorkflowClassManager>();
+                services.AddScoped<IWorkflowClassVersionManager, WorkflowClassVersionManager>();
 
-                    // Tool Implementations
-                    services.AddScoped<GovernanceTools>();
-                    services.AddScoped<InfoTools>();
-                    services.AddScoped<AnalysisTools>();
-                    services.AddScoped<AgentTools>(); // Added AgentTools
-
-                    // Hosted Service to run the MCP Loop
-                    services.AddHostedService<McpHostedService>();
-                })
-                .ConfigureLogging(logging =>
+                services.AddMediatR(cfg =>
                 {
-                    // Redirect logging to debug/stderr so it doesn't interfere with stdout JSON-RPC
-                    logging.ClearProviders();
-                    logging.AddDebug();
-                    logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace); 
-                })
-                .Build();
+                    cfg.RegisterServicesFromAssembly(typeof(CreateWorkflowClassCommand).Assembly);
+                    cfg.AddOpenBehavior(typeof(PolicyEnforcementBehavior<,>));
+                });
 
-            await host.RunAsync();
-        }
+                services.AddSingleton<IToolRegistry, ToolRegistry>();
+                services.AddSingleton<McpServer>();
+
+                services.AddScoped<GovernanceTools>();
+                services.AddScoped<InfoTools>();
+                services.AddScoped<AnalysisTools>();
+                services.AddScoped<AgentTools>();
+
+                services.AddHostedService<McpHostedService>();
+            })
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddDebug();
+                logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
+            })
+            .Build();
+
+        await host.RunAsync();
+    }
+}
+
+public class McpHostedService : IHostedService
+{
+    private readonly McpServer _server;
+    private readonly IToolRegistry _registry;
+    private readonly IServiceProvider _serviceProvider;
+
+    public McpHostedService(McpServer server, IToolRegistry registry, IServiceProvider serviceProvider)
+    {
+        _server = server;
+        _registry = registry;
+        _serviceProvider = serviceProvider;
     }
 
-    public class McpHostedService : IHostedService
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        private readonly McpServer _server;
-        private readonly IToolRegistry _registry;
-        private readonly IServiceProvider _serviceProvider;
+        RegisterTools();
+        await _server.RunAsync(cancellationToken);
+    }
 
-        public McpHostedService(McpServer server, IToolRegistry registry, IServiceProvider serviceProvider)
-        {
-            _server = server;
-            _registry = registry;
-            _serviceProvider = serviceProvider;
-        }
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public async Task StartAsync(CancellationToken cancellationToken)
-        {
-            RegisterTools();
-            await _server.RunAsync(cancellationToken);
-        }
+    private void RegisterTools()
+    {
+        _registry.Register("describe_workflowclass_schema", "Get the JSON schema for WorkflowClassBlueprint", null,
+            async (args) => await ExecuteScopedAsync<InfoTools>(t => t.DescribeSchema(args)));
 
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        _registry.Register("list_public_workflowclasses", "List all Public WorkflowClasses", null,
+            async (args) => await ExecuteScopedAsync<InfoTools>(t => t.ListPublic(args)));
 
-        private void RegisterTools()
-        {
-            // Create a scope to resolve tools (though handlers will create their own scope per request ideally)
-            // Actually, we can just register delegates that create scopes.
-            
-            using var scope = _serviceProvider.CreateScope();
-            var governance = scope.ServiceProvider.GetRequiredService<GovernanceTools>();
-            var info = scope.ServiceProvider.GetRequiredService<InfoTools>();
-            var analysis = scope.ServiceProvider.GetRequiredService<AnalysisTools>();
-            var agent = scope.ServiceProvider.GetRequiredService<AgentTools>();
+        _registry.Register("list_available_agents", "List all available AI Agents and their capabilities", null,
+            async (args) => await ExecuteScopedAsync<AgentTools>(t => t.ListAvailableAgents(args)));
 
-            // We need to wrap the handler to create a scope per request if the tool relies on Scoped services like DbContext
-            
-            // Info Tools
-            _registry.Register("describe_workflowclass_schema", "Get the JSON schema for WorkflowClassBlueprint", null, 
-                async (args) => await ExecuteScopedAsync<InfoTools>(t => t.DescribeSchema(args)));
+        _registry.Register("suggest_agent_action", "Get suggested actions from an agent for a workflow instance", null,
+            async (args) => await ExecuteScopedAsync<AgentTools>(t => t.SuggestAgentAction(args)));
 
-            _registry.Register("list_public_workflowclasses", "List all Public WorkflowClasses", null, 
-                async (args) => await ExecuteScopedAsync<InfoTools>(t => t.ListPublic(args)));
+        _registry.Register("explain_validation_violation", "Explain a validation error code and provide hints", null,
+            async (args) => await ExecuteScopedAsync<AnalysisTools>(t => t.ExplainValidationViolation(args)));
 
-            // Agent Tools
-            _registry.Register("list_available_agents", "List all available AI Agents and their capabilities", null,
-                async (args) => await ExecuteScopedAsync<AgentTools>(t => t.ListAvailableAgents(args)));
+        _registry.Register("lint_draft_workflowclass", "Analyze a Draft for design quality warnings", null,
+            async (args) => await ExecuteScopedAsync<AnalysisTools>(t => t.LintDraftWorkflowClass(args)));
 
-            _registry.Register("suggest_agent_action", "Get suggested actions from an agent for a workflow instance", null,
-                async (args) => await ExecuteScopedAsync<AgentTools>(t => t.SuggestAgentAction(args)));
+        _registry.Register("create_draft_workflowclass", "Create a new Draft WorkflowClass", null,
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.CreateDraft(args)));
 
-            // Analysis Tools
-            _registry.Register("explain_validation_violation", "Explain a validation error code and provide hints", null,
-                async (args) => await ExecuteScopedAsync<AnalysisTools>(t => t.ExplainValidationViolation(args)));
+        _registry.Register("update_draft_workflowclass", "Update a Draft WorkflowClass", null,
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.UpdateDraft(args)));
 
-            _registry.Register("lint_draft_workflowclass", "Analyze a Draft for design quality warnings", null,
-                async (args) => await ExecuteScopedAsync<AnalysisTools>(t => t.LintDraftWorkflowClass(args)));
+        _registry.Register("validate_draft_workflowclass", "Validate a Draft WorkflowClass", null,
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.ValidateDraft(args)));
 
-            // Governance Tools
-            _registry.Register("create_draft_workflowclass", "Create a new Draft WorkflowClass", null, 
-                async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.CreateDraft(args)));
+        _registry.Register("fork_public_workflowclass", "Fork a Public WorkflowClass to a new Draft", null,
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.ForkPublic(args)));
+    }
 
-            _registry.Register("update_draft_workflowclass", "Update a Draft WorkflowClass", null, 
-                async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.UpdateDraft(args)));
-
-            _registry.Register("validate_draft_workflowclass", "Validate a Draft WorkflowClass", null, 
-                async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.ValidateDraft(args)));
-
-             _registry.Register("fork_public_workflowclass", "Fork a Public WorkflowClass to a new Draft", null, 
-                async (args) => await ExecuteScopedAsync<GovernanceTools>(t => t.ForkPublic(args)));
-        }
-
-        private async Task<CallToolResult> ExecuteScopedAsync<T>(Func<T, Task<CallToolResult>> action) where T : notnull
-        {
-            using var scope = _serviceProvider.CreateScope();
-            var tool = scope.ServiceProvider.GetRequiredService<T>();
-            return await action(tool);
-        }
+    private async Task<CallToolResult> ExecuteScopedAsync<T>(Func<T, Task<CallToolResult>> action) where T : notnull
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var tool = scope.ServiceProvider.GetRequiredService<T>();
+        return await action(tool);
     }
 }

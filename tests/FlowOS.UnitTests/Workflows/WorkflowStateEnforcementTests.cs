@@ -5,6 +5,7 @@ using FlowOS.Domain.ValueObjects;
 using FlowOS.Events.Models;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Engine;
+using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Enums;
 using Xunit;
 
@@ -17,7 +18,7 @@ public class WorkflowStateEnforcementTests
 
     public WorkflowStateEnforcementTests()
     {
-        _engine = new WorkflowEngine();
+        _engine = new WorkflowEngine(new StateMachineEngine());
     }
 
     [Fact]

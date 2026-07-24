@@ -14,9 +14,10 @@ public class WorkflowEngine : IWorkflowEngine
 {
     private readonly StateMachineEngine _stateMachineEngine;
 
-    public WorkflowEngine()
+    public WorkflowEngine(StateMachineEngine stateMachineEngine)
     {
-        _stateMachineEngine = new StateMachineEngine();
+        _stateMachineEngine = stateMachineEngine
+            ?? throw new ArgumentNullException(nameof(stateMachineEngine));
     }
 
     public WorkflowAdvanceResult Advance(

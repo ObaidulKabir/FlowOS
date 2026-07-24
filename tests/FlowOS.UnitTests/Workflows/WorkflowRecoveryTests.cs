@@ -3,6 +3,7 @@ using System.Linq;
 using FlowOS.Events.Models;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.StateMachines.Models;
+using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Engine;
 using FlowOS.Workflows.Enums;
@@ -88,7 +89,7 @@ public class WorkflowRecoveryTests
             Assert.Equal(tenantId, loadedInstance.TenantId);
 
             // 3. Continue Workflow
-            var engine = new WorkflowEngine();
+            var engine = new WorkflowEngine(new StateMachineEngine());
             var evt = new TestDomainEvent(tenantId, "EventB");
             
             // In a real scenario, we'd load the definition too

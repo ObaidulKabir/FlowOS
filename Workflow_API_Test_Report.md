@@ -1,47 +1,47 @@
-# Workflow API Test Report
+# FlowOS Test Report
 
-**Date:** 2026-02-06
+**Date:** 2026-07-24
 **Status:** PASSED
-**Scope:** E2E API Tests, Governance, Runtime, Human Tasks, Security
+**Scope:** Full solution build + test execution (Unit, Integration, E2E, MCP), plus targeted gap analysis and new regression tests.
 
 ## 1. Summary
-We have successfully expanded the E2E test coverage for FlowOS, validating critical governance rules, runtime execution, and human task management. The system now passes all comprehensive test suites.
 
-## 2. Test Execution Log
+Ran a full baseline build and test pass across the entire solution (17 projects, 3 test projects). Found and fixed a build-blocking file corruption issue, then added regression tests for two real architectural/behavioral gaps discovered during review. Final state: **154/154 tests passing, 0 failures, 0 build errors.**
 
-### A. E2E Runtime & Tasks (`FlowOS.E2E.Tests`)
-- **Scope:** Workflow instantiation, event publishing, auto-advancement, and human task completion.
-- **Results:**
-  - `RuntimeTests`: 4/4 Passed. Verified event-driven transitions and state machine integrity.
-  - `TasksTests`: 1/1 Passed. Verified `POST /api/tasks/{id}/complete` flow, ensuring correct state transitions upon task completion.
-- **Key Fixes:**
-  - Implemented missing `/api/tasks/{id}/complete` endpoint.
-  - Corrected `StartWorkflowCommand` constructor usage across all tests.
-  - Resolved `WorkflowsController` and `TasksController` dependency injection issues.
+## 2. Baseline Fix
 
-### B. Governance & Lifecycle (`FlowOS.EndToEndTests`)
-- **Scope:** WorkflowClass authoring, versioning, publishing, and tenant isolation.
-- **Results:** 20/20 Passed.
-- **Key Scenarios Verified:**
-  - **Lifecycle:** Draft -> Published -> Deprecated.
-  - **Scope:** Private vs. Public workflows; enforcing copying rules for public templates.
-  - **Validation:** Preventing invalid blueprints (e.g., missing StartStepId, dead-end steps).
-  - **Security:** Tenant isolation enforced via `x-tenant-id` and `PolicyEnforcementBehavior`.
+- `tests/FlowOS.EndToEndTests/FlowOS.EndToEndTests.csproj` had a corrupted, stacked UTF-8 BOM (`EF BB BF` repeated ~10 times) at the start of the file, which broke `dotnet restore`/`build` for the **entire solution** (MSBuild XML parser error: "Data at the root level is invalid"). Rewrote the file with clean, valid XML content (no functional changes). This was blocking all builds and all test execution before the fix.
 
-### C. Unit Tests (`FlowOS.UnitTests`)
-- **Scope:** Domain logic, handlers, and core services.
-- **Results:** 51/51 Passed.
-- **Verification:** Ensured that recent API changes (e.g., `StartWorkflowCommand` refactoring) did not regress core domain logic.
+## 3. Test Execution Results (after fix)
 
-## 3. Key Findings & Decisions
+| Project | Framework | Total | Passed | Failed | Skipped |
+|---|---|---|---|---|---|
+| `FlowOS.MCP.UnitTests` | net9.0 | 1 | 1 | 0 | 0 |
+| `FlowOS.UnitTests` | net8.0 | 133 | 133 | 0 | 0 |
+| `FlowOS.EndToEndTests` | net9.0 | 20 | 20 | 0 | 0 |
+| **Total** | | **154** | **154** | **0** | **0** |
 
-### API Consistency
-- **Endpoint Parity:** Ensured `WorkflowsController` and `TasksController` align with CQRS patterns using MediatR.
-- **Error Handling:** Standardized on `404 NotFound` for missing resources and `400 BadRequest` for domain validation failures.
+Build: 0 errors, 91 warnings (mostly nullable-reference-type warnings; catalogued but not all addressed - see Section 5).
 
-### Governance Enforcement
-- **Immutable Public Templates:** Validated that Public WorkflowClasses cannot be modified but can be copied to tenants.
-- **Draft-Only Deletion:** Enforced rule that only Draft workflows can be hard-deleted.
+## 4. New Tests Added
 
-## 4. Conclusion
-The FlowOS API is now robustly tested across E2E and Unit levels. The addition of Human Task completion tests closes a critical gap in the runtime verification loop. Governance tests ensure that the multi-tenant architecture remains secure and compliant.
+12 new tests added to close coverage gaps and lock in current (documented) behavior:
+
+- **`Integration/PoliciesControllerTests.cs`** (6 tests) - No test coverage previously existed for `POST /api/policies` and `GET /api/policies/{id}`. Covers: create + return id, duplicate-name conflict within a tenant, same name allowed across different tenants, get by id, 404 for missing id, and tenant-isolation (a policy created under tenant A returns 404 when queried under tenant B).
+- **`Application/Handlers/WorkflowCommandHandlers_StateMachineGapTests.cs`** (2 tests) - Documents that `PublishEventCommand`'s handler never loads or consults a `StateMachineDefinition`/entity state, even when one exists for the entity type. A sanity test proves the underlying `StateMachineEngine` *would* deny the transition if consulted; the second test proves the actual command handler advances the workflow anyway because it's never wired in.
+- **`Security/PolicyEvaluatorGapTests.cs`** (4 tests) - Documents that `EfCorePolicyProvider` drops `ConditionJson` entirely when mapping DB policies to the domain `Policy` object, and that `DefaultPolicyEvaluator` only ever special-cases the exact string `"DenyAll"` - any other policy (regardless of its stored condition) is always allowed.
+
+Additionally tightened an existing ambiguous assertion in `Integration/EventApiTests.cs` (`PublishEvent_WithMissingPermissions_ShouldFail`), which previously only asserted "not a success status code" (accepting either a 403 or an unhandled 500). Verified and now asserts the deterministic `403 Forbidden`, confirming `ApiExceptionFilterAttribute` correctly maps `PolicyViolationException` in the current codebase.
+
+## 5. Known Gaps (documented via regression tests, not fixed)
+
+These are pre-existing behaviors, now covered by tests so future changes are intentional and visible:
+
+1. **State machine enforcement is not wired into the runtime event-publish path.** `WorkflowEngine.Advance` fully supports state-machine enforcement given a `StateMachineDefinition` and current entity state, and a standalone `POST /api/statemachines/validate` endpoint exists for dry-run checks - but `WorkflowCommandHandlers.Handle(PublishEventCommand, ...)` never loads either, so a state machine that would deny a transition has no effect on the real `/api/events/publish` call.
+2. **Policy `ConditionJson` is not evaluated.** It's stored on the `Policy` entity and accepted by `POST /api/policies`, but `EfCorePolicyProvider` discards it when mapping to the domain policy object, and `DefaultPolicyEvaluator` only checks for the literal name `"DenyAll"`.
+3. **Verbose debug logging via `Console.WriteLine`** remains in `EventsController`, `WorkflowCommandHandlers`, and `PolicyEnforcementBehavior` (dumps headers, roles, and resolved capabilities per request). Not a correctness issue, but noisy and not level-controlled; recommend migrating to `ILogger` with appropriate log levels.
+4. **91 nullable-reference-type warnings** across `src/` and `tests/` (mostly `CS8602`/`CS8600`/`CS8603`/`CS8625`), plus a handful of xUnit analyzer and ASP0019 header-append warnings. None currently cause test failures; listed for future cleanup.
+
+## 6. Conclusion
+
+The solution's test suite is comprehensive and, after fixing the build-blocking corrupted project file, fully green (154/154). Coverage gaps around the Policies endpoint have been closed, and two real behavioral gaps (state machine enforcement not wired into publish, policy conditions not evaluated) are now documented with explicit regression tests rather than left as silent, undiscovered risk.

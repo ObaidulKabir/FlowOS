@@ -11,9 +11,12 @@ using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.Events.Models;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Persistence.Repositories;
 using FlowOS.Security.Interfaces;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
+using FlowOS.Workflows.Engine;
+using FlowOS.StateMachines.Engine;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
@@ -40,10 +43,11 @@ public class WorkflowCommandHandlersTests : IDisposable
         _mockCapabilityService = new Mock<ICapabilityService>();
 
         _handler = new WorkflowCommandHandlers(
-            _context,
+            new UnitOfWork(_context),
             _mockEventRegistry.Object,
             _mockCurrentUser.Object,
-            _mockCapabilityService.Object
+            _mockCapabilityService.Object,
+            new WorkflowEngine(new StateMachineEngine())
         );
     }
 

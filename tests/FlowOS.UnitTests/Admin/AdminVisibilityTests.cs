@@ -6,6 +6,7 @@ using FlowOS.Application.Handlers.Admin;
 using FlowOS.Application.Queries.Admin;
 using FlowOS.Events.Models;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Persistence.Repositories;
 using FlowOS.Workflows.Domain;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -65,7 +66,7 @@ public class AdminVisibilityTests
         await context.SaveChangesAsync();
 
         // Act
-        var handler = new AdminQueryHandlers(context, new StubPolicyProvider());
+        var handler = new AdminQueryHandlers(new UnitOfWork(context), new StubPolicyProvider());
         // Ensure tenantId matches (in test, we used same tenantId)
         var result = await handler.Handle(new GetAdminWorkflowDetailQuery(instance.Id, tenantId), CancellationToken.None);
 
