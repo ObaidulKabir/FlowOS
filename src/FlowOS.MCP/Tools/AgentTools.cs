@@ -32,7 +32,7 @@ public class AgentTools
         {
             Content = new List<ToolContent>
             {
-                new ToolContent { Type = "json", Text = JObject.FromObject(new { agents }).ToString() }
+                new ToolContent { Type = "text", Text = JObject.FromObject(new { agents }).ToString() }
             }
         });
     }
@@ -93,7 +93,7 @@ public class AgentTools
             {
                 Content = new List<ToolContent>
                 {
-                    new ToolContent { Type = "json", Text = JObject.FromObject(result).ToString() }
+                    new ToolContent { Type = "text", Text = JObject.FromObject(result).ToString() }
                 }
             };
         }

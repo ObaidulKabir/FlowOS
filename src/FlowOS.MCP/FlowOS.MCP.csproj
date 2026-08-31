@@ -5,6 +5,8 @@
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
     <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
+    <ProjectReference Include="..\FlowOS.Workflows\FlowOS.Workflows.csproj" />
+    <ProjectReference Include="..\FlowOS.StateMachines\FlowOS.StateMachines.csproj" />
   </ItemGroup>
 
   <ItemGroup>

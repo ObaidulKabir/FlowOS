@@ -163,7 +163,7 @@ public class GovernanceTools
     {
         Content = new List<ToolContent>
         {
-            new ToolContent { Type = "json", Text = JObject.FromObject(data).ToString() }
+            new ToolContent { Type = "text", Text = JObject.FromObject(data).ToString() }
         }
     };
 

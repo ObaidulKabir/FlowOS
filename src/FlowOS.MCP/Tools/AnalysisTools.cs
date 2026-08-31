@@ -149,7 +149,7 @@ public class AnalysisTools
         {
             Content = new List<ToolContent>
             {
-                new ToolContent { Type = "json", Text = JObject.FromObject(result).ToString() }
+                new ToolContent { Type = "text", Text = JObject.FromObject(result).ToString() }
             }
         });
     }
@@ -247,7 +247,7 @@ public class AnalysisTools
         {
             Content = new List<ToolContent>
             {
-                new ToolContent { Type = "json", Text = JObject.FromObject(new { warnings }).ToString() }
+                new ToolContent { Type = "text", Text = JObject.FromObject(new { warnings }).ToString() }
             }
         };
     }

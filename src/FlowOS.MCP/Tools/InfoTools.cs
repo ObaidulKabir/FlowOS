@@ -123,7 +123,7 @@ public class InfoTools
         {
             Content = new List<ToolContent>
             {
-                new ToolContent { Type = "json", Text = JObject.FromObject(schema).ToString() }
+                new ToolContent { Type = "text", Text = JObject.FromObject(schema).ToString() }
             }
         });
     }
@@ -143,7 +143,7 @@ public class InfoTools
         {
             Content = new List<ToolContent>
             {
-                new ToolContent { Type = "json", Text = JObject.FromObject(publicWorkflows).ToString() }
+                new ToolContent { Type = "text", Text = JArray.FromObject(publicWorkflows).ToString() }
             }
         };
     }

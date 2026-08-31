@@ -6,6 +6,8 @@ using FlowOS.Domain.Validation;
 using FlowOS.Infrastructure;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.Infrastructure.Services;
+using FlowOS.StateMachines.Engine;
+using FlowOS.Workflows.Engine;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
@@ -38,6 +40,9 @@ class Program
                 });
 
                 services.AddFlowOSPersistence();
+                services.AddScoped<IEventRegistry, EventRegistry>();
+                services.AddSingleton<WorkflowEngine>();
+                services.AddSingleton<StateMachineEngine>();
                 services.AddMemoryCache();
                 services.AddScoped<ICurrentUser, McpCurrentUser>();
                 services.AddScoped<ICapabilityService, CapabilityService>();
@@ -76,7 +81,7 @@ class Program
     }
 }
 
-public class McpHostedService : IHostedService
+public class McpHostedService : BackgroundService
 {
     private readonly McpServer _server;
     private readonly IToolRegistry _registry;
@@ -89,13 +94,11 @@ public class McpHostedService : IHostedService
         _serviceProvider = serviceProvider;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         RegisterTools();
-        await _server.RunAsync(cancellationToken);
+        await _server.RunAsync(stoppingToken);
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private void RegisterTools()
     {

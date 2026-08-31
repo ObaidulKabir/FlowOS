@@ -13,7 +13,16 @@ namespace FlowOS.MCP.Services
 
         public void Register(string name, string description, object schema, Func<JObject, Task<CallToolResult>> handler)
         {
-            _tools[name] = (new McpTool { Name = name, Description = description, InputSchema = schema }, handler);
+            _tools[name] = (new McpTool
+            {
+                Name = name,
+                Description = description,
+                InputSchema = schema ?? new Dictionary<string, object>
+                {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object>()
+                }
+            }, handler);
         }
 
         public IEnumerable<McpTool> GetTools()
