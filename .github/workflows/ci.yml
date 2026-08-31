@@ -1,0 +1,38 @@
+name: CI Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    name: Build API and MCP images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build FlowOS.Api image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/FlowOS.Api/Dockerfile
+          push: false
+          tags: flowos-api:ci
+          cache-from: type=gha,scope=flowos-api
+          cache-to: type=gha,mode=max,scope=flowos-api
+
+      - name: Build FlowOS.MCP image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/FlowOS.MCP/Dockerfile
+          push: false
+          tags: flowos-mcp:ci
+          cache-from: type=gha,scope=flowos-mcp
+          cache-to: type=gha,mode=max,scope=flowos-mcp

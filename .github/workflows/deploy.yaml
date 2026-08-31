@@ -1,9 +1,9 @@
 name: Deploy to Server (Docker Compose)
 
+# Auto-deploy is manual until production SSH (SSH_HOST) is reachable from GitHub Actions again.
+# Runs 37–38 failed at ssh-keyscan; re-enable `push` to main after verifying SSH_HOST/SSH_PORT.
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -20,14 +20,51 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          set -euo pipefail
+          if [ -z "${SSH_HOST:-}" ]; then
+            echo "::error::Secret SSH_HOST is empty. Set it under Settings → Environments → production (or repository secrets)."
+            exit 1
+          fi
+
+          PORT="${SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          echo "Scanning host keys for ${SSH_HOST} (port ${PORT})..."
+          for attempt in 1 2 3; do
+            if ssh-keyscan -p "$PORT" -T 15 -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>keyscan.err; then
+              echo "Host keys added successfully (attempt ${attempt})."
+              exit 0
+            fi
+            echo "ssh-keyscan attempt ${attempt} failed:"
+            cat keyscan.err || true
+            sleep 5
+          done
+
+          echo "::error::Could not reach SSH host '${SSH_HOST}:${PORT}'. Check that the server is up, port ${PORT} is open to GitHub Actions, and SSH_HOST/SSH_PORT secrets are correct."
+          exit 1
 
       - name: Deploy with Docker Compose
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          APP_PATH: ${{ secrets.APP_PATH }}
         run: |
-          ssh -A -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          set -euo pipefail
+          if [ -z "${SSH_USER:-}" ] || [ -z "${APP_PATH:-}" ]; then
+            echo "::error::SSH_USER and APP_PATH secrets are required."
+            exit 1
+          fi
+
+          PORT="${SSH_PORT:-22}"
+          ssh -A -p "$PORT" -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" << EOF
             set -e
-            cd ${{ secrets.APP_PATH }}
+            cd '${APP_PATH}'
             git fetch origin
             git checkout -B main origin/main
             docker network create traefik-network || true
