@@ -1,15 +1,16 @@
 # Use ASP.NET Core Runtime (or just Runtime) for the final image
-# Using aspnet:9.0 to be safe with any potential web dependencies or if we add health checks later
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+# Aligned with solution-wide net8.0 target (all project refs + shared framework Microsoft.AspNetCore.App 8.0)
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 
 # Use SDK for building
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
 # Copy CSPROJ files first to optimize cache
 COPY ["src/FlowOS.MCP/FlowOS.MCP.csproj", "src/FlowOS.MCP/"]
+COPY ["src/FlowOS.Application/FlowOS.Application.csproj", "src/FlowOS.Application/"]
 COPY ["src/FlowOS.Domain/FlowOS.Domain.csproj", "src/FlowOS.Domain/"]
 COPY ["src/FlowOS.Infrastructure/FlowOS.Infrastructure.csproj", "src/FlowOS.Infrastructure/"]
 COPY ["src/FlowOS.Core/FlowOS.Core.csproj", "src/FlowOS.Core/"]

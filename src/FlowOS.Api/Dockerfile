@@ -20,6 +20,7 @@ COPY ["src/FlowOS.Security/FlowOS.Security.csproj", "src/FlowOS.Security/"]
 COPY ["src/FlowOS.Agents/FlowOS.Agents.csproj", "src/FlowOS.Agents/"]
 COPY ["src/FlowOS.StateMachines/FlowOS.StateMachines.csproj", "src/FlowOS.StateMachines/"]
 COPY ["src/FlowOS.Workflows/FlowOS.Workflows.csproj", "src/FlowOS.Workflows/"]
+COPY ["src/FlowOS.Notifications/FlowOS.Notifications.csproj", "src/FlowOS.Notifications/"]
 
 # Restore dependencies
 RUN dotnet restore "src/FlowOS.Api/FlowOS.Api.csproj"
