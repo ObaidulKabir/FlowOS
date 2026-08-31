@@ -4,13 +4,70 @@ FlowOS ships a standalone **Model Context Protocol (MCP)** server (`src/FlowOS.M
 
 ## Running the MCP server
 
+### Stdio (default — Cursor local MCP)
+
 ```bash
 dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
 ```
 
-It communicates over **stdio** (`stdin`/`stdout`) using JSON-RPC 2.0 — there is no HTTP port. Logging is redirected to stderr/Debug so it never pollutes the JSON-RPC stream on stdout (`Program.cs`). In Docker, the `flowos-mcp` service is started with `stdin_open`/`tty` so you can `docker attach` to it.
+Communicates over **stdio** (`stdin`/`stdout`) using JSON-RPC 2.0. Logging goes to stderr/Debug so it never pollutes the JSON-RPC stream on stdout.
 
-If no `ConnectionStrings:DefaultConnection` is configured, it falls back to an in-memory database (`FlowOS_MCP_Db`) — separate from the API's own in-memory instance.
+### Streamable HTTP
+
+```bash
+# PowerShell
+$env:MCP_TRANSPORT="http"
+$env:ASPNETCORE_URLS="http://0.0.0.0:8080"
+dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
+```
+
+```bash
+# bash
+MCP_TRANSPORT=http ASPNETCORE_URLS=http://0.0.0.0:8080 \
+  dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
+```
+
+Endpoints:
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| `POST` | `/mcp` | JSON-RPC body → `application/json` response (or `202` for notifications) |
+| `GET` | `/mcp` | `405` (no standalone SSE listen stream) |
+| `GET` | `/health` | `200` `{ "status": "ok" }` |
+
+Optional headers (same mock auth style as the API): `x-tenant-id`, `X-Mock-Role`.
+
+Smoke test:
+
+```bash
+curl -s http://localhost:8080/health
+
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
+
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+```
+
+Cursor remote MCP example (`mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "flowos": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+Docker Compose runs MCP in HTTP mode by default (`MCP_TRANSPORT=http`, port **8081→8080** locally; Traefik `PathPrefix(/mcp)` in `docker-compose.test.yaml`).
+
+If no `ConnectionStrings:DefaultConnection` is configured, MCP falls back to an in-memory database (`FlowOS_MCP_Db`) — separate from the API's own in-memory instance.
 
 ## Governance constitution summary
 

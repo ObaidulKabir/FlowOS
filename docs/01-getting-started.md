@@ -41,7 +41,7 @@ This starts four services defined in `docker-compose.yml`:
 |---|---|---|
 | `flowos-api` | `src/FlowOS.Api/Dockerfile` | Connects to the `postgres` service. **No host port is published in the base `docker-compose.yml`** — add a `ports:` mapping (e.g. `"5183:8080"`) in a `docker-compose.override.yml` if you need to reach it from your host, or use `docker-compose exec`/the dashboard's proxy. |
 | `flowos-dashboard` | `docker/dashboard.Dockerfile` | Vite dev server on port `3000`, proxies API calls to `flowos-api:8080` |
-| `flowos-mcp` | `src/FlowOS.MCP/Dockerfile` | Stdio-based MCP server (no HTTP port; `stdin_open`/`tty` enabled for `docker attach`) |
+| `flowos-mcp` | `src/FlowOS.MCP/Dockerfile` | Streamable HTTP MCP (`POST /mcp` on port 8080; set `MCP_TRANSPORT=stdio` for local Cursor stdio) |
 | `postgres` | `postgres:15-alpine` | Database `flowos`, user/password `postgres`/`password` |
 
 > There is also a `docker-compose.test.yaml` at the repo root. Despite the name, it is **not** a lightweight test harness — it's a production-style deployment manifest that fronts every service (including the `ExpenseApp` sample) with a Traefik reverse proxy on a real domain. Don't use it for local development.

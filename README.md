@@ -31,7 +31,7 @@ docker-compose up -d --build
 ```
 *   **API**: `flowos-api` (no host port is published by default in `docker-compose.yml` — see [Chapter 1](docs/01-getting-started.md#option-b--run-the-full-stack-with-docker-compose))
 *   **Dashboard**: `http://localhost:3000`
-*   **MCP server**: `flowos-mcp` (stdio JSON-RPC, no HTTP port)
+*   **MCP server**: `flowos-mcp` (Streamable HTTP on host port **8081** → `POST /mcp`; stdio still available via `MCP_TRANSPORT=stdio`)
 
 The **Expense App** sample (`ExpenseApp/`) and the **Node.js demo client** (`clients/node-expense-client`) are documented in [Chapter 16 — Sample Applications](docs/16-sample-applications.md).
 
@@ -43,4 +43,4 @@ dotnet test FlowOS.sln
 ```
 
 ## 🤖 AI Capabilities
-FlowOS exposes a **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`, stdio JSON-RPC) that lets AI agents author and validate `WorkflowClass` designs under strict, design-time-only governance, plus a runtime **Agent Insights API** (`/api/agents/insight`) for advisory, human-in-the-loop suggestions during live workflow execution. See [Chapter 13 — MCP & AI Agent Automation](docs/13-mcp-and-ai-agent-integration.md) and [Chapter 7 — AI Agents & Insights](docs/07-ai-agents-and-insights.md).
+FlowOS exposes a **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) over **stdio** or **Streamable HTTP** (`MCP_TRANSPORT=http`, `POST /mcp`) that lets AI agents author and validate `WorkflowClass` designs under strict, design-time-only governance, plus a runtime **Agent Insights API** (`/api/agents/insight`) for advisory, human-in-the-loop suggestions during live workflow execution. See [Chapter 13 — MCP & AI Agent Automation](docs/13-mcp-and-ai-agent-integration.md) and [Chapter 7 — AI Agents & Insights](docs/07-ai-agents-and-insights.md).

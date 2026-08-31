@@ -1,7 +1,7 @@
-# Use ASP.NET Core Runtime (or just Runtime) for the final image
-# Aligned with solution-wide net8.0 target (all project refs + shared framework Microsoft.AspNetCore.App 8.0)
+# Use ASP.NET Core Runtime — supports both stdio and Streamable HTTP transports
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
+EXPOSE 8080
 
 # Use SDK for building
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
@@ -37,17 +37,7 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# MCP uses Stdin/Stdout, so we need to ensure the entrypoint is correct
-# and that we keep the container alive if it's meant to be persistent (though MCP usually runs on demand).
-# However, for a "Service" in Docker Compose, it usually needs to listen on a port (SSE) or be invoked via exec.
-# The current MCP implementation is Stdio based.
-# If we want to expose it to other containers, we might need an SSE wrapper or just keep it running.
-# But standard MCP over Docker usually means running the container interactively.
-# Or, if this is for the "Dashboard" to use, the Dashboard cannot easily invoke Stdio of a remote container.
-# The prompt says "enable docker for MCP service".
-# If it's a "Service", maybe it should expose a port?
-# But the current implementation `Program.cs` reads from Console.In.
-# Let's assume Stdio mode for now. To use it, one would `docker run -i flowos-mcp`.
-# In docker-compose, `stdin_open: true` and `tty: true` might be needed.
+ENV MCP_TRANSPORT=http
+ENV ASPNETCORE_URLS=http://+:8080
 
 ENTRYPOINT ["dotnet", "FlowOS.MCP.dll"]

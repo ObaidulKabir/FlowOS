@@ -41,18 +41,21 @@ services:
     networks:
       - traefik-network 
 
-  # ─── FlowOS MCP (Stdio – no HTTP routing) ───────────────────
+  # ─── FlowOS MCP (Streamable HTTP) ───────────────────────────
   flowos-mcp:
     image: flowos-mcp
     build:
       context: .
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
+      - MCP_TRANSPORT=http
+      - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
-    stdin_open: true # docker run -i
-    tty: true        # docker run -t 
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
+      - "traefik.http.routers.flowos-mcp.rule=Host(`${FLOWOS_DOMAIN}`) && PathPrefix(`/mcp`)"
+      - "traefik.http.routers.flowos-mcp.entrypoints=web"
+      - "traefik.http.services.flowos-mcp.loadbalancer.server.port=8080"
     networks:
       - traefik-network
 

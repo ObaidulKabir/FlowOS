@@ -29,9 +29,11 @@ services:
       context: .
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
+      - MCP_TRANSPORT=http
+      - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
-    stdin_open: true # docker run -i
-    tty: true        # docker run -t
+    ports:
+      - "8081:8080"
     depends_on:
       - postgres
 
