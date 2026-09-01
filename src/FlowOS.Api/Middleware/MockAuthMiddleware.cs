@@ -17,9 +17,13 @@ public class MockAuthMiddleware
     {
         if (context.Request.Headers.TryGetValue("X-Mock-Role", out var role))
         {
+            var userId = context.Request.Headers.TryGetValue("X-Mock-UserId", out var uid) && !string.IsNullOrWhiteSpace(uid)
+                ? uid.ToString()
+                : "mock-user";
+
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, "mock-user"),
+                new Claim(ClaimTypes.NameIdentifier, userId),
                 new Claim(ClaimTypes.Name, "Mock User"),
                 new Claim(ClaimTypes.Role, role.ToString())
             };

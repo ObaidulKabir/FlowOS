@@ -26,9 +26,13 @@ public class MockAuthenticationHandler : AuthenticationHandler<AuthenticationSch
 
         if (Context.Request.Headers.TryGetValue("X-Mock-Role", out var role))
         {
+            var userId = Context.Request.Headers.TryGetValue("X-Mock-UserId", out var uid) && !string.IsNullOrWhiteSpace(uid)
+                ? uid.ToString()
+                : "mock-user";
+
             var claims = new System.Collections.Generic.List<System.Security.Claims.Claim>
             {
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "mock-user"),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userId),
                 new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "Mock User"),
                 new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role.ToString())
             };

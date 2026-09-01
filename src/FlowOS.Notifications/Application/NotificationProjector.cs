@@ -47,10 +47,11 @@ public class NotificationProjector : INotificationHandler<DomainEventNotificatio
 
     private Notification? MapEvent(DomainEvent ev)
     {
-        string message;
+        string? message = null;
         string severity = "Info";
         Guid? targetUserId = null;
 
+        // Try direct metadata first
         if (ev.Metadata.TryGetValue("Message", out var msgObj) && msgObj is string msg && !string.IsNullOrWhiteSpace(msg))
         {
             message = msg;
@@ -58,18 +59,6 @@ public class NotificationProjector : INotificationHandler<DomainEventNotificatio
             {
                 severity = sev;
             }
-        }
-        else
-        {
-            (message, severity) = ev.EventType switch
-            {
-                "EVT-WORKFLOW-STARTED" => ("Workflow started", "Info"),
-                "EVT-TASK-ASSIGNED" => ("Task assigned to you", "Info"),
-                "EVT-TASK-OVERDUE" => ("Task overdue", "Warning"),
-                "EVT-WORKFLOW-STUCK" => ("Workflow needs attention", "Critical"),
-                "EVT-AGENT-INSIGHT" => ("New agent insight available", "Info"),
-                _ => ($"Event: {ev.EventType}", "Info") 
-            };
         }
 
         if (ev.Metadata.TryGetValue("TargetUserId", out var userObj) && userObj is string userStr && Guid.TryParse(userStr, out var userId))
@@ -79,6 +68,59 @@ public class NotificationProjector : INotificationHandler<DomainEventNotificatio
         else if (ev.Metadata.TryGetValue("AssignedTo", out var assignObj) && assignObj is string assignStr && Guid.TryParse(assignStr, out var assignedId))
         {
             targetUserId = assignedId;
+        }
+
+        // If not found, inspect Payload JSON in Metadata
+        if (ev.Metadata.TryGetValue("Payload", out var payloadJson) && !string.IsNullOrWhiteSpace(payloadJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(payloadJson);
+                var root = doc.RootElement;
+                if (root.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    if (message == null && root.TryGetProperty("Message", out var msgProp) && msgProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        message = msgProp.GetString();
+                    }
+
+                    if (root.TryGetProperty("Severity", out var sevProp) && sevProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        severity = sevProp.GetString() ?? severity;
+                    }
+
+                    if (!targetUserId.HasValue)
+                    {
+                        if (root.TryGetProperty("TargetUserId", out var targetProp) && Guid.TryParse(targetProp.GetString(), out var tid))
+                        {
+                            targetUserId = tid;
+                        }
+                        else if (root.TryGetProperty("AssignedTo", out var assignProp) && Guid.TryParse(assignProp.GetString(), out var aid))
+                        {
+                            targetUserId = aid;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore malformed JSON in Payload
+            }
+        }
+
+        // Fallback default message if still null
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            (message, var defaultSeverity) = ev.EventType switch
+            {
+                "EVT-WORKFLOW-STARTED" => ("Workflow started", "Info"),
+                "EVT-TASK-ASSIGNED" => ("Task assigned to you", "Info"),
+                "EVT-TASK-OVERDUE" => ("Task overdue", "Warning"),
+                "EVT-WORKFLOW-STUCK" => ("Workflow needs attention", "Critical"),
+                "EVT-AGENT-INSIGHT" => ("New agent insight available", "Info"),
+                _ => ($"Event: {ev.EventType}", "Info") 
+            };
+            if (severity == "Info") severity = defaultSeverity;
         }
 
         return new Notification(ev.TenantId, ev.EventType, message, severity, ev.CorrelationId, targetUserId);
