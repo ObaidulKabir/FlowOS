@@ -18,8 +18,11 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         builder.Property(n => n.Message).IsRequired().HasMaxLength(500);
         builder.Property(n => n.Severity).IsRequired().HasMaxLength(20);
         builder.Property(n => n.CreatedAt).IsRequired();
+        builder.Property(n => n.IsRead).IsRequired().HasDefaultValue(false);
+        builder.Property(n => n.TargetUserId);
 
         builder.HasIndex(n => n.TenantId);
         builder.HasIndex(n => n.CreatedAt);
+        builder.HasIndex(n => n.TargetUserId);
     }
 }

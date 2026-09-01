@@ -47,15 +47,41 @@ public class NotificationProjector : INotificationHandler<DomainEventNotificatio
 
     private Notification? MapEvent(DomainEvent ev)
     {
-        return ev.EventType switch
+        string message;
+        string severity = "Info";
+        Guid? targetUserId = null;
+
+        if (ev.Metadata.TryGetValue("Message", out var msgObj) && msgObj is string msg && !string.IsNullOrWhiteSpace(msg))
         {
-            "EVT-WORKFLOW-STARTED" => new Notification(ev.TenantId, ev.EventType, "Workflow started", "Info", ev.CorrelationId),
-            "EVT-TASK-ASSIGNED" => new Notification(ev.TenantId, ev.EventType, "Task assigned to you", "Info", ev.CorrelationId),
-            "EVT-TASK-OVERDUE" => new Notification(ev.TenantId, ev.EventType, "Task overdue", "Warning", ev.CorrelationId),
-            "EVT-WORKFLOW-STUCK" => new Notification(ev.TenantId, ev.EventType, "Workflow needs attention", "Critical", ev.CorrelationId),
-            "EVT-AGENT-INSIGHT" => new Notification(ev.TenantId, ev.EventType, "New agent insight available", "Info", ev.CorrelationId),
-            _ => new Notification(ev.TenantId, ev.EventType, $"Event: {ev.EventType}", "Info", ev.CorrelationId) 
-        };
+            message = msg;
+            if (ev.Metadata.TryGetValue("Severity", out var sevObj) && sevObj is string sev)
+            {
+                severity = sev;
+            }
+        }
+        else
+        {
+            (message, severity) = ev.EventType switch
+            {
+                "EVT-WORKFLOW-STARTED" => ("Workflow started", "Info"),
+                "EVT-TASK-ASSIGNED" => ("Task assigned to you", "Info"),
+                "EVT-TASK-OVERDUE" => ("Task overdue", "Warning"),
+                "EVT-WORKFLOW-STUCK" => ("Workflow needs attention", "Critical"),
+                "EVT-AGENT-INSIGHT" => ("New agent insight available", "Info"),
+                _ => ($"Event: {ev.EventType}", "Info") 
+            };
+        }
+
+        if (ev.Metadata.TryGetValue("TargetUserId", out var userObj) && userObj is string userStr && Guid.TryParse(userStr, out var userId))
+        {
+            targetUserId = userId;
+        }
+        else if (ev.Metadata.TryGetValue("AssignedTo", out var assignObj) && assignObj is string assignStr && Guid.TryParse(assignStr, out var assignedId))
+        {
+            targetUserId = assignedId;
+        }
+
+        return new Notification(ev.TenantId, ev.EventType, message, severity, ev.CorrelationId, targetUserId);
     }
 }
 

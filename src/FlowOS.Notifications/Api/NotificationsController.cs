@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FlowOS.Core.Interfaces;
 using FlowOS.Notifications.Application;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -45,8 +46,18 @@ public class NotificationsController : ControllerBase
     public async Task<IActionResult> GetNotifications()
     {
         var tenantId = _currentUser.TenantId;
-        var notifications = await _queryService.GetNotificationsAsync(tenantId);
+        var userId = Guid.TryParse(_currentUser.Id, out var uid) ? uid : Guid.Empty;
+        var notifications = await _queryService.GetNotificationsAsync(tenantId, userId);
         return Ok(notifications);
+    }
+    
+    [HttpPut("{id}/read")]
+    public async Task<IActionResult> MarkAsRead(Guid id)
+    {
+        var tenantId = _currentUser.TenantId;
+        var userId = Guid.TryParse(_currentUser.Id, out var uid) ? uid : Guid.Empty;
+        await _queryService.MarkAsReadAsync(tenantId, userId, id);
+        return NoContent();
     }
     
     // ... rest of stream logic ...
@@ -54,12 +65,16 @@ public class NotificationsController : ControllerBase
     public async Task GetNotificationStream()
     {
         var tenantId = _currentUser.TenantId;
+        var userId = Guid.TryParse(_currentUser.Id, out var uid) ? uid : Guid.Empty;
         
-        Response.Headers.Add("Content-Type", "text/event-stream");
-        Response.Headers.Add("Cache-Control", "no-cache");
-        Response.Headers.Add("Connection", "keep-alive");
+        Response.Headers.Append("Content-Type", "text/event-stream");
+        Response.Headers.Append("Cache-Control", "no-cache");
+        Response.Headers.Append("Connection", "keep-alive");
 
-        var client = new StreamClient(new System.IO.StreamWriter(Response.Body) { AutoFlush = true });
+        // Use StreamClient but associate it with userId?
+        // Right now AddClient just takes tenantId. We'll leave the stream logic as tenant-broadcast for now, 
+        // or update stream service to filter by userId.
+        var client = new StreamClient(new System.IO.StreamWriter(Response.Body) { AutoFlush = true }, userId);
         _streamService.AddClient(tenantId, client);
 
         try
@@ -67,12 +82,18 @@ public class NotificationsController : ControllerBase
             // Keep connection open
             while (!HttpContext.RequestAborted.IsCancellationRequested)
             {
-                await Task.Delay(1000); // Heartbeat / Keep-alive check
+                await Task.Delay(15000, HttpContext.RequestAborted); // 15s heartbeat
+                await client.WriteMessageAsync(":\n\n"); // SSE comment as ping
             }
+        }
+        catch (TaskCanceledException)
+        {
+            // Client disconnected normally
         }
         finally
         {
             _streamService.RemoveClient(tenantId, client);
+            client.Dispose();
         }
     }
 }

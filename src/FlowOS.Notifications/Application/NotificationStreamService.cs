@@ -40,39 +40,66 @@ public class NotificationStreamService
                 clientsSnapshot = tenantClients.ToList();
             }
 
-            foreach (var client in clientsSnapshot)
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                notification.Id,
+                notification.Message,
+                notification.Severity,
+                notification.CreatedAt,
+                notification.EventType
+            });
+            
+            var message = $"data: {json}\n\n";
+
+            var tasks = clientsSnapshot
+                .Where(c => notification.TargetUserId == null || c.UserId == notification.TargetUserId)
+                .Select(async client => 
             {
                 try
                 {
-                    // Format as SSE data: "data: {json}\n\n"
-                    var json = System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        notification.Message,
-                        notification.Severity,
-                        notification.CreatedAt,
-                        notification.EventType
-                    });
-                    
-                    await client.Writer.WriteAsync($"data: {json}\n\n");
-                    await client.Writer.FlushAsync();
+                    await client.WriteMessageAsync(message);
                 }
                 catch
                 {
                     // Client disconnected
                     RemoveClient(notification.TenantId, client);
                 }
-            }
+            });
+
+            await Task.WhenAll(tasks);
         }
     }
 }
 
-public class StreamClient
+public class StreamClient : IDisposable
 {
     public Guid Id { get; } = Guid.NewGuid();
-    public System.IO.TextWriter Writer { get; }
+    public Guid UserId { get; }
+    private readonly System.IO.TextWriter _writer;
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
 
-    public StreamClient(System.IO.TextWriter writer)
+    public StreamClient(System.IO.TextWriter writer, Guid userId)
     {
-        Writer = writer;
+        _writer = writer;
+        UserId = userId;
+    }
+
+    public async Task WriteMessageAsync(string message)
+    {
+        await _semaphore.WaitAsync();
+        try
+        {
+            await _writer.WriteAsync(message);
+            await _writer.FlushAsync();
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        _semaphore.Dispose();
     }
 }

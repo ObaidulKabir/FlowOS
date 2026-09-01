@@ -12,9 +12,12 @@ public class Notification
     public string Severity { get; private set; } = "Info"; // Info, Warning, Critical
     public DateTime CreatedAt { get; private set; }
 
+    public Guid? TargetUserId { get; private set; }
+    public bool IsRead { get; private set; }
+
     protected Notification() { }
 
-    public Notification(Guid tenantId, string eventType, string message, string severity, Guid? correlationId)
+    public Notification(Guid tenantId, string eventType, string message, string severity, Guid? correlationId, Guid? targetUserId = null)
     {
         Id = Guid.NewGuid();
         TenantId = tenantId;
@@ -22,6 +25,13 @@ public class Notification
         Message = message;
         Severity = severity;
         CorrelationId = correlationId;
+        TargetUserId = targetUserId;
         CreatedAt = DateTime.UtcNow;
+        IsRead = false;
+    }
+
+    public void MarkAsRead()
+    {
+        IsRead = true;
     }
 }

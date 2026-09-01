@@ -31,20 +31,34 @@ public class NotificationRepository : INotificationRepository, INotificationQuer
     }
 
     // Query Side (For Controller)
-    public async Task<object> GetNotificationsAsync(Guid tenantId)
+    public async Task<object> GetNotificationsAsync(Guid tenantId, Guid userId)
     {
         return await _context.Notifications
             .AsNoTracking()
-            .Where(n => n.TenantId == tenantId)
+            .Where(n => n.TenantId == tenantId && (n.TargetUserId == null || n.TargetUserId == userId))
             .OrderByDescending(n => n.CreatedAt)
             .Take(50)
             .Select(n => new 
             {
+                n.Id,
                 n.Message,
                 n.Severity,
                 n.CreatedAt,
-                n.EventType
+                n.EventType,
+                n.IsRead
             })
             .ToListAsync();
+    }
+
+    public async Task MarkAsReadAsync(Guid tenantId, Guid userId, Guid notificationId)
+    {
+        var notification = await _context.Notifications
+            .FirstOrDefaultAsync(n => n.Id == notificationId && n.TenantId == tenantId && (n.TargetUserId == null || n.TargetUserId == userId));
+            
+        if (notification != null && !notification.IsRead)
+        {
+            notification.MarkAsRead();
+            await _context.SaveChangesAsync();
+        }
     }
 }
