@@ -13,12 +13,12 @@ namespace FlowOS.Notifications.Infrastructure.Persistence;
 
 public class EventPublishingInterceptor : SaveChangesInterceptor
 {
-    private readonly IPublisher _publisher;
+    private readonly IServiceProvider _serviceProvider;
     private List<DomainEvent> _eventsToPublish = new();
 
-    public EventPublishingInterceptor(IPublisher publisher)
+    public EventPublishingInterceptor(IServiceProvider serviceProvider)
     {
-        _publisher = publisher;
+        _serviceProvider = serviceProvider;
     }
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -70,9 +70,13 @@ public class EventPublishingInterceptor : SaveChangesInterceptor
     {
         if (_eventsToPublish.Any())
         {
-            foreach (var domainEvent in _eventsToPublish)
+            var publisher = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IPublisher>(_serviceProvider);
+            if (publisher != null)
             {
-                await _publisher.Publish(new DomainEventNotification<DomainEvent>(domainEvent), cancellationToken);
+                foreach (var domainEvent in _eventsToPublish)
+                {
+                    await publisher.Publish(new DomainEventNotification<DomainEvent>(domainEvent), cancellationToken);
+                }
             }
             _eventsToPublish.Clear();
         }

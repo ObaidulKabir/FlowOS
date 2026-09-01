@@ -118,6 +118,10 @@ public class NotificationProjector : INotificationHandler<DomainEventNotificatio
                 "EVT-TASK-OVERDUE" => ("Task overdue", "Warning"),
                 "EVT-WORKFLOW-STUCK" => ("Workflow needs attention", "Critical"),
                 "EVT-AGENT-INSIGHT" => ("New agent insight available", "Info"),
+                "EVT-ESCALATE" => ("Task SLA breached — Workflow automatically escalated", "High"),
+                "EVT-TASK-TIMEOUT" => ("Task SLA timeout — Triggered escalation", "High"),
+                var t when t.Contains("ESCALAT", StringComparison.OrdinalIgnoreCase) => ($"Task Escalated: {t}", "High"),
+                var t when t.Contains("TIMEOUT", StringComparison.OrdinalIgnoreCase) => ($"Task Timeout: {t}", "High"),
                 _ => ($"Event: {ev.EventType}", "Info") 
             };
             if (severity == "Info") severity = defaultSeverity;

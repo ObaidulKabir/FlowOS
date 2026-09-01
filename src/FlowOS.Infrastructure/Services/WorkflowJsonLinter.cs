@@ -233,6 +233,33 @@ namespace FlowOS.Infrastructure.Services
                             }
                         }
                     }
+
+                    // SLA Linting
+                    var slaToken = step["sla"] as JObject;
+                    if (slaToken != null)
+                    {
+                        var duration = slaToken["duration"]?.Value<string>();
+                        var timeoutEvent = slaToken["timeoutEvent"]?.Value<string>();
+                        var escalationStepId = slaToken["escalationStepId"]?.Value<string>();
+
+                        if (string.IsNullOrWhiteSpace(duration))
+                        {
+                            AddError(errors, slaToken, "WF-012", $"Step '{stepId}' defines SLA without 'duration'", $"workflow.steps[{stepId}].sla", "Workflow");
+                        }
+                        if (string.IsNullOrWhiteSpace(timeoutEvent))
+                        {
+                            AddError(errors, slaToken, "WF-013", $"Step '{stepId}' defines SLA without 'timeoutEvent'", $"workflow.steps[{stepId}].sla", "Workflow");
+                        }
+                        else if (!declaredEvents.Contains(timeoutEvent))
+                        {
+                            AddError(errors, slaToken["timeoutEvent"] ?? slaToken, "WF-007", $"SLA timeout event '{timeoutEvent}' is not declared in events", $"workflow.steps[{stepId}].sla.timeoutEvent", "Workflow");
+                        }
+
+                        if (!string.IsNullOrEmpty(escalationStepId) && escalationStepId != "END" && !stepIds.Contains(escalationStepId))
+                        {
+                            AddError(errors, slaToken["escalationStepId"] ?? slaToken, "WF-008", $"SLA escalationStepId '{escalationStepId}' does not exist in steps", $"workflow.steps[{stepId}].sla.escalationStepId", "Workflow");
+                        }
+                    }
                 }
             }
 

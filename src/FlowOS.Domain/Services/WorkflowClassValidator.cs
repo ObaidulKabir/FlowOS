@@ -198,7 +198,29 @@ public class WorkflowClassValidator
                 foreach (var nextStepId in step.Conditions.Values)
                 {
                     if (nextStepId != "END" && !stepIds.Contains(nextStepId))
-                        result.AddError("CON-004", "Consistency", $"Step '{step.StepId}' references unknown NextStep '{nextStepId}' in Conditions", "Workflow");
+                        result.AddError("CON-004", "Consistency", $"Step '{step.StepId}' Conditions references unknown NextStep '{nextStepId}'", "Workflow");
+                }
+            }
+
+            // Check Step SLA validation
+            if (step.Sla != null)
+            {
+                if (string.IsNullOrWhiteSpace(step.Sla.Duration))
+                {
+                    result.AddError("WF-SLA-001", "WorkflowSla", $"Step '{step.StepId}' defines an SLA without a Duration", "Workflow");
+                }
+                if (string.IsNullOrWhiteSpace(step.Sla.TimeoutEvent))
+                {
+                    result.AddError("WF-SLA-002", "WorkflowSla", $"Step '{step.StepId}' defines an SLA without a TimeoutEvent", "Workflow");
+                }
+                else if (!declaredEvents.Contains(step.Sla.TimeoutEvent))
+                {
+                    result.AddError("CON-005", "Consistency", $"Step '{step.StepId}' SLA references undeclared timeout event '{step.Sla.TimeoutEvent}'", "Workflow");
+                }
+
+                if (!string.IsNullOrEmpty(step.Sla.EscalationStepId) && step.Sla.EscalationStepId != "END" && !stepIds.Contains(step.Sla.EscalationStepId))
+                {
+                    result.AddError("CON-004", "Consistency", $"Step '{step.StepId}' SLA references unknown EscalationStepId '{step.Sla.EscalationStepId}'", "Workflow");
                 }
             }
         }

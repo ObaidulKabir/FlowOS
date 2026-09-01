@@ -18,4 +18,6 @@ public interface IWorkflowTimerService
         Guid workflowInstanceId,
         string stepId,
         CancellationToken cancellationToken = default);
+
+    Task<int> ExecuteDueTimersAsync(CancellationToken cancellationToken = default);
 }

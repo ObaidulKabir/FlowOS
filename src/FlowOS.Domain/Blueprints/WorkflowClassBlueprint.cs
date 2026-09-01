@@ -57,6 +57,18 @@ public record StepBlueprint
     
     // For Decision steps: Condition -> NextStepId
     public Dictionary<string, string> Conditions { get; init; } = new();
+
+    // Declarative Step SLA & Boundary Timer
+    public StepSlaBlueprint? Sla { get; init; }
+}
+
+public record StepSlaBlueprint
+{
+    public string Duration { get; init; } = string.Empty;
+    public string TimeoutEvent { get; init; } = string.Empty;
+    public string? EscalationStepId { get; init; }
+    public string? EscalationRole { get; init; }
+    public bool IsInterrupting { get; init; } = true;
 }
 
 // Governance Declarations

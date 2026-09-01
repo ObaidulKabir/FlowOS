@@ -36,7 +36,13 @@ public static class WorkflowClassCompiler
             {
                 AllowedRoles = stepBp.RequiredRoles,
                 NextSteps = stepBp.NextSteps,
-                Conditions = stepBp.Conditions
+                Conditions = stepBp.Conditions,
+                Sla = stepBp.Sla != null ? new StepSlaDefinition(
+                    stepBp.Sla.Duration,
+                    stepBp.Sla.TimeoutEvent,
+                    stepBp.Sla.EscalationStepId,
+                    stepBp.Sla.EscalationRole,
+                    stepBp.Sla.IsInterrupting) : null
             };
             def.AddStep(stepDef);
         }

@@ -21,10 +21,12 @@ public class Workflow_Timer_Tests : IClassFixture<WebApplicationFactory<Program>
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
     private readonly Guid _tenantId = Guid.Parse("77777777-7777-7777-7777-777777777777");
 
-    public Workflow_Timer_Tests(WebApplicationFactory<Program> factory)
+    public Workflow_Timer_Tests(WebApplicationFactory<Program> factory, Xunit.Abstractions.ITestOutputHelper output)
     {
+        _output = output;
         _factory = factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
@@ -57,7 +59,7 @@ public class Workflow_Timer_Tests : IClassFixture<WebApplicationFactory<Program>
     public async Task Scenario_WorkflowWithTimerStep_Pauses_And_Resumes_When_Timer_Fires()
     {
         // 1. Setup Definitions
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = _factory.Server.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
             
@@ -134,7 +136,7 @@ public class Workflow_Timer_Tests : IClassFixture<WebApplicationFactory<Program>
         Assert.Equal("AutoDelay", workflowState.CurrentStepId);
 
         // 5. Verify Timer Job is scheduled in the DB
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = _factory.Server.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
             var timerJob = await db.WorkflowTimerJobs.FirstOrDefaultAsync(t => t.WorkflowInstanceId == workflowId && t.StepId == "AutoDelay");
@@ -152,6 +154,12 @@ public class Workflow_Timer_Tests : IClassFixture<WebApplicationFactory<Program>
         {
             await Task.Delay(500);
             elapsedMs += 500;
+
+            using (var scope = _factory.Server.Services.CreateScope())
+            {
+                var timerService = scope.ServiceProvider.GetRequiredService<FlowOS.Application.Common.Interfaces.IWorkflowTimerService>();
+                await timerService.ExecuteDueTimersAsync();
+            }
 
             var state = await _client.GetFromJsonAsync<WorkflowStateDto>($"/api/workflows/{workflowId}");
             if (state?.Status == "Completed")

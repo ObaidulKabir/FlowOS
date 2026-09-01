@@ -171,7 +171,19 @@ public static class McpToolSchemas
                       "stepType":{"type":"string","enum":["Command","SystemTask","HumanTask","Timer","Decision","End"]},
                       "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
                       "requiredRoles":{"type":"array","items":{"type":"string"}},
-                      "conditions":{"type":"object","additionalProperties":{"type":"string"}}
+                      "conditions":{"type":"object","additionalProperties":{"type":"string"}},
+                      "sla":{
+                        "type":"object",
+                        "required":["duration","timeoutEvent"],
+                        "properties":{
+                          "duration":{"type":"string","minLength":1},
+                          "timeoutEvent":{"type":"string","minLength":1},
+                          "escalationStepId":{"type":"string"},
+                          "escalationRole":{"type":"string"},
+                          "isInterrupting":{"type":"boolean"}
+                        },
+                        "additionalProperties":false
+                      }
                     },
                     "additionalProperties":false
                   }

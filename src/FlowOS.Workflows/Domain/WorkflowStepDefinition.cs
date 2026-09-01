@@ -19,6 +19,9 @@ public class WorkflowStepDefinition
     // Value: NextStepId
     public Dictionary<string, string> Conditions { get; set; } = new();
 
+    // Declarative Step SLA / Boundary Timer & Escalation
+    public StepSlaDefinition? Sla { get; set; }
+
     public WorkflowStepDefinition() { }
 
     public WorkflowStepDefinition(string stepId, WorkflowStepType type)

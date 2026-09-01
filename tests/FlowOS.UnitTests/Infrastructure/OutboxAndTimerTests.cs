@@ -30,7 +30,9 @@ public class OutboxAndTimerTests
     public async Task EventPublishingInterceptor_Creates_OutboxMessage_On_Event_Save()
     {
         var mockPublisher = new Mock<IPublisher>();
-        var interceptor = new EventPublishingInterceptor(mockPublisher.Object);
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        mockServiceProvider.Setup(sp => sp.GetService(typeof(IPublisher))).Returns(mockPublisher.Object);
+        var interceptor = new EventPublishingInterceptor(mockServiceProvider.Object);
 
         var options = new DbContextOptionsBuilder<FlowOSDbContext>()
             .UseInMemoryDatabase("FlowOS_Outbox_Test_" + Guid.NewGuid())
@@ -62,7 +64,8 @@ public class OutboxAndTimerTests
             .Options;
 
         using var db = new FlowOSDbContext(options);
-        var timerService = new WorkflowTimerService(db, NullLogger<WorkflowTimerService>.Instance);
+        var serviceProvider = new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider();
+        var timerService = new WorkflowTimerService(db, serviceProvider, NullLogger<WorkflowTimerService>.Instance);
 
         var instanceId = Guid.NewGuid();
         var duration = TimeSpan.FromSeconds(30);

@@ -256,10 +256,16 @@ public class WorkflowCommandHandlers :
             }
         }
 
+        var previousStepId = instance.CurrentStepId;
         var result = _engine.Advance(instance, definition, domainEvent, context);
 
         if (result.Success)
         {
+            if (_timerService != null && !string.IsNullOrEmpty(previousStepId))
+            {
+                await _timerService.CancelTimerAsync(instance.Id, previousStepId, cancellationToken);
+            }
+
             _unitOfWork.Events.Add(domainEvent);
             RunAutoAdvance(instance, definition, request.TenantId, context);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
@@ -293,10 +299,16 @@ public class WorkflowCommandHandlers :
         }
 
         var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        var previousStepId = instance.CurrentStepId;
         var result = _engine.Advance(instance, definition, domainEvent, context);
 
         if (result.Success)
         {
+            if (_timerService != null && !string.IsNullOrEmpty(previousStepId))
+            {
+                await _timerService.CancelTimerAsync(instance.Id, previousStepId, cancellationToken);
+            }
+
             _unitOfWork.Events.Add(domainEvent);
             RunAutoAdvance(instance, definition, request.TenantId, context);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
@@ -335,23 +347,81 @@ public class WorkflowCommandHandlers :
         CancellationToken cancellationToken = default)
     {
         if (_timerService == null) return;
+        if (instance.Status != FlowOS.Workflows.Enums.WorkflowInstanceStatus.Waiting &&
+            instance.Status != FlowOS.Workflows.Enums.WorkflowInstanceStatus.Running)
+        {
+            return;
+        }
 
         var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
-        if (currentStep != null && currentStep.StepType == FlowOS.Workflows.Enums.WorkflowStepType.Timer)
+        if (currentStep == null) return;
+
+        // 1. Standalone Timer Step
+        if (currentStep.StepType == FlowOS.Workflows.Enums.WorkflowStepType.Timer)
         {
             var triggerEvent = currentStep.NextSteps.Keys.FirstOrDefault() ?? "Default";
-            var duration = TimeSpan.FromSeconds(5); // Default 5s
-
-            if (currentStep.Conditions.TryGetValue("Duration", out var durStr) ||
-                currentStep.Conditions.TryGetValue("duration", out durStr))
-            {
-                if (int.TryParse(durStr, out var secs))
-                    duration = TimeSpan.FromSeconds(secs);
-                else if (TimeSpan.TryParse(durStr, out var ts))
-                    duration = ts;
-            }
+            var durStr = currentStep.Conditions.TryGetValue("Duration", out var d) ? d :
+                         currentStep.Conditions.TryGetValue("duration", out d) ? d : null;
+            var duration = ParseDuration(durStr);
 
             await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+        }
+        // 2. Declarative Step SLA & Boundary Timer
+        else if (currentStep.Sla != null)
+        {
+            var triggerEvent = currentStep.Sla.TimeoutEvent;
+            var duration = ParseDuration(currentStep.Sla.Duration);
+
+            await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+        }
+    }
+
+    private TimeSpan ParseDuration(string? durationStr)
+    {
+        if (string.IsNullOrWhiteSpace(durationStr))
+            return TimeSpan.FromSeconds(5);
+
+        durationStr = durationStr.Trim();
+
+        if (durationStr.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var seconds))
+        {
+            return TimeSpan.FromSeconds(seconds);
+        }
+        if (durationStr.EndsWith("m", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var minutes))
+        {
+            return TimeSpan.FromMinutes(minutes);
+        }
+        if (durationStr.EndsWith("h", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var hours))
+        {
+            return TimeSpan.FromHours(hours);
+        }
+        if (durationStr.EndsWith("d", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var days))
+        {
+            return TimeSpan.FromDays(days);
+        }
+
+        // Raw numbers (e.g. "1", "10") are seconds
+        if (double.TryParse(durationStr, out var rawSecs))
+        {
+            return TimeSpan.FromSeconds(rawSecs);
+        }
+
+        if (durationStr.Contains(':') && TimeSpan.TryParse(durationStr, out var ts))
+        {
+            return ts;
+        }
+
+        try
+        {
+            return System.Xml.XmlConvert.ToTimeSpan(durationStr);
+        }
+        catch
+        {
+            return TimeSpan.FromSeconds(5);
         }
     }
 }

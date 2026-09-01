@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FlowOS.Application.Commands;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -55,43 +56,10 @@ public class WorkflowTimerProcessorService : BackgroundService
     private async Task ProcessDueTimersAsync(CancellationToken cancellationToken)
     {
         using var scope = _serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
-        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-
-        var now = DateTime.UtcNow;
-        var dueJobs = await dbContext.WorkflowTimerJobs
-            .Where(t => !t.IsProcessed && t.DueTimeUtc <= now)
-            .OrderBy(t => t.DueTimeUtc)
-            .Take(50)
-            .ToListAsync(cancellationToken);
-
-        if (!dueJobs.Any()) return;
-
-        foreach (var job in dueJobs)
+        var timerService = scope.ServiceProvider.GetService<IWorkflowTimerService>();
+        if (timerService != null)
         {
-            try
-            {
-                _logger.LogInformation("Triggering due timer {JobId} for workflow {WorkflowId} with event {EventType}",
-                    job.Id, job.WorkflowInstanceId, job.TriggerEventType);
-
-                var command = new PublishEventCommand(
-                    job.TenantId,
-                    job.WorkflowInstanceId,
-                    job.TriggerEventType,
-                    null
-                );
-
-                await mediator.Send(command, cancellationToken);
-                job.MarkAsProcessed();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to execute due timer {JobId} for workflow {WorkflowId}", job.Id, job.WorkflowInstanceId);
-                // Mark processed to avoid infinite loop on failed invalid workflow states
-                job.MarkAsProcessed();
-            }
+            await timerService.ExecuteDueTimersAsync(cancellationToken);
         }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

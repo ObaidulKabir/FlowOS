@@ -28,6 +28,7 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
         builder.OwnsMany(w => w.Steps, step =>
         {
             step.ToJson();
+            step.OwnsOne(s => s.Sla);
             
             // Map the dictionary explicitly for JSON serialization
             step.Property(s => s.NextSteps)

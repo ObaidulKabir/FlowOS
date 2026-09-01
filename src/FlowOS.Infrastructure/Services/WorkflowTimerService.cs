@@ -13,11 +13,16 @@ namespace FlowOS.Infrastructure.Services;
 public class WorkflowTimerService : IWorkflowTimerService
 {
     private readonly FlowOSDbContext _dbContext;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<WorkflowTimerService> _logger;
 
-    public WorkflowTimerService(FlowOSDbContext dbContext, ILogger<WorkflowTimerService> logger)
+    public WorkflowTimerService(
+        FlowOSDbContext dbContext,
+        IServiceProvider serviceProvider,
+        ILogger<WorkflowTimerService> logger)
     {
         _dbContext = dbContext;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -60,5 +65,52 @@ public class WorkflowTimerService : IWorkflowTimerService
             _logger.LogInformation("Cancelled {Count} active timer jobs for instance {InstanceId}, step '{StepId}'",
                 activeJobs.Count, workflowInstanceId, stepId);
         }
+    }
+
+    public async Task<int> ExecuteDueTimersAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var dueJobs = await _dbContext.WorkflowTimerJobs
+            .Where(t => !t.IsProcessed && t.DueTimeUtc <= now)
+            .OrderBy(t => t.DueTimeUtc)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        if (!dueJobs.Any()) return 0;
+
+        var executedCount = 0;
+        foreach (var job in dueJobs)
+        {
+            try
+            {
+                _logger.LogInformation("Triggering due timer {JobId} for workflow {WorkflowId} with event {EventType}",
+                    job.Id, job.WorkflowInstanceId, job.TriggerEventType);
+
+                var command = new FlowOS.Application.Commands.PublishEventCommand(
+                    job.TenantId,
+                    job.WorkflowInstanceId,
+                    job.TriggerEventType,
+                    null
+                );
+
+                var mediator = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<MediatR.IMediator>(_serviceProvider);
+                if (mediator != null)
+                {
+                    await mediator.Send(command, cancellationToken);
+                }
+
+                job.MarkAsProcessed();
+                executedCount++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[TimerService Exception]: {ex}");
+                _logger.LogWarning(ex, "Failed to execute due timer {JobId} for workflow {WorkflowId}", job.Id, job.WorkflowInstanceId);
+                job.MarkAsProcessed();
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return executedCount;
     }
 }
