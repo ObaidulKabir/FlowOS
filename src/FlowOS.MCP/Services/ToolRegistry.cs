@@ -4,12 +4,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace FlowOS.MCP.Services
 {
     public class ToolRegistry : IToolRegistry
     {
         private readonly Dictionary<string, (McpTool Tool, Func<JObject, Task<CallToolResult>> Handler)> _tools = new();
+        private readonly ILogger<ToolRegistry> _logger;
+
+        public ToolRegistry(ILogger<ToolRegistry> logger)
+        {
+            _logger = logger;
+        }
 
         public void Register(string name, string description, object schema, Func<JObject, Task<CallToolResult>> handler)
         {
@@ -30,15 +37,13 @@ namespace FlowOS.MCP.Services
             return _tools.Values.Select(x => x.Tool);
         }
 
+        public bool Contains(string name) => _tools.ContainsKey(name);
+
         public async Task<CallToolResult> ExecuteAsync(string name, JObject arguments)
         {
             if (!_tools.TryGetValue(name, out var entry))
             {
-                return new CallToolResult 
-                { 
-                    IsError = true, 
-                    Content = new List<ToolContent> { new ToolContent { Text = $"Tool '{name}' not found." } } 
-                };
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Tool '{name}' was not found.");
             }
 
             try
@@ -47,11 +52,8 @@ namespace FlowOS.MCP.Services
             }
             catch (Exception ex)
             {
-                return new CallToolResult 
-                { 
-                    IsError = true, 
-                    Content = new List<ToolContent> { new ToolContent { Text = $"Error executing tool '{name}': {ex.Message}\n{ex.StackTrace}" } } 
-                };
+                _logger.LogError(ex, "Unhandled exception executing MCP tool {ToolName}", name);
+                return McpToolResults.Fail("MCP-INTERNAL", "The tool failed unexpectedly.");
             }
         }
     }

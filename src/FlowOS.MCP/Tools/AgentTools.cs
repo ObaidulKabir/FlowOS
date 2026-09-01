@@ -2,6 +2,7 @@ using FlowOS.Agents.Abstractions;
 using FlowOS.Agents.Implementations;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.MCP.Models;
+using FlowOS.MCP.Services;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.Tools;
@@ -28,13 +29,7 @@ public class AgentTools
             }
         };
 
-        return Task.FromResult(new CallToolResult
-        {
-            Content = new List<ToolContent>
-            {
-                new ToolContent { Type = "text", Text = JObject.FromObject(new { agents }).ToString() }
-            }
-        });
+        return Task.FromResult(McpToolResults.Success(new { agents }));
     }
 
     public async Task<CallToolResult> SuggestAgentAction(JObject args)
@@ -45,70 +40,66 @@ public class AgentTools
             var agentId = args["agentId"]?.ToString();
 
             if (string.IsNullOrEmpty(instanceIdStr) || !Guid.TryParse(instanceIdStr, out var instanceId))
-                return Error("Valid WorkflowInstanceId is required");
+                return McpToolResults.Fail("MCP-ARG-002", "workflowInstanceId must be a valid UUID.");
 
             if (string.IsNullOrEmpty(agentId))
-                return Error("AgentId is required");
+                return McpToolResults.Fail("MCP-ARG-001", "agentId is required.");
 
-            var instance = await _unitOfWork.WorkflowInstances.GetByIdAsNoTrackingAsync(instanceId);
-            if (instance == null) return Error("WorkflowInstance not found");
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var instance = await _unitOfWork.WorkflowInstances.GetByIdAsNoTrackingAsync(instanceId, tenantId);
+            if (instance == null) return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowInstance not found.");
 
             IWorkflowAgent? agent = agentId == "RiskAnalysisAgent" ? new RiskAnalysisAgent() : null;
-            if (agent == null) return Error($"Agent '{agentId}' not found");
+            if (agent == null) return McpToolResults.Fail("MCP-NOTFOUND-001", $"Agent '{agentId}' not found.");
 
-            var payload = new Dictionary<string, object>
-            {
-                { "Amount", 6000 },
-                { "Category", "Travel" }
-            };
+            // ---- New: optional objective ----
+            var objective = args["objective"]?.ToString() ?? "Analyze workflow instance";
 
+            // ---- New: fetch and order events ----
             var events = await _unitOfWork.Events.ListByCorrelationIdAsync(instanceId);
-            var lastEvent = events.OrderByDescending(e => e.Timestamp).FirstOrDefault();
+            var orderedEvents = events.OrderBy(e => e.Timestamp).ToList();
 
-            if (lastEvent != null && lastEvent.Metadata.ContainsKey("Payload"))
+            // ---- New: aggregate payload from all events (last-write-wins) ----
+            var payload = new Dictionary<string, object>();
+            foreach (var ev in orderedEvents)
             {
+                if (!ev.Metadata.ContainsKey("Payload")) continue;
                 try
                 {
-                    var json = lastEvent.Metadata["Payload"]?.ToString();
-                    var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(json ?? "");
-                    if (dict != null) payload = dict;
+                    var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(ev.Metadata["Payload"]?.ToString() ?? "");
+                    if (dict != null)
+                    {
+                        foreach (var kv in dict)
+                            payload[kv.Key] = kv.Value; // overwrite with later values
+                    }
                 }
-                catch
-                {
-                    /* Ignore parsing error */
-                }
+                catch { /* ignore malformed payloads */ }
+            }
+
+            if (payload.Count == 0)
+            {
+                return McpToolResults.Fail("MCP-NODATA-001", "No payload data found in the event history for this workflow instance.");
             }
 
             var context = new AgentContext(
                 instance.TenantId,
                 payload,
                 instance.CurrentStepId,
-                new List<FlowOS.Events.Abstractions.IEvent>(),
-                "Analyze for MCP"
+                orderedEvents,
+                objective
             );
 
             var result = await agent.ExecuteAsync(context);
 
-            return new CallToolResult
-            {
-                Content = new List<ToolContent>
-                {
-                    new ToolContent { Type = "text", Text = JObject.FromObject(result).ToString() }
-                }
-            };
+            return McpToolResults.Success(result);
         }
-        catch (Exception ex)
+        catch (McpToolException ex)
         {
-            return Error($"Agent execution failed: {ex.Message}");
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Agent execution failed.");
         }
     }
-
-    private static CallToolResult Error(string message) => new()
-    {
-        IsError = true,
-        Content = new List<ToolContent>
-        {
-            new ToolContent { Type = "text", Text = message }
-        }
-    };
 }

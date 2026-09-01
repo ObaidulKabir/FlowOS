@@ -18,12 +18,16 @@ Communicates over **stdio** (`stdin`/`stdout`) using JSON-RPC 2.0. Logging goes 
 # PowerShell
 $env:MCP_TRANSPORT="http"
 $env:ASPNETCORE_URLS="http://0.0.0.0:8080"
+$env:MCP_API_KEY="replace-with-a-long-random-secret"
+$env:MCP_ROLE="Admin"
+$env:MCP_ALLOWED_ORIGINS="https://your-browser-client.example"
 dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
 ```
 
 ```bash
 # bash
 MCP_TRANSPORT=http ASPNETCORE_URLS=http://0.0.0.0:8080 \
+MCP_API_KEY=replace-with-a-long-random-secret MCP_ROLE=Admin \
   dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
 ```
 
@@ -32,10 +36,14 @@ Endpoints:
 | Method | Path | Behavior |
 |--------|------|----------|
 | `POST` | `/mcp` | JSON-RPC body → `application/json` response (or `202` for notifications) |
-| `GET` | `/mcp` | `405` (no standalone SSE listen stream) |
+| `GET` | `/mcp` | `405` with `Allow: POST` (no standalone SSE listen stream) |
 | `GET` | `/health` | `200` `{ "status": "ok" }` |
 
-Optional headers (same mock auth style as the API): `x-tenant-id`, `X-Mock-Role`.
+Every `/mcp` request requires `X-MCP-API-Key` and a valid `x-tenant-id`.
+After initialization, requests also require `MCP-Protocol-Version: 2025-03-26`.
+The service role comes only from `MCP_ROLE`; caller-supplied role headers are ignored.
+Browser origins are rejected unless listed (comma-separated) in `MCP_ALLOWED_ORIGINS`;
+native clients that omit `Origin` are allowed. `/health` remains unauthenticated.
 
 Smoke test:
 
@@ -45,11 +53,16 @@ curl -s http://localhost:8080/health
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
+  -H "X-MCP-API-Key: replace-with-a-long-random-secret" \
+  -H "x-tenant-id: 11111111-1111-1111-1111-111111111111" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
 
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
+  -H "X-MCP-API-Key: replace-with-a-long-random-secret" \
+  -H "x-tenant-id: 11111111-1111-1111-1111-111111111111" \
+  -H "MCP-Protocol-Version: 2025-03-26" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
 
@@ -59,13 +72,20 @@ Cursor remote MCP example (`mcp.json`):
 {
   "mcpServers": {
     "flowos": {
-      "url": "http://localhost:8080/mcp"
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "X-MCP-API-Key": "replace-with-a-long-random-secret",
+        "x-tenant-id": "11111111-1111-1111-1111-111111111111"
+      }
     }
   }
 }
 ```
 
-Docker Compose runs MCP in HTTP mode by default (`MCP_TRANSPORT=http`, port **8081→8080** locally; Traefik `PathPrefix(/mcp)` in `docker-compose.test.yaml`).
+Docker Compose runs MCP in HTTP mode by default (port **8081→8080** locally;
+Traefik `PathPrefix(/mcp)` in `docker-compose.test.yaml`). Set `MCP_API_KEY` and
+`MCP_ROLE` in the deployment environment before running Compose. Set
+`MCP_ALLOWED_ORIGINS` only when browser clients are used; do not commit secrets.
 
 If no `ConnectionStrings:DefaultConnection` is configured, MCP falls back to an in-memory database (`FlowOS_MCP_Db`) — separate from the API's own in-memory instance.
 
@@ -92,20 +112,30 @@ Earlier internal design documents for this project described an aspirational rul
 
 **When citing a rejected design to a human or another agent, use the real codes from [Chapter 9](09-workflow-class-governance.md#validation-rules--verified-against-workflowclassvalidatorvalidate-the-actual-error-codes-it-emits), not the principle names above** — the principle names don't appear anywhere in an actual `ValidateOnly`/`Publish` API response.
 
-## MCP tool reference — verified against `FlowOS.MCP.Program.RegisterTools()`
+## MCP tool reference — verified against `ToolRegistration.RegisterAll()`
+
+`tools/list` is self-describing: every tool advertises its canonical input
+schema plus behavioral constraints, result shape, stable error codes, and a
+compact JSON input example. Successful tool content uses
+`{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
+return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
 | Tool name | Arguments | Implementation | Description |
 |---|---|---|---|
 | `describe_workflowclass_schema` | _none_ | `InfoTools.DescribeSchema` | Returns a JSON schema aligned with `WorkflowClassBlueprint` (`EventId`, Roles/Capabilities, real StepTypes). |
-| `list_public_workflowclasses` | `tenantId` (opt) | `InfoTools.ListPublic` | Lists `{ id, name, version }` for every `Public`-scope WorkflowClass (via Application MediatR/UoW). |
+| `list_public_workflowclasses` | `tenantId` (stdio) | `InfoTools.ListPublic` | Lists `{ id, name, version }` for every `Public`-scope WorkflowClass (via Application MediatR/UoW). |
 | `list_available_agents` | _none_ | `AgentTools.ListAvailableAgents` | Lists registered runtime agents (currently hardcoded: `RiskAnalysisAgent`) and their capabilities. |
-| `suggest_agent_action` | `workflowInstanceId`, `agentId` | `AgentTools.SuggestAgentAction` | Runs a real `IWorkflowAgent` against a workflow instance's latest event payload (or a simulated payload if none exists) and returns its `SuggestedAction`. |
+| `suggest_agent_action` | `workflowInstanceId`, `agentId`, `tenantId` (stdio) | `AgentTools.SuggestAgentAction` | Runs a real `IWorkflowAgent` against a tenant-scoped workflow instance's latest event payload (or a simulated payload if none exists) and returns its `SuggestedAction`. |
 | `explain_validation_violation` | `code`, `context` (json) | `AnalysisTools.ExplainValidationViolation` | Explains real `WorkflowClassValidator` codes (`STR-*`, `CON-*`, `WF-COMP-*`, `GOV-001`, etc.). |
-| `lint_draft_workflowclass` | `id`, `tenantId` (opt) | `AnalysisTools.LintDraftWorkflowClass` | Advisory, non-blocking lint: orphaned events, excessive state count (>15), overly short Step IDs. |
+| `lint_draft_workflowclass` | `id`, `tenantId` (stdio) | `AnalysisTools.LintDraftWorkflowClass` | Tenant-scoped advisory lint: orphaned events, excessive state count (>15), overly short Step IDs. |
 | `create_draft_workflowclass` | `name`, `version`, `blueprint`, `tenantId` | `GovernanceTools.CreateDraft` | Creates a new Draft via `CreateWorkflowClassCommand`. **Fails if authoritative validation fails.** |
 | `update_draft_workflowclass` | `id`, `blueprint`, `tenantId`, `name`/`version` (opt) | `GovernanceTools.UpdateDraft` | Updates an existing Draft via `UpdateWorkflowClassCommand`. **Requires `tenantId`.** |
 | `validate_draft_workflowclass` | `id`, `tenantId` | `GovernanceTools.ValidateDraft` | Runs authoritative validation without modifying anything. **Requires `tenantId`.** |
 | `fork_public_workflowclass` | `publicId`, `tenantId` | `GovernanceTools.ForkPublic` | Creates a private Draft copy of a `Public` template via `CopyWorkflowClassCommand`. |
+
+For HTTP, the authenticated `x-tenant-id` header is authoritative. A `tenantId`
+tool argument may repeat that value but cannot override it. For stdio, every
+tenant-scoped tool requires an explicit `tenantId` argument.
 
 ## Usage example: design loop for "Leave Approval"
 

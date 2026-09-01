@@ -1,17 +1,18 @@
-using FlowOS.Application.Common.Interfaces.Persistence;
+using FlowOS.Application.Queries.Governance;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
+using MediatR;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.Tools;
 
 public class AnalysisTools
 {
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IMediator _mediator;
 
-    public AnalysisTools(IUnitOfWork unitOfWork)
+    public AnalysisTools(IMediator mediator)
     {
-        _unitOfWork = unitOfWork;
+        _mediator = mediator;
     }
 
     public Task<CallToolResult> ExplainValidationViolation(JObject args)
@@ -21,11 +22,7 @@ public class AnalysisTools
 
         if (string.IsNullOrEmpty(code))
         {
-            return Task.FromResult(new CallToolResult
-            {
-                IsError = true,
-                Content = new List<ToolContent> { new ToolContent { Text = "Error code is required." } }
-            });
+            return Task.FromResult(McpToolResults.Fail("MCP-ARG-001", "code is required."));
         }
 
         string humanExplanation;
@@ -144,14 +141,7 @@ public class AnalysisTools
                 break;
         }
 
-        var result = new { code, humanExplanation, designHint };
-        return Task.FromResult(new CallToolResult
-        {
-            Content = new List<ToolContent>
-            {
-                new ToolContent { Type = "text", Text = JObject.FromObject(result).ToString() }
-            }
-        });
+        return Task.FromResult(McpToolResults.Success(new { code, humanExplanation, designHint }));
     }
 
     public async Task<CallToolResult> LintDraftWorkflowClass(JObject args)
@@ -159,26 +149,30 @@ public class AnalysisTools
         var idStr = args["id"]?.ToString();
         if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
         {
-            return new CallToolResult
-            {
-                IsError = true,
-                Content = new List<ToolContent> { new ToolContent { Text = "Valid Draft ID is required." } }
-            };
+            return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
         }
 
-        var tenantIdStr = args["tenantId"]?.ToString();
-        if (Guid.TryParse(tenantIdStr, out var tenantId))
-            McpRequestContext.TenantId = tenantId;
-
-        var workflowClass = await _unitOfWork.WorkflowClasses.GetByIdAsNoTrackingAsync(id);
-        if (workflowClass == null)
+        Guid tenantId;
+        try
         {
-            return new CallToolResult
-            {
-                IsError = true,
-                Content = new List<ToolContent> { new ToolContent { Text = "WorkflowClass not found." } }
-            };
+            tenantId = McpTenantResolver.ResolveRequired(args);
         }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+
+        FlowOS.Application.DTOs.Governance.WorkflowClassResponseDto? workflowClass;
+        try
+        {
+            workflowClass = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, id));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        if (workflowClass == null)
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
 
         var warnings = new List<object>();
 
@@ -243,12 +237,6 @@ public class AnalysisTools
             }
         }
 
-        return new CallToolResult
-        {
-            Content = new List<ToolContent>
-            {
-                new ToolContent { Type = "text", Text = JObject.FromObject(new { warnings }).ToString() }
-            }
-        };
+        return McpToolResults.Success(new { warnings });
     }
 }

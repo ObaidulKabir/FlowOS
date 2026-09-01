@@ -9,6 +9,7 @@ namespace FlowOS.MCP.Services
     {
         void Register(string name, string description, object schema, Func<JObject, Task<CallToolResult>> handler);
         IEnumerable<McpTool> GetTools();
+        bool Contains(string name);
         Task<CallToolResult> ExecuteAsync(string name, JObject arguments);
     }
 }

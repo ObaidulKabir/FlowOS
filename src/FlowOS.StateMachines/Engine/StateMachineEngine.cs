@@ -41,8 +41,33 @@ public class StateMachineEngine
             }
         }
 
-        // 3. Constraint Validation (Placeholder for Part B)
-        // This is where Role/Policy checks will hook in later.
+        // 3. Constraint Validation
+        if (transition.Constraints != null)
+        {
+            foreach (var constraint in transition.Constraints)
+            {
+                if (constraint.Key == "Expression")
+                {
+                    if (!ExpressionEvaluator.Evaluate(constraint.Value, context.Payload))
+                    {
+                        return TransitionResult.Denied($"State Machine constraint violation: Expression '{constraint.Value}' evaluated to false.");
+                    }
+                }
+                else if (constraint.Key == "Role")
+                {
+                    if (!context.Metadata.TryGetValue("Roles", out var rolesObj) || rolesObj == null)
+                    {
+                        return TransitionResult.Denied($"State Machine constraint violation: Role '{constraint.Value}' is required, but no roles were provided in context.");
+                    }
+
+                    var roles = rolesObj as System.Collections.Generic.IEnumerable<string>;
+                    if (roles == null || !roles.Contains(constraint.Value))
+                    {
+                        return TransitionResult.Denied($"State Machine constraint violation: Required role '{constraint.Value}' is missing.");
+                    }
+                }
+            }
+        }
         
         return TransitionResult.Allowed(transition);
     }

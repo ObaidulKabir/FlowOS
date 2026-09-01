@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="System.Linq.Dynamic.Core" Version="1.7.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
     <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />

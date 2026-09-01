@@ -16,17 +16,25 @@ namespace FlowOS.MCP.Server
         private readonly TextWriter _output;
 
         public McpServer(IMcpJsonRpcDispatcher dispatcher)
+            : this(dispatcher, Console.In, Console.Out)
+        {
+        }
+
+        public McpServer(
+            IMcpJsonRpcDispatcher dispatcher,
+            TextReader input,
+            TextWriter output)
         {
             _dispatcher = dispatcher;
-            _input = Console.In;
-            _output = Console.Out;
+            _input = input;
+            _output = output;
         }
 
         public async Task RunAsync(CancellationToken cancellationToken = default)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                string? line = await _input.ReadLineAsync();
+                string? line = await _input.ReadLineAsync(cancellationToken);
                 if (line == null) break;
 
                 try

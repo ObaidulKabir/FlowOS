@@ -1,0 +1,78 @@
+namespace FlowOS.MCP.Models;
+
+public static class McpToolDescriptions
+{
+    public static IReadOnlyDictionary<string, string> All { get; } =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["describe_workflowclass_schema"] =
+                "Returns the canonical camelCase JSON Schema for a WorkflowClass blueprint. " +
+                "Use it before creating or updating a draft. Returns: {ok:true,data:<JSON Schema>}. " +
+                "Errors: MCP-INTERNAL. Input example: {}",
+
+            ["list_public_workflowclasses"] =
+                "Lists public WorkflowClasses visible to the current tenant as id, name, and version. " +
+                "HTTP uses the authenticated x-tenant-id; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{workflowClasses:[...]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["list_available_agents"] =
+                "Lists advisory FlowOS agents and their declared capabilities; it does not execute an agent. " +
+                "Returns: {ok:true,data:{agents:[...]}}. Errors: MCP-INTERNAL. Input example: {}",
+
+            ["suggest_agent_action"] =
+                "Runs the selected advisory agent against an existing workflow instance without mutating it. " +
+                "Accepts an optional `objective` string that guides the agent's analysis. " +
+                "The instance lookup is tenant-scoped. HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:<SuggestedAction>}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NODATA-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"agentId\":\"RiskAnalysisAgent\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"objective\":\"Analyze expense\"}",
+
+            ["explain_validation_violation"] =
+                "Explains a FlowOS validator code and gives a design correction hint. The optional context object " +
+                "can contain stepId, event, state, or capability details. " +
+                "Returns: {ok:true,data:{code,humanExplanation,designHint}}. Errors: MCP-ARG-001. " +
+                "Input example: {\"code\":\"CON-001\",\"context\":{\"event\":\"EVT-APPROVE\"}}",
+
+            ["lint_draft_workflowclass"] =
+                "Performs read-only advisory linting on a tenant-visible WorkflowClass; it does not replace " +
+                "authoritative validation or modify the draft. HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{warnings:[{code,severity,message,context}]}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["create_draft_workflowclass"] =
+                "Creates a private Draft WorkflowClass after authoritative blueprint validation; it does not publish it. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"name\":\"Student Leave\",\"version\":\"1.0.0\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"blueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}",
+
+            ["update_draft_workflowclass"] =
+                "Replaces the blueprint of an existing tenant-owned Draft and optionally changes its name or version. " +
+                "The updated blueprint must pass authoritative validation; published classes cannot be edited here. " +
+                "Returns: {ok:true,data:{id,status,message}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"blueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}",
+
+            ["validate_draft_workflowclass"] =
+                "Runs authoritative validation for a tenant-owned Draft without modifying or publishing it. " +
+                "An invalid blueprint is a successful tool call with data.isValid=false and structured validation errors. " +
+                "Returns: {ok:true,data:{isValid,errors:[{code,category,message,element}]}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["fork_public_workflowclass"] =
+                "Copies a Public WorkflowClass into a new private Draft owned by the current tenant; the source is unchanged. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"publicId\":\"44444444-4444-4444-4444-444444444444\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
+        };
+
+    public static string For(string toolName) =>
+        All.TryGetValue(toolName, out var description)
+            ? description
+            : throw new ArgumentOutOfRangeException(nameof(toolName), toolName, "Unknown MCP tool.");
+}

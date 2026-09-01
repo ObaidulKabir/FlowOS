@@ -209,37 +209,10 @@ public class WorkflowEngine : IWorkflowEngine
         return WorkflowAdvanceResult.Advanced(nextStepId);
     }
 
-    // Helper for Naive Evaluation (Replace with real CEL later)
+    // Evaluates complex conditions using System.Linq.Dynamic.Core
     private bool EvaluateCondition(string expression, Dictionary<string, object> payload)
     {
-        // Support simple "Key > Value"
-        // e.g. "Amount > 100"
-
-        var parts = expression.Split(' ');
-        if (parts.Length != 3) return false; // Only support simple binary
-
-        var key = parts[0];
-        var op = parts[1];
-        var valStr = parts[2];
-
-        if (!payload.ContainsKey(key)) return false;
-
-        var val = payload[key];
-
-        if (double.TryParse(val.ToString(), out var numVal) && double.TryParse(valStr, out var compareVal))
-        {
-            return op switch
-            {
-                ">" => numVal > compareVal,
-                "<" => numVal < compareVal,
-                ">=" => numVal >= compareVal,
-                "<=" => numVal <= compareVal,
-                "==" => numVal == compareVal,
-                _ => false
-            };
-        }
-
-        return false;
+        return ExpressionEvaluator.Evaluate(expression, payload);
     }
 
     // Helper list wrapper

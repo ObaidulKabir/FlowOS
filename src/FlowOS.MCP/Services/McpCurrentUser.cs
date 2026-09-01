@@ -12,6 +12,7 @@ public static class McpRequestContext
 {
     private static readonly AsyncLocal<Guid> TenantIdCurrent = new();
     private static readonly AsyncLocal<string?> RoleCurrent = new();
+    private static readonly AsyncLocal<bool> AuthenticatedTransportCurrent = new();
 
     public static Guid TenantId
     {
@@ -24,24 +25,34 @@ public static class McpRequestContext
         get => RoleCurrent.Value;
         set => RoleCurrent.Value = value;
     }
+
+    public static bool IsAuthenticatedTransport
+    {
+        get => AuthenticatedTransportCurrent.Value;
+        set => AuthenticatedTransportCurrent.Value = value;
+    }
+
+    public static void Clear()
+    {
+        TenantIdCurrent.Value = Guid.Empty;
+        RoleCurrent.Value = null;
+        AuthenticatedTransportCurrent.Value = false;
+    }
 }
 
 public class McpCurrentUser : ICurrentUser
 {
     public string? Id => "mcp-agent";
 
-    public Guid TenantId => McpRequestContext.TenantId == Guid.Empty
-        ? Guid.Parse("11111111-1111-1111-1111-111111111111")
-        : McpRequestContext.TenantId;
+    public Guid TenantId => McpRequestContext.TenantId;
 
     public List<string> Roles
     {
         get
         {
-            var role = string.IsNullOrWhiteSpace(McpRequestContext.Role)
-                ? "Admin"
-                : McpRequestContext.Role!;
-            return new List<string> { role };
+            return string.IsNullOrWhiteSpace(McpRequestContext.Role)
+                ? new List<string>()
+                : new List<string> { McpRequestContext.Role! };
         }
     }
 }

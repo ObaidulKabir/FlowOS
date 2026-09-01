@@ -49,6 +49,9 @@ services:
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
       - MCP_TRANSPORT=http
+      - MCP_API_KEY=${MCP_API_KEY:?MCP_API_KEY is required}
+      - MCP_ROLE=${MCP_ROLE:?MCP_ROLE is required}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
     labels:

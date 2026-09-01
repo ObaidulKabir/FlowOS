@@ -42,6 +42,12 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 ## MCP "Read Gap" — partially closed, not fully
 
 * As of this writing, MCP still has no `get_workflowclass(id)` tool to read back an existing (non-public) WorkflowClass, and no diagnostic/runtime-observability tools. Full detail: [Chapter 13](13-mcp-and-ai-agent-integration.md#gap-analysis--updated).
+* The earlier transport-safety gaps are resolved: all 10 tools publish canonical
+  schemas, HTTP requires API-key authentication and an authoritative tenant,
+  cross-tenant lint/agent lookups fail closed, errors are sanitized, and both
+  transports support protocol-correct JSON-RPC errors and batches. This does not
+  expand MCP into runtime mutation; execution, event publication, task completion,
+  publication, and admin mutation remain intentionally unavailable.
 
 ## Docker Compose does not publish the API's host port by default
 

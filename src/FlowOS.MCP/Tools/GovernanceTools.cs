@@ -23,29 +23,31 @@ public class GovernanceTools
         try
         {
             var name = args["name"]?.ToString();
-            var version = args["version"]?.ToString() ?? "0.1.0";
+            var version = args["version"]?.ToString() ?? "1.0.0";
             var blueprintJson = args["blueprint"] as JObject;
-            var tenantIdStr = args["tenantId"]?.ToString();
 
-            if (string.IsNullOrEmpty(name)) return Error("Name is required");
-            if (blueprintJson == null) return Error("Blueprint is required");
+            if (string.IsNullOrWhiteSpace(name)) return McpToolResults.Fail("MCP-ARG-001", "name is required.");
+            if (blueprintJson == null) return McpToolResults.Fail("MCP-ARG-001", "blueprint is required.");
 
-            var tenantId = Guid.TryParse(tenantIdStr, out var tid) ? tid : Guid.NewGuid();
-            McpRequestContext.TenantId = tenantId;
+            var tenantId = McpTenantResolver.ResolveRequired(args);
 
             var blueprint = blueprintJson.ToObject<WorkflowClassBlueprint>();
-            if (blueprint == null) return Error("Invalid blueprint format");
+            if (blueprint == null) return McpToolResults.Fail("MCP-ARG-001", "blueprint format is invalid.");
 
             var result = await _mediator.Send(new CreateWorkflowClassCommand(tenantId, name, version, blueprint));
-            return Success(new { id = result.Id, tenantId, status = "Draft", message = "Draft created successfully" });
+            return McpToolResults.Success(new { id = result.Id, tenantId, status = "Draft", message = "Draft created successfully" });
         }
         catch (WorkflowClassValidationException ex)
         {
-            return Error($"Validation Failed: {string.Join(", ", ex.ValidationResult.Errors.Select(e => $"{e.Code}: {e.Message}"))}");
+            return McpToolResults.ValidationFailed(ex.ValidationResult);
         }
-        catch (Exception ex)
+        catch (McpToolException ex)
         {
-            return Error($"Failed to create draft: {ex.Message}");
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to create draft.");
         }
     }
 
@@ -56,42 +58,43 @@ public class GovernanceTools
             var idStr = args["id"]?.ToString();
             var blueprintJson = args["blueprint"] as JObject;
 
-            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id)) return Error("Valid ID is required");
-            if (blueprintJson == null) return Error("Blueprint is required");
+            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
+                return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
+            if (blueprintJson == null) return McpToolResults.Fail("MCP-ARG-001", "blueprint is required.");
 
-            var tenantIdStr = args["tenantId"]?.ToString();
-            if (!Guid.TryParse(tenantIdStr, out var tenantId))
-                return Error("tenantId is required for update_draft_workflowclass");
-
-            McpRequestContext.TenantId = tenantId;
+            var tenantId = McpTenantResolver.ResolveRequired(args);
 
             var existing = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, id));
-            if (existing == null) return Error("WorkflowClass not found");
+            if (existing == null) return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
 
             var name = args["name"]?.ToString() ?? existing.Name;
             var version = args["version"]?.ToString() ?? existing.Version;
 
             var blueprint = blueprintJson.ToObject<WorkflowClassBlueprint>();
-            if (blueprint == null) return Error("Invalid blueprint format");
+            if (blueprint == null) return McpToolResults.Fail("MCP-ARG-001", "blueprint format is invalid.");
 
             var result = await _mediator.Send(new UpdateWorkflowClassCommand(tenantId, id, name, version, blueprint));
-            return Success(new { id = result.Id, status = result.Status.ToString(), message = "Draft updated successfully" });
+            return McpToolResults.Success(new { id = result.Id, status = result.Status.ToString(), message = "Draft updated successfully" });
         }
         catch (WorkflowClassValidationException ex)
         {
-            return Error($"Validation Failed: {string.Join(", ", ex.ValidationResult.Errors.Select(e => $"{e.Code}: {e.Message}"))}");
+            return McpToolResults.ValidationFailed(ex.ValidationResult);
         }
         catch (KeyNotFoundException)
         {
-            return Error("WorkflowClass not found");
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
         }
         catch (UnauthorizedAccessException)
         {
-            return Error("WorkflowClass is not owned by the current tenant.");
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
         }
-        catch (Exception ex)
+        catch (McpToolException ex)
         {
-            return Error($"Failed to update draft: {ex.Message}");
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to update draft.");
         }
     }
 
@@ -100,32 +103,39 @@ public class GovernanceTools
         try
         {
             var idStr = args["id"]?.ToString();
-            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id)) return Error("Valid ID is required");
+            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
+                return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
 
-            var tenantIdStr = args["tenantId"]?.ToString();
-            if (!Guid.TryParse(tenantIdStr, out var tenantId))
-                return Error("tenantId is required for validate_draft_workflowclass");
-
-            McpRequestContext.TenantId = tenantId;
+            var tenantId = McpTenantResolver.ResolveRequired(args);
 
             var result = await _mediator.Send(new ValidateWorkflowClassCommand(tenantId, id));
-            return Success(new
+            return McpToolResults.Success(new
             {
                 isValid = result.IsValid,
-                errors = result.Errors.Select(e => new { code = e.Code, message = e.Message })
+                errors = result.Errors.Select(e => new
+                {
+                    code = e.Code,
+                    category = e.Category,
+                    message = e.Message,
+                    element = e.Element
+                })
             });
         }
         catch (KeyNotFoundException)
         {
-            return Error("WorkflowClass not found");
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
         }
         catch (UnauthorizedAccessException)
         {
-            return Error("WorkflowClass is not owned by the current tenant.");
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
         }
-        catch (Exception ex)
+        catch (McpToolException ex)
         {
-            return Error($"Validation failed: {ex.Message}");
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Draft validation failed.");
         }
     }
 
@@ -134,45 +144,30 @@ public class GovernanceTools
         try
         {
             var publicIdStr = args["publicId"]?.ToString();
-            var tenantIdStr = args["tenantId"]?.ToString();
 
             if (string.IsNullOrEmpty(publicIdStr) || !Guid.TryParse(publicIdStr, out var publicId))
-                return Error("Valid Public ID is required");
+                return McpToolResults.Fail("MCP-ARG-002", "publicId must be a valid UUID.");
 
-            var tenantId = Guid.TryParse(tenantIdStr, out var tid) ? tid : Guid.NewGuid();
-            McpRequestContext.TenantId = tenantId;
+            var tenantId = McpTenantResolver.ResolveRequired(args);
 
             var result = await _mediator.Send(new CopyWorkflowClassCommand(tenantId, publicId, tenantId));
-            return Success(new { id = result.Id, tenantId, status = "Draft", message = $"Forked from {result.Name}" });
+            return McpToolResults.Success(new { id = result.Id, tenantId, status = "Draft", message = $"Forked from {result.Name}" });
         }
         catch (KeyNotFoundException)
         {
-            return Error("Public WorkflowClass not found");
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "Public WorkflowClass not found.");
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            return Error(ex.Message);
+            return McpToolResults.Fail("MCP-ARG-001", "WorkflowClass cannot be forked.");
         }
-        catch (Exception ex)
+        catch (McpToolException ex)
         {
-            return Error($"Fork failed: {ex.Message}");
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "WorkflowClass fork failed.");
         }
     }
-
-    private static CallToolResult Success(object data) => new()
-    {
-        Content = new List<ToolContent>
-        {
-            new ToolContent { Type = "text", Text = JObject.FromObject(data).ToString() }
-        }
-    };
-
-    private static CallToolResult Error(string message) => new()
-    {
-        IsError = true,
-        Content = new List<ToolContent>
-        {
-            new ToolContent { Type = "text", Text = message }
-        }
-    };
 }
