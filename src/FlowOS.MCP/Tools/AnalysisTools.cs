@@ -116,6 +116,16 @@ public class AnalysisTools
                 designHint = $"Add NextSteps on HumanTask '{context?["stepId"]}'.";
                 break;
 
+            // SLA / Boundary Timer validation
+            case "WF-SLA-001":
+                humanExplanation = "A step SLA definition is missing a Duration.";
+                designHint = $"Provide a valid Duration (e.g. '24h', '30m', '10s') on step '{context?["stepId"]}'.";
+                break;
+            case "WF-SLA-002":
+                humanExplanation = "A step SLA definition is missing a TimeoutEvent.";
+                designHint = $"Specify a declared TimeoutEvent (e.g. 'EVT-TIMEOUT', 'EVT-ESCALATE') on step '{context?["stepId"]}'.";
+                break;
+
             // Events / governance
             case "EVT-SCHEMA-001":
                 humanExplanation = "An event has an invalid JSON Schema in PayloadSchema.";
