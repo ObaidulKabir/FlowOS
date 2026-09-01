@@ -102,7 +102,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(10, httpNames.Length);
+        Assert.Equal(12, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);
@@ -117,6 +117,24 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"explain_validation_violation","arguments":{"code":"STR-001"}}}""");
         Assert.Equal(HttpStatusCode.OK, call.StatusCode);
         Assert.False(JObject.Parse(await call.Content.ReadAsStringAsync())["result"]?["isError"]?.Value<bool>());
+
+        var notifCall = await SendAsync(
+            $$"""
+            {
+              "jsonrpc": "2.0",
+              "id": 4,
+              "method": "tools/call",
+              "params": {
+                "name": "list_notifications",
+                "arguments": {
+                  "tenantId": "{{TenantId}}",
+                  "userId": "{{Guid.NewGuid()}}"
+                }
+              }
+            }
+            """);
+        Assert.Equal(HttpStatusCode.OK, notifCall.StatusCode);
+        Assert.False(JObject.Parse(await notifCall.Content.ReadAsStringAsync())["result"]?["isError"]?.Value<bool>());
 
         var notification = await SendAsync(
             """{"jsonrpc":"2.0","method":"notifications/initialized"}""");

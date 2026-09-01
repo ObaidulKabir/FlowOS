@@ -10,6 +10,32 @@ public static class McpToolSchemas
     public static JObject TenantOptional() => JObject.Parse(
         """{"type":"object","properties":{"tenantId":{"type":"string","format":"uuid"}},"additionalProperties":false}""");
 
+    public static JObject ListNotifications() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"},
+            "userId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject MarkNotificationAsRead() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["id"],
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"},
+            "userId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject SuggestAgentAction() => JObject.Parse(
         """
         {

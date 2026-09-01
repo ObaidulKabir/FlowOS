@@ -11,6 +11,7 @@ using FlowOS.Workflows.Engine;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
 using FlowOS.MCP.Tools;
+using FlowOS.Notifications.Application;
 using FlowOS.Security.Interfaces;
 using FlowOS.Security.Policies;
 using Microsoft.AspNetCore.Builder;
@@ -291,6 +292,10 @@ public partial class Program
         services.AddScoped<InfoTools>();
         services.AddScoped<AnalysisTools>();
         services.AddScoped<AgentTools>();
+        services.AddScoped<NotificationRepository>();
+        services.AddScoped<INotificationRepository>(sp => sp.GetRequiredService<NotificationRepository>());
+        services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredService<NotificationRepository>());
+        services.AddScoped<NotificationTools>();
     }
 }
 

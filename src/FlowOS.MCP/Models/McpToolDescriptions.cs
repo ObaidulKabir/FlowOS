@@ -17,6 +17,20 @@ public static class McpToolDescriptions
                 "Errors: MCP-TENANT-001, MCP-TENANT-002. " +
                 "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["list_notifications"] =
+                "Lists recent notifications for the tenant and user with read status and severity. " +
+                "HTTP uses the authenticated x-tenant-id; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{notifications:[{id,message,severity,createdAt,eventType,isRead}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"userId\":\"22222222-2222-2222-2222-222222222222\"}",
+
+            ["mark_notification_as_read"] =
+                "Marks a specific tenant/user notification as read. " +
+                "HTTP uses the authenticated x-tenant-id; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{success:true,message:\"Notification marked as read.\"}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
             ["list_available_agents"] =
                 "Lists advisory FlowOS agents and their declared capabilities; it does not execute an agent. " +
                 "Returns: {ok:true,data:{agents:[...]}}. Errors: MCP-INTERNAL. Input example: {}",

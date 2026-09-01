@@ -14,6 +14,12 @@ public static class ToolRegistration
         registry.Register("list_public_workflowclasses", McpToolDescriptions.For("list_public_workflowclasses"), McpToolSchemas.TenantOptional(),
             async (args) => await ExecuteScopedAsync<InfoTools>(serviceProvider, t => t.ListPublic(args)));
 
+        registry.Register("list_notifications", McpToolDescriptions.For("list_notifications"), McpToolSchemas.ListNotifications(),
+            async (args) => await ExecuteScopedAsync<NotificationTools>(serviceProvider, t => t.ListNotifications(args)));
+
+        registry.Register("mark_notification_as_read", McpToolDescriptions.For("mark_notification_as_read"), McpToolSchemas.MarkNotificationAsRead(),
+            async (args) => await ExecuteScopedAsync<NotificationTools>(serviceProvider, t => t.MarkNotificationAsRead(args)));
+
         registry.Register("list_available_agents", McpToolDescriptions.For("list_available_agents"), McpToolSchemas.NoArguments(),
             async (args) => await ExecuteScopedAsync<AgentTools>(serviceProvider, t => t.ListAvailableAgents(args)));
 
