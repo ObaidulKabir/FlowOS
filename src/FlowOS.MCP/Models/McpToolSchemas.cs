@@ -120,7 +120,8 @@ public static class McpToolSchemas
                     "properties":{
                       "fromState":{"type":"string"},
                       "toState":{"type":"string"},
-                      "eventId":{"type":"string"}
+                      "eventId":{"type":"string"},
+                      "constraints":{"type":"object","additionalProperties":{"type":"string"}}
                     },
                     "additionalProperties":false
                   }

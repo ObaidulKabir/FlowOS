@@ -60,8 +60,23 @@ public class StateMachineEngine
                         return TransitionResult.Denied($"State Machine constraint violation: Role '{constraint.Value}' is required, but no roles were provided in context.");
                     }
 
-                    var roles = rolesObj as System.Collections.Generic.IEnumerable<string>;
-                    if (roles == null || !roles.Contains(constraint.Value))
+                    // Support multiple data shapes for roles
+                    var hasRole = false;
+                    if (rolesObj is IEnumerable<string> stringRoles)
+                    {
+                        hasRole = stringRoles.Contains(constraint.Value);
+                    }
+                    else if (rolesObj is IEnumerable<object> objectRoles)
+                    {
+                        hasRole = objectRoles.Any(r => r?.ToString() == constraint.Value);
+                    }
+                    else if (rolesObj is string roleString)
+                    {
+                        // Handle comma-separated string or single role
+                        hasRole = roleString.Split(',').Select(r => r.Trim()).Contains(constraint.Value);
+                    }
+
+                    if (!hasRole)
                     {
                         return TransitionResult.Denied($"State Machine constraint violation: Required role '{constraint.Value}' is missing.");
                     }

@@ -166,7 +166,7 @@ public class WorkflowCommandHandlers :
 
         if (fullDefinition != null)
         {
-            RunAutoAdvance(instance, fullDefinition, request.TenantId);
+            RunAutoAdvance(instance, fullDefinition, request.TenantId, new FlowOS.StateMachines.Models.ExecutionContext());
         }
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -255,7 +255,7 @@ public class WorkflowCommandHandlers :
         if (result.Success)
         {
             _unitOfWork.Events.Add(domainEvent);
-            RunAutoAdvance(instance, definition, request.TenantId);
+            RunAutoAdvance(instance, definition, request.TenantId, context);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
@@ -285,12 +285,13 @@ public class WorkflowCommandHandlers :
             domainEvent.SetCorrelationId(request.CorrelationId.Value);
         }
 
-        var result = _engine.Advance(instance, definition, domainEvent, new FlowOS.StateMachines.Models.ExecutionContext());
+        var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        var result = _engine.Advance(instance, definition, domainEvent, context);
 
         if (result.Success)
         {
             _unitOfWork.Events.Add(domainEvent);
-            RunAutoAdvance(instance, definition, request.TenantId);
+            RunAutoAdvance(instance, definition, request.TenantId, context);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
@@ -298,7 +299,7 @@ public class WorkflowCommandHandlers :
         return false;
     }
 
-    private void RunAutoAdvance(WorkflowInstance instance, WorkflowDefinition definition, Guid tenantId)
+    private void RunAutoAdvance(WorkflowInstance instance, WorkflowDefinition definition, Guid tenantId, FlowOS.StateMachines.Models.ExecutionContext context)
     {
         int autoAdvanceLimit = 5;
         while (autoAdvanceLimit > 0)
@@ -307,7 +308,7 @@ public class WorkflowCommandHandlers :
             if (currentStep != null && currentStep.NextSteps.ContainsKey("Default"))
             {
                 var defaultEvent = new StandardEvent(tenantId, "Default");
-                var result = _engine.Advance(instance, definition, defaultEvent, new FlowOS.StateMachines.Models.ExecutionContext());
+                var result = _engine.Advance(instance, definition, defaultEvent, context);
                 
                 if (!result.Success) break;
                 autoAdvanceLimit--;
