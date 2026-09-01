@@ -15,6 +15,7 @@ public static class DependencyInjection
     {
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IConfigurationPublisher, ConfigurationPublisher>();
+        services.AddScoped<IWorkflowTimerService, WorkflowTimerService>();
         return services;
     }
 }

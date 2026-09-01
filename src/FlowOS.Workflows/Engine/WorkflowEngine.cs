@@ -86,6 +86,12 @@ public class WorkflowEngine : IWorkflowEngine
             instance.Wait(); // Pause for human
             return WorkflowAdvanceResult.Waiting("Waiting for human task completion.");
         }
+        else if (nextStep.StepType == WorkflowStepType.Timer)
+        {
+            instance.AdvanceTo(nextStepId);
+            instance.Wait(); // Pause for timer
+            return WorkflowAdvanceResult.Waiting("Waiting for timer trigger.");
+        }
         else if (nextStep.StepType == WorkflowStepType.Decision)
         {
             // Evaluate each condition expression against the execution context payload.

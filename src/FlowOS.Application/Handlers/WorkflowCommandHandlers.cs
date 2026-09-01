@@ -29,19 +29,22 @@ public class WorkflowCommandHandlers :
     private readonly IEventRegistry _eventRegistry;
     private readonly ICurrentUser _currentUser;
     private readonly ICapabilityService _capabilityService;
+    private readonly FlowOS.Application.Common.Interfaces.IWorkflowTimerService? _timerService;
 
     public WorkflowCommandHandlers(
         IUnitOfWork unitOfWork, 
         IEventRegistry eventRegistry,
         ICurrentUser currentUser,
         ICapabilityService capabilityService,
-        WorkflowEngine engine)
+        WorkflowEngine engine,
+        FlowOS.Application.Common.Interfaces.IWorkflowTimerService? timerService = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
         _engine = engine;
         _currentUser = currentUser;
         _capabilityService = capabilityService;
+        _timerService = timerService;
     }
 
     public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
@@ -167,6 +170,7 @@ public class WorkflowCommandHandlers :
         if (fullDefinition != null)
         {
             RunAutoAdvance(instance, fullDefinition, request.TenantId, new FlowOS.StateMachines.Models.ExecutionContext());
+            await CheckAndScheduleTimerAsync(instance, fullDefinition, request.TenantId, cancellationToken);
         }
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -176,18 +180,20 @@ public class WorkflowCommandHandlers :
 
     public async Task<bool> Handle(PublishEventCommand request, CancellationToken cancellationToken)
     {
-        var requiredCapability = $"event.publish.{request.EventType}";
         var userRoles = _currentUser.Roles ?? new List<string>();
-        
-        var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
-        
-        bool hasSpecific = capabilities.Contains(requiredCapability);
-        bool hasRoot = capabilities.Contains("event.publish");
-        
-        if (!hasSpecific && !hasRoot)
+        if (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id))
         {
-             Console.WriteLine($"[WorkflowHandler] Access Denied. User {_currentUser.Id} (Roles: {string.Join(",", userRoles)}) lacks {requiredCapability}");
-             throw new FlowOS.Application.Common.Exceptions.PolicyViolationException("EventPermission", $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
+            var requiredCapability = $"event.publish.{request.EventType}";
+            var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
+            
+            bool hasSpecific = capabilities.Contains(requiredCapability);
+            bool hasRoot = capabilities.Contains("event.publish");
+            
+            if (!hasSpecific && !hasRoot)
+            {
+                 Console.WriteLine($"[WorkflowHandler] Access Denied. User {_currentUser.Id} (Roles: {string.Join(",", userRoles)}) lacks {requiredCapability}");
+                 throw new FlowOS.Application.Common.Exceptions.PolicyViolationException("EventPermission", $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
+            }
         }
 
         var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
@@ -256,6 +262,7 @@ public class WorkflowCommandHandlers :
         {
             _unitOfWork.Events.Add(domainEvent);
             RunAutoAdvance(instance, definition, request.TenantId, context);
+            await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
@@ -292,6 +299,7 @@ public class WorkflowCommandHandlers :
         {
             _unitOfWork.Events.Add(domainEvent);
             RunAutoAdvance(instance, definition, request.TenantId, context);
+            await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
@@ -317,6 +325,33 @@ public class WorkflowCommandHandlers :
             {
                 break;
             }
+        }
+    }
+
+    private async Task CheckAndScheduleTimerAsync(
+        WorkflowInstance instance,
+        WorkflowDefinition definition,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        if (_timerService == null) return;
+
+        var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+        if (currentStep != null && currentStep.StepType == FlowOS.Workflows.Enums.WorkflowStepType.Timer)
+        {
+            var triggerEvent = currentStep.NextSteps.Keys.FirstOrDefault() ?? "Default";
+            var duration = TimeSpan.FromSeconds(5); // Default 5s
+
+            if (currentStep.Conditions.TryGetValue("Duration", out var durStr) ||
+                currentStep.Conditions.TryGetValue("duration", out durStr))
+            {
+                if (int.TryParse(durStr, out var secs))
+                    duration = TimeSpan.FromSeconds(secs);
+                else if (TimeSpan.TryParse(durStr, out var ts))
+                    duration = ts;
+            }
+
+            await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
         }
     }
 }

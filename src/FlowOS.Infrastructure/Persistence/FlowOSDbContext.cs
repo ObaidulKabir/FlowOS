@@ -21,6 +21,8 @@ public class FlowOSDbContext : DbContext
     public DbSet<Policy> Policies { get; set; }
     public DbSet<WorkflowClass> WorkflowClasses { get; set; } // Added WorkflowClass
     public DbSet<Notification> Notifications { get; set; } // Add this
+    public DbSet<FlowOS.Core.Common.Models.OutboxMessage> OutboxMessages { get; set; }
+    public DbSet<FlowOS.Core.Common.Models.WorkflowTimerJob> WorkflowTimerJobs { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

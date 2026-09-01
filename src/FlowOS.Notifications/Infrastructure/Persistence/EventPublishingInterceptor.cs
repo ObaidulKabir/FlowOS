@@ -39,6 +39,27 @@ public class EventPublishingInterceptor : SaveChangesInterceptor
             .Select(e => e.Entity)
             .ToList();
 
+        if (_eventsToPublish.Any())
+        {
+            try
+            {
+                var outboxSet = context.Set<OutboxMessage>();
+                foreach (var domainEvent in _eventsToPublish)
+                {
+                    var payload = System.Text.Json.JsonSerializer.Serialize(domainEvent, domainEvent.GetType());
+                    var outboxMessage = new OutboxMessage(
+                        domainEvent.TenantId,
+                        domainEvent.EventType,
+                        payload);
+                    outboxSet.Add(outboxMessage);
+                }
+            }
+            catch
+            {
+                // In case OutboxMessage is not registered in the DbContext model
+            }
+        }
+
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 

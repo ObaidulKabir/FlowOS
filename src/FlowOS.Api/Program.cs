@@ -89,6 +89,9 @@ builder.Services.AddMediatR(cfg =>
     cfg.AddOpenBehavior(typeof(PolicyEnforcementBehavior<,>));
 });
 
+builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.OutboxProcessorService>();
+builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.WorkflowTimerProcessorService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowDashboard",
