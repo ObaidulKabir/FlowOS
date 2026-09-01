@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: ["localhost", "flowos.gkibria121.com"], // Allow both localhost and Docker host
+    allowedHosts: ["localhost", "flowos.gkibria121.com","flowos.prospectbdltd.com"], // Allow both localhost and Docker host
     port: 5173,
     host: true, // Needed for Docker
     proxy: {
