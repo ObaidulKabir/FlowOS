@@ -97,10 +97,10 @@ builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.InMem
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowDashboard",
+    options.AddPolicy("AllowAll",
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+            policy.AllowAnyOrigin()
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
@@ -108,11 +108,12 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseCors("AllowAll");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    app.UseCors("AllowDashboard");
 }
 
 app.UseMiddleware<MockAuthMiddleware>();
