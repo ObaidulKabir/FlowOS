@@ -9,6 +9,8 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     volumes:
       - ./flowos-config:/app/flowos-config
+    ports:
+      - "5183:8080"
     depends_on:
       - postgres
 
@@ -20,6 +22,8 @@ services:
     command: npm run dev -- --host --port 3000
     environment:
       - VITE_API_TARGET=http://flowos-api:8080
+    ports:
+      - "3000:3000"
     depends_on:
       - flowos-api
 

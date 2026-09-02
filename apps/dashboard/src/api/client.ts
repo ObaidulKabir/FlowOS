@@ -39,8 +39,14 @@ export const api = {
     console.log('Fetching workflows with headers:', headers);
     const params = new URLSearchParams();
     params.append('tenantId', TENANT_ID);
-    if (scope !== undefined) params.append('scope', scope.toString());
-    if (status !== undefined) params.append('status', status.toString());
+    if (scope !== undefined) {
+      const scopeName = WorkflowClassScope[scope] || scope.toString();
+      params.append('scope', scopeName);
+    }
+    if (status !== undefined) {
+      const statusName = WorkflowClassStatus[status] || status.toString();
+      params.append('status', statusName);
+    }
     
     const response = await fetch(`${API_BASE}?${params.toString()}`, { headers });
     return handleResponse(response, 'Failed to list workflow classes');

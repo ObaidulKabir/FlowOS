@@ -8,7 +8,7 @@ import { WorkflowClass, WorkflowClassScope, WorkflowClassStatus, ValidationResul
 import { AlertCircle, Plus, Play, RefreshCw, CheckCircle, Shield, Cpu, Clock, Terminal } from 'lucide-react';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'Instances' | 'Drafts' | 'Published' | 'Shared' | 'Public'>('Instances');
+  const [activeTab, setActiveTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared' | 'Public' | 'Instances'>('All');
   const [items, setItems] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [selectedItem, setSelectedItem] = useState<WorkflowClass | null>(null);
@@ -38,6 +38,9 @@ function App() {
       } else {
         let data: WorkflowClass[] = [];
         switch (activeTab) {
+          case 'All':
+            data = await api.list(undefined, undefined, role);
+            break;
           case 'Drafts':
             data = await api.list(undefined, WorkflowClassStatus.Draft, role);
             break;
@@ -355,22 +358,20 @@ function App() {
           <div className="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
             <div className="bg-slate-800 rounded-lg border border-slate-700 p-1 flex text-xs">
               <button 
-                onClick={() => { setRole('Tenant'); setActiveTab('Instances'); }} 
+                onClick={() => { setRole('Tenant'); setActiveTab('All'); }} 
                 className={`px-3 py-1.5 rounded-md font-medium transition-all ${role === 'Tenant' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
               >Tenant View</button>
               <button 
-                onClick={() => { setRole('Admin'); setActiveTab('Shared'); }} 
+                onClick={() => { setRole('Admin'); setActiveTab('All'); }} 
                 className={`px-3 py-1.5 rounded-md font-medium transition-all ${role === 'Admin' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
               >Admin View</button>
             </div>
 
-            {activeTab === 'Instances' && (
-              <button onClick={handleStartLiveInstance} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
-                <Play size={14} /> Start New Instance
-              </button>
-            )}
+            <button onClick={handleStartLiveInstance} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+              <Play size={14} /> Start New Instance
+            </button>
 
-            {activeTab === 'Drafts' && role === 'Tenant' && (
+            {role === 'Tenant' && (
               <button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                 <Plus size={14} /> New WorkflowClass
               </button>
@@ -395,7 +396,7 @@ function App() {
         <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
           <div className="border-b border-slate-700 bg-slate-850">
             <nav className="flex divide-x divide-slate-700 text-xs font-semibold">
-              {(['Instances', 'Drafts', 'Published', 'Shared', 'Public'] as const).map((tab) => (
+              {(['All', 'Published', 'Drafts', 'Shared', 'Public', 'Instances'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -405,7 +406,7 @@ function App() {
                       : 'text-slate-400 hover:text-white hover:bg-slate-750'
                   }`}
                 >
-                  {tab === 'Instances' ? '⚡ Live Instances' : tab}
+                  {tab === 'Instances' ? '⚡ Live Instances' : tab === 'All' ? '📑 All Workflows' : tab}
                 </button>
               ))}
             </nav>
