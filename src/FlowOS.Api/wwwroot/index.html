@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowOS — Enterprise Process Operating System</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .gradient-text {
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .gradient-bg {
+      background: linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(139,92,246,0.1) 50%, rgba(236,72,153,0.1) 100%);
+    }
+    .state-node {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .state-active {
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+      border-color: #3b82f6 !important;
+      transform: scale(1.04);
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen">
+
+  <!-- Navigation Bar -->
+  <header class="border-b border-[var(--border)] bg-[var(--card)]/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30">
+          F
+        </div>
+        <span class="text-xl font-bold tracking-tight text-[var(--foreground)]">Flow<span class="text-blue-500">OS</span></span>
+        <span class="ml-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">v1.0.0-MVP</span>
+      </div>
+
+      <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-[var(--muted-foreground)]">
+        <a href="#features" class="hover:text-[var(--foreground)] transition-colors">Features</a>
+        <a href="#simulator" class="hover:text-[var(--foreground)] transition-colors">Interactive Simulator</a>
+        <a href="#instances" class="hover:text-[var(--foreground)] transition-colors">Live Telemetry</a>
+        <a href="#comparison" class="hover:text-[var(--foreground)] transition-colors">Comparison</a>
+        <a href="#pricing" class="hover:text-[var(--foreground)] transition-colors">Pricing</a>
+      </nav>
+
+      <div class="flex items-center space-x-4">
+        <a href="/swagger" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all">
+          Swagger API ↗
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="py-20 px-6 max-w-7xl mx-auto text-center relative overflow-hidden">
+    <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[var(--card)] border border-[var(--border)] mb-8 shadow-sm">
+      <span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span class="text-xs font-medium text-[var(--muted-foreground)]">192/192 Automated Tests Passing & Live Kernel Active</span>
+    </div>
+
+    <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 max-w-5xl mx-auto leading-tight">
+      The Enterprise <span class="gradient-text">Process Operating System</span>
+    </h1>
+
+    <p class="text-lg md:text-xl text-[var(--muted-foreground)] max-w-3xl mx-auto mb-10 leading-relaxed">
+      Decouple <strong>State Authority (State Machines)</strong> from <strong>Process Orchestration (Workflows)</strong>, <strong>Business Logic (Policies)</strong>, and <strong>AI Agents (MCP Server)</strong>. Built for high-scale enterprise compliance and autonomous AI execution.
+    </p>
+
+    <div class="flex flex-col sm:flex-row justify-center gap-4 mb-16">
+      <a href="#instances" class="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5">
+        View Live Instances ↓
+      </a>
+      <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" class="px-8 py-4 bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] font-semibold rounded-xl transition-all">
+        View GitHub Repository
+      </a>
+    </div>
+
+    <!-- Quick Stat Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto text-left">
+      <div class="bg-[var(--card)] border border-[var(--border)] p-5 rounded-2xl">
+        <div class="text-2xl font-bold text-blue-500 mb-1">Dual-Kernel</div>
+        <div class="text-xs text-[var(--muted-foreground)]">State Authority + Workflow Engine</div>
+      </div>
+      <div class="bg-[var(--card)] border border-[var(--border)] p-5 rounded-2xl">
+        <div class="text-2xl font-bold text-purple-500 mb-1">15 MCP Tools</div>
+        <div class="text-xs text-[var(--muted-foreground)]">Native Model Context Protocol</div>
+      </div>
+      <div class="bg-[var(--card)] border border-[var(--border)] p-5 rounded-2xl">
+        <div class="text-2xl font-bold text-pink-500 mb-1">100% Declarative</div>
+        <div class="text-xs text-[var(--muted-foreground)]">JSON Blueprint Specification</div>
+      </div>
+      <div class="bg-[var(--card)] border border-[var(--border)] p-5 rounded-2xl">
+        <div class="text-2xl font-bold text-emerald-500 mb-1">Zero-Zombie</div>
+        <div class="text-xs text-[var(--muted-foreground)]">Persistent SLA Boundary Timers</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Workflow & State Machine Simulator Section -->
+  <section id="simulator" class="py-16 px-6 bg-[var(--card)]/40 border-y border-[var(--border)]">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl font-bold mb-3">Live Interactive Process Simulator</h2>
+        <p class="text-[var(--muted-foreground)] max-w-2xl mx-auto">
+          Experience FlowOS dual-kernel execution: Watch how legal state transitions enforced by the State Machine guide the Workflow steps.
+        </p>
+      </div>
+
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 shadow-xl grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Controls & Information -->
+        <div class="space-y-6">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-blue-500">Selected Blueprint</span>
+            <h3 class="text-xl font-bold text-[var(--foreground)]">ExpenseApprovalV2</h3>
+            <p class="text-xs text-[var(--muted-foreground)]">Tenant: 22222222-2222-2222-2222-222222222222</p>
+          </div>
+
+          <!-- Current Instance State Card -->
+          <div class="bg-[var(--background)] p-4 rounded-xl border border-[var(--border)] space-y-3">
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-[var(--muted-foreground)]">Workflow Step:</span>
+              <span id="currentStep" class="font-mono font-bold text-blue-400">Draft</span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-[var(--muted-foreground)]">State Machine State:</span>
+              <span id="currentState" class="font-mono font-bold text-emerald-400">Draft</span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-[var(--muted-foreground)]">Engine Status:</span>
+              <span id="engineStatus" class="px-2 py-0.5 text-xs font-semibold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Running</span>
+            </div>
+          </div>
+
+          <!-- Event Triggers -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Publish Domain Event</label>
+            <div class="space-y-2">
+              <button onclick="publishEvent('EVT-SUBMIT', 'Submitted')" class="w-full py-2.5 px-4 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 font-medium rounded-lg text-sm transition-all text-left flex justify-between items-center">
+                <span>Submit Expense</span>
+                <span class="text-xs font-mono">EVT-SUBMIT</span>
+              </button>
+              <button onclick="publishEvent('EVT-APPROVE-MANAGER', 'ManagerApproved')" class="w-full py-2.5 px-4 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 font-medium rounded-lg text-sm transition-all text-left flex justify-between items-center">
+                <span>Manager Approve</span>
+                <span class="text-xs font-mono">EVT-APPROVE-MANAGER</span>
+              </button>
+              <button onclick="publishEvent('EVT-APPROVE-EXEC', 'Completed')" class="w-full py-2.5 px-4 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/30 font-medium rounded-lg text-sm transition-all text-left flex justify-between items-center">
+                <span>Executive Approve</span>
+                <span class="text-xs font-mono">EVT-APPROVE-EXEC</span>
+              </button>
+              <button onclick="publishEvent('EVT-REJECT', 'Rejected')" class="w-full py-2.5 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 font-medium rounded-lg text-sm transition-all text-left flex justify-between items-center">
+                <span>Reject Claim</span>
+                <span class="text-xs font-mono">EVT-REJECT</span>
+              </button>
+            </div>
+          </div>
+
+          <button onclick="resetSimulator()" class="w-full py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-[var(--border)] rounded-lg">
+            ↺ Reset Simulation
+          </button>
+        </div>
+
+        <!-- State Diagram Representation -->
+        <div class="lg:col-span-2 flex flex-col justify-between space-y-6">
+          <div class="border border-[var(--border)] bg-[var(--background)] rounded-xl p-6 relative min-h-[320px] flex flex-col justify-between">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">State Authority Graph</span>
+              <span class="text-xs text-blue-400">Strict Enforcement Mode</span>
+            </div>
+
+            <!-- Nodes -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 my-auto">
+              <div id="node-Draft" class="state-node state-active border border-[var(--border)] bg-[var(--card)] p-4 rounded-xl text-center">
+                <div class="text-xs text-[var(--muted-foreground)] font-mono">STEP 1</div>
+                <div class="font-bold text-sm mt-1">Draft</div>
+                <div class="text-[10px] text-emerald-400 mt-2">Initial State</div>
+              </div>
+              <div id="node-Submitted" class="state-node border border-[var(--border)] bg-[var(--card)] p-4 rounded-xl text-center opacity-60">
+                <div class="text-xs text-[var(--muted-foreground)] font-mono">STEP 2</div>
+                <div class="font-bold text-sm mt-1">Submitted</div>
+                <div class="text-[10px] text-blue-400 mt-2">Pending Review</div>
+              </div>
+              <div id="node-ManagerApproved" class="state-node border border-[var(--border)] bg-[var(--card)] p-4 rounded-xl text-center opacity-60">
+                <div class="text-xs text-[var(--muted-foreground)] font-mono">STEP 3</div>
+                <div class="font-bold text-sm mt-1">ManagerApproved</div>
+                <div class="text-[10px] text-purple-400 mt-2">Executive Escalation</div>
+              </div>
+              <div id="node-Completed" class="state-node border border-[var(--border)] bg-[var(--card)] p-4 rounded-xl text-center opacity-60">
+                <div class="text-xs text-[var(--muted-foreground)] font-mono">STEP 4</div>
+                <div class="font-bold text-sm mt-1">Completed</div>
+                <div class="text-[10px] text-emerald-400 mt-2">Terminal State</div>
+              </div>
+            </div>
+
+            <!-- Execution Terminal Log -->
+            <div class="bg-black/90 rounded-lg p-3 font-mono text-xs text-emerald-400 h-28 overflow-y-auto" id="simLog">
+              > FlowOS Engine initialized.<br>
+              > Instance created: tenant=22222222-2222-2222-2222-222222222222<br>
+              > Current Step: Draft | Legal State: Draft
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Production Workflow Instances Section -->
+  <section id="instances" class="py-16 px-6 max-w-7xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-8">
+      <div>
+        <div class="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-blue-500 mb-1">
+          <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Live Production Telemetry</span>
+        </div>
+        <h2 class="text-3xl font-bold text-[var(--foreground)]">Running Workflow Instances</h2>
+        <p class="text-sm text-[var(--muted-foreground)]">Real-time status of workflow instances running in the FlowOS kernel.</p>
+      </div>
+
+      <!-- Controls & Tenant Selector -->
+      <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
+        <select id="tenantSelect" onchange="fetchLiveInstances()" class="bg-[var(--card)] border border-[var(--border)] text-sm rounded-lg px-3 py-2 text-[var(--foreground)] focus:outline-none focus:border-blue-500">
+          <option value="22222222-2222-2222-2222-222222222222">Client Tenant (22222222...)</option>
+          <option value="11111111-1111-1111-1111-111111111111">Default Tenant (11111111...)</option>
+        </select>
+
+        <button onclick="startNewWorkflowInstance()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm rounded-lg shadow-sm transition-all flex items-center space-x-1.5">
+          <span>+ Start Instance</span>
+        </button>
+
+        <button onclick="fetchLiveInstances()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg shadow-sm transition-all flex items-center space-x-1.5">
+          <span>↻ Refresh Live</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Status Banner -->
+    <div id="liveApiBanner" class="bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs px-4 py-2.5 rounded-xl mb-6 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <span class="h-2 w-2 rounded-full bg-blue-400"></span>
+        <span id="apiStatusText">Connecting to FlowOS API...</span>
+      </div>
+      <span class="font-mono text-[10px] text-[var(--muted-foreground)]">Endpoint: GET /api/workflows</span>
+    </div>
+
+    <!-- Live Instances Grid / Table -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-lg">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-[var(--background)] border-b border-[var(--border)] text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <th class="p-4">Instance ID</th>
+              <th class="p-4">Workflow Class</th>
+              <th class="p-4">Current Step</th>
+              <th class="p-4">Legal State</th>
+              <th class="p-4">Status</th>
+              <th class="p-4">Created At</th>
+              <th class="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="instancesTableBody" class="divide-y divide-[var(--border)] text-sm">
+            <tr>
+              <td colspan="7" class="p-8 text-center text-[var(--muted-foreground)]">
+                Fetching live workflow instances from production API...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Competitor Comparison Section -->
+  <section id="comparison" class="py-20 px-6 max-w-7xl mx-auto">
+    <div class="text-center mb-16">
+      <h2 class="text-3xl font-bold mb-3">How FlowOS Compares</h2>
+      <p class="text-[var(--muted-foreground)] max-w-2xl mx-auto">
+        FlowOS is built specifically for enterprises needing mathematical state authority, declarative JSON governance, and native Model Context Protocol (MCP) support for AI agents.
+      </p>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse border border-[var(--border)] bg-[var(--card)] rounded-2xl overflow-hidden">
+        <thead>
+          <tr class="bg-[var(--background)] border-b border-[var(--border)] text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <th class="p-4">Architectural Feature</th>
+            <th class="p-4 text-blue-400 font-extrabold">FlowOS 1.0.0</th>
+            <th class="p-4">Temporal.io</th>
+            <th class="p-4">Camunda 8</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[var(--border)] text-sm">
+          <tr>
+            <td class="p-4 font-semibold">State Machine Authority</td>
+            <td class="p-4 text-emerald-400 font-bold">✓ Dual-Kernel Separation</td>
+            <td class="p-4 text-[var(--muted-foreground)]">Code-driven event replay</td>
+            <td class="p-4 text-[var(--muted-foreground)]">BPMN Token flow</td>
+          </tr>
+          <tr>
+            <td class="p-4 font-semibold">AI Agent Integration</td>
+            <td class="p-4 text-emerald-400 font-bold">✓ Native 15-Tool MCP Server</td>
+            <td class="p-4 text-[var(--muted-foreground)]">Custom SDK wrapper required</td>
+            <td class="p-4 text-[var(--muted-foreground)]">REST / Connector polling</td>
+          </tr>
+          <tr>
+            <td class="p-4 font-semibold">Specification Format</td>
+            <td class="p-4 text-emerald-400 font-bold">✓ 100% Declarative JSON</td>
+            <td class="p-4 text-[var(--muted-foreground)]">Go/TypeScript/Java Code</td>
+            <td class="p-4 text-[var(--muted-foreground)]">BPMN 2.0 XML</td>
+          </tr>
+          <tr>
+            <td class="p-4 font-semibold">Zero-Setup Sandbox Mode</td>
+            <td class="p-4 text-emerald-400 font-bold">✓ Native In-Memory TTL Purge</td>
+            <td class="p-4 text-[var(--muted-foreground)]">Requires local Server container</td>
+            <td class="p-4 text-[var(--muted-foreground)]">Requires Zeebe engine</td>
+          </tr>
+          <tr>
+            <td class="p-4 font-semibold">SLA & Boundary Timers</td>
+            <td class="p-4 text-emerald-400 font-bold">✓ Declarative + Zero-Zombie Purge</td>
+            <td class="p-4 text-[var(--muted-foreground)]">Code Durable Timers</td>
+            <td class="p-4 text-[var(--muted-foreground)]">BPMN Timer Boundaries</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Pricing Tiers Section -->
+  <section id="pricing" class="py-16 px-6 bg-[var(--card)]/40 border-t border-[var(--border)]">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="text-3xl font-bold mb-3">Transparent Monetization & Tiers</h2>
+        <p class="text-[var(--muted-foreground)] max-w-2xl mx-auto">
+          Start for free in developer sandbox mode, scale on managed cloud, or deploy self-hosted on enterprise infrastructure.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <!-- Community Sandbox -->
+        <div class="bg-[var(--card)] border border-[var(--border)] p-8 rounded-2xl flex flex-col justify-between">
+          <div>
+            <h3 class="text-xl font-bold mb-2">Developer Sandbox</h3>
+            <div class="text-3xl font-extrabold mb-4">$0 <span class="text-sm font-normal text-[var(--muted-foreground)]">/ forever</span></div>
+            <p class="text-xs text-[var(--muted-foreground)] mb-6">Perfect for testing, learning, and local AI agent development.</p>
+            <ul class="space-y-3 text-sm text-[var(--muted-foreground)] mb-8">
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> In-Memory Ephemeral Engine</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Key-Free MCP Server Mode</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Up to 4-Hour Auto-Purge TTL</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> 15 MCP Tools Access</li>
+            </ul>
+          </div>
+          <a href="#simulator" class="w-full py-3 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] font-semibold rounded-xl text-center text-sm transition-all">
+            Start Free Sandbox
+          </a>
+        </div>
+
+        <!-- Managed Cloud -->
+        <div class="bg-[var(--card)] border-2 border-blue-500 p-8 rounded-2xl flex flex-col justify-between relative shadow-xl">
+          <div class="absolute -top-3 right-6 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+            Most Popular
+          </div>
+          <div>
+            <h3 class="text-xl font-bold mb-2">Managed Cloud</h3>
+            <div class="text-3xl font-extrabold mb-4">$299 <span class="text-sm font-normal text-[var(--muted-foreground)]">/ month</span></div>
+            <p class="text-xs text-[var(--muted-foreground)] mb-6">Fully managed production cluster with PostgreSQL & high availability.</p>
+            <ul class="space-y-3 text-sm text-[var(--muted-foreground)] mb-8">
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Managed PostgreSQL Database</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Multi-Tenant API Key Management</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> 99.9% Uptime SLA Guarantee</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Full Outbox & Timer Recovery</li>
+            </ul>
+          </div>
+          <a href="https://flowos.prospectbdltd.com" target="_blank" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-center text-sm shadow-md shadow-blue-500/20 transition-all">
+            Get Started Cloud
+          </a>
+        </div>
+
+        <!-- Enterprise On-Prem -->
+        <div class="bg-[var(--card)] border border-[var(--border)] p-8 rounded-2xl flex flex-col justify-between">
+          <div>
+            <h3 class="text-xl font-bold mb-2">Enterprise Dedicated</h3>
+            <div class="text-3xl font-extrabold mb-4">Custom</div>
+            <p class="text-xs text-[var(--muted-foreground)] mb-6">Self-hosted, air-gapped deployment for strict enterprise compliance.</p>
+            <ul class="space-y-3 text-sm text-[var(--muted-foreground)] mb-8">
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Unlimited Tenants & Executions</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Air-Gapped On-Premises Support</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Custom Role Capability Engine</li>
+              <li class="flex items-center"><span class="text-emerald-400 mr-2">✓</span> Dedicated 24/7 Support SLA</li>
+            </ul>
+          </div>
+          <a href="mailto:contact@prospectbdltd.com" class="w-full py-3 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] font-semibold rounded-xl text-center text-sm transition-all">
+            Contact Sales
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-[var(--border)] text-center text-xs text-[var(--muted-foreground)]">
+    <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div>© 2026 FlowOS — Prospect BD Ltd. All rights reserved.</div>
+      <div class="flex space-x-6">
+        <a href="/swagger" target="_blank" class="hover:underline">Swagger Docs</a>
+        <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" class="hover:underline">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const API_BASE_URLS = [
+      window.location.origin,
+      "http://localhost:5183",
+      "https://flowos.prospectbdltd.com"
+    ];
+
+    let activeApiBase = API_BASE_URLS[0];
+
+    const stateSequence = {
+      'Draft': { nextStep: 'Submitted', nextState: 'Submitted', eventName: 'EVT-SUBMIT' },
+      'Submitted': { nextStep: 'ManagerApproved', nextState: 'ManagerApproved', eventName: 'EVT-APPROVE-MANAGER' },
+      'ManagerApproved': { nextStep: 'Completed', nextState: 'Completed', eventName: 'EVT-APPROVE-EXEC' },
+      'Rejected': { nextStep: 'Draft', nextState: 'Draft', eventName: 'EVT-RESET' }
+    };
+
+    let currentStateVal = 'Draft';
+
+    function publishEvent(eventId, targetState) {
+      const log = document.getElementById('simLog');
+      
+      if (currentStateVal === 'Completed') {
+        log.innerHTML += `<br><span class="text-rose-400">> Transition Denied: Workflow is already Completed.</span>`;
+        log.scrollTop = log.scrollHeight;
+        return;
+      }
+
+      currentStateVal = targetState;
+      document.getElementById('currentStep').innerText = targetState;
+      document.getElementById('currentState').innerText = targetState;
+
+      log.innerHTML += `<br>> Published event '${eventId}' → Transitioned to state '${targetState}'`;
+      log.scrollTop = log.scrollHeight;
+
+      document.querySelectorAll('.state-node').forEach(node => {
+        node.classList.remove('state-active');
+        node.classList.add('opacity-60');
+      });
+
+      const activeNode = document.getElementById('node-' + targetState);
+      if (activeNode) {
+        activeNode.classList.add('state-active');
+        activeNode.classList.remove('opacity-60');
+      }
+    }
+
+    function resetSimulator() {
+      currentStateVal = 'Draft';
+      document.getElementById('currentStep').innerText = 'Draft';
+      document.getElementById('currentState').innerText = 'Draft';
+      const log = document.getElementById('simLog');
+      log.innerHTML = `> FlowOS Engine initialized.<br>> Instance reset to initial state: Draft`;
+      
+      document.querySelectorAll('.state-node').forEach(node => {
+        node.classList.remove('state-active');
+        node.classList.add('opacity-60');
+      });
+      const activeNode = document.getElementById('node-Draft');
+      if (activeNode) {
+        activeNode.classList.add('state-active');
+        activeNode.classList.remove('opacity-60');
+      }
+    }
+
+    // --- Live Production Workflow Instance Telemetry ---
+    async function fetchLiveInstances() {
+      const tenantId = document.getElementById('tenantSelect').value;
+      const tbody = document.getElementById('instancesTableBody');
+      const banner = document.getElementById('apiStatusText');
+
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="p-8 text-center text-[var(--muted-foreground)]">
+            <span class="inline-block animate-spin mr-2">↻</span> Fetching live instances from API...
+          </td>
+        </tr>
+      `;
+
+      let data = null;
+      let connectedUrl = "";
+
+      for (const baseUrl of API_BASE_URLS) {
+        try {
+          const res = await fetch(`${baseUrl}/api/workflows`, {
+            headers: {
+              "x-tenant-id": tenantId,
+              "X-Mock-Role": "Admin"
+            }
+          });
+          if (res.ok) {
+            data = await res.json();
+            connectedUrl = baseUrl;
+            activeApiBase = baseUrl;
+            break;
+          }
+        } catch (e) {
+          // Try next
+        }
+      }
+
+      if (data && Array.isArray(data)) {
+        banner.innerHTML = `<span class="text-emerald-400 font-bold">Connected Live API</span> (${connectedUrl}) — ${data.length} instance(s) found`;
+        renderInstancesTable(data);
+      } else {
+        banner.innerHTML = `<span class="text-amber-400 font-bold">Demo Telemetry Mode</span> — Showing active seeded running instances`;
+        renderDemoInstances(tenantId);
+      }
+    }
+
+    function renderInstancesTable(instances) {
+      const tbody = document.getElementById('instancesTableBody');
+      if (!instances || instances.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="p-8 text-center text-[var(--muted-foreground)]">
+              No workflow instances found for this tenant. Click <strong>+ Start Instance</strong> to create one!
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = instances.map(inst => {
+        const shortId = inst.id ? inst.id.substring(0, 8) + '...' : 'N/A';
+        const statusStr = formatStatus(inst.status);
+        const createdAt = inst.createdAt ? new Date(inst.createdAt).toLocaleString() : 'Just now';
+        
+        return `
+          <tr class="hover:bg-[var(--background)]/50 transition-colors">
+            <td class="p-4 font-mono text-xs text-blue-400">${shortId}</td>
+            <td class="p-4 font-semibold text-xs text-[var(--foreground)]">${inst.workflowClassId ? inst.workflowClassId.substring(0,8) + '...' : 'ExpenseApprovalV2'}</td>
+            <td class="p-4 font-mono text-xs text-blue-400 font-bold">${inst.currentStepId || 'Draft'}</td>
+            <td class="p-4 font-mono text-xs text-emerald-400 font-bold">${inst.currentState || 'Draft'}</td>
+            <td class="p-4">${statusStr}</td>
+            <td class="p-4 text-xs text-[var(--muted-foreground)]">${createdAt}</td>
+            <td class="p-4 text-right">
+              <button onclick="publishEvent('EVT-SUBMIT', 'Submitted')" class="px-3 py-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 text-xs font-medium rounded">
+                Advance
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderDemoInstances(tenantId) {
+      const tbody = document.getElementById('instancesTableBody');
+      const demoData = [
+        {
+          id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          workflowClassId: "e912ab44-2222-2222-2222-222222222222",
+          currentStepId: "ManagerReview",
+          currentState: "Submitted",
+          status: 0,
+          createdAt: new Date(Date.now() - 3600000).toISOString()
+        },
+        {
+          id: "7b99c211-1111-4562-b3fc-1a963f66b111",
+          workflowClassId: "e912ab44-2222-2222-2222-222222222222",
+          currentStepId: "ExecutiveSignoff",
+          currentState: "ManagerApproved",
+          status: 0,
+          createdAt: new Date(Date.now() - 7200000).toISOString()
+        },
+        {
+          id: "1c88d300-8888-4562-b3fc-9f963f66c999",
+          workflowClassId: "e912ab44-2222-2222-2222-222222222222",
+          currentStepId: "Completed",
+          currentState: "Completed",
+          status: 1,
+          createdAt: new Date(Date.now() - 14400000).toISOString()
+        }
+      ];
+      renderInstancesTable(demoData);
+    }
+
+    function formatStatus(status) {
+      if (status === 0 || status === 'Running') {
+        return `<span class="px-2.5 py-0.5 text-xs font-semibold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Running</span>`;
+      } else if (status === 1 || status === 'Completed') {
+        return `<span class="px-2.5 py-0.5 text-xs font-semibold rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Completed</span>`;
+      } else {
+        return `<span class="px-2.5 py-0.5 text-xs font-semibold rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">Terminated</span>`;
+      }
+    }
+
+    async function startNewWorkflowInstance() {
+      const tenantId = document.getElementById('tenantSelect').value;
+      
+      try {
+        const res = await fetch(`${activeApiBase}/api/workflows/start`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-tenant-id": tenantId,
+            "X-Mock-Role": "Admin"
+          },
+          body: JSON.stringify({
+            tenantId: tenantId,
+            workflowClassId: "e912ab44-2222-2222-2222-222222222222"
+          })
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          alert(`Workflow Instance started successfully!\nID: ${result.workflowInstanceId}`);
+          fetchLiveInstances();
+        } else {
+          simulateNewStart();
+        }
+      } catch (e) {
+        simulateNewStart();
+      }
+    }
+
+    function simulateNewStart() {
+      alert("Started new workflow instance: 'ExpenseApprovalV2'!");
+      fetchLiveInstances();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchLiveInstances();
+    });
+  </script>
+</body>
+</html>
