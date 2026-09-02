@@ -82,4 +82,64 @@ public class PolicyEvaluatorGapTests
         Assert.True(anythingElseResult.IsAllowed);
         Assert.True(allowCondition.IsAllowed);
     }
+
+    [Fact]
+    public void DefaultPolicyEvaluator_DeniesWhenRoleIsDenied()
+    {
+        var evaluator = new DefaultPolicyEvaluator();
+        var context = new PolicyContext
+        {
+            TenantId = Guid.NewGuid().ToString(),
+            ActorId = "user-1",
+            Roles = new List<string> { "Guest", "Auditor" }
+        };
+
+        var policy = new Policy("NoGuests", "Global", "No guests allowed",
+            """{ "deniedRoles": ["Guest", "External"], "reason": "Guests are forbidden" }""");
+
+        var result = evaluator.Evaluate(policy, context);
+
+        Assert.False(result.IsAllowed);
+        Assert.Contains("Guests are forbidden", result.Reason);
+    }
+
+    [Fact]
+    public void DefaultPolicyEvaluator_DeniesWhenRequiredRolesMissing()
+    {
+        var evaluator = new DefaultPolicyEvaluator();
+        var context = new PolicyContext
+        {
+            TenantId = Guid.NewGuid().ToString(),
+            ActorId = "user-1",
+            Roles = new List<string> { "User" }
+        };
+
+        var policy = new Policy("AdminOnly", "Global", "Admin only",
+            """{ "requiredRoles": ["Admin", "SuperAdmin"], "reason": "Requires administrative role" }""");
+
+        var result = evaluator.Evaluate(policy, context);
+
+        Assert.False(result.IsAllowed);
+        Assert.Contains("Requires administrative role", result.Reason);
+    }
+
+    [Fact]
+    public void DefaultPolicyEvaluator_DeniesWhenCommandTypeIsDenied()
+    {
+        var evaluator = new DefaultPolicyEvaluator();
+        var context = new PolicyContext
+        {
+            TenantId = Guid.NewGuid().ToString(),
+            ActorId = "user-1",
+            CommandType = "DeleteWorkflowClassCommand"
+        };
+
+        var policy = new Policy("NoDelete", "Global", "Deletion protection",
+            """{ "deniedCommandTypes": ["DeleteWorkflowClassCommand"], "reason": "Deletion is restricted" }""");
+
+        var result = evaluator.Evaluate(policy, context);
+
+        Assert.False(result.IsAllowed);
+        Assert.Contains("Deletion is restricted", result.Reason);
+    }
 }

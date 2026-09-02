@@ -1,4 +1,4 @@
-﻿# FlowOS Changelog
+# FlowOS Changelog
 
 All notable changes to the FlowOS project are documented in this file.
 
@@ -38,11 +38,17 @@ FlowOS is an enterprise-grade Process Operating System that separates **State Au
 
 #### 6. Model Context Protocol (MCP) Server
 - **Dual Transport Support**: Stdio for CLI/desktop agents and Streamable HTTP (`POST /mcp`) with API-key authentication for remote clients.
-- **10 Design-Time Tools**: Tools for blueprint discovery, drafting, validation, linting, and design hints (`describe_workflowclass_schema`, `create_draft_workflowclass`, `explain_validation_violation`, `list_notifications`, etc.).
+- **13 Built-in Tools**: Full coverage across blueprint design, validation, advisory linting, notifications, agent actions, and live inspection (`get_draft_workflowclass`, `list_draft_workflowclasses`, `get_workflow_instance_status`, `describe_workflowclass_schema`, `create_draft_workflowclass`, `explain_validation_violation`, etc.).
 
 #### 7. Observability, Containerization & Health Checks
 - **Health Checks**: Standard `/health/live` and `/health/ready` endpoints with database connectivity probes.
 - **Production Container Packaging**: Multi-stage production `Dockerfile` configurations and `docker-compose.prod.yml`.
 
+#### 8. Architectural Hardening & Law Enforcement
+- **Runtime State Machine Enforcement**: Event publication runtime path strictly enforces State Machine transitions and updates entity state in lockstep with workflow steps.
+- **Dynamic Policy Engine**: Enhanced `DefaultPolicyEvaluator` with support for dynamic role checking (`deniedRoles`, `requiredRoles`), temporal constraints (`allowedDays`), and command type filtering.
+- **Governance Security Gating**: Protected `ApproveAsPublic` endpoint with `[RequiresCapability("workflow.approve_public")]` and role authorization.
+- **Automatic Sandbox Data Purging**: Built-in background service (`InMemoryDataCleanupService`) that automatically purges temporary in-memory workflow instances and events older than a configurable TTL (2 to 6 hours, default: 4 hours).
+
 ### 🧪 Automated Test Suite
-- **188 / 188 passing automated tests** across `FlowOS.UnitTests`, `FlowOS.EndToEndTests`, and `FlowOS.MCP.UnitTests`.
+- **192 / 192 passing automated tests** across `FlowOS.UnitTests`, `FlowOS.EndToEndTests`, and `FlowOS.MCP.UnitTests`.

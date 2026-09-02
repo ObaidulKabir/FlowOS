@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlowOS.Application.Common.Attributes;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.DTOs.Governance;
 using FlowOS.Domain.Blueprints;
@@ -36,6 +37,7 @@ public record DeleteWorkflowClassCommand(Guid TenantId, Guid Id)
 public record AbandonWorkflowClassCommand(Guid TenantId, Guid Id)
     : IRequest<WorkflowClassResponseDto>, IPolicySecuredCommand;
 
+[RequiresCapability("workflow.approve_public")]
 public record ApproveWorkflowClassCommand(Guid TenantId, Guid Id)
     : IRequest<WorkflowClassResponseDto>, IPolicySecuredCommand;
 

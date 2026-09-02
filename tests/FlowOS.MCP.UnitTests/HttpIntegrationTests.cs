@@ -102,7 +102,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(12, httpNames.Length);
+        Assert.Equal(15, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);

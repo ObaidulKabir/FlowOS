@@ -41,6 +41,7 @@ public static class DataSeeder
             adminRole.AddPermission("workflow.read");
             adminRole.AddPermission("event.publish");
             adminRole.AddPermission("task.complete");
+            adminRole.AddPermission("workflow.approve_public");
             adminRole.AddPermission("role.create"); // Just in case
             adminRole.AddPermission("agent.insight.publish"); // For notifications
             
@@ -573,6 +574,7 @@ public static class DataSeeder
         adminRole.AddPermission("workflow.read");
         adminRole.AddPermission("event.publish");
         adminRole.AddPermission("task.complete");
+        adminRole.AddPermission("workflow.approve_public");
         context.Roles.Add(adminRole);
     }
     

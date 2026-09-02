@@ -65,6 +65,11 @@ public class WorkflowEngine : IWorkflowEngine
             {
                 return WorkflowAdvanceResult.Failed($"State Machine violation: {smResult.Reason}");
             }
+
+            if (smResult.MatchedTransition != null)
+            {
+                instance.SetCurrentState(smResult.MatchedTransition.ToState);
+            }
         }
 
         // 4. Handle End of Workflow

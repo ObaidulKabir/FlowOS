@@ -77,6 +77,19 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject WorkflowInstanceStatus() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["instanceId"],
+          "properties":{
+            "instanceId":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject CreateDraft() => JObject.Parse(
         $$"""
         {

@@ -1,0 +1,35 @@
+version: '3.8'
+
+# FlowOS Sandbox / In-Memory Learning Mode
+# Usage: docker compose -f docker-compose.sandbox.yml up --build
+
+services:
+  flowos-api-sandbox:
+    build:
+      context: .
+      dockerfile: src/FlowOS.Api/Dockerfile
+    container_name: flowos-api-sandbox
+    ports:
+      - "5183:8080"
+    environment:
+      - UseInMemoryDatabase=true
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Sandbox__DataTtlHours=4  # Automatically purges temporary data older than 4 hours (2-6h range)
+      - Sandbox__AutoCleanupEnabled=true
+    restart: unless-stopped
+
+  flowos-mcp-sandbox:
+    build:
+      context: .
+      dockerfile: src/FlowOS.MCP/Dockerfile
+    container_name: flowos-mcp-sandbox
+    ports:
+      - "8081:8080"
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_API_KEY=disabled  # Pre-payment gateway unauthenticated testing mode
+      - MCP_ROLE=Admin
+      - FLOWOS_API_URL=http://flowos-api-sandbox:8080
+    depends_on:
+      - flowos-api-sandbox
+    restart: unless-stopped

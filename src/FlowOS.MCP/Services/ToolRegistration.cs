@@ -41,6 +41,15 @@ public static class ToolRegistration
         registry.Register("validate_draft_workflowclass", McpToolDescriptions.For("validate_draft_workflowclass"), McpToolSchemas.DraftById(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.ValidateDraft(args)));
 
+        registry.Register("get_draft_workflowclass", McpToolDescriptions.For("get_draft_workflowclass"), McpToolSchemas.DraftById(),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.GetDraft(args)));
+
+        registry.Register("list_draft_workflowclasses", McpToolDescriptions.For("list_draft_workflowclasses"), McpToolSchemas.TenantOptional(),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.ListDrafts(args)));
+
+        registry.Register("get_workflow_instance_status", McpToolDescriptions.For("get_workflow_instance_status"), McpToolSchemas.WorkflowInstanceStatus(),
+            async (args) => await ExecuteScopedAsync<InfoTools>(serviceProvider, t => t.GetWorkflowInstanceStatus(args)));
+
         registry.Register("fork_public_workflowclass", McpToolDescriptions.For("fork_public_workflowclass"), McpToolSchemas.DraftById("publicId"),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.ForkPublic(args)));
     }

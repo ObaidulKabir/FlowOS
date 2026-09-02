@@ -14,6 +14,7 @@ public class WorkflowInstance : IWorkflowInstance
     public Guid WorkflowClassId { get; private set; } // Link to Governance Entity
     public int WorkflowVersion { get; private set; }
     public string CurrentStepId { get; private set; }
+    public string? CurrentState { get; private set; }
     public WorkflowInstanceStatus Status { get; private set; }
 
     // Orchestration state only - not business data
@@ -23,7 +24,7 @@ public class WorkflowInstance : IWorkflowInstance
         CurrentStepId = null!;
     }
 
-    public WorkflowInstance(Guid tenantId, Guid definitionId, Guid workflowClassId, int version, string initialStepId, Guid? correlationId = null)
+    public WorkflowInstance(Guid tenantId, Guid definitionId, Guid workflowClassId, int version, string initialStepId, Guid? correlationId = null, string? initialState = null)
     {
         if (string.IsNullOrWhiteSpace(initialStepId))
             throw new ArgumentNullException(nameof(initialStepId));
@@ -34,6 +35,7 @@ public class WorkflowInstance : IWorkflowInstance
         WorkflowClassId = workflowClassId;
         WorkflowVersion = version;
         CurrentStepId = initialStepId;
+        CurrentState = initialState ?? initialStepId;
         Status = WorkflowInstanceStatus.Running;
         CorrelationId = correlationId;
         CreatedAt = DateTime.UtcNow;
@@ -49,6 +51,11 @@ public class WorkflowInstance : IWorkflowInstance
 
         CurrentStepId = nextStepId;
         Status = WorkflowInstanceStatus.Running;
+    }
+
+    public void SetCurrentState(string state)
+    {
+        CurrentState = state;
     }
 
     public void Complete()

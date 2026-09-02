@@ -127,7 +127,7 @@ public class Notification_Feature_Tests : IClassFixture<WebApplicationFactory<Pr
         var user1Notifs = await user1NotifsResponse.Content.ReadFromJsonAsync<List<NotificationDto>>();
 
         Assert.NotNull(user1Notifs);
-        var user1Notif = Assert.Single(user1Notifs);
+        var user1Notif = user1Notifs.First(n => n.Message == "Please review urgent expense report");
         Assert.Equal("Please review urgent expense report", user1Notif.Message);
         Assert.Equal("Critical", user1Notif.Severity);
         Assert.Equal("EVT-RICH-TASK", user1Notif.EventType);

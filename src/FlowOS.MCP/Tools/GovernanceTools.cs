@@ -170,4 +170,66 @@ public class GovernanceTools
             return McpToolResults.Fail("MCP-INTERNAL", "WorkflowClass fork failed.");
         }
     }
+
+    public async Task<CallToolResult> GetDraft(JObject args)
+    {
+        try
+        {
+            var idStr = args["id"]?.ToString();
+            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
+                return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var workflowClass = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, id));
+            if (workflowClass == null)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+            }
+
+            return McpToolResults.Success(workflowClass);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to retrieve draft workflow class.");
+        }
+    }
+
+    public async Task<CallToolResult> ListDrafts(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var list = await _mediator.Send(new ListWorkflowClassesQuery(tenantId, null, FlowOS.Domain.Enums.WorkflowClassStatus.Draft));
+            var drafts = list.Select(w => new
+            {
+                w.Id,
+                w.Name,
+                w.Version,
+                Status = w.Status.ToString(),
+                Scope = w.Scope.ToString(),
+                w.CreatedAt,
+                w.PublishedAt
+            }).ToList();
+
+            return McpToolResults.Success(new { drafts });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to list draft workflow classes.");
+        }
+    }
 }

@@ -19,6 +19,10 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
             .IsRequired()
             .HasMaxLength(200);
 
+        builder.Property(w => w.CurrentState)
+            .IsRequired(false)
+            .HasMaxLength(200);
+
         builder.Property(w => w.Status)
             .HasConversion<string>();
 

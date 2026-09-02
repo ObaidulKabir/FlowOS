@@ -15,17 +15,16 @@ Communicates over **stdio** (`stdin`/`stdout`) using JSON-RPC 2.0. Logging goes 
 ### Streamable HTTP
 
 ```bash
-# PowerShell
+# PowerShell (Development / Pre-Payment Gateway Sandbox Mode)
 $env:MCP_TRANSPORT="http"
 $env:ASPNETCORE_URLS="http://0.0.0.0:8080"
-$env:MCP_API_KEY="replace-with-a-long-random-secret"
+$env:MCP_API_KEY="disabled"  # Set to "disabled" or omit for key-free sandbox testing
 $env:MCP_ROLE="Admin"
-$env:MCP_ALLOWED_ORIGINS="https://your-browser-client.example"
 dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
 ```
 
 ```bash
-# bash
+# bash (Production Mode with API Key)
 MCP_TRANSPORT=http ASPNETCORE_URLS=http://0.0.0.0:8080 \
 MCP_API_KEY=replace-with-a-long-random-secret MCP_ROLE=Admin \
   dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
@@ -39,13 +38,10 @@ Endpoints:
 | `GET` | `/mcp` | `405` with `Allow: POST` (no standalone SSE listen stream) |
 | `GET` | `/health` | `200` `{ "status": "ok" }` |
 
-Every `/mcp` request requires `X-MCP-API-Key` and a valid `x-tenant-id`.
-After initialization, requests also require `MCP-Protocol-Version: 2025-03-26`.
-The service role comes only from `MCP_ROLE`; caller-supplied role headers are ignored.
-Browser origins are rejected unless listed (comma-separated) in `MCP_ALLOWED_ORIGINS`;
-native clients that omit `Origin` are allowed. `/health` remains unauthenticated.
+> 💡 **Pre-Payment Gateway & Sandbox Mode**:
+> Setting `MCP_API_KEY=disabled` (or leaving `MCP_API_KEY` unconfigured) bypasses the `X-MCP-API-Key` header requirement for easy testing and AI agent evaluation. When set to a secret string, `X-MCP-API-Key` is strictly enforced. Every request still requires a valid `x-tenant-id`.
 
-Smoke test:
+Smoke test (Sandbox Mode):
 
 ```bash
 curl -s http://localhost:8080/health
@@ -53,18 +49,24 @@ curl -s http://localhost:8080/health
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "X-MCP-API-Key: replace-with-a-long-random-secret" \
   -H "x-tenant-id: 11111111-1111-1111-1111-111111111111" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
 
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "X-MCP-API-Key: replace-with-a-long-random-secret" \
   -H "x-tenant-id: 11111111-1111-1111-1111-111111111111" \
   -H "MCP-Protocol-Version: 2025-03-26" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
+
+### Temporary In-Memory Sandbox Docker Compose
+For testing and learning without setting up PostgreSQL or API keys:
+```bash
+docker compose -f docker-compose.sandbox.yml up --build
+```
+- **API**: `http://localhost:5183` (In-Memory Database)
+- **MCP**: `http://localhost:8081` (Unauthenticated Sandbox Mode)
 
 Cursor remote MCP example (`mcp.json`):
 
@@ -72,20 +74,14 @@ Cursor remote MCP example (`mcp.json`):
 {
   "mcpServers": {
     "flowos": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8081/mcp",
       "headers": {
-        "X-MCP-API-Key": "replace-with-a-long-random-secret",
         "x-tenant-id": "11111111-1111-1111-1111-111111111111"
       }
     }
   }
 }
 ```
-
-Docker Compose runs MCP in HTTP mode by default (port **8081→8080** locally;
-Traefik `PathPrefix(/mcp)` in `docker-compose.test.yaml`). Set `MCP_API_KEY` and
-`MCP_ROLE` in the deployment environment before running Compose. Set
-`MCP_ALLOWED_ORIGINS` only when browser clients are used; do not commit secrets.
 
 If no `ConnectionStrings:DefaultConnection` is configured, MCP falls back to an in-memory database (`FlowOS_MCP_Db`) — separate from the API's own in-memory instance.
 
@@ -126,12 +122,17 @@ return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 | `list_public_workflowclasses` | `tenantId` (stdio) | `InfoTools.ListPublic` | Lists `{ id, name, version }` for every `Public`-scope WorkflowClass (via Application MediatR/UoW). |
 | `list_available_agents` | _none_ | `AgentTools.ListAvailableAgents` | Lists registered runtime agents (currently hardcoded: `RiskAnalysisAgent`) and their capabilities. |
 | `suggest_agent_action` | `workflowInstanceId`, `agentId`, `tenantId` (stdio) | `AgentTools.SuggestAgentAction` | Runs a real `IWorkflowAgent` against a tenant-scoped workflow instance's latest event payload (or a simulated payload if none exists) and returns its `SuggestedAction`. |
-| `explain_validation_violation` | `code`, `context` (json) | `AnalysisTools.ExplainValidationViolation` | Explains real `WorkflowClassValidator` codes (`STR-*`, `CON-*`, `WF-COMP-*`, `GOV-001`, etc.). |
+| `explain_validation_violation` | `code`, `context` (json) | `AnalysisTools.ExplainValidationViolation` | Explains real `WorkflowClassValidator` codes (`STR-*`, `CON-*`, `WF-COMP-*`, `GOV-001`, `WF-SLA-*`, etc.). |
 | `lint_draft_workflowclass` | `id`, `tenantId` (stdio) | `AnalysisTools.LintDraftWorkflowClass` | Tenant-scoped advisory lint: orphaned events, excessive state count (>15), overly short Step IDs. |
+| `get_draft_workflowclass` | `id`, `tenantId` (stdio) | `GovernanceTools.GetDraft` | Reads back full metadata and JSON blueprint of a tenant-owned Draft. |
+| `list_draft_workflowclasses` | `tenantId` (stdio) | `GovernanceTools.ListDrafts` | Lists all private Draft WorkflowClasses for a tenant. |
+| `get_workflow_instance_status` | `instanceId`, `tenantId` (stdio) | `InfoTools.GetWorkflowInstanceStatus` | Queries runtime instance execution status, current step, current state, and completion timestamps. |
 | `create_draft_workflowclass` | `name`, `version`, `blueprint`, `tenantId` | `GovernanceTools.CreateDraft` | Creates a new Draft via `CreateWorkflowClassCommand`. **Fails if authoritative validation fails.** |
 | `update_draft_workflowclass` | `id`, `blueprint`, `tenantId`, `name`/`version` (opt) | `GovernanceTools.UpdateDraft` | Updates an existing Draft via `UpdateWorkflowClassCommand`. **Requires `tenantId`.** |
 | `validate_draft_workflowclass` | `id`, `tenantId` | `GovernanceTools.ValidateDraft` | Runs authoritative validation without modifying anything. **Requires `tenantId`.** |
 | `fork_public_workflowclass` | `publicId`, `tenantId` | `GovernanceTools.ForkPublic` | Creates a private Draft copy of a `Public` template via `CopyWorkflowClassCommand`. |
+| `list_notifications` | `tenantId`, `userId` (opt) | `NotificationTools.ListNotifications` | Lists recent tenant and user notifications with severity levels. |
+| `mark_notification_as_read` | `id`, `tenantId` | `NotificationTools.MarkNotificationAsRead` | Marks a specific notification as read. |
 
 For HTTP, the authenticated `x-tenant-id` header is authoritative. A `tenantId`
 tool argument may repeat that value but cannot override it. For stdio, every

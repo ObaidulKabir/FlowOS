@@ -76,12 +76,11 @@ public partial class Program
         configureBuilder?.Invoke(builder);
 
         var apiKey = builder.Configuration["MCP_API_KEY"];
-        if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("MCP_API_KEY must be configured for HTTP transport.");
+        var isAuthRequired = !string.IsNullOrWhiteSpace(apiKey) &&
+                             !string.Equals(apiKey, "disabled", StringComparison.OrdinalIgnoreCase) &&
+                             !string.Equals(apiKey, "none", StringComparison.OrdinalIgnoreCase);
 
-        var serviceRole = builder.Configuration["MCP_ROLE"];
-        if (string.IsNullOrWhiteSpace(serviceRole))
-            throw new InvalidOperationException("MCP_ROLE must be configured for HTTP transport.");
+        var serviceRole = builder.Configuration["MCP_ROLE"] ?? "Admin";
 
         var allowedOrigins = (builder.Configuration["MCP_ALLOWED_ORIGINS"] ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -122,12 +121,15 @@ public partial class Program
                 return;
             }
 
-            var suppliedApiKey = context.Request.Headers["X-MCP-API-Key"].FirstOrDefault();
-            if (!FixedTimeEquals(apiKey, suppliedApiKey))
+            if (isAuthRequired)
             {
-                context.Response.Headers.WWWAuthenticate = "ApiKey";
-                await WriteHttpError(context, StatusCodes.Status401Unauthorized, -32001, "Authentication required.");
-                return;
+                var suppliedApiKey = context.Request.Headers["X-MCP-API-Key"].FirstOrDefault();
+                if (!FixedTimeEquals(apiKey!, suppliedApiKey))
+                {
+                    context.Response.Headers.WWWAuthenticate = "ApiKey";
+                    await WriteHttpError(context, StatusCodes.Status401Unauthorized, -32001, "Authentication required.");
+                    return;
+                }
             }
 
             var tenantText = context.Request.Headers["x-tenant-id"].FirstOrDefault();

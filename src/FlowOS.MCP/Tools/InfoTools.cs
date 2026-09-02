@@ -36,4 +36,37 @@ public class InfoTools
             return McpToolResults.Fail(ex.Code, ex.Message);
         }
     }
+
+    public async Task<CallToolResult> GetWorkflowInstanceStatus(JObject args)
+    {
+        try
+        {
+            var instanceIdStr = args["instanceId"]?.ToString() ?? args["id"]?.ToString();
+            if (string.IsNullOrEmpty(instanceIdStr) || !Guid.TryParse(instanceIdStr, out var instanceId))
+                return McpToolResults.Fail("MCP-ARG-002", "instanceId must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var summary = await _mediator.Send(new FlowOS.Application.Queries.GetWorkflowByIdQuery
+            {
+                TenantId = tenantId,
+                Id = instanceId
+            });
+
+            if (summary == null)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", "Workflow instance not found.");
+            }
+
+            return McpToolResults.Success(summary);
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to retrieve workflow instance status.");
+        }
+    }
 }

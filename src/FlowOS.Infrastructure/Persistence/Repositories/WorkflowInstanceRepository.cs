@@ -99,6 +99,7 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         Version = w.WorkflowVersion,
         CurrentStepId = w.CurrentStepId,
         CurrentStep = w.CurrentStepId,
+        CurrentState = w.CurrentState,
         Status = w.Status.ToString(),
         CorrelationId = w.CorrelationId,
         CreatedAt = w.CreatedAt,

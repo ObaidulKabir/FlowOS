@@ -82,7 +82,28 @@ public static class McpToolDescriptions
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"publicId\":\"44444444-4444-4444-4444-444444444444\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
+                "Input example: {\"publicId\":\"44444444-4444-4444-4444-444444444444\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["get_draft_workflowclass"] =
+                "Reads and returns the complete draft WorkflowClass definition, metadata, and full blueprint by ID. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:<WorkflowClassResponseDto>}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["list_draft_workflowclasses"] =
+                "Lists all private Draft WorkflowClasses owned by the tenant. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{drafts:[{id,name,version,status,scope,createdAt,updatedAt}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["get_workflow_instance_status"] =
+                "Queries the runtime execution status, current step, current state, and completion timestamps of an active or completed workflow instance. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:<WorkflowSummaryDto>}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"instanceId\":\"55555555-5555-5555-5555-555555555555\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
         };
 
     public static string For(string toolName) =>

@@ -1,4 +1,4 @@
-﻿using FlowOS.Workflows.Enums;
+using FlowOS.Workflows.Enums;
 
 namespace FlowOS.Workflows.Domain
 {
@@ -8,6 +8,7 @@ namespace FlowOS.Workflows.Domain
         Guid? CorrelationId { get; }
         DateTime CreatedAt { get; }
         string CurrentStepId { get; }
+        string? CurrentState { get; }
         Guid Id { get; }
         WorkflowInstanceStatus Status { get; }
         Guid TenantId { get; }
@@ -16,6 +17,7 @@ namespace FlowOS.Workflows.Domain
         int WorkflowVersion { get; }
 
         void AdvanceTo(string nextStepId);
+        void SetCurrentState(string state);
         void Complete();
         void Wait();
     }

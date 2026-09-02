@@ -93,6 +93,7 @@ builder.Services.AddMediatR(cfg =>
 
 builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.OutboxProcessorService>();
 builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.WorkflowTimerProcessorService>();
+builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.InMemoryDataCleanupService>();
 
 builder.Services.AddCors(options =>
 {

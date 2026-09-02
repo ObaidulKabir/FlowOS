@@ -156,6 +156,7 @@ public class WorkflowClassesController : ControllerBase
     }
 
     [HttpPost("{id}/approve")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> ApproveAsPublic(Guid id)
         => await Mutate(new ApproveWorkflowClassCommand(_currentUser.TenantId, id));
 

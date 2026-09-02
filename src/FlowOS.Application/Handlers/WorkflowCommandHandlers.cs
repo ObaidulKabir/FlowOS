@@ -196,7 +196,9 @@ public class WorkflowCommandHandlers :
             }
         }
 
-        var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
+        Console.WriteLine($"[Handler] Handling PublishEventCommand: Event={request.EventType}, WorkflowInstanceId={request.WorkflowInstanceId}, Tenant={request.TenantId}");
+        
+        bool isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
         if (!isRegistered && request.EventType.StartsWith("EVT-", StringComparison.OrdinalIgnoreCase))
         {
              Console.WriteLine($"[Handler] Event '{request.EventType}' not registered for tenant {request.TenantId}");
@@ -256,8 +258,11 @@ public class WorkflowCommandHandlers :
             }
         }
 
+        var smDef = await ResolveStateMachineDefinitionAsync(instance.WorkflowClassId, request.TenantId, definition.Name, cancellationToken);
+        var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
+
         var previousStepId = instance.CurrentStepId;
-        var result = _engine.Advance(instance, definition, domainEvent, context);
+        var result = _engine.Advance(instance, definition, domainEvent, context, smDef, currentEntityState);
 
         if (result.Success)
         {
@@ -267,7 +272,7 @@ public class WorkflowCommandHandlers :
             }
 
             _unitOfWork.Events.Add(domainEvent);
-            RunAutoAdvance(instance, definition, request.TenantId, context);
+            RunAutoAdvance(instance, definition, request.TenantId, context, smDef);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
@@ -299,8 +304,11 @@ public class WorkflowCommandHandlers :
         }
 
         var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        var smDef = await ResolveStateMachineDefinitionAsync(instance.WorkflowClassId, request.TenantId, definition.Name, cancellationToken);
+        var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
+
         var previousStepId = instance.CurrentStepId;
-        var result = _engine.Advance(instance, definition, domainEvent, context);
+        var result = _engine.Advance(instance, definition, domainEvent, context, smDef, currentEntityState);
 
         if (result.Success)
         {
@@ -310,7 +318,7 @@ public class WorkflowCommandHandlers :
             }
 
             _unitOfWork.Events.Add(domainEvent);
-            RunAutoAdvance(instance, definition, request.TenantId, context);
+            RunAutoAdvance(instance, definition, request.TenantId, context, smDef);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
@@ -319,7 +327,54 @@ public class WorkflowCommandHandlers :
         return false;
     }
 
-    private void RunAutoAdvance(WorkflowInstance instance, WorkflowDefinition definition, Guid tenantId, FlowOS.StateMachines.Models.ExecutionContext context)
+    private async Task<FlowOS.Domain.Entities.StateMachineDefinition?> ResolveStateMachineDefinitionAsync(
+        Guid workflowClassId,
+        Guid tenantId,
+        string workflowName,
+        CancellationToken cancellationToken)
+    {
+        if (workflowClassId != Guid.Empty)
+        {
+            var wc = await _unitOfWork.WorkflowClasses.GetByIdAsNoTrackingAsync(workflowClassId, cancellationToken);
+            if (wc?.Definition.StateMachine != null)
+            {
+                var smBp = wc.Definition.StateMachine;
+                var smDef = new FlowOS.Domain.Entities.StateMachineDefinition(
+                    tenantId,
+                    smBp.EntityType ?? wc.Name,
+                    smBp.InitialState ?? "Start"
+                );
+                foreach (var state in smBp.States)
+                {
+                    if (state != smDef.InitialState) smDef.AddState(state);
+                }
+                foreach (var tr in smBp.Transitions)
+                {
+                    smDef.AddTransition(new FlowOS.Domain.ValueObjects.StateTransition
+                    {
+                        FromState = tr.FromState,
+                        ToState = tr.ToState,
+                        EventId = tr.EventId
+                    });
+                }
+                return smDef;
+            }
+        }
+        else if (!string.IsNullOrEmpty(workflowName))
+        {
+            var smDef = await _unitOfWork.StateMachines.GetByEntityTypeAndTenantAsync(workflowName, tenantId, cancellationToken);
+            if (smDef != null) return smDef;
+        }
+
+        return null;
+    }
+
+    private void RunAutoAdvance(
+        WorkflowInstance instance,
+        WorkflowDefinition definition,
+        Guid tenantId,
+        FlowOS.StateMachines.Models.ExecutionContext context,
+        FlowOS.Domain.Entities.StateMachineDefinition? smDef = null)
     {
         int autoAdvanceLimit = 5;
         while (autoAdvanceLimit > 0)
@@ -328,7 +383,8 @@ public class WorkflowCommandHandlers :
             if (currentStep != null && currentStep.NextSteps.ContainsKey("Default"))
             {
                 var defaultEvent = new StandardEvent(tenantId, "Default");
-                var result = _engine.Advance(instance, definition, defaultEvent, context);
+                var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
+                var result = _engine.Advance(instance, definition, defaultEvent, context, smDef, currentEntityState);
                 
                 if (!result.Success) break;
                 autoAdvanceLimit--;

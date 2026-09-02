@@ -15,6 +15,7 @@ public class WorkflowSummaryDto
     public int Version { get; set; }
     public string CurrentStepId { get; set; } = string.Empty;
     public string CurrentStep { get; set; }
+    public string? CurrentState { get; set; }
     public string Status { get; set; } = string.Empty;
     public Guid? CorrelationId { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -39,10 +39,10 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## 🧪 Testing
 
-Run the full automated test suite (188 tests across MCP, Unit, and End-to-End integration):
+Run the full automated test suite (192 tests across MCP, Unit, and End-to-End integration):
 ```bash
 dotnet test FlowOS.sln
 ```
 
 ## 🤖 AI Capabilities
-FlowOS exposes a **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) over **stdio** or authenticated **Streamable HTTP** (`MCP_TRANSPORT=http`, `POST /mcp`). HTTP calls require an API key and authoritative tenant header, and expose the same 10 design-time tools and schemas as stdio. The separate runtime **Agent Insights API** (`/api/agents/insight`) provides advisory, human-in-the-loop suggestions during live workflow execution. See [Chapter 13 — MCP & AI Agent Automation](docs/13-mcp-and-ai-agent-integration.md) and [Chapter 7 — AI Agents & Insights](docs/07-ai-agents-and-insights.md).
+FlowOS exposes a **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) over **stdio** or authenticated **Streamable HTTP** (`MCP_TRANSPORT=http`, `POST /mcp`). HTTP calls require an API key and authoritative tenant header, and expose 15 design-time, observability, and advisory tools and schemas. The separate runtime **Agent Insights API** (`/api/agents/insight`) provides advisory, human-in-the-loop suggestions during live workflow execution. See [Chapter 13 — MCP & AI Agent Automation](docs/13-mcp-and-ai-agent-integration.md) and [Chapter 7 — AI Agents & Insights](docs/07-ai-agents-and-insights.md).
