@@ -48,12 +48,15 @@ export interface CopyRequest {
 }
 
 export interface WorkflowInstance {
-  workflowId: string;
-  workflowClassId: string;
-  workflowClassName: string;
-  correlationId: string;
-  currentStep: string;
-  status: string;
+  id?: string;
+  workflowId?: string;
+  workflowClassId?: string;
+  workflowClassName?: string;
+  correlationId?: string;
+  currentStep?: string;
+  currentStepId?: string;
+  currentState?: string;
+  status: any;
   createdAt: string;
   completedAt?: string;
 }

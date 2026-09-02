@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { WorkflowTable } from './components/WorkflowTable';
 import { DetailView } from './components/DetailView';
 import { EditorView } from './components/EditorView';
@@ -114,7 +114,7 @@ function App() {
     }
   };
 
-  const handleAction = async (action: () => Promise<void>) => {
+  const handleAction = async (action: () => Promise<any>) => {
     if (!confirm('Are you sure you want to proceed with this action?')) return;
     try {
         await action();
