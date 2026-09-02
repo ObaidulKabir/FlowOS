@@ -232,4 +232,39 @@ public class GovernanceTools
             return McpToolResults.Fail("MCP-INTERNAL", "Failed to list draft workflow classes.");
         }
     }
+
+    public async Task<CallToolResult> Publish(JObject args)
+    {
+        try
+        {
+            var idStr = args["id"]?.ToString();
+            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
+                return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var result = await _mediator.Send(new PublishWorkflowClassCommand(tenantId, id));
+            return McpToolResults.Success(new { id = result.Id, tenantId, status = "Published", message = "WorkflowClass published successfully." });
+        }
+        catch (WorkflowClassValidationException ex)
+        {
+            return McpToolResults.ValidationFailed(ex.ValidationResult);
+        }
+        catch (KeyNotFoundException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to publish workflow class: {ex.Message}");
+        }
+    }
 }

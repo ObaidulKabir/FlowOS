@@ -56,8 +56,21 @@ export const WorkflowTable: React.FC<Props> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
-          {items.map((item) => (
-            <tr key={item.id}>
+          {items.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="px-6 py-12 text-center text-slate-500 text-sm">
+                No <strong>{currentTab}</strong> workflow classes found.
+                {currentTab === 'Drafts' && (
+                  <p className="text-xs text-slate-400 mt-1">Click &quot;+ New WorkflowClass&quot; above to create a draft, or check the &quot;Published&quot; tab.</p>
+                )}
+                {currentTab === 'Published' && (
+                  <p className="text-xs text-slate-400 mt-1">Workflow classes published from &quot;Drafts&quot; will appear here.</p>
+                )}
+              </td>
+            </tr>
+          ) : (
+            items.map((item) => (
+              <tr key={item.id}>
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.version}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{WorkflowClassScope[item.scope]}</td>
@@ -136,7 +149,7 @@ export const WorkflowTable: React.FC<Props> = ({
 
               </td>
             </tr>
-          ))}
+          )))}
         </tbody>
       </table>
     </div>

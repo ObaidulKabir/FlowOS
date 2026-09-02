@@ -52,6 +52,9 @@ public static class ToolRegistration
 
         registry.Register("fork_public_workflowclass", McpToolDescriptions.For("fork_public_workflowclass"), McpToolSchemas.DraftById("publicId"),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.ForkPublic(args)));
+
+        registry.Register("publish_workflowclass", McpToolDescriptions.For("publish_workflowclass"), McpToolSchemas.DraftById(),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.Publish(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

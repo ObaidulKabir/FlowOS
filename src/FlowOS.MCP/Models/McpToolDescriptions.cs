@@ -103,7 +103,14 @@ public static class McpToolDescriptions
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:<WorkflowSummaryDto>}. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"instanceId\":\"55555555-5555-5555-5555-555555555555\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
+                "Input example: {\"instanceId\":\"55555555-5555-5555-5555-555555555555\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["publish_workflowclass"] =
+                "Publishes a tenant-owned Draft WorkflowClass, compiling it into an executable runtime WorkflowDefinition and registering associated EventDefinitions. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
         };
 
     public static string For(string toolName) =>

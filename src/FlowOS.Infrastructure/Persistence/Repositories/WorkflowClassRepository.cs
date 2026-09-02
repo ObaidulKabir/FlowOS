@@ -44,11 +44,14 @@ public class WorkflowClassRepository : IWorkflowClassRepository
         }
         else if (scope == WorkflowClassScope.Private)
         {
-            query = query.Where(wc => wc.TenantId == tenantId && wc.Scope == WorkflowClassScope.Private);
+            query = query.Where(wc => (wc.TenantId == tenantId || tenantId == Guid.Empty) && wc.Scope == WorkflowClassScope.Private);
         }
         else
         {
-            query = query.Where(wc => wc.TenantId == tenantId || wc.Scope == WorkflowClassScope.Public);
+            if (tenantId != Guid.Empty)
+            {
+                query = query.Where(wc => wc.TenantId == tenantId || wc.Scope == WorkflowClassScope.Public);
+            }
         }
 
         if (status.HasValue)

@@ -143,8 +143,9 @@ function App() {
       }
       const result = await api.validate(savedItem.id);
       setValidationResult(result);
-      setEditorItem(savedItem);
+      setEditorItem(null);
       setIsCreating(false);
+      setActiveTab('Drafts');
       await loadData();
     } catch (err: any) {
       setError(err.message);
@@ -425,10 +426,28 @@ function App() {
                 onView={handleView}
                 onEdit={handleEdit}
                 onDelete={(id) => handleAction(() => api.delete(id))}
-                onPublish={(id) => handleAction(() => api.publish(id))}
-                onSubmit={(id) => handleAction(() => api.submit(id))}
+                onPublish={async (id) => {
+                  await handleAction(async () => {
+                    const pub = await api.publish(id);
+                    setActiveTab('Published');
+                    return pub;
+                  });
+                }}
+                onSubmit={async (id) => {
+                  await handleAction(async () => {
+                    const sub = await api.submit(id);
+                    setActiveTab('Shared');
+                    return sub;
+                  });
+                }}
                 onWithdraw={(id) => handleAction(() => api.withdraw(id))}
-                onApprove={(id) => handleAction(() => api.approve(id))}
+                onApprove={async (id) => {
+                  await handleAction(async () => {
+                    const app = await api.approve(id);
+                    setActiveTab('Public');
+                    return app;
+                  });
+                }}
                 onDeprecate={(id) => handleAction(() => api.deprecate(id))}
                 onAbandon={(id) => handleAction(() => api.abandon(id))}
                 onNewVersion={async (id) => {
