@@ -526,6 +526,7 @@ public static class DataSeeder
         };
 
         var v2Wc = new WorkflowClass(clientTenantId, v2Name, "1.0.0", v2Bp);
+        SetPrivateProperty(v2Wc, "Id", Guid.Parse("e912ab44-2222-2222-2222-222222222222"));
         var manager2 = new WorkflowClassManager();
         manager2.Publish(v2Wc);
         context.WorkflowClasses.Add(v2Wc);
@@ -642,20 +643,25 @@ public static class DataSeeder
     
     await context.SaveChangesAsync();
 
-    // 4. Fix History for specific instance (User Request)
-        var targetInstanceId = Guid.Parse("c6fd0acb-8afe-4d0e-b8eb-654545198f11");
-        var targetInstance = await context.WorkflowInstances.FindAsync(targetInstanceId);
-        if (targetInstance != null)
+        // 6. Ensure at least one live instance exists for Tenant / Admin view (Production only)
+        if (env.IsProduction() && !await context.WorkflowInstances.AnyAsync(w => w.TenantId == clientTenantId))
         {
-             var hasSubmit = await context.Events.AnyAsync(e => e.CorrelationId == targetInstanceId && e.EventType == "EVT-SUBMIT");
-             if (!hasSubmit)
-             {
-                 var submitEvent = new StandardEvent(targetInstance.TenantId, "EVT-SUBMIT");
-                 submitEvent.SetCorrelationId(targetInstanceId);
-                 SetPrivateProperty(submitEvent, "Timestamp", DateTime.UtcNow.AddHours(-1));
-                 context.Events.Add(submitEvent);
-                 await context.SaveChangesAsync();
-             }
+            var defV2 = await context.WorkflowDefinitions.FirstOrDefaultAsync(d => d.TenantId == clientTenantId && d.Name == v2Name);
+            var wcV2 = await context.WorkflowClasses.FirstOrDefaultAsync(w => w.TenantId == clientTenantId && w.Name == v2Name);
+            if (defV2 != null && wcV2 != null)
+            {
+                var demoInstance = new WorkflowInstance(
+                    clientTenantId,
+                    defV2.Id,
+                    wcV2.Id,
+                    1,
+                    "PendingManager",
+                    Guid.NewGuid()
+                );
+                SetPrivateProperty(demoInstance, "CurrentState", "PendingManager");
+                context.WorkflowInstances.Add(demoInstance);
+                await context.SaveChangesAsync();
+            }
         }
     }
 

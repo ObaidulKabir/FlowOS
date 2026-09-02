@@ -33,22 +33,22 @@ function App() {
     setError(null);
     try {
       if (activeTab === 'Instances') {
-        const data = await api.listInstances();
+        const data = await api.listInstances(role);
         setInstances(data);
       } else {
         let data: WorkflowClass[] = [];
         switch (activeTab) {
           case 'Drafts':
-            data = await api.list(undefined, WorkflowClassStatus.Draft);
+            data = await api.list(undefined, WorkflowClassStatus.Draft, role);
             break;
           case 'Published':
-            data = await api.list(undefined, WorkflowClassStatus.Published);
+            data = await api.list(undefined, WorkflowClassStatus.Published, role);
             break;
           case 'Shared':
-            data = await api.list(WorkflowClassScope.Shared, undefined);
+            data = await api.list(WorkflowClassScope.Shared, undefined, role);
             break;
           case 'Public':
-            data = await api.list(WorkflowClassScope.Public, undefined);
+            data = await api.list(WorkflowClassScope.Public, undefined, role);
             break;
         }
         setItems(data);
@@ -62,7 +62,7 @@ function App() {
 
   useEffect(() => {
     loadData();
-  }, [activeTab]);
+  }, [activeTab, role]);
 
   const handleSimulateEvent = (eventId: string, targetState: string, targetStep: string) => {
     if (simState === 'Completed') {
@@ -97,7 +97,7 @@ function App() {
         },
         body: JSON.stringify({
           tenantId: '22222222-2222-2222-2222-222222222222',
-          workflowClassId: 'e912ab44-2222-2222-2222-222222222222'
+          workflowName: 'ExpenseApprovalV2'
         })
       });
       if (res.ok) {
@@ -106,7 +106,8 @@ function App() {
         setActiveTab('Instances');
         loadData();
       } else {
-        alert('Failed to start instance via API. Check console.');
+        const errText = await res.text();
+        alert(`Failed to start instance via API: ${errText}`);
       }
     } catch (err: any) {
       alert(`Start failed: ${err.message}`);
