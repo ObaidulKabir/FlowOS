@@ -24,32 +24,37 @@ public class MockAuthenticationHandler : AuthenticationHandler<AuthenticationSch
              return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(Context.User, "Mock")));
         }
 
-        if (Context.Request.Headers.TryGetValue("X-Mock-Role", out var role))
+        string role = "Admin";
+        if (Context.Request.Headers.TryGetValue("X-Mock-Role", out var r) && !string.IsNullOrWhiteSpace(r))
         {
-            var userId = Context.Request.Headers.TryGetValue("X-Mock-UserId", out var uid) && !string.IsNullOrWhiteSpace(uid)
-                ? uid.ToString()
-                : "mock-user";
-
-            var claims = new System.Collections.Generic.List<System.Security.Claims.Claim>
-            {
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userId),
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "Mock User"),
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role.ToString())
-            };
-
-            // Add Tenant ID claim if provided in header
-            if (Context.Request.Headers.TryGetValue("x-tenant-id", out var tenantId))
-            {
-                claims.Add(new System.Security.Claims.Claim("tenant_id", tenantId.ToString()));
-            }
-
-            var identity = new System.Security.Claims.ClaimsIdentity(claims, "Mock");
-            var principal = new System.Security.Claims.ClaimsPrincipal(identity);
-            var ticket = new AuthenticationTicket(principal, "Mock");
-
-            return Task.FromResult(AuthenticateResult.Success(ticket));
+            role = r.ToString();
         }
 
-        return Task.FromResult(AuthenticateResult.NoResult());
+        var userId = Context.Request.Headers.TryGetValue("X-Mock-UserId", out var uid) && !string.IsNullOrWhiteSpace(uid)
+            ? uid.ToString()
+            : "mock-user";
+
+        var claims = new System.Collections.Generic.List<System.Security.Claims.Claim>
+        {
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userId),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "Mock User"),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role)
+        };
+
+        // Add Tenant ID claim if provided in header or query string
+        if (Context.Request.Headers.TryGetValue("x-tenant-id", out var tenantId) && !string.IsNullOrWhiteSpace(tenantId))
+        {
+            claims.Add(new System.Security.Claims.Claim("tenant_id", tenantId.ToString()));
+        }
+        else if (Context.Request.Query.TryGetValue("tenantId", out var queryTenant) && !string.IsNullOrWhiteSpace(queryTenant))
+        {
+            claims.Add(new System.Security.Claims.Claim("tenant_id", queryTenant.ToString()));
+        }
+
+        var identity = new System.Security.Claims.ClaimsIdentity(claims, "Mock");
+        var principal = new System.Security.Claims.ClaimsPrincipal(identity);
+        var ticket = new AuthenticationTicket(principal, "Mock");
+
+        return Task.FromResult(AuthenticateResult.Success(ticket));
     }
 }

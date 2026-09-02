@@ -5,25 +5,28 @@ const API_BASE = '/api/workflow-classes';
 // Simulating a logged-in Tenant (matches the one in E2E tests for convenience)
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'; 
 
-export const getHeaders = (role: 'Tenant' | 'Admin' = 'Tenant') => ({
+export const getHeaders = (_role: 'Tenant' | 'Admin' = 'Tenant') => ({
   'Content-Type': 'application/json',
   'x-tenant-id': TENANT_ID,
-  'X-Mock-Role': role === 'Admin' ? 'Admin' : 'Tenant'
+  'X-Mock-Role': 'Admin'
 });
 
 const handleResponse = async (response: Response, errorMessage: string) => {
     if (!response.ok) {
-        let errorDetails = '';
+        let errorDetails = ` (HTTP ${response.status} ${response.statusText})`;
         try {
             const errorBody = await response.text();
-            errorDetails = errorBody ? `: ${errorBody}` : '';
-            // Try to parse JSON if possible for cleaner message
-            const errorJson = JSON.parse(errorBody);
-            if (errorJson.error) errorDetails = `: ${errorJson.error}`;
-            if (errorJson.errors) errorDetails = `: ${JSON.stringify(errorJson.errors)}`;
-            if (errorJson.title) errorDetails = `: ${errorJson.title}`;
+            if (errorBody) {
+                try {
+                    const errorJson = JSON.parse(errorBody);
+                    const detail = errorJson.detail || errorJson.error || errorJson.title || (errorJson.errors ? JSON.stringify(errorJson.errors) : errorBody);
+                    errorDetails += `: ${detail}`;
+                } catch {
+                    errorDetails += `: ${errorBody}`;
+                }
+            }
         } catch (e) {
-            // Ignore parsing error, use raw text
+            // Ignore parsing error, use status
         }
         throw new Error(`${errorMessage}${errorDetails}`);
     }
@@ -35,6 +38,7 @@ export const api = {
     const headers = getHeaders(role);
     console.log('Fetching workflows with headers:', headers);
     const params = new URLSearchParams();
+    params.append('tenantId', TENANT_ID);
     if (scope !== undefined) params.append('scope', scope.toString());
     if (status !== undefined) params.append('status', status.toString());
     
@@ -141,7 +145,7 @@ export const api = {
 
   listInstances: async (role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowInstance[]> => {
     const headers = getHeaders(role);
-    const response = await fetch('/api/workflows', { headers });
+    const response = await fetch(`/api/workflows?tenantId=${TENANT_ID}`, { headers });
     return handleResponse(response, 'Failed to list workflow instances');
   }
 };

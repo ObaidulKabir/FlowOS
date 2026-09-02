@@ -27,16 +27,23 @@ public class CurrentUserService : ICurrentUser
 
             // Try header
             if (context.Request.Headers.TryGetValue("x-tenant-id", out var headerValue) && 
-                Guid.TryParse(headerValue, out var tenantId))
+                Guid.TryParse(headerValue, out var tenantId) && tenantId != Guid.Empty)
             {
                 return tenantId;
             }
 
             // Try claim
             var claim = context.User?.FindFirst("tenant_id")?.Value;
-            if (Guid.TryParse(claim, out var claimId))
+            if (Guid.TryParse(claim, out var claimId) && claimId != Guid.Empty)
             {
                 return claimId;
+            }
+
+            // Try query parameter
+            if (context.Request.Query.TryGetValue("tenantId", out var queryValue) &&
+                Guid.TryParse(queryValue, out var qTenantId) && qTenantId != Guid.Empty)
+            {
+                return qTenantId;
             }
 
             return Guid.Empty; // Or throw

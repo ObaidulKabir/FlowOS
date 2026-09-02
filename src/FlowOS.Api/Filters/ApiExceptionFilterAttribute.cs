@@ -57,6 +57,22 @@ public class ApiExceptionFilterAttribute : ExceptionFilterAttribute
 
             context.ExceptionHandled = true;
         }
+        else
+        {
+            var details = new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "Internal Server Error",
+                Detail = context.Exception.Message
+            };
+
+            context.Result = new ObjectResult(details)
+            {
+                StatusCode = StatusCodes.Status500InternalServerError
+            };
+
+            context.ExceptionHandled = true;
+        }
         
         base.OnException(context);
     }

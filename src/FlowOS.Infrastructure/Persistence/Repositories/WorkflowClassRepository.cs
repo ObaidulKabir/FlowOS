@@ -32,11 +32,24 @@ public class WorkflowClassRepository : IWorkflowClassRepository
         WorkflowClassStatus? status,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.WorkflowClasses.AsQueryable()
-            .Where(wc => wc.TenantId == tenantId || wc.Scope == WorkflowClassScope.Public);
+        var query = _context.WorkflowClasses.AsQueryable();
 
-        if (scope.HasValue)
-            query = query.Where(wc => wc.Scope == scope.Value);
+        if (scope == WorkflowClassScope.Shared)
+        {
+            query = query.Where(wc => wc.Scope == WorkflowClassScope.Shared);
+        }
+        else if (scope == WorkflowClassScope.Public)
+        {
+            query = query.Where(wc => wc.Scope == WorkflowClassScope.Public);
+        }
+        else if (scope == WorkflowClassScope.Private)
+        {
+            query = query.Where(wc => wc.TenantId == tenantId && wc.Scope == WorkflowClassScope.Private);
+        }
+        else
+        {
+            query = query.Where(wc => wc.TenantId == tenantId || wc.Scope == WorkflowClassScope.Public);
+        }
 
         if (status.HasValue)
             query = query.Where(wc => wc.Status == status.Value);
