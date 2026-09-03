@@ -122,9 +122,12 @@ public partial class Program
                 return;
             }
 
+            string? suppliedApiKey = null;
+            Guid? dbResolvedTenantId = null;
+
             if (isAuthRequired)
             {
-                var suppliedApiKey = context.Request.Headers["X-MCP-API-Key"].FirstOrDefault();
+                suppliedApiKey = context.Request.Headers["X-MCP-API-Key"].FirstOrDefault();
                 if (string.IsNullOrWhiteSpace(suppliedApiKey))
                 {
                     suppliedApiKey = context.Request.Headers["X-API-Key"].FirstOrDefault();
@@ -151,6 +154,33 @@ public partial class Program
                                   FixedTimeEquals("local-development-key-change-me", suppliedApiKey) ||
                                   FixedTimeEquals("YOUR_PRODUCTION_API_KEY", suppliedApiKey);
 
+                if (!isValidKey && !string.IsNullOrWhiteSpace(suppliedApiKey))
+                {
+                    try
+                    {
+                        var db = context.RequestServices.GetService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+                        if (db != null)
+                        {
+                            var keyHash = FlowOS.Domain.Entities.TenantApiKey.HashKey(suppliedApiKey);
+                            var apiKeyRecord = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
+                                db.TenantApiKeys,
+                                k => k.KeyHash == keyHash && !k.IsRevoked);
+
+                            if (apiKeyRecord != null)
+                            {
+                                isValidKey = true;
+                                dbResolvedTenantId = apiKeyRecord.TenantId;
+                                apiKeyRecord.RecordUsage();
+                                await db.SaveChangesAsync();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore DB lookup error in fallback
+                    }
+                }
+
                 if (!isValidKey)
                 {
                     context.Response.Headers.WWWAuthenticate = "ApiKey";
@@ -169,9 +199,27 @@ public partial class Program
                 tenantText = context.Request.Query["tenantId"].FirstOrDefault();
             }
 
-            if (!Guid.TryParse(tenantText, out var tenantId) || tenantId == Guid.Empty)
+            Guid tenantId = Guid.Empty;
+            if (!string.IsNullOrWhiteSpace(tenantText))
             {
-                await WriteHttpError(context, StatusCodes.Status400BadRequest, -32602, "A valid x-tenant-id header is required.");
+                Guid.TryParse(tenantText, out tenantId);
+            }
+
+            if (tenantId == Guid.Empty && dbResolvedTenantId.HasValue)
+            {
+                tenantId = dbResolvedTenantId.Value;
+            }
+
+            if (tenantId == Guid.Empty && (suppliedApiKey == "flowos_prod_secret_key_32_chars_min" ||
+                                           suppliedApiKey == "local-development-key-change-me" ||
+                                           suppliedApiKey == "YOUR_PRODUCTION_API_KEY"))
+            {
+                tenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+            }
+
+            if (tenantId == Guid.Empty)
+            {
+                await WriteHttpError(context, StatusCodes.Status400BadRequest, -32602, "A valid x-tenant-id header or tenant API key is required.");
                 return;
             }
 

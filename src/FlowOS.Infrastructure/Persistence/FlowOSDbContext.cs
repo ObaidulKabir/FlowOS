@@ -11,6 +11,7 @@ namespace FlowOS.Infrastructure.Persistence;
 public class FlowOSDbContext : DbContext
 {
     public DbSet<Tenant> Tenants { get; set; }
+    public DbSet<TenantApiKey> TenantApiKeys { get; set; }
     public DbSet<DomainEvent> Events { get; set; }
     public DbSet<WorkflowInstance> WorkflowInstances { get; set; }
     public DbSet<WorkflowDefinition> WorkflowDefinitions { get; set; }

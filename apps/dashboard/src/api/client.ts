@@ -2,12 +2,16 @@ import { WorkflowClass, CreateDraftRequest, CopyRequest, ValidationResult, Workf
 
 const API_BASE = '/api/workflow-classes';
 
-// Simulating a logged-in Tenant (matches the one in E2E tests for convenience)
-const TENANT_ID = '22222222-2222-2222-2222-222222222222'; 
+let currentTenantId = '22222222-2222-2222-2222-222222222222';
+
+export const getActiveTenantId = () => currentTenantId;
+export const setActiveTenantId = (id: string) => {
+  if (id) currentTenantId = id;
+};
 
 export const getHeaders = (_role: 'Tenant' | 'Admin' = 'Tenant') => ({
   'Content-Type': 'application/json',
-  'x-tenant-id': TENANT_ID,
+  'x-tenant-id': currentTenantId,
   'X-Mock-Role': 'Admin'
 });
 
@@ -38,7 +42,7 @@ export const api = {
     const headers = getHeaders(role);
     console.log('Fetching workflows with headers:', headers);
     const params = new URLSearchParams();
-    params.append('tenantId', TENANT_ID);
+    params.append('tenantId', currentTenantId);
     if (scope !== undefined) {
       const scopeName = WorkflowClassScope[scope] || scope.toString();
       params.append('scope', scopeName);
@@ -54,13 +58,13 @@ export const api = {
 
   get: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}?tenantId=${TENANT_ID}`, { headers });
+    const response = await fetch(`${API_BASE}/${id}?tenantId=${currentTenantId}`, { headers });
     return handleResponse(response, 'Failed to get workflow class');
   },
 
   createDraft: async (req: CreateDraftRequest, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}?tenantId=${TENANT_ID}`, {
+    const response = await fetch(`${API_BASE}?tenantId=${currentTenantId}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(req)
@@ -70,7 +74,7 @@ export const api = {
 
   updateDraft: async (id: string, req: CreateDraftRequest, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}?tenantId=${TENANT_ID}`, {
+    const response = await fetch(`${API_BASE}/${id}?tenantId=${currentTenantId}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(req)
@@ -80,61 +84,61 @@ export const api = {
 
   validate: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<ValidationResult> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/validate?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/validate?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to validate');
   },
 
   publish: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/publish?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/publish?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to publish');
   },
 
   submit: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/submit?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/submit?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to submit');
   },
 
   withdraw: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/withdraw?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/withdraw?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to withdraw');
   },
 
   deprecate: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/deprecate?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/deprecate?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to deprecate');
   },
 
   abandon: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/abandon?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/abandon?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to abandon');
   },
 
   approve: async (id: string): Promise<WorkflowClass> => {
     const headers = getHeaders('Admin');
-    const response = await fetch(`${API_BASE}/${id}/approve?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/approve?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to approve');
   },
 
   newVersion: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/new-version?tenantId=${TENANT_ID}`, { method: 'POST', headers });
+    const response = await fetch(`${API_BASE}/${id}/new-version?tenantId=${currentTenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to create new version');
   },
 
   delete: async (id: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<void> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}?tenantId=${TENANT_ID}`, { method: 'DELETE', headers });
+    const response = await fetch(`${API_BASE}/${id}?tenantId=${currentTenantId}`, { method: 'DELETE', headers });
     return handleResponse(response, 'Failed to delete');
   },
 
   copy: async (id: string, req: CopyRequest, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowClass> => {
     const headers = getHeaders(role);
-    const response = await fetch(`${API_BASE}/${id}/copy?tenantId=${TENANT_ID}`, { 
+    const response = await fetch(`${API_BASE}/${id}/copy?tenantId=${currentTenantId}`, { 
         method: 'POST', 
         headers,
         body: JSON.stringify(req)
@@ -144,7 +148,51 @@ export const api = {
 
   listInstances: async (role: 'Tenant' | 'Admin' = 'Tenant'): Promise<WorkflowInstance[]> => {
     const headers = getHeaders(role);
-    const response = await fetch(`/api/workflows?tenantId=${TENANT_ID}`, { headers });
+    const response = await fetch(`/api/workflows?tenantId=${currentTenantId}`, { headers });
     return handleResponse(response, 'Failed to list workflow instances');
+  },
+
+  listTenants: async (): Promise<any[]> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch('/api/tenants', { headers });
+    return handleResponse(response, 'Failed to list tenants');
+  },
+
+  registerTenant: async (name: string, keyName?: string): Promise<{ tenant: any; apiKey: string }> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch('/api/tenants', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name, keyName })
+    });
+    return handleResponse(response, 'Failed to register tenant');
+  },
+
+  listTenantKeys: async (tenantId: string): Promise<any[]> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch(`/api/tenants/${tenantId}/keys`, { headers });
+    return handleResponse(response, 'Failed to list tenant keys');
+  },
+
+  generateTenantKey: async (tenantId: string, name?: string): Promise<any> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch(`/api/tenants/${tenantId}/keys`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: name || 'API Key' })
+    });
+    return handleResponse(response, 'Failed to generate API key');
+  },
+
+  revokeTenantKey: async (tenantId: string, keyId: string): Promise<void> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch(`/api/tenants/${tenantId}/keys/${keyId}`, {
+      method: 'DELETE',
+      headers
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to revoke API key (HTTP ${response.status})`);
+    }
   }
 };
+

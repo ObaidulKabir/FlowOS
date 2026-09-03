@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FlowOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FlowOS.Infrastructure.Migrations
 {
     [DbContext(typeof(FlowOSDbContext))]
-    partial class FlowOSDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903044847_AddTenantApiKeys")]
+    partial class AddTenantApiKeys
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

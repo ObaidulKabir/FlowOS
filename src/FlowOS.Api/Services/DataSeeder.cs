@@ -41,6 +41,15 @@ public static class DataSeeder
             await context.SaveChangesAsync();
         }
 
+        // 1.2 Ensure Demo Tenant API Keys
+        if (!await context.TenantApiKeys.AnyAsync(k => k.TenantId == demoClientTenantId))
+        {
+            var demoKey1 = new TenantApiKey(demoClientTenantId, "Production Key", "flowos_prod_secret_key_32_chars_min");
+            var demoKey2 = new TenantApiKey(demoClientTenantId, "Local Dev Key", "local-development-key-change-me");
+            context.TenantApiKeys.AddRange(demoKey1, demoKey2);
+            await context.SaveChangesAsync();
+        }
+
         // 1.5 Ensure Admin Role
         if (!await context.Roles.AnyAsync(r => r.Name == "Admin" && r.TenantId == DefaultTenantId))
         {

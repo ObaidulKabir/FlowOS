@@ -3,12 +3,14 @@ import { WorkflowTable } from './components/WorkflowTable';
 import { DetailView } from './components/DetailView';
 import { EditorView } from './components/EditorView';
 import { WorkflowInstanceTable } from './components/WorkflowInstanceTable';
-import { api } from './api/client';
+import { TenantManager } from './components/TenantManager';
+import { api, getActiveTenantId } from './api/client';
 import { WorkflowClass, WorkflowClassScope, WorkflowClassStatus, ValidationResult, CreateDraftRequest, WorkflowInstance } from './types';
-import { AlertCircle, Plus, Play, RefreshCw, CheckCircle, Shield, Cpu, Clock, Terminal } from 'lucide-react';
+import { AlertCircle, Plus, Play, RefreshCw, CheckCircle, Shield, Cpu, Clock, Terminal, Key } from 'lucide-react';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared' | 'Public' | 'Instances'>('All');
+  const [activeTab, setActiveTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared' | 'Public' | 'Instances' | 'Tenants'>('All');
+  const [currentTenantId, setCurrentTenantId] = useState<string>(getActiveTenantId());
   const [items, setItems] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [selectedItem, setSelectedItem] = useState<WorkflowClass | null>(null);
@@ -29,6 +31,10 @@ function App() {
   ]);
 
   const loadData = async () => {
+    if (activeTab === 'Tenants') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -356,6 +362,18 @@ function App() {
           </div>
 
           <div className="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setActiveTab('Tenants')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-lg text-xs transition-colors"
+              title="Click to manage tenants and API keys"
+            >
+              <Key size={13} className="text-amber-400" />
+              <span className="text-slate-400">Tenant:</span>
+              <span className="font-mono text-blue-400 font-bold">
+                {currentTenantId.substring(0, 8)}...
+              </span>
+            </button>
+
             <div className="bg-slate-800 rounded-lg border border-slate-700 p-1 flex text-xs">
               <button 
                 onClick={() => { setRole('Tenant'); setActiveTab('All'); }} 
@@ -396,7 +414,7 @@ function App() {
         <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
           <div className="border-b border-slate-700 bg-slate-850">
             <nav className="flex divide-x divide-slate-700 text-xs font-semibold">
-              {(['All', 'Published', 'Drafts', 'Shared', 'Public', 'Instances'] as const).map((tab) => (
+              {(['All', 'Published', 'Drafts', 'Shared', 'Public', 'Instances', 'Tenants'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -406,7 +424,7 @@ function App() {
                       : 'text-slate-400 hover:text-white hover:bg-slate-750'
                   }`}
                 >
-                  {tab === 'Instances' ? '⚡ Live Instances' : tab === 'All' ? '📑 All Workflows' : tab}
+                  {tab === 'Tenants' ? '🏢 Tenants & API Keys' : tab === 'Instances' ? '⚡ Live Instances' : tab === 'All' ? '📑 All Workflows' : tab}
                 </button>
               ))}
             </nav>
@@ -417,6 +435,8 @@ function App() {
               <div className="text-center py-12 text-slate-400 text-xs">
                 <span className="inline-block animate-spin mr-2">↻</span> Loading kernel telemetry...
               </div>
+            ) : activeTab === 'Tenants' ? (
+              <TenantManager onTenantChange={(newTenantId) => { setCurrentTenantId(newTenantId); loadData(); }} />
             ) : activeTab === 'Instances' ? (
               <WorkflowInstanceTable items={instances} />
             ) : (

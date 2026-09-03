@@ -60,3 +60,37 @@ export interface WorkflowInstance {
   createdAt: string;
   completedAt?: string;
 }
+
+export interface TenantApiKeyDto {
+  id: string;
+  name: string;
+  maskedKey: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt?: string;
+  isRevoked: boolean;
+}
+
+export interface TenantDto {
+  tenantId: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  keyCount: number;
+  keys: TenantApiKeyDto[];
+}
+
+export interface RegisterTenantResponse {
+  tenant: TenantDto;
+  apiKey: string;
+}
+
+export interface CreateKeyResponse {
+  id: string;
+  tenantId: string;
+  name: string;
+  apiKey: string;
+  maskedKey: string;
+  createdAt: string;
+}
+
