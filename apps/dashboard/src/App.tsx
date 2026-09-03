@@ -11,6 +11,7 @@ import { AlertCircle, Plus, Play, RefreshCw, CheckCircle, Shield, Cpu, Clock, Te
 function App() {
   const [activeTab, setActiveTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared' | 'Public' | 'Instances' | 'Tenants'>('All');
   const [currentTenantId, setCurrentTenantId] = useState<string>(getActiveTenantId());
+  const [openTenantRegisterModal, setOpenTenantRegisterModal] = useState(false);
   const [items, setItems] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [selectedItem, setSelectedItem] = useState<WorkflowClass | null>(null);
@@ -201,12 +202,32 @@ function App() {
           <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
             <a href="#simulator" className="hover:text-white transition-colors">Simulator</a>
             <a href="#console" className="hover:text-white transition-colors">Governance & Instances</a>
+            <button 
+              onClick={() => { 
+                setActiveTab('Tenants'); 
+                document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' }); 
+              }}
+              className="hover:text-white transition-colors flex items-center gap-1.5 text-slate-300"
+            >
+              <Key size={14} className="text-amber-400" /> Tenants & API Keys
+            </button>
             <a href="#comparison" className="hover:text-white transition-colors">Comparison</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
           </div>
 
           <div className="flex items-center space-x-3">
-            <a href="/swagger" target="_blank" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all">
+            <button
+              onClick={() => {
+                setActiveTab('Tenants');
+                setOpenTenantRegisterModal(true);
+                document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-lg shadow-lg shadow-blue-500/25 flex items-center gap-1.5 transition-all border border-blue-400/30 hover:scale-[1.02]"
+              title="Register a new Tenant and generate API key"
+            >
+              <Plus size={15} className="text-blue-200" /> Register New Tenant
+            </button>
+            <a href="/swagger" target="_blank" className="hidden sm:inline-flex px-3 py-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all">
               Swagger API ↗
             </a>
           </div>
@@ -229,7 +250,17 @@ function App() {
         </p>
 
         <div className="flex flex-wrap justify-center gap-4 mb-12">
-          <a href="#simulator" className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all">
+          <button
+            onClick={() => {
+              setActiveTab('Tenants');
+              setOpenTenantRegisterModal(true);
+              document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all flex items-center gap-2"
+          >
+            <Plus size={18} /> Register New Tenant
+          </button>
+          <a href="#simulator" className="px-6 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold rounded-xl transition-all">
             Try Simulator ↓
           </a>
           <a href="#console" className="px-6 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold rounded-xl transition-all">
@@ -389,8 +420,18 @@ function App() {
               <Play size={14} /> Start New Instance
             </button>
 
+            <button 
+              onClick={() => {
+                setActiveTab('Tenants');
+                setOpenTenantRegisterModal(true);
+              }} 
+              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+            >
+              <Plus size={14} /> Register New Tenant
+            </button>
+
             {role === 'Tenant' && (
-              <button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+              <button onClick={() => setIsCreating(true)} className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                 <Plus size={14} /> New WorkflowClass
               </button>
             )}
@@ -436,7 +477,11 @@ function App() {
                 <span className="inline-block animate-spin mr-2">↻</span> Loading kernel telemetry...
               </div>
             ) : activeTab === 'Tenants' ? (
-              <TenantManager onTenantChange={(newTenantId) => { setCurrentTenantId(newTenantId); loadData(); }} />
+              <TenantManager 
+                openRegisterModal={openTenantRegisterModal}
+                onRegisterModalClosed={() => setOpenTenantRegisterModal(false)}
+                onTenantChange={(newTenantId) => { setCurrentTenantId(newTenantId); loadData(); }} 
+              />
             ) : activeTab === 'Instances' ? (
               <WorkflowInstanceTable items={instances} />
             ) : (

@@ -5,9 +5,15 @@ import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle2, S
 
 interface TenantManagerProps {
   onTenantChange?: (newTenantId: string) => void;
+  openRegisterModal?: boolean;
+  onRegisterModalClosed?: () => void;
 }
 
-export const TenantManager: React.FC<TenantManagerProps> = ({ onTenantChange }) => {
+export const TenantManager: React.FC<TenantManagerProps> = ({ 
+  onTenantChange, 
+  openRegisterModal = false,
+  onRegisterModalClosed 
+}) => {
   const [tenants, setTenants] = useState<TenantDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,10 +22,23 @@ export const TenantManager: React.FC<TenantManagerProps> = ({ onTenantChange }) 
   const [activeTenant, setActiveTenant] = useState<string>(getActiveTenantId());
 
   // Registration Modal State
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(openRegisterModal);
   const [newTenantName, setNewTenantName] = useState('');
   const [newKeyName, setNewKeyName] = useState('Primary Key');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (openRegisterModal) {
+      setShowRegisterModal(true);
+    }
+  }, [openRegisterModal]);
+
+  const closeRegisterModal = () => {
+    setShowRegisterModal(false);
+    if (onRegisterModalClosed) {
+      onRegisterModalClosed();
+    }
+  };
 
   // Key Generation Modal State
   const [keyGenTenant, setKeyGenTenant] = useState<TenantDto | null>(null);
@@ -76,7 +95,7 @@ export const TenantManager: React.FC<TenantManagerProps> = ({ onTenantChange }) 
     setError(null);
     try {
       const res = await api.registerTenant(newTenantName.trim(), newKeyName.trim() || 'Primary Key');
-      setShowRegisterModal(false);
+      closeRegisterModal();
       setNewTenantName('');
       setNewKeyName('Primary Key');
       setLatestKeyInfo({
@@ -507,7 +526,7 @@ headers = {
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowRegisterModal(false)}
+                  onClick={closeRegisterModal}
                   className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
                 >
                   Cancel
