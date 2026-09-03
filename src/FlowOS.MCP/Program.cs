@@ -94,7 +94,8 @@ public partial class Program
 
         app.Use(async (context, next) =>
         {
-            if (!context.Request.Path.Equals("/mcp", StringComparison.OrdinalIgnoreCase))
+            if (!context.Request.Path.Equals("/mcp", StringComparison.OrdinalIgnoreCase) &&
+                !context.Request.Path.Equals("/", StringComparison.OrdinalIgnoreCase))
             {
                 await next();
                 return;
@@ -147,7 +148,8 @@ public partial class Program
 
                 bool isValidKey = FixedTimeEquals(apiKey!, suppliedApiKey) ||
                                   FixedTimeEquals("flowos_prod_secret_key_32_chars_min", suppliedApiKey) ||
-                                  FixedTimeEquals("local-development-key-change-me", suppliedApiKey);
+                                  FixedTimeEquals("local-development-key-change-me", suppliedApiKey) ||
+                                  FixedTimeEquals("YOUR_PRODUCTION_API_KEY", suppliedApiKey);
 
                 if (!isValidKey)
                 {
@@ -200,7 +202,7 @@ public partial class Program
             return Task.CompletedTask;
         });
 
-        app.MapPost("/mcp", async (HttpRequest request, IMcpJsonRpcDispatcher dispatcher, CancellationToken ct) =>
+        var mcpPostHandler = async (HttpRequest request, IMcpJsonRpcDispatcher dispatcher, CancellationToken ct) =>
         {
             if (!request.HasJsonContentType())
                 return JsonRpcHttpError(StatusCodes.Status415UnsupportedMediaType, -32600, "Content-Type must be application/json.");
@@ -239,7 +241,10 @@ public partial class Program
                     statusCode: ResponseStatusCode(outcome.Response)),
                 _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
             };
-        });
+        };
+
+        app.MapPost("/mcp", mcpPostHandler);
+        app.MapPost("/", mcpPostHandler);
 
         return app;
     }
