@@ -27,6 +27,9 @@ services:
       - VITE_API_TARGET=http://flowos-api:8080
     ports:
       - "3000:3000"
+    volumes:
+      - ./apps/dashboard:/app
+      - /app/node_modules
     restart: unless-stopped
     depends_on:
       - flowos-api
