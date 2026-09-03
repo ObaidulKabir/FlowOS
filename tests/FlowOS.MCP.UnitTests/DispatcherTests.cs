@@ -58,6 +58,49 @@ public sealed class DispatcherTests
 
         var onlyNotification = await dispatcher.DispatchAsync($"[{notification}]");
         Assert.Equal(McpDispatchKind.NoResponse, onlyNotification.Kind);
+    }
+
+    [Fact]
+    public async Task Prompts_and_resources_are_supported()
+    {
+        var dispatcher = new McpJsonRpcDispatcher(_registry);
+
+        // 1. Initialize returns instructions and capabilities
+        var init = await dispatcher.DispatchAsync(Request(1, "initialize", new
+        {
+            protocolVersion = McpJsonRpcDispatcher.SupportedProtocolVersion,
+            clientInfo = new { name = "tests", version = "1" },
+            capabilities = new { }
+        }));
+        var initResult = JObject.FromObject(((JsonRpcResponse)init.Response!).Result!);
+        Assert.NotNull(initResult["instructions"]);
+        Assert.NotNull(initResult["capabilities"]?["prompts"]);
+        Assert.NotNull(initResult["capabilities"]?["resources"]);
+
+        // 2. Prompts list & get
+        var promptsList = await dispatcher.DispatchAsync(Request(2, "prompts/list"));
+        var promptsResult = JObject.FromObject(((JsonRpcResponse)promptsList.Response!).Result!);
+        Assert.NotEmpty(promptsResult["prompts"]!);
+
+        var promptGet = await dispatcher.DispatchAsync(Request(3, "prompts/get", new { name = "operate_workflow_process" }));
+        var promptGetResult = JObject.FromObject(((JsonRpcResponse)promptGet.Response!).Result!);
+        Assert.NotNull(promptGetResult["messages"]);
+
+        // 3. Resources list & read
+        var resourcesList = await dispatcher.DispatchAsync(Request(4, "resources/list"));
+        var resourcesResult = JObject.FromObject(((JsonRpcResponse)resourcesList.Response!).Result!);
+        Assert.NotEmpty(resourcesResult["resources"]!);
+
+        var resourceRead = await dispatcher.DispatchAsync(Request(5, "resources/read", new { uri = "flowos://guides/lifecycle" }));
+        var resourceReadResult = JObject.FromObject(((JsonRpcResponse)resourceRead.Response!).Result!);
+        Assert.NotNull(resourceReadResult["contents"]);
+    }
+
+    [Fact]
+    public async Task Batch_omits_notifications_and_notification_only_has_no_response_batch_test()
+    {
+        var dispatcher = new McpJsonRpcDispatcher(_registry);
+        var notification = """{"jsonrpc":"2.0","method":"notifications/initialized"}""";
 
         var batch = await dispatcher.DispatchAsync(
             $"[{notification},{Request(7, "ping")}]");

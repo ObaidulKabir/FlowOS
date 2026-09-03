@@ -106,11 +106,39 @@ public static class McpToolDescriptions
                 "Input example: {\"instanceId\":\"55555555-5555-5555-5555-555555555555\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["publish_workflowclass"] =
-                "Publishes a tenant-owned Draft WorkflowClass, compiling it into an executable runtime WorkflowDefinition and registering associated EventDefinitions. " +
+                "[Lifecycle Step 3: Publish] Publishes a tenant-owned Draft WorkflowClass, compiling it into an executable runtime WorkflowDefinition and registering associated EventDefinitions. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["start_workflow"] =
+                "[Lifecycle Step 4: Run Instance] Starts a live runtime execution instance of a published WorkflowClass or WorkflowDefinition. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{workflowInstanceId,tenantId,status,correlationId,message}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"workflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["publish_event"] =
+                "[Lifecycle Step 5: State Transition] Publishes an event to advance the state machine and workflow step of an active workflow instance. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{success:true,workflowInstanceId,eventType,message}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-EXEC-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["complete_task"] =
+                "[Lifecycle Step 5: Task Execution] Completes a manual or human-in-the-loop task step within an active workflow instance. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{success:true,workflowInstanceId,taskId,message}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"taskId\":\"66666666-6666-6666-6666-666666666666\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["list_workflow_instances"] =
+                "[Telemetry] Lists active and completed workflow instances for the tenant with their current execution status and step. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{instances:[{id,workflowClassName,currentStep,status,createdAt}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
         };
 
     public static string For(string toolName) =>

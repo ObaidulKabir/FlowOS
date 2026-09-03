@@ -96,8 +96,14 @@ public sealed class McpJsonRpcDispatcher : IMcpJsonRpcDispatcher
                     result = new
                     {
                         protocolVersion = SupportedProtocolVersion,
-                        capabilities = new { tools = new { listChanged = false } },
-                        serverInfo = new { name = "FlowOS MCP Server", version = "1.1.0" }
+                        capabilities = new 
+                        { 
+                            tools = new { listChanged = false },
+                            prompts = new { listChanged = false },
+                            resources = new { listChanged = false }
+                        },
+                        serverInfo = new { name = "FlowOS MCP Server", version = "1.1.0" },
+                        instructions = FlowOsMcpGuidance.SystemInstructions
                     };
                     break;
 
@@ -125,6 +131,39 @@ public sealed class McpJsonRpcDispatcher : IMcpJsonRpcDispatcher
                     result = await _toolRegistry.ExecuteAsync(
                         callParams.Name,
                         callParams.Arguments ?? new JObject());
+                    break;
+
+                case "prompts/list":
+                    result = FlowOsMcpGuidance.GetPromptsList();
+                    break;
+
+                case "prompts/get":
+                    if (parameters == null || string.IsNullOrWhiteSpace(parameters["name"]?.ToString()))
+                        return Response(Error(id, -32602, "name is required for prompts/get"));
+
+                    var promptName = parameters["name"]!.ToString();
+                    var promptArgs = parameters["arguments"] as JObject;
+                    var promptResult = FlowOsMcpGuidance.GetPrompt(promptName, promptArgs);
+                    if (promptResult == null)
+                        return Response(Error(id, -32602, $"Prompt not found: {promptName}"));
+
+                    result = promptResult;
+                    break;
+
+                case "resources/list":
+                    result = FlowOsMcpGuidance.GetResourcesList();
+                    break;
+
+                case "resources/read":
+                    if (parameters == null || string.IsNullOrWhiteSpace(parameters["uri"]?.ToString()))
+                        return Response(Error(id, -32602, "uri is required for resources/read"));
+
+                    var resourceUri = parameters["uri"]!.ToString();
+                    var resourceResult = FlowOsMcpGuidance.GetResource(resourceUri);
+                    if (resourceResult == null)
+                        return Response(Error(id, -32602, $"Resource not found: {resourceUri}"));
+
+                    result = resourceResult;
                     break;
 
                 default:

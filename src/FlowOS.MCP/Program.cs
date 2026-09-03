@@ -381,6 +381,7 @@ public partial class Program
         services.AddScoped<InfoTools>();
         services.AddScoped<AnalysisTools>();
         services.AddScoped<AgentTools>();
+        services.AddScoped<ExecutionTools>();
         services.AddScoped<NotificationRepository>();
         services.AddScoped<INotificationRepository>(sp => sp.GetRequiredService<NotificationRepository>());
         services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredService<NotificationRepository>());

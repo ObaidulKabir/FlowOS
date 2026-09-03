@@ -55,6 +55,18 @@ public static class ToolRegistration
 
         registry.Register("publish_workflowclass", McpToolDescriptions.For("publish_workflowclass"), McpToolSchemas.DraftById(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.Publish(args)));
+
+        registry.Register("start_workflow", McpToolDescriptions.For("start_workflow"), McpToolSchemas.StartWorkflow(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.StartWorkflow(args)));
+
+        registry.Register("publish_event", McpToolDescriptions.For("publish_event"), McpToolSchemas.PublishEvent(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.PublishEvent(args)));
+
+        registry.Register("complete_task", McpToolDescriptions.For("complete_task"), McpToolSchemas.CompleteTask(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.CompleteTask(args)));
+
+        registry.Register("list_workflow_instances", McpToolDescriptions.For("list_workflow_instances"), McpToolSchemas.ListWorkflowInstances(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.ListWorkflowInstances(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

@@ -233,4 +233,64 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject StartWorkflow() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "workflowClassId":{"type":"string","format":"uuid"},
+            "workflowDefinitionId":{"type":"string","format":"uuid"},
+            "workflowName":{"type":"string"},
+            "version":{"type":"integer"},
+            "initialStepId":{"type":"string"},
+            "correlationId":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject PublishEvent() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId","eventType"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "eventType":{"type":"string","minLength":1},
+            "correlationId":{"type":"string","format":"uuid"},
+            "payload":{"type":"object"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject CompleteTask() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId","taskId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "taskId":{"type":"string","format":"uuid"},
+            "correlationId":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListWorkflowInstances() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "status":{"type":"string"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
 }
