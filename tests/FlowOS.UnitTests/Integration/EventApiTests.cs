@@ -251,4 +251,59 @@ public class EventApiTests : IClassFixture<CustomWebApplicationFactory<Program>>
         Assert.NotNull(problem);
         Assert.Contains("transition failed", problem.Detail); // "Workflow transition failed: No transition defined..."
     }
+
+    [Fact]
+    public async Task PublishEvent_WithPayload_ShouldPersistEventAndPayloadInDatabase()
+    {
+        // 1. Arrange & Seed Workflow with start step "StepA"
+        var (instanceId, _) = await SeedWorkflowAsync("StepA");
+
+        var customPayload = new Dictionary<string, object>
+        {
+            { "amount", 1250.75 },
+            { "currency", "USD" },
+            { "vendor", "Acme Cloud" },
+            { "department", "Engineering" }
+        };
+
+        var command = new PublishEventCommand(
+            TenantId: _tenantId,
+            WorkflowInstanceId: instanceId,
+            EventType: "EVT-NEXT",
+            CorrelationId: instanceId,
+            Payload: customPayload
+        );
+
+        // 2. Act: Publish Event
+        var publishResp = await _client.PostAsJsonAsync("/api/events/publish", command);
+        publishResp.EnsureSuccessStatusCode();
+
+        // 3. Assert in Database directly
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            var recordedEvents = await db.Events
+                .Where(e => e.CorrelationId == instanceId && e.EventType == "EVT-NEXT")
+                .ToListAsync();
+
+            Assert.Single(recordedEvents);
+            var evt = recordedEvents[0];
+            Assert.Equal("EVT-NEXT", evt.EventType);
+            Assert.True(evt.Metadata.ContainsKey("Payload"));
+            Assert.Contains("1250.75", evt.Metadata["Payload"]);
+            Assert.Contains("Acme Cloud", evt.Metadata["Payload"]);
+            Assert.Equal("StepA", evt.Metadata["FromStep"]);
+            Assert.Equal("StepB", evt.Metadata["ToStep"]);
+        }
+
+        // 4. Assert via GET /api/events API
+        var getEventsResp = await _client.GetAsync($"/api/events?workflowInstanceId={instanceId}");
+        getEventsResp.EnsureSuccessStatusCode();
+        var eventList = await getEventsResp.Content.ReadFromJsonAsync<List<FlowOS.Application.Queries.PublishedEventDto>>();
+        Assert.NotNull(eventList);
+        var foundEvent = eventList.FirstOrDefault(e => e.EventType == "EVT-NEXT");
+        Assert.NotNull(foundEvent);
+        Assert.NotNull(foundEvent.PayloadJson);
+        Assert.Contains("Acme Cloud", foundEvent.PayloadJson);
+    }
 }

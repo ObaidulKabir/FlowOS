@@ -167,6 +167,18 @@ public class WorkflowCommandHandlers :
 
         _unitOfWork.WorkflowInstances.Add(instance);
 
+        var startEvent = new StandardEvent(request.TenantId, "WorkflowStarted");
+        startEvent.SetCorrelationId(instance.Id);
+        startEvent.AddMetadata("WorkflowName", fullDefinition?.Name ?? request.WorkflowName ?? "Workflow");
+        startEvent.AddMetadata("Version", instance.WorkflowVersion.ToString());
+        startEvent.AddMetadata("StartStep", startStep);
+        startEvent.AddMetadata("InitialState", instance.CurrentState ?? "Draft");
+        if (!string.IsNullOrEmpty(_currentUser.Id))
+        {
+            startEvent.AddMetadata("ActorId", _currentUser.Id);
+        }
+        _unitOfWork.Events.Add(startEvent);
+
         if (fullDefinition != null)
         {
             RunAutoAdvance(instance, fullDefinition, request.TenantId, new FlowOS.StateMachines.Models.ExecutionContext());
@@ -262,6 +274,7 @@ public class WorkflowCommandHandlers :
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
         var previousStepId = instance.CurrentStepId;
+        var previousState = instance.CurrentState ?? instance.CurrentStepId;
         var result = _engine.Advance(instance, definition, domainEvent, context, smDef, currentEntityState);
 
         if (result.Success)
@@ -271,7 +284,26 @@ public class WorkflowCommandHandlers :
                 await _timerService.CancelTimerAsync(instance.Id, previousStepId, cancellationToken);
             }
 
+            domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");
+            domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
+            domainEvent.AddMetadata("FromState", previousState ?? "Draft");
+            domainEvent.AddMetadata("ToState", instance.CurrentState ?? "Draft");
+            if (!string.IsNullOrEmpty(_currentUser.Id))
+            {
+                domainEvent.AddMetadata("ActorId", _currentUser.Id);
+            }
+
             _unitOfWork.Events.Add(domainEvent);
+
+            if (instance.Status == FlowOS.Workflows.Enums.WorkflowInstanceStatus.Completed)
+            {
+                var completionEvent = new StandardEvent(request.TenantId, "WorkflowCompleted");
+                completionEvent.SetCorrelationId(instance.Id);
+                completionEvent.AddMetadata("CompletedStep", instance.CurrentStepId);
+                completionEvent.AddMetadata("FinalState", instance.CurrentState ?? "Completed");
+                _unitOfWork.Events.Add(completionEvent);
+            }
+
             RunAutoAdvance(instance, definition, request.TenantId, context, smDef);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -302,12 +334,17 @@ public class WorkflowCommandHandlers :
         {
             domainEvent.SetCorrelationId(request.CorrelationId.Value);
         }
+        else
+        {
+            domainEvent.SetCorrelationId(request.WorkflowInstanceId);
+        }
 
         var context = new FlowOS.StateMachines.Models.ExecutionContext();
         var smDef = await ResolveStateMachineDefinitionAsync(instance.WorkflowClassId, request.TenantId, definition.Name, cancellationToken);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
         var previousStepId = instance.CurrentStepId;
+        var previousState = instance.CurrentState ?? instance.CurrentStepId;
         var result = _engine.Advance(instance, definition, domainEvent, context, smDef, currentEntityState);
 
         if (result.Success)
@@ -317,7 +354,26 @@ public class WorkflowCommandHandlers :
                 await _timerService.CancelTimerAsync(instance.Id, previousStepId, cancellationToken);
             }
 
+            domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");
+            domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
+            domainEvent.AddMetadata("FromState", previousState ?? "Draft");
+            domainEvent.AddMetadata("ToState", instance.CurrentState ?? "Draft");
+            if (!string.IsNullOrEmpty(_currentUser.Id))
+            {
+                domainEvent.AddMetadata("ActorId", _currentUser.Id);
+            }
+
             _unitOfWork.Events.Add(domainEvent);
+
+            if (instance.Status == FlowOS.Workflows.Enums.WorkflowInstanceStatus.Completed)
+            {
+                var completionEvent = new StandardEvent(request.TenantId, "WorkflowCompleted");
+                completionEvent.SetCorrelationId(instance.Id);
+                completionEvent.AddMetadata("CompletedStep", instance.CurrentStepId);
+                completionEvent.AddMetadata("FinalState", instance.CurrentState ?? "Completed");
+                _unitOfWork.Events.Add(completionEvent);
+            }
+
             RunAutoAdvance(instance, definition, request.TenantId, context, smDef);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);

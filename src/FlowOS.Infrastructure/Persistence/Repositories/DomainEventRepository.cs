@@ -26,5 +26,22 @@ public class DomainEventRepository : IDomainEventRepository
             .OrderBy(e => e.Timestamp)
             .ToListAsync(cancellationToken);
 
+    public Task<List<DomainEvent>> ListByTenantAsync(Guid tenantId, Guid? correlationId = null, int limit = 50, CancellationToken cancellationToken = default)
+    {
+        var query = _context.Events
+            .AsNoTracking()
+            .Where(e => e.TenantId == tenantId);
+
+        if (correlationId.HasValue && correlationId.Value != Guid.Empty)
+        {
+            query = query.Where(e => e.CorrelationId == correlationId.Value);
+        }
+
+        return query
+            .OrderByDescending(e => e.Timestamp)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Add(DomainEvent domainEvent) => _context.Events.Add(domainEvent);
 }

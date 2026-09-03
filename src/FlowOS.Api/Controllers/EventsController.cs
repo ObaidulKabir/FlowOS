@@ -49,4 +49,15 @@ public class EventsController : ControllerBase
             throw;
         }
     }
+
+    [HttpGet]
+    public async Task<IActionResult> GetEvents([FromQuery] Guid? workflowInstanceId, [FromQuery] int limit = 50)
+    {
+        if (_currentUser.TenantId == Guid.Empty)
+            return Unauthorized("TenantId is missing.");
+
+        var query = new FlowOS.Application.Queries.GetPublishedEventsQuery(_currentUser.TenantId, workflowInstanceId, limit);
+        var result = await _mediator.Send(query);
+        return Ok(result);
+    }
 }

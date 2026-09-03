@@ -164,6 +164,26 @@ public class AdminQueryHandlers :
                 summary = $"Event: {evt.EventType}";
                 if (evt.Metadata != null)
                 {
+                    if (evt.EventType == "WorkflowStarted")
+                    {
+                        var wfName = evt.Metadata.GetValueOrDefault("WorkflowName", "Workflow");
+                        var startStep = evt.Metadata.GetValueOrDefault("StartStep", "Start");
+                        summary = $"{wfName} started at step {startStep}";
+                    }
+                    else if (evt.EventType == "WorkflowCompleted")
+                    {
+                        var finalState = evt.Metadata.GetValueOrDefault("FinalState", "Completed");
+                        summary = $"Workflow reached END in state {finalState}";
+                    }
+                    else if (evt.Metadata.ContainsKey("FromState") && evt.Metadata.ContainsKey("ToState"))
+                    {
+                        summary = $"State transitioned from {evt.Metadata["FromState"]} to {evt.Metadata["ToState"]} via {evt.EventType}";
+                    }
+                    else if (evt.Metadata.ContainsKey("FromStep") && evt.Metadata.ContainsKey("ToStep"))
+                    {
+                        summary = $"Step advanced from {evt.Metadata["FromStep"]} to {evt.Metadata["ToStep"]} via {evt.EventType}";
+                    }
+
                     foreach (var kvp in evt.Metadata)
                     {
                         if (!keyData.ContainsKey(kvp.Key))
