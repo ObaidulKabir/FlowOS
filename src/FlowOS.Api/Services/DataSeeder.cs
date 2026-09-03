@@ -24,11 +24,20 @@ public static class DataSeeder
     public static async Task SeedAsync(FlowOSDbContext context, IServiceProvider serviceProvider, IHostEnvironment env)
     {
         // 1. Ensure Tenant
-        if (!await context.Tenants.AnyAsync())
+        if (!await context.Tenants.AnyAsync(t => t.TenantId == DefaultTenantId))
         {
             var tenant = new Tenant("Default Tenant");
             SetPrivateProperty(tenant, "TenantId", DefaultTenantId);
             context.Tenants.Add(tenant);
+            await context.SaveChangesAsync();
+        }
+
+        var demoClientTenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        if (!await context.Tenants.AnyAsync(t => t.TenantId == demoClientTenantId))
+        {
+            var clientTenant = new Tenant("Demo Client Tenant");
+            SetPrivateProperty(clientTenant, "TenantId", demoClientTenantId);
+            context.Tenants.Add(clientTenant);
             await context.SaveChangesAsync();
         }
 

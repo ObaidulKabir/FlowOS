@@ -6,13 +6,16 @@ services:
       dockerfile: src/FlowOS.Api/Dockerfile 
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     volumes:
       - ./flowos-config:/app/flowos-config
     ports:
       - "5183:8080"
+    restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   flowos-dashboard:
     image: flowos-dashboard
@@ -24,6 +27,7 @@ services:
       - VITE_API_TARGET=http://flowos-api:8080
     ports:
       - "3000:3000"
+    restart: unless-stopped
     depends_on:
       - flowos-api
 
@@ -34,15 +38,17 @@ services:
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
       - MCP_TRANSPORT=http
-      - MCP_API_KEY=${MCP_API_KEY:?MCP_API_KEY is required}
-      - MCP_ROLE=${MCP_ROLE:?MCP_ROLE is required}
-      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}
+      - MCP_API_KEY=${MCP_API_KEY:-local-development-key-change-me}
+      - MCP_ROLE=${MCP_ROLE:-Admin}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-*}
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     ports:
       - "8081:8080"
+    restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:15-alpine
@@ -50,8 +56,14 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=flowos 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flowos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     volumes:
       - db-data:/var/lib/postgresql/data
+    restart: unless-stopped
 
 volumes:
   db-data:

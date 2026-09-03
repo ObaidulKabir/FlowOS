@@ -59,7 +59,7 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         var query = from w in _context.WorkflowInstances.AsNoTracking()
                     join wc in _context.WorkflowClasses.AsNoTracking() on w.WorkflowClassId equals wc.Id into wcGroup
                     from wc in wcGroup.DefaultIfEmpty()
-                    where w.TenantId == tenantId
+                    where (tenantId == Guid.Empty || w.TenantId == tenantId)
                     select new { w, Name = wc != null ? wc.Name : "Unknown" };
 
         if (status.HasValue)

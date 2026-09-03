@@ -5,13 +5,14 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: ["localhost", "flowos.gkibria121.com","flowos.prospectbdltd.com"], // Allow both localhost and Docker host
+    allowedHosts: true, // Allow any host (localhost, flowos.prospectbdltd.com, flowos.gkibria121.com, etc.)
     port: 5173,
     host: true, // Needed for Docker
     proxy: {
       "/api": {
-        target: process.env.VITE_API_TARGET || "http://localhost:5183", // Updated default to match current backend
+        target: process.env.VITE_API_TARGET || "http://flowos-api:8080",
         changeOrigin: true,
+        secure: false,
       },
     },
   },

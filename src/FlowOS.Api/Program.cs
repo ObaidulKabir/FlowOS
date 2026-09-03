@@ -137,14 +137,30 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    if (context.Database.IsRelational())
+    int maxRetries = 10;
+    int delaySeconds = 2;
+    for (int retry = 1; retry <= maxRetries; retry++)
     {
-        context.Database.Migrate();
-    }
-    else
-    {
-        context.Database.EnsureCreated();
+        try
+        {
+            if (context.Database.IsRelational())
+            {
+                logger.LogInformation("Attempting database migration (attempt {Retry}/{Max})...", retry, maxRetries);
+                context.Database.Migrate();
+            }
+            else
+            {
+                context.Database.EnsureCreated();
+            }
+            break;
+        }
+        catch (Exception ex) when (retry < maxRetries)
+        {
+            logger.LogWarning(ex, "Database connection/migration failed on attempt {Retry}. Retrying in {Delay}s...", retry, delaySeconds);
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+        }
     }
 
     await DataSeeder.SeedAsync(context, scope.ServiceProvider, app.Environment);
