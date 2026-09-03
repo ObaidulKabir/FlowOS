@@ -189,39 +189,39 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-hidden h-full w-full flex justify-center items-center z-50">
-      <div className="bg-white w-[95vw] h-[90vh] rounded-lg shadow-xl flex overflow-hidden">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-hidden h-full w-full flex justify-center items-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-700 text-slate-100 w-[96vw] h-[92vh] rounded-2xl shadow-2xl flex overflow-hidden">
         
         {/* Left: Editor (Scrollable) */}
-        <div className="flex-1 flex flex-col border-r border-gray-200 overflow-hidden">
-            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                <h2 className="text-xl font-bold text-gray-800">{item ? `Edit ${item.name}` : 'Create Workflow'}</h2>
+        <div className="flex-1 flex flex-col border-r border-slate-800 overflow-hidden">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/70">
+                <h2 className="text-lg font-bold text-white">{item ? `Edit ${item.name}` : 'Create WorkflowClass Draft'}</h2>
                 <div className="space-x-2 flex items-center">
                     {!item && (
-                        <select onChange={(e) => loadTemplate(e.target.value)} className="text-sm border p-1 rounded mr-2" defaultValue="">
-                            <option value="" disabled>Load Example...</option>
+                        <select onChange={(e) => loadTemplate(e.target.value)} className="text-xs bg-slate-800 border border-slate-700 text-slate-200 p-1.5 rounded-lg mr-2" defaultValue="">
+                            <option value="" disabled>Load Blueprint Example...</option>
                             <option value="Simple">Example 1: Simple (Direct Mapping)</option>
                             <option value="Complex">Example 2: Complex (Decoupled)</option>
                         </select>
                     )}
-                    <button onClick={() => setJsonMode(!jsonMode)} className="px-3 py-1 bg-gray-200 rounded text-sm hover:bg-gray-300">
+                    <button onClick={() => setJsonMode(!jsonMode)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors">
                         {jsonMode ? "Switch to Form" : "Switch to JSON"}
                     </button>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-                        <X size={24} />
+                    <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded transition-colors">
+                        <X size={20} />
                     </button>
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-900">
                 <div className="grid grid-cols-2 gap-4 mb-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Name</label>
-                        <input value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Blueprint Name</label>
+                        <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500 font-medium" />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Version</label>
-                        <input value={version} onChange={e => setVersion(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Version (SemVer)</label>
+                        <input value={version} onChange={e => setVersion(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white font-mono focus:outline-none focus:border-blue-500" />
                     </div>
                 </div>
 
@@ -229,7 +229,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                     <textarea 
                         value={rawJson} 
                         onChange={e => setRawJson(e.target.value)} 
-                        className="w-full h-full font-mono text-sm p-4 border rounded bg-gray-50 min-h-[500px]"
+                        className="w-full h-full font-mono text-xs p-4 border border-slate-800 rounded-xl bg-slate-950 text-blue-300/90 min-h-[500px] leading-relaxed focus:outline-none focus:border-blue-500"
                     />
                 ) : (
                     <div className="space-y-8">
@@ -454,23 +454,23 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 )}
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
-                <span className="text-sm text-gray-500 italic">Changes are validated on save.</span>
-                <button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2 font-medium shadow-sm">
-                    <Save size={18} />
+            <div className="p-4 border-t border-slate-800 bg-slate-950/70 flex justify-between items-center">
+                <span className="text-xs text-slate-400 italic">Authoritative validation is run automatically on save.</span>
+                <button onClick={handleSave} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl flex items-center gap-2 font-semibold text-xs shadow-lg transition-all">
+                    <Save size={16} />
                     Save Draft
                 </button>
             </div>
         </div>
 
         {/* Right: Validation Panel (Sticky) */}
-        <div className="w-[350px] bg-gray-50 border-l border-gray-200 flex flex-col">
-            <div className="p-4 border-b bg-white">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+        <div className="w-[350px] bg-slate-950/80 border-l border-slate-800 flex flex-col">
+            <div className="p-4 border-b border-slate-800 bg-slate-950/90">
+                <h3 className="font-bold text-white text-sm flex items-center gap-2">
                     {validation ? (
-                        validation.isValid ? <CheckCircle className="text-green-500" size={20} /> : <AlertTriangle className="text-red-500" size={20} />
+                        validation.isValid ? <CheckCircle className="text-emerald-400" size={18} /> : <AlertTriangle className="text-rose-400" size={18} />
                     ) : (
-                        <Info className="text-gray-400" size={20} />
+                        <Info className="text-slate-400" size={18} />
                     )}
                     Validation Report
                 </h3>
@@ -478,27 +478,27 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
             
             <div className="flex-1 overflow-y-auto p-4">
                 {!validation ? (
-                    <div className="text-center text-gray-500 mt-10">
-                        <p>Save the draft to run validation.</p>
-                        <p className="text-xs mt-2">Validation checks Schema, Completeness, and Governance Rules.</p>
+                    <div className="text-center text-slate-500 mt-10 space-y-2">
+                        <p className="text-xs">Save the draft to run full validation.</p>
+                        <p className="text-[11px] text-slate-600">Validation verifies Schema, Graph Completeness, and Governance Rules.</p>
                     </div>
                 ) : validation.isValid ? (
-                    <div className="text-center text-green-600 mt-10">
-                        <p className="font-medium">No issues found.</p>
-                        <p className="text-sm mt-1">This workflow is valid and ready to be published.</p>
+                    <div className="text-center text-emerald-400 mt-10 space-y-1">
+                        <p className="font-semibold text-sm">No issues found.</p>
+                        <p className="text-xs text-slate-400">Blueprint is valid and ready to be published to engine.</p>
                     </div>
                 ) : (
                     <div className="space-y-3">
                         {validation.errors.map((err, idx) => (
-                            <div key={idx} className="bg-white p-3 rounded border border-red-200 shadow-sm border-l-4 border-l-red-500">
+                            <div key={idx} className="bg-slate-900 p-3 rounded-xl border border-rose-500/30 shadow-sm border-l-4 border-l-rose-500">
                                 <div className="flex justify-between items-start mb-1">
-                                    <span className="text-xs font-bold text-red-600 uppercase tracking-wider">{err.code}</span>
-                                    <span className="text-xs text-gray-400">{err.category}</span>
+                                    <span className="text-[10px] font-bold text-rose-400 font-mono tracking-wider">{err.code}</span>
+                                    <span className="text-[10px] text-slate-500">{err.category}</span>
                                 </div>
-                                <p className="text-sm font-medium text-gray-800 mb-1">{err.message}</p>
+                                <p className="text-xs font-medium text-slate-200 mb-1">{err.message}</p>
                                 {err.element && (
-                                    <div className="text-xs text-gray-500 mt-2 bg-gray-50 p-1 rounded">
-                                        Location: <span className="font-mono text-gray-700">{err.element}</span>
+                                    <div className="text-[10px] text-slate-400 mt-1.5 bg-slate-950 p-1.5 rounded font-mono">
+                                        Location: <span className="text-blue-300">{err.element}</span>
                                     </div>
                                 )}
                             </div>
