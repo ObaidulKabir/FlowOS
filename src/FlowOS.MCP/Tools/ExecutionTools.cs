@@ -238,4 +238,45 @@ public class ExecutionTools
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to list workflow instances: {ex.Message}");
         }
     }
+
+    public async Task<CallToolResult> GetWorkflowHistory(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            if (args["workflowInstanceId"] == null || !Guid.TryParse(args["workflowInstanceId"]?.ToString(), out var instanceId))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "workflowInstanceId is required and must be a valid UUID.");
+            }
+
+            var query = new FlowOS.Application.Queries.Admin.GetAdminWorkflowDetailQuery(instanceId, tenantId);
+            var detail = await _mediator.Send(query);
+
+            if (detail == null)
+            {
+                return McpToolResults.Fail("MCP-NOT-FOUND", $"Workflow instance '{instanceId}' not found for tenant '{tenantId}'.");
+            }
+
+            return McpToolResults.Success(new
+            {
+                workflowInstanceId = detail.Id,
+                definitionName = detail.DefinitionName,
+                version = detail.Version,
+                currentStepId = detail.CurrentStepId,
+                status = detail.Status,
+                correlationId = detail.CorrelationId,
+                createdAt = detail.CreatedAt,
+                timeline = detail.Timeline
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to retrieve workflow history: {ex.Message}");
+        }
+    }
 }

@@ -293,4 +293,17 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject GetWorkflowHistory() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
 }

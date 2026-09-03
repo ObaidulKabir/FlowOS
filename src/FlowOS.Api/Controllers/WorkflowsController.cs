@@ -73,4 +73,21 @@ public class WorkflowsController : ControllerBase
         }
         return Ok(result);
     }
+
+    [HttpGet("{id}/audit")]
+    [HttpGet("{id}/history")]
+    public async Task<IActionResult> GetAuditHistory(Guid id)
+    {
+        var tenantId = _currentUser.TenantId;
+        if (tenantId == Guid.Empty) return Unauthorized();
+
+        var query = new FlowOS.Application.Queries.Admin.GetAdminWorkflowDetailQuery(id, tenantId);
+        var result = await _mediator.Send(query);
+        if (result == null)
+        {
+            _logger.LogWarning("GetAuditHistory Workflow {WorkflowId} not found for Tenant {TenantId}", id, tenantId);
+            return NotFound();
+        }
+        return Ok(result);
+    }
 }

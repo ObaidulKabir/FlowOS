@@ -67,6 +67,9 @@ public static class ToolRegistration
 
         registry.Register("list_workflow_instances", McpToolDescriptions.For("list_workflow_instances"), McpToolSchemas.ListWorkflowInstances(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.ListWorkflowInstances(args)));
+
+        registry.Register("get_workflow_history", McpToolDescriptions.For("get_workflow_history"), McpToolSchemas.GetWorkflowHistory(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.GetWorkflowHistory(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

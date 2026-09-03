@@ -138,7 +138,15 @@ public static class McpToolDescriptions
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{instances:[{id,workflowClassName,currentStep,status,createdAt}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
-                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["get_workflow_history"] =
+                "[Audit & Telemetry] Retrieves the complete chronological audit trail and timeline of events for a workflow instance, " +
+                "including state transitions, step advances, task completions, and AI agent insights. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{workflowInstanceId,definitionName,status,timeline:[{eventId,eventType,timestamp,summary,keyData}]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOT-FOUND, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}"
         };
 
     public static string For(string toolName) =>

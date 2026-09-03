@@ -266,4 +266,46 @@ public class WorkflowApiTests : IClassFixture<CustomWebApplicationFactory<Progra
         Assert.Equal(v1.Id, v2.PreviousVersionId);
         Assert.NotEqual(v1.Id, v2.Id);
     }
+
+    [Fact]
+    public async Task GetWorkflowAudit_ReturnsTimelineAndEvents()
+    {
+        // 1. Arrange & Seed instance
+        Guid instanceId = Guid.NewGuid();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            var def = new WorkflowDefinition(_tenantId, "AuditTestWf", 1);
+            var step = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+            step.NextSteps.Add("Default", "END");
+            def.AddStep(step);
+            def.Publish();
+            db.WorkflowDefinitions.Add(def);
+
+            var instance = new FlowOS.Workflows.Domain.WorkflowInstance(_tenantId, def.Id, Guid.NewGuid(), def.Version, "Start");
+            typeof(FlowOS.Workflows.Domain.WorkflowInstance).GetProperty("Id")!.SetValue(instance, instanceId);
+            db.WorkflowInstances.Add(instance);
+
+            var evt = new FlowOS.Events.Models.StandardEvent(_tenantId, "WorkflowStarted");
+            evt.SetCorrelationId(instanceId);
+            evt.AddMetadata("Step", "Start");
+            db.Events.Add(evt);
+
+            await db.SaveChangesAsync();
+        }
+
+        // 2. Query Audit History via tenant endpoint
+        _client.DefaultRequestHeaders.Remove("x-tenant-id");
+        _client.DefaultRequestHeaders.Add("x-tenant-id", _tenantId.ToString());
+
+        var auditResp = await _client.GetAsync($"/api/workflows/{instanceId}/audit");
+        auditResp.EnsureSuccessStatusCode();
+
+        var audit = await auditResp.Content.ReadFromJsonAsync<FlowOS.Application.DTOs.Admin.AdminWorkflowDetailDto>();
+        Assert.NotNull(audit);
+        Assert.Equal(instanceId, audit.Id);
+        Assert.NotNull(audit.Timeline);
+        Assert.NotEmpty(audit.Timeline);
+        Assert.Contains(audit.Timeline, t => t.EventType == "WorkflowStarted");
+    }
 }
