@@ -110,3 +110,11 @@ export interface PublishedEventDto {
   payloadJson?: string;
 }
 
+export interface AuthSession {
+  role: 'Admin' | 'Tenant';
+  tenantId: string;
+  tenantName: string;
+  apiKey?: string;
+  username?: string;
+}
+

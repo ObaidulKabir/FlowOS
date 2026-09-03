@@ -111,6 +111,12 @@ public class NotificationProjector : INotificationHandler<DomainEventNotificatio
         // Fallback default message if still null
         if (string.IsNullOrWhiteSpace(message))
         {
+            if (ev.EventType == "WorkflowStarted" || ev.EventType == "WorkflowCompleted")
+            {
+                // Internal lifecycle events should not produce general broadcast user inbox notifications
+                return null;
+            }
+
             (message, var defaultSeverity) = ev.EventType switch
             {
                 "EVT-WORKFLOW-STARTED" => ("Workflow started", "Info"),
