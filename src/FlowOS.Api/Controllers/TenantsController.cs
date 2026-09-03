@@ -49,11 +49,17 @@ public class TenantsController : ControllerBase
             {
                 Id = k.Id,
                 Name = k.Name,
+                ApplicationName = k.ApplicationName,
+                Environment = k.Environment,
+                Scopes = k.Scopes,
                 MaskedKey = k.MaskedKey,
                 KeyPrefix = k.KeyPrefix,
                 CreatedAt = k.CreatedAt,
+                ExpiresAt = k.ExpiresAt,
                 LastUsedAt = k.LastUsedAt,
-                IsRevoked = k.IsRevoked
+                IsRevoked = k.IsRevoked,
+                IsExpired = k.IsExpired,
+                IsActive = k.IsActive
             }).ToList()
         });
 
@@ -76,7 +82,14 @@ public class TenantsController : ControllerBase
 
         var rawKey = TenantApiKey.GenerateRawKey();
         var keyName = string.IsNullOrWhiteSpace(request.KeyName) ? "Default API Key" : request.KeyName.Trim();
-        var apiKey = new TenantApiKey(tenant.TenantId, keyName, rawKey);
+        var appName = string.IsNullOrWhiteSpace(request.ApplicationName) ? "Default Application" : request.ApplicationName.Trim();
+        var env = string.IsNullOrWhiteSpace(request.Environment) ? "Production" : request.Environment.Trim();
+        var scopes = request.Scopes != null && request.Scopes.Any() ? request.Scopes : new List<string> { "*" };
+        DateTime? expiresAt = request.ExpiresInDays.HasValue && request.ExpiresInDays.Value > 0
+            ? DateTime.UtcNow.AddDays(request.ExpiresInDays.Value)
+            : null;
+
+        var apiKey = new TenantApiKey(tenant.TenantId, keyName, rawKey, appName, env, scopes, expiresAt);
         _context.TenantApiKeys.Add(apiKey);
 
         await _context.SaveChangesAsync();
@@ -96,11 +109,17 @@ public class TenantsController : ControllerBase
                     {
                         Id = apiKey.Id,
                         Name = apiKey.Name,
+                        ApplicationName = apiKey.ApplicationName,
+                        Environment = apiKey.Environment,
+                        Scopes = apiKey.Scopes,
                         MaskedKey = apiKey.MaskedKey,
                         KeyPrefix = apiKey.KeyPrefix,
                         CreatedAt = apiKey.CreatedAt,
+                        ExpiresAt = apiKey.ExpiresAt,
                         LastUsedAt = null,
-                        IsRevoked = false
+                        IsRevoked = false,
+                        IsExpired = false,
+                        IsActive = true
                     }
                 }
             },
@@ -121,11 +140,17 @@ public class TenantsController : ControllerBase
             {
                 Id = k.Id,
                 Name = k.Name,
+                ApplicationName = k.ApplicationName,
+                Environment = k.Environment,
+                Scopes = k.Scopes,
                 MaskedKey = k.MaskedKey,
                 KeyPrefix = k.KeyPrefix,
                 CreatedAt = k.CreatedAt,
+                ExpiresAt = k.ExpiresAt,
                 LastUsedAt = k.LastUsedAt,
-                IsRevoked = k.IsRevoked
+                IsRevoked = k.IsRevoked,
+                IsExpired = k.IsExpired,
+                IsActive = k.IsActive
             })
             .ToListAsync();
 
@@ -153,11 +178,17 @@ public class TenantsController : ControllerBase
             {
                 Id = k.Id,
                 Name = k.Name,
+                ApplicationName = k.ApplicationName,
+                Environment = k.Environment,
+                Scopes = k.Scopes,
                 MaskedKey = k.MaskedKey,
                 KeyPrefix = k.KeyPrefix,
                 CreatedAt = k.CreatedAt,
+                ExpiresAt = k.ExpiresAt,
                 LastUsedAt = k.LastUsedAt,
-                IsRevoked = k.IsRevoked
+                IsRevoked = k.IsRevoked,
+                IsExpired = k.IsExpired,
+                IsActive = k.IsActive
             })
             .ToListAsync();
 
@@ -172,7 +203,14 @@ public class TenantsController : ControllerBase
 
         var rawKey = TenantApiKey.GenerateRawKey();
         var keyName = string.IsNullOrWhiteSpace(request.Name) ? "API Key" : request.Name.Trim();
-        var apiKey = new TenantApiKey(id, keyName, rawKey);
+        var appName = string.IsNullOrWhiteSpace(request.ApplicationName) ? "Default Application" : request.ApplicationName.Trim();
+        var env = string.IsNullOrWhiteSpace(request.Environment) ? "Production" : request.Environment.Trim();
+        var scopes = request.Scopes != null && request.Scopes.Any() ? request.Scopes : new List<string> { "*" };
+        DateTime? expiresAt = request.ExpiresInDays.HasValue && request.ExpiresInDays.Value > 0
+            ? DateTime.UtcNow.AddDays(request.ExpiresInDays.Value)
+            : null;
+
+        var apiKey = new TenantApiKey(id, keyName, rawKey, appName, env, scopes, expiresAt);
         _context.TenantApiKeys.Add(apiKey);
 
         await _context.SaveChangesAsync();
@@ -182,9 +220,13 @@ public class TenantsController : ControllerBase
             Id = apiKey.Id,
             TenantId = id,
             Name = apiKey.Name,
+            ApplicationName = apiKey.ApplicationName,
+            Environment = apiKey.Environment,
+            Scopes = apiKey.Scopes,
             ApiKey = rawKey,
             MaskedKey = apiKey.MaskedKey,
-            CreatedAt = apiKey.CreatedAt
+            CreatedAt = apiKey.CreatedAt,
+            ExpiresAt = apiKey.ExpiresAt
         });
     }
 
@@ -206,12 +248,20 @@ public class RegisterTenantRequest
     [Required]
     public string Name { get; set; } = string.Empty;
     public string? KeyName { get; set; }
+    public string? ApplicationName { get; set; }
+    public string? Environment { get; set; }
+    public List<string>? Scopes { get; set; }
+    public int? ExpiresInDays { get; set; }
 }
 
 public class GenerateKeyRequest
 {
     [Required]
     public string Name { get; set; } = "API Key";
+    public string? ApplicationName { get; set; }
+    public string? Environment { get; set; }
+    public List<string>? Scopes { get; set; }
+    public int? ExpiresInDays { get; set; }
 }
 
 public class TenantDto
@@ -228,11 +278,17 @@ public class TenantApiKeyDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string ApplicationName { get; set; } = string.Empty;
+    public string Environment { get; set; } = string.Empty;
+    public List<string> Scopes { get; set; } = new();
     public string MaskedKey { get; set; } = string.Empty;
     public string KeyPrefix { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
     public DateTime? LastUsedAt { get; set; }
     public bool IsRevoked { get; set; }
+    public bool IsExpired { get; set; }
+    public bool IsActive { get; set; }
 }
 
 public class RegisterTenantResponse
@@ -246,7 +302,11 @@ public class CreateKeyResponse
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string ApplicationName { get; set; } = string.Empty;
+    public string Environment { get; set; } = string.Empty;
+    public List<string> Scopes { get; set; } = new();
     public string ApiKey { get; set; } = string.Empty;
     public string MaskedKey { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
 }

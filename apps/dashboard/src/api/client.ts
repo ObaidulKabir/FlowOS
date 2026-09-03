@@ -158,12 +158,19 @@ export const api = {
     return handleResponse(response, 'Failed to list tenants');
   },
 
-  registerTenant: async (name: string, keyName?: string): Promise<{ tenant: any; apiKey: string }> => {
+  registerTenant: async (
+    name: string, 
+    keyName?: string, 
+    applicationName?: string, 
+    environment?: string, 
+    scopes?: string[], 
+    expiresInDays?: number
+  ): Promise<{ tenant: any; apiKey: string }> => {
     const headers = getHeaders('Admin');
     const response = await fetch('/api/tenants', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ name, keyName })
+      body: JSON.stringify({ name, keyName, applicationName, environment, scopes, expiresInDays })
     });
     return handleResponse(response, 'Failed to register tenant');
   },
@@ -174,12 +181,25 @@ export const api = {
     return handleResponse(response, 'Failed to list tenant keys');
   },
 
-  generateTenantKey: async (tenantId: string, name?: string): Promise<any> => {
+  generateTenantKey: async (
+    tenantId: string, 
+    name?: string, 
+    applicationName?: string, 
+    environment?: string, 
+    scopes?: string[], 
+    expiresInDays?: number
+  ): Promise<any> => {
     const headers = getHeaders('Admin');
     const response = await fetch(`/api/tenants/${tenantId}/keys`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ name: name || 'API Key' })
+      body: JSON.stringify({ 
+        name: name || 'API Key',
+        applicationName: applicationName || 'Default Application',
+        environment: environment || 'Production',
+        scopes: scopes || ['*'],
+        expiresInDays
+      })
     });
     return handleResponse(response, 'Failed to generate API key');
   },

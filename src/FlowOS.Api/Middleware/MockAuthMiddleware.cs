@@ -70,11 +70,17 @@ public class MockAuthMiddleware
                         var keyHash = FlowOS.Domain.Entities.TenantApiKey.HashKey(suppliedApiKey);
                         var apiKeyRecord = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
                             db.TenantApiKeys,
-                            k => k.KeyHash == keyHash && !k.IsRevoked);
+                            k => k.KeyHash == keyHash && !k.IsRevoked && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow));
 
                         if (apiKeyRecord != null)
                         {
                             resolvedTenantId = apiKeyRecord.TenantId.ToString();
+                            claims.Add(new Claim("app_name", apiKeyRecord.ApplicationName));
+                            claims.Add(new Claim("environment", apiKeyRecord.Environment));
+                            foreach (var scope in apiKeyRecord.Scopes)
+                            {
+                                claims.Add(new Claim("scope", scope));
+                            }
                             apiKeyRecord.RecordUsage();
                             await db.SaveChangesAsync();
                         }

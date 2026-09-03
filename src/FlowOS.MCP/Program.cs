@@ -164,7 +164,7 @@ public partial class Program
                             var keyHash = FlowOS.Domain.Entities.TenantApiKey.HashKey(suppliedApiKey);
                             var apiKeyRecord = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
                                 db.TenantApiKeys,
-                                k => k.KeyHash == keyHash && !k.IsRevoked);
+                                k => k.KeyHash == keyHash && !k.IsRevoked && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow));
 
                             if (apiKeyRecord != null)
                             {

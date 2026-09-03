@@ -44,8 +44,8 @@ public static class DataSeeder
         // 1.2 Ensure Demo Tenant API Keys
         if (!await context.TenantApiKeys.AnyAsync(k => k.TenantId == demoClientTenantId))
         {
-            var demoKey1 = new TenantApiKey(demoClientTenantId, "Production Key", "flowos_prod_secret_key_32_chars_min");
-            var demoKey2 = new TenantApiKey(demoClientTenantId, "Local Dev Key", "local-development-key-change-me");
+            var demoKey1 = new TenantApiKey(demoClientTenantId, "Production Key", "flowos_prod_secret_key_32_chars_min", "ERP Integration", "Production", new[] { "*" });
+            var demoKey2 = new TenantApiKey(demoClientTenantId, "Local Dev Key", "local-development-key-change-me", "Developer Sandbox", "Development", new[] { "*" });
             context.TenantApiKeys.AddRange(demoKey1, demoKey2);
             await context.SaveChangesAsync();
         }

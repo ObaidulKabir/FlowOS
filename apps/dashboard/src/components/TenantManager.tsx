@@ -25,6 +25,10 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   const [showRegisterModal, setShowRegisterModal] = useState(openRegisterModal);
   const [newTenantName, setNewTenantName] = useState('');
   const [newKeyName, setNewKeyName] = useState('Primary Key');
+  const [newAppName, setNewAppName] = useState('Web Portal');
+  const [newEnv, setNewEnv] = useState<'Production' | 'Staging' | 'Development'>('Production');
+  const [newScopes, setNewScopes] = useState<string[]>(['*']);
+  const [newExpiresInDays, setNewExpiresInDays] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -43,6 +47,10 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   // Key Generation Modal State
   const [keyGenTenant, setKeyGenTenant] = useState<TenantDto | null>(null);
   const [generateKeyName, setGenerateKeyName] = useState('Production Key');
+  const [generateAppName, setGenerateAppName] = useState('ERP Sync');
+  const [generateEnv, setGenerateEnv] = useState<'Production' | 'Staging' | 'Development'>('Production');
+  const [generateScopes, setGenerateScopes] = useState<string[]>(['*']);
+  const [generateExpiresInDays, setGenerateExpiresInDays] = useState<number>(0);
 
   // Key Generated Alert Modal
   const [latestKeyInfo, setLatestKeyInfo] = useState<{
@@ -50,6 +58,9 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
     tenantName: string;
     apiKey: string;
     keyName: string;
+    applicationName?: string;
+    environment?: string;
+    scopes?: string[];
   } | null>(null);
 
   // Copy Feedback State
@@ -94,15 +105,29 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.registerTenant(newTenantName.trim(), newKeyName.trim() || 'Primary Key');
+      const res = await api.registerTenant(
+        newTenantName.trim(), 
+        newKeyName.trim() || 'Primary Key',
+        newAppName.trim() || 'Default Application',
+        newEnv,
+        newScopes,
+        newExpiresInDays > 0 ? newExpiresInDays : undefined
+      );
       closeRegisterModal();
       setNewTenantName('');
       setNewKeyName('Primary Key');
+      setNewAppName('Web Portal');
+      setNewEnv('Production');
+      setNewScopes(['*']);
+      setNewExpiresInDays(0);
       setLatestKeyInfo({
         tenantId: res.tenant.tenantId,
         tenantName: res.tenant.name,
         apiKey: res.apiKey,
-        keyName: res.tenant.keys?.[0]?.name || 'Primary Key'
+        keyName: res.tenant.keys?.[0]?.name || 'Primary Key',
+        applicationName: res.tenant.keys?.[0]?.applicationName,
+        environment: res.tenant.keys?.[0]?.environment,
+        scopes: res.tenant.keys?.[0]?.scopes
       });
       await loadTenants();
       handleSelectTenant(res.tenant.tenantId);
@@ -120,15 +145,29 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.generateTenantKey(keyGenTenant.tenantId, generateKeyName.trim() || 'API Key');
+      const res = await api.generateTenantKey(
+        keyGenTenant.tenantId, 
+        generateKeyName.trim() || 'API Key',
+        generateAppName.trim() || 'Default Application',
+        generateEnv,
+        generateScopes,
+        generateExpiresInDays > 0 ? generateExpiresInDays : undefined
+      );
       const currentTarget = keyGenTenant;
       setKeyGenTenant(null);
       setGenerateKeyName('Production Key');
+      setGenerateAppName('ERP Sync');
+      setGenerateEnv('Production');
+      setGenerateScopes(['*']);
+      setGenerateExpiresInDays(0);
       setLatestKeyInfo({
         tenantId: currentTarget.tenantId,
         tenantName: currentTarget.name,
         apiKey: res.apiKey,
-        keyName: res.name
+        keyName: res.name,
+        applicationName: res.applicationName,
+        environment: res.environment,
+        scopes: res.scopes
       });
       await loadTenants();
     } catch (err: any) {
@@ -449,33 +488,81 @@ headers = {
                       <table className="w-full text-left text-xs text-slate-300">
                         <thead className="bg-slate-800/70 text-[11px] text-slate-400 uppercase tracking-wider">
                           <tr>
-                            <th className="py-2.5 px-3 rounded-l-lg">Key Name</th>
+                            <th className="py-2.5 px-3 rounded-l-lg">Application & Key</th>
+                            <th className="py-2.5 px-3">Environment</th>
+                            <th className="py-2.5 px-3">Granted Scopes</th>
                             <th className="py-2.5 px-3">Masked Secret</th>
-                            <th className="py-2.5 px-3">Created</th>
+                            <th className="py-2.5 px-3">Expires</th>
                             <th className="py-2.5 px-3">Last Used</th>
                             <th className="py-2.5 px-3 text-right rounded-r-lg">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                          {t.keys.map((k) => (
-                            <tr key={k.id} className="hover:bg-slate-800/40 transition-colors">
-                              <td className="py-2.5 px-3 font-medium text-white">{k.name}</td>
-                              <td className="py-2.5 px-3 font-mono text-slate-400">{k.maskedKey}</td>
-                              <td className="py-2.5 px-3 text-slate-400">{new Date(k.createdAt).toLocaleDateString()}</td>
-                              <td className="py-2.5 px-3 text-slate-400">
-                                {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'Never'}
-                              </td>
-                              <td className="py-2.5 px-3 text-right">
-                                <button
-                                  onClick={() => handleRevokeKey(t.tenantId, k.id)}
-                                  className="text-rose-400 hover:text-rose-300 p-1 rounded hover:bg-rose-500/10 transition-colors"
-                                  title="Revoke Key"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {t.keys.map((k) => {
+                            const isExpired = k.isExpired || (k.expiresAt && new Date(k.expiresAt) <= new Date());
+                            const envColors = k.environment === 'Production'
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                              : k.environment === 'Staging'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+
+                            return (
+                              <tr key={k.id} className="hover:bg-slate-800/40 transition-colors">
+                                <td className="py-2.5 px-3">
+                                  <div className="font-semibold text-white flex items-center gap-2">
+                                    <span>{k.applicationName || 'Default Application'}</span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50 font-normal">
+                                      {k.name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${envColors}`}>
+                                    {k.environment || 'Production'}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <div className="flex flex-wrap gap-1 max-w-xs">
+                                    {(k.scopes && k.scopes.length > 0) ? (
+                                      k.scopes.map((s, idx) => (
+                                        <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 font-mono">
+                                          {s === '*' ? 'Full Access (*)' : s}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 font-mono">
+                                        Full Access (*)
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-slate-400">
+                                  {k.maskedKey}
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  {isExpired ? (
+                                    <span className="text-[11px] font-bold text-rose-400">Expired</span>
+                                  ) : k.expiresAt ? (
+                                    <span className="text-slate-400 text-[11px]">{new Date(k.expiresAt).toLocaleDateString()}</span>
+                                  ) : (
+                                    <span className="text-slate-500 text-[11px]">Never</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-400">
+                                  {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'Never'}
+                                </td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <button
+                                    onClick={() => handleRevokeKey(t.tenantId, k.id)}
+                                    className="text-rose-400 hover:text-rose-300 p-1.5 rounded hover:bg-rose-500/10 transition-colors"
+                                    title="Revoke Key"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -490,18 +577,18 @@ headers = {
       {/* Register Tenant Modal */}
       {showRegisterModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Globe className="text-blue-400" size={20} />
               Register New Tenant
             </h3>
             <p className="text-xs text-slate-400">
-              Create a dedicated tenant environment. An initial API key will be automatically provisioned for immediate integration.
+              Create an isolated organization workspace with dedicated application keys, scopes, and governance.
             </p>
 
             <form onSubmit={handleRegisterTenant} className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Tenant Name *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Tenant Organization Name *</label>
                 <input
                   type="text"
                   required
@@ -512,15 +599,153 @@ headers = {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Application Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Web Portal, Mobile Client"
+                    value={newAppName}
+                    onChange={(e) => setNewAppName(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Key Label</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Primary Deployment Key"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Application Presets */}
+              <div className="flex flex-wrap gap-1.5 text-[11px]">
+                <span className="text-slate-500">Quick App:</span>
+                {['Web Portal', 'Mobile App', 'ERP / SAP Sync', 'AI MCP Agent', 'CI/CD Deployer'].map((app) => (
+                  <button
+                    key={app}
+                    type="button"
+                    onClick={() => {
+                      setNewAppName(app);
+                      setNewKeyName(`${app} Key`);
+                    }}
+                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-[10px]"
+                  >
+                    + {app}
+                  </button>
+                ))}
+              </div>
+
+              {/* Environment Toggle */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Initial API Key Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Production Deployment Key"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                />
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">Target Environment</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Production', 'Staging', 'Development'] as const).map((env) => (
+                    <button
+                      key={env}
+                      type="button"
+                      onClick={() => setNewEnv(env)}
+                      className={`py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                        newEnv === env
+                          ? env === 'Production'
+                            ? 'bg-rose-500/20 border-rose-500 text-rose-300'
+                            : env === 'Staging'
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                            : 'bg-cyan-500/20 border-cyan-500 text-cyan-300'
+                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
+                      }`}
+                    >
+                      {env}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Permissions & Scopes Presets */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-300">Permission Scopes</label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setNewScopes(['*'])}
+                      className="text-[10px] text-blue-400 hover:underline"
+                    >
+                      Full Access
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setNewScopes(['workflow:start', 'event:publish', 'task:complete', 'workflow:read'])}
+                      className="text-[10px] text-blue-400 hover:underline"
+                    >
+                      Operator
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setNewScopes(['workflow:read'])}
+                      className="text-[10px] text-blue-400 hover:underline"
+                    >
+                      Read-Only
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-800/60 rounded-lg border border-slate-700/60 text-xs">
+                  {[
+                    { id: '*', label: 'Full Admin (*)' },
+                    { id: 'workflow:start', label: 'Start Workflows' },
+                    { id: 'event:publish', label: 'Publish Events' },
+                    { id: 'task:complete', label: 'Complete Tasks' },
+                    { id: 'workflow:read', label: 'Read Telemetry' },
+                    { id: 'governance:manage', label: 'Manage Blueprints' },
+                  ].map((scope) => {
+                    const checked = newScopes.includes('*') || newScopes.includes(scope.id);
+                    return (
+                      <label key={scope.id} className="flex items-center gap-2 cursor-pointer text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={newScopes.includes('*') && scope.id !== '*'}
+                          onChange={(e) => {
+                            if (scope.id === '*') {
+                              setNewScopes(e.target.checked ? ['*'] : ['workflow:read']);
+                            } else {
+                              if (e.target.checked) {
+                                setNewScopes([...newScopes.filter(s => s !== '*'), scope.id]);
+                              } else {
+                                setNewScopes(newScopes.filter(s => s !== scope.id));
+                              }
+                            }
+                          }}
+                          className="rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-0"
+                        />
+                        <span className="text-[11px]">{scope.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Expiration Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Key Expiration</label>
+                <select
+                  value={newExpiresInDays}
+                  onChange={(e) => setNewExpiresInDays(Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value={0}>Never Expires (Recommended for backend services)</option>
+                  <option value={30}>Expires in 30 Days</option>
+                  <option value={90}>Expires in 90 Days</option>
+                  <option value={365}>Expires in 1 Year</option>
+                </select>
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
@@ -536,7 +761,7 @@ headers = {
                   disabled={submitting || !newTenantName.trim()}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
                 >
-                  {submitting ? 'Registering...' : 'Register & Provision Key'}
+                  {submitting ? 'Registering...' : 'Register Tenant & Provision Key'}
                 </button>
               </div>
             </form>
@@ -547,26 +772,164 @@ headers = {
       {/* Generate Additional Key Modal */}
       {keyGenTenant && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Key className="text-amber-400" size={20} />
-              Generate API Key for {keyGenTenant.name}
+              Provision Application Key for {keyGenTenant.name}
             </h3>
             <p className="text-xs text-slate-400">
-              Provide a descriptive label for this key (e.g., CI/CD Pipeline, Python Deployment Script, MCP Runner).
+              Generate a dedicated key for a specific application or service with isolated permissions and lifetime.
             </p>
 
             <form onSubmit={handleGenerateKey} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Application Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. ERP Sync, AI Bot"
+                    value={generateAppName}
+                    onChange={(e) => setGenerateAppName(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Key Label *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Production Runner"
+                    value={generateKeyName}
+                    onChange={(e) => setGenerateKeyName(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Application Presets */}
+              <div className="flex flex-wrap gap-1.5 text-[11px]">
+                <span className="text-slate-500">Quick App:</span>
+                {['ERP Integration', 'Mobile Client', 'AI MCP Agent', 'CI/CD Deployer', 'Reporting BI'].map((app) => (
+                  <button
+                    key={app}
+                    type="button"
+                    onClick={() => {
+                      setGenerateAppName(app);
+                      setGenerateKeyName(`${app} Key`);
+                    }}
+                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-[10px]"
+                  >
+                    + {app}
+                  </button>
+                ))}
+              </div>
+
+              {/* Environment Toggle */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Key Label *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Python Deployment Runner"
-                  value={generateKeyName}
-                  onChange={(e) => setGenerateKeyName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                />
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">Target Environment</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Production', 'Staging', 'Development'] as const).map((env) => (
+                    <button
+                      key={env}
+                      type="button"
+                      onClick={() => setGenerateEnv(env)}
+                      className={`py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                        generateEnv === env
+                          ? env === 'Production'
+                            ? 'bg-rose-500/20 border-rose-500 text-rose-300'
+                            : env === 'Staging'
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                            : 'bg-cyan-500/20 border-cyan-500 text-cyan-300'
+                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
+                      }`}
+                    >
+                      {env}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Permissions & Scopes Presets */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-300">Permission Scopes</label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setGenerateScopes(['*'])}
+                      className="text-[10px] text-blue-400 hover:underline"
+                    >
+                      Full Access
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setGenerateScopes(['workflow:start', 'event:publish', 'task:complete', 'workflow:read'])}
+                      className="text-[10px] text-blue-400 hover:underline"
+                    >
+                      Operator
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setGenerateScopes(['workflow:read'])}
+                      className="text-[10px] text-blue-400 hover:underline"
+                    >
+                      Read-Only
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-800/60 rounded-lg border border-slate-700/60 text-xs">
+                  {[
+                    { id: '*', label: 'Full Admin (*)' },
+                    { id: 'workflow:start', label: 'Start Workflows' },
+                    { id: 'event:publish', label: 'Publish Events' },
+                    { id: 'task:complete', label: 'Complete Tasks' },
+                    { id: 'workflow:read', label: 'Read Telemetry' },
+                    { id: 'governance:manage', label: 'Manage Blueprints' },
+                  ].map((scope) => {
+                    const checked = generateScopes.includes('*') || generateScopes.includes(scope.id);
+                    return (
+                      <label key={scope.id} className="flex items-center gap-2 cursor-pointer text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={generateScopes.includes('*') && scope.id !== '*'}
+                          onChange={(e) => {
+                            if (scope.id === '*') {
+                              setGenerateScopes(e.target.checked ? ['*'] : ['workflow:read']);
+                            } else {
+                              if (e.target.checked) {
+                                setGenerateScopes([...generateScopes.filter(s => s !== '*'), scope.id]);
+                              } else {
+                                setGenerateScopes(generateScopes.filter(s => s !== scope.id));
+                              }
+                            }
+                          }}
+                          className="rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-0"
+                        />
+                        <span className="text-[11px]">{scope.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Expiration Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Key Expiration</label>
+                <select
+                  value={generateExpiresInDays}
+                  onChange={(e) => setGenerateExpiresInDays(Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value={0}>Never Expires (Recommended for backend services)</option>
+                  <option value={30}>Expires in 30 Days</option>
+                  <option value={90}>Expires in 90 Days</option>
+                  <option value={365}>Expires in 1 Year</option>
+                </select>
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
@@ -582,7 +945,7 @@ headers = {
                   disabled={submitting}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
                 >
-                  {submitting ? 'Generating...' : 'Generate Key'}
+                  {submitting ? 'Generating...' : 'Generate Scoped Key'}
                 </button>
               </div>
             </form>

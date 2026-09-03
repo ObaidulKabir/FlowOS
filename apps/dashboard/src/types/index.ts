@@ -64,11 +64,17 @@ export interface WorkflowInstance {
 export interface TenantApiKeyDto {
   id: string;
   name: string;
+  applicationName?: string;
+  environment?: string;
+  scopes?: string[];
   maskedKey: string;
   keyPrefix: string;
   createdAt: string;
+  expiresAt?: string;
   lastUsedAt?: string;
   isRevoked: boolean;
+  isExpired?: boolean;
+  isActive?: boolean;
 }
 
 export interface TenantDto {
