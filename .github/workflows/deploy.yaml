@@ -1,79 +1,40 @@
-name: Deploy to Server (Docker Compose)
-
-# Auto-deploy is manual until production SSH (SSH_HOST) is reachable from GitHub Actions again.
-# Runs 37–38 failed at ssh-keyscan; re-enable `push` to main after verifying SSH_HOST/SSH_PORT.
+name: CI
 on:
-  workflow_dispatch:
-  workflow_run:
-    workflows: ["CI Build"]
-    branches:
-      - main
-    types:
-      - completed
-
-jobs:
+  push:
+    branches: [ main]
+  pull_request:
+    branches: [ main]
+jobs:     
   deploy:
-    name: Deploy Main Branch
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    name: Deploy to production
     runs-on: ubuntu-latest
-    environment: production
+    environment: production 
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Update Code on Server
+        uses: appleboy/ssh-action@b0a8f324e192469585a608d1f586061cf28a6571
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+            cd  ${{ secrets.APP_PATH }}
+            git fetch -p
+            git checkout ${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
 
-      - name: Add server to known_hosts
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SSH_HOST:-}" ]; then
-            echo "::error::Secret SSH_HOST is empty. Set it under Settings → Environments → production (or repository secrets)."
-            exit 1
-          fi
-
-          PORT="${SSH_PORT:-22}"
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-
-          echo "Scanning host keys for ${SSH_HOST} (port ${PORT})..."
-          for attempt in 1 2 3; do
-            if ssh-keyscan -p "$PORT" -T 15 -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>keyscan.err; then
-              echo "Host keys added successfully (attempt ${attempt})."
-              exit 0
-            fi
-            echo "ssh-keyscan attempt ${attempt} failed:"
-            cat keyscan.err || true
-            sleep 5
-          done
-
-          echo "::error::Could not reach SSH host '${SSH_HOST}:${PORT}'. Check that the server is up, port ${PORT} is open to GitHub Actions, and SSH_HOST/SSH_PORT secrets are correct."
-          exit 1
-
-      - name: Deploy with Docker Compose
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          APP_PATH: ${{ secrets.APP_PATH }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SSH_USER:-}" ] || [ -z "${APP_PATH:-}" ]; then
-            echo "::error::SSH_USER and APP_PATH secrets are required."
-            exit 1
-          fi
-
-          PORT="${SSH_PORT:-22}"
-          ssh -A -p "$PORT" -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" << EOF
-            set -e
-            cd '${APP_PATH}'
-            git fetch origin
-            git checkout -B main origin/main
-            docker network create traefik-network || true
-            docker compose -f docker-compose.test.yaml up -d --build
-          EOF
+      - name: Build and Deploy Containers
+        uses: appleboy/ssh-action@b0a8f324e192469585a608d1f586061cf28a6571
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+            cd  ${{ secrets.APP_PATH }}
+            docker compose -f docker-compose.test.yml  down
+            docker compose -f docker-compose.test.yml up -d --build
