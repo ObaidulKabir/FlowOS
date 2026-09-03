@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { WorkflowInstance } from '../types';
-import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles } from 'lucide-react';
+import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson } from 'lucide-react';
 import { getActiveTenantId } from '../api/client';
 
 interface Props {
@@ -244,12 +244,30 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items }) => {
                           </div>
 
                           {evt.keyData && Object.keys(evt.keyData).length > 0 && (
-                            <div className="pt-1.5 flex flex-wrap gap-1.5">
-                              {Object.entries(evt.keyData).map(([k, v]) => (
-                                <span key={k} className="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-mono">
-                                  <strong className="text-slate-300">{k}:</strong> {v}
-                                </span>
-                              ))}
+                            <div className="pt-1.5 space-y-1.5">
+                              <div className="flex flex-wrap gap-1.5">
+                                {Object.entries(evt.keyData)
+                                  .filter(([k]) => k !== 'Payload')
+                                  .map(([k, v]) => (
+                                    <span key={k} className="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-mono">
+                                      <strong className="text-slate-300">{k}:</strong> {v}
+                                    </span>
+                                  ))}
+                              </div>
+                              {evt.keyData.Payload && (
+                                <div className="bg-slate-950/80 border border-slate-800 p-2 rounded-lg font-mono text-[10px] text-emerald-300/90 overflow-x-auto max-h-32">
+                                  <div className="text-slate-500 font-bold mb-0.5 flex items-center gap-1 text-[9px]">
+                                    <FileJson size={10} /> Attached Payload:
+                                  </div>
+                                  <pre>{(() => {
+                                    try {
+                                      return JSON.stringify(JSON.parse(evt.keyData.Payload), null, 2);
+                                    } catch {
+                                      return evt.keyData.Payload;
+                                    }
+                                  })()}</pre>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

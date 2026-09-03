@@ -4,12 +4,13 @@ import { DetailView } from './components/DetailView';
 import { EditorView } from './components/EditorView';
 import { WorkflowInstanceTable } from './components/WorkflowInstanceTable';
 import { TenantManager } from './components/TenantManager';
+import { EventAuditViewer } from './components/EventAuditViewer';
 import { api, getActiveTenantId } from './api/client';
 import { WorkflowClass, WorkflowClassScope, WorkflowClassStatus, ValidationResult, CreateDraftRequest, WorkflowInstance } from './types';
 import { AlertCircle, Plus, Play, RefreshCw, CheckCircle, Shield, Cpu, Clock, Terminal, Key } from 'lucide-react';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared' | 'Public' | 'Instances' | 'Tenants'>('All');
+  const [activeTab, setActiveTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared' | 'Public' | 'Instances' | 'Events' | 'Tenants'>('All');
   const [currentTenantId, setCurrentTenantId] = useState<string>(getActiveTenantId());
   const [openTenantRegisterModal, setOpenTenantRegisterModal] = useState(false);
   const [items, setItems] = useState<WorkflowClass[]>([]);
@@ -32,7 +33,7 @@ function App() {
   ]);
 
   const loadData = async () => {
-    if (activeTab === 'Tenants') {
+    if (activeTab === 'Tenants' || activeTab === 'Events') {
       setLoading(false);
       return;
     }
@@ -455,7 +456,7 @@ function App() {
         <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
           <div className="border-b border-slate-700 bg-slate-850">
             <nav className="flex divide-x divide-slate-700 text-xs font-semibold">
-              {(['All', 'Published', 'Drafts', 'Shared', 'Public', 'Instances', 'Tenants'] as const).map((tab) => (
+              {(['All', 'Published', 'Drafts', 'Shared', 'Public', 'Instances', 'Events', 'Tenants'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -465,7 +466,7 @@ function App() {
                       : 'text-slate-400 hover:text-white hover:bg-slate-750'
                   }`}
                 >
-                  {tab === 'Tenants' ? '🏢 Tenants & API Keys' : tab === 'Instances' ? '⚡ Live Instances' : tab === 'All' ? '📑 All Workflows' : tab}
+                  {tab === 'Tenants' ? '🏢 Tenants & API Keys' : tab === 'Instances' ? '⚡ Live Instances' : tab === 'Events' ? '📡 Event Stream & Audit' : tab === 'All' ? '📑 All Workflows' : tab}
                 </button>
               ))}
             </nav>
@@ -484,6 +485,13 @@ function App() {
               />
             ) : activeTab === 'Instances' ? (
               <WorkflowInstanceTable items={instances} />
+            ) : activeTab === 'Events' ? (
+              <EventAuditViewer 
+                role={role} 
+                onInspectWorkflow={() => {
+                  setActiveTab('Instances');
+                }} 
+              />
             ) : (
               <WorkflowTable 
                 items={items} 

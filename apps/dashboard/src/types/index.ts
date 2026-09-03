@@ -100,3 +100,13 @@ export interface CreateKeyResponse {
   createdAt: string;
 }
 
+export interface PublishedEventDto {
+  eventId: string;
+  tenantId: string;
+  eventType: string;
+  correlationId?: string;
+  timestamp: string;
+  metadata: Record<string, string>;
+  payloadJson?: string;
+}
+

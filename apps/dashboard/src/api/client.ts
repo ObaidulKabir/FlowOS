@@ -152,6 +152,21 @@ export const api = {
     return handleResponse(response, 'Failed to list workflow instances');
   },
 
+  listEvents: async (workflowInstanceId?: string, limit: number = 50, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<any[]> => {
+    const headers = getHeaders(role);
+    const params = new URLSearchParams();
+    if (workflowInstanceId) params.append('workflowInstanceId', workflowInstanceId);
+    params.append('limit', limit.toString());
+    const response = await fetch(`/api/events?${params.toString()}`, { headers });
+    return handleResponse(response, 'Failed to list events');
+  },
+
+  getWorkflowAudit: async (instanceId: string, role: 'Tenant' | 'Admin' = 'Tenant'): Promise<any> => {
+    const headers = getHeaders(role);
+    const response = await fetch(`/api/workflows/${instanceId}/audit`, { headers });
+    return handleResponse(response, 'Failed to get workflow audit history');
+  },
+
   listTenants: async (): Promise<any[]> => {
     const headers = getHeaders('Admin');
     const response = await fetch('/api/tenants', { headers });
