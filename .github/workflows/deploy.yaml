@@ -4,10 +4,17 @@ name: Deploy to Server (Docker Compose)
 # Runs 37–38 failed at ssh-keyscan; re-enable `push` to main after verifying SSH_HOST/SSH_PORT.
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI Build"]
+    branches:
+      - main
+    types:
+      - completed
 
 jobs:
   deploy:
     name: Deploy Main Branch
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
