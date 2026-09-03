@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult, CreateDraftRequest } from '../types';
-import { api } from '../api/client';
+import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult, CreateDraftRequest, TenantDto } from '../types';
+import { api, setActiveTenantId } from '../api/client';
 import { WorkflowTable } from './WorkflowTable';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
@@ -9,15 +9,16 @@ import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
 import { 
   Building2, Plus, Play, RefreshCw, Key, Activity, FileText, 
-  Cpu, Copy, Check
+  Cpu, Copy, Check, Filter
 } from 'lucide-react';
 
 interface Props {
   session: AuthSession;
   onSwitchWorkspace: () => void;
+  onTenantChange?: (newTenantId: string, newTenantName: string) => void;
 }
 
-export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace }) => {
+export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
   const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Events' | 'Keys' | 'Simulator'>('Instances');
   const [blueprintSubTab, setBlueprintSubTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared'>('All');
   
@@ -26,6 +27,30 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedTenantId, setCopiedTenantId] = useState(false);
+
+  // Tenant Filter for development / testing
+  const [availableTenants, setAvailableTenants] = useState<TenantDto[]>([]);
+
+  useEffect(() => {
+    const fetchTenants = async () => {
+      try {
+        const list = await api.listTenants();
+        setAvailableTenants(list);
+      } catch (err) {
+        console.warn('Could not fetch tenants list in tenant view', err);
+      }
+    };
+    fetchTenants();
+  }, []);
+
+  const handleSelectTenant = (newTenantId: string) => {
+    const matched = availableTenants.find(t => t.tenantId === newTenantId);
+    const newTenantName = matched ? matched.name : 'Tenant ' + newTenantId.substring(0, 8);
+    setActiveTenantId(newTenantId, newTenantName);
+    if (onTenantChange) {
+      onTenantChange(newTenantId, newTenantName);
+    }
+  };
 
   // Modals
   const [selectedBlueprint, setSelectedBlueprint] = useState<WorkflowClass | null>(null);
@@ -182,11 +207,40 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace })
               </span>
             </div>
 
-            <h1 className="text-2xl md:text-3xl font-extrabold text-white">
-              {session.tenantName}
-            </h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-white">
+                {session.tenantName}
+              </h1>
+
+              {/* Interactive Tenant Filter Dropdown */}
+              <div className="flex items-center gap-1.5 bg-slate-950/90 border border-blue-500/40 rounded-xl px-3 py-1.5 shadow-inner">
+                <Filter size={13} className="text-blue-400 shrink-0" />
+                <span className="text-[11px] text-slate-400">Filter Tenant:</span>
+                <select
+                  value={session.tenantId}
+                  onChange={(e) => handleSelectTenant(e.target.value)}
+                  className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+                  title="Filter and switch active tenant workspace"
+                >
+                  {availableTenants.map(t => (
+                    <option key={t.tenantId} value={t.tenantId} className="bg-slate-900 text-white">
+                      {t.name} ({t.tenantId.substring(0, 8)}...)
+                    </option>
+                  ))}
+                  {availableTenants.length === 0 && (
+                    <option value={session.tenantId} className="bg-slate-900 text-white">
+                      {session.tenantName} ({session.tenantId.substring(0, 8)}...)
+                    </option>
+                  )}
+                </select>
+              </div>
+            </div>
+
             <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-              Operating environment with strict zero-trust boundary. Workflows, live state machines, and event streams are private to this tenant.
+              Operating environment with strict zero-trust boundary. Currently filtered to <strong>{session.tenantName}</strong>.
+              <span className="text-slate-500 ml-1">
+                (Tenant filter active for multi-tenant testing; final release will automatically bind to authenticated user organization).
+              </span>
             </p>
           </div>
 

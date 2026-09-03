@@ -126,6 +126,15 @@ function App() {
           <TenantDashboard 
             session={session} 
             onSwitchWorkspace={() => setIsLoggedOut(true)} 
+            onTenantChange={(newTenantId, newTenantName) => {
+              const updated: AuthSession = {
+                ...session,
+                tenantId: newTenantId,
+                tenantName: newTenantName
+              };
+              setAuthSession(updated);
+              setSession(updated);
+            }}
           />
         )}
       </main>
