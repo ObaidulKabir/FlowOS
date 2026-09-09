@@ -2,17 +2,17 @@ services:
   # ─── FlowOS API ──────────────────────────────────────────────
   flowos-api:
     image: flowos-api
+    restart: unless-stopped
     build:
       context: .
-      dockerfile: src/FlowOS.Api/Dockerfile 
+      dockerfile: src/FlowOS.Api/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
       - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
     volumes:
-      - ./flowos-config:/app/flowos-config 
+      - ./flowos-config:/app/flowos-config
     labels:
       - "traefik.enable=true"
-      # Route /api/* to the API service
       - "traefik.http.routers.flowos-api.rule=Host(`${FLOWOS_DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.flowos-api.entrypoints=web"
       - "traefik.http.services.flowos-api.loadbalancer.server.port=8080"
@@ -22,28 +22,28 @@ services:
   # ─── FlowOS Dashboard ───────────────────────────────────────
   flowos-dashboard:
     image: flowos-dashboard
+    restart: unless-stopped
     build:
       context: .
-      dockerfile: docker/dashboard.Dockerfile 
+      dockerfile: docker/dashboard.Dockerfile
     command: npm run dev -- --host --port 3000
     environment:
       - VITE_API_TARGET=${VITE_API_TARGET}
     depends_on:
       - flowos-api
-
     labels:
       - "traefik.enable=true"
-      # Catch-all for the domain root (lower priority so /api takes precedence)
       - "traefik.http.routers.flowos-dashboard.rule=Host(`${FLOWOS_DOMAIN}`)"
       - "traefik.http.routers.flowos-dashboard.entrypoints=web"
       - "traefik.http.routers.flowos-dashboard.priority=1"
       - "traefik.http.services.flowos-dashboard.loadbalancer.server.port=3000"
     networks:
-      - traefik-network 
+      - traefik-network
 
-  # ─── FlowOS MCP (Streamable HTTP) ───────────────────────────
+  # ─── FlowOS MCP ─────────────────────────────────────────────
   flowos-mcp:
     image: flowos-mcp
+    restart: unless-stopped
     build:
       context: .
       dockerfile: src/FlowOS.MCP/Dockerfile
@@ -62,9 +62,10 @@ services:
     networks:
       - traefik-network
 
-  # ─── Expense App Backend ──────────────────────────────────────
+  # ─── Expense App Backend ────────────────────────────────────
   expense-backend:
     image: node:20-alpine
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./ExpenseApp/backend:/app
@@ -72,18 +73,18 @@ services:
     command: sh -c "npm install && npm start"
     environment:
       - EXPENSE_APP_FLOWOS_API_URL=http://flowos-api:8080/api
- 
     networks:
       - traefik-network
     labels:
       - "traefik.enable=true"
-      # Catch-all for the domain root (lower priority so /api takes precedence)
       - "traefik.http.routers.expense-backend.rule=Host(`expense-app.gkibria121.com`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.expense-backend.entrypoints=web" 
-      - "traefik.http.services.expense-backend.loadbalancer.server.port=3001"  
-  # ─── Expense App Frontend ─────────────────────────────────────
+      - "traefik.http.routers.expense-backend.entrypoints=web"
+      - "traefik.http.services.expense-backend.loadbalancer.server.port=3001"
+
+  # ─── Expense App Frontend ──────────────────────────────────
   expense-frontend:
     image: node:20-alpine
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./ExpenseApp/frontend:/app
@@ -94,11 +95,10 @@ services:
       - traefik-network
     labels:
       - "traefik.enable=true"
-      # Catch-all for the domain root (lower priority so /api takes precedence)
       - "traefik.http.routers.expense-frontend.rule=Host(`expense-app.gkibria121.com`)"
-      - "traefik.http.routers.expense-frontend.entrypoints=web" 
-      - "traefik.http.services.expense-frontend.loadbalancer.server.port=3002"  
-# ─── Networks ─────────────────────────────────────────────────
+      - "traefik.http.routers.expense-frontend.entrypoints=web"
+      - "traefik.http.services.expense-frontend.loadbalancer.server.port=3002"
+
 networks:
   traefik-network:
     external: true
