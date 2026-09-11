@@ -157,39 +157,42 @@ public static class McpToolDescriptions
     public static readonly IReadOnlyDictionary<string, ToolSecurityProfile> SecurityProfiles =
         new Dictionary<string, ToolSecurityProfile>(StringComparer.Ordinal)
         {
-            ["describe_workflowclass_schema"] = new("info", "public", false, false, false),
-            ["list_public_workflowclasses"] = new("query", "authenticated", false, true, true),
-            ["list_notifications"] = new("notification", "authenticated", false, true, true),
-            ["mark_notification_as_read"] = new("command", "authenticated", true, true, true),
-            ["list_available_agents"] = new("analysis", "authenticated", false, false, false),
-            ["suggest_agent_action"] = new("analysis", "authenticated", false, true, true),
-            ["explain_validation_violation"] = new("analysis", "authenticated", false, false, false),
-            ["lint_draft_workflowclass"] = new("analysis", "authenticated", false, true, true),
-            ["create_draft_workflowclass"] = new("governance", "authenticated", true, true, true),
-            ["update_draft_workflowclass"] = new("governance", "authenticated", true, true, true),
-            ["validate_draft_workflowclass"] = new("governance", "authenticated", false, true, true),
-            ["get_draft_workflowclass"] = new("governance", "authenticated", false, true, true),
-            ["list_draft_workflowclasses"] = new("governance", "authenticated", false, true, true),
-            ["get_workflow_instance_status"] = new("query", "authenticated", false, true, true),
-            ["fork_public_workflowclass"] = new("governance", "authenticated", true, true, true),
-            ["publish_workflowclass"] = new("governance", "authenticated", true, true, true),
-            ["start_workflow"] = new("command", "authenticated", true, true, true),
-            ["publish_event"] = new("command", "authenticated", true, true, true),
-            ["complete_task"] = new("command", "authenticated", true, true, true),
-            ["list_workflow_instances"] = new("query", "authenticated", false, true, true),
-            ["get_workflow_history"] = new("query", "authenticated", false, true, true)
+            ["describe_workflowclass_schema"] = new("info", "public", false, false, false, "none", false, "low"),
+            ["explain_validation_violation"] = new("analysis", "public", false, false, false, "none", false, "low"),
+            ["list_available_agents"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
+            ["suggest_agent_action"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["lint_draft_workflowclass"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["list_public_workflowclasses"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["get_workflow_instance_status"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["get_workflow_history"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["list_notifications"] = new("notification", "authenticated", true, true, false, "none", true, "low"),
+            ["mark_notification_as_read"] = new("command", "authenticated", true, true, true, "reversible", true, "low"),
+            ["create_draft_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["update_draft_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["validate_draft_workflowclass"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
+            ["get_draft_workflowclass"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
+            ["list_draft_workflowclasses"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
+            ["fork_public_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["publish_workflowclass"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high"),
+            ["start_workflow"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["publish_event"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["complete_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium")
         };
 
     public static ToolSecurityProfile ProfileFor(string toolName) =>
         SecurityProfiles.TryGetValue(toolName, out var profile)
             ? profile
-            : new ToolSecurityProfile("unknown", "authenticated", false, true, true);
+            : new ToolSecurityProfile("unknown", "authenticated", true, true, false, "none", true, "medium");
 }
 
 public record ToolSecurityProfile(
     string Category,
     string Access,
+    bool AuthenticationRequired,
+    bool AuthorizationRequired,
     bool Mutating,
+    string SideEffect,
     bool TenantScoped,
-    bool RequiresAuthorization
+    string RiskLevel
 );

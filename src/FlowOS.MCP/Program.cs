@@ -222,6 +222,12 @@ public partial class Program
                 tenantId = dbResolvedTenantId.Value;
             }
 
+            if (dbResolvedTenantId.HasValue && tenantId != Guid.Empty && tenantId != dbResolvedTenantId.Value)
+            {
+                await WriteHttpError(context, StatusCodes.Status403Forbidden, -32003, "Cross-tenant access forbidden. The authenticated API key is not authorized for the requested tenant context.");
+                return;
+            }
+
             if (tenantId == Guid.Empty && (suppliedApiKey == "flowos_prod_secret_key_32_chars_min" ||
                                            suppliedApiKey == "local-development-key-change-me" ||
                                            suppliedApiKey == "YOUR_PRODUCTION_API_KEY"))
@@ -273,9 +279,13 @@ public partial class Program
                         t.Description,
                         profile.Category,
                         profile.Access,
+                        profile.AuthenticationRequired,
+                        profile.AuthorizationRequired,
                         profile.Mutating,
+                        profile.SideEffect,
                         profile.TenantScoped,
-                        profile.RequiresAuthorization
+                        profile.RiskLevel,
+                        t.InputSchema
                     );
                 })
                 .ToList();
@@ -286,7 +296,7 @@ public partial class Program
                 return Results.Content(html, "text/html; charset=utf-8");
             }
 
-            return Results.Ok(new
+            var payload = new
             {
                 name = "FlowOS MCP Server",
                 status = "online",
@@ -305,13 +315,18 @@ public partial class Program
                     description = t.Description,
                     category = t.Category,
                     access = t.Access,
+                    authenticationRequired = t.AuthenticationRequired,
+                    authorizationRequired = t.AuthorizationRequired,
                     mutating = t.Mutating,
+                    sideEffect = t.SideEffect,
                     tenantScoped = t.TenantScoped,
-                    requiresAuthorization = t.RequiresAuthorization
+                    riskLevel = t.RiskLevel,
+                    inputSchema = t.InputSchema
                 }).ToList(),
                 agentSetup = new
                 {
-                    claudeDesktop = new
+                    description = "Connect your AI agent to FlowOS via MCP streamable HTTP transport",
+                    quickstart = new
                     {
                         mcpServers = new
                         {
@@ -330,7 +345,9 @@ public partial class Program
                         }
                     }
                 }
-            });
+            };
+
+            return Results.Content(JsonConvert.SerializeObject(payload, Formatting.Indented), "application/json; charset=utf-8");
         });
 
         var mcpPostHandler = async (HttpRequest request, IMcpJsonRpcDispatcher dispatcher, CancellationToken ct) =>
@@ -564,6 +581,13 @@ public partial class Program
     .pill-readonly { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
     .pill-tenant { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
     .pill-category { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .pill-risk-low { background: rgba(16, 185, 129, 0.12); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.25); }
+    .pill-risk-medium { background: rgba(245, 158, 11, 0.12); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.25); }
+    .pill-risk-high { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .pill-sideeffect { background: rgba(217, 70, 239, 0.12); color: #f0abfc; border: 1px solid rgba(217, 70, 239, 0.25); }
+    details summary { font-size: 0.72rem; color: #60a5fa; cursor: pointer; user-select: none; margin-top: 0.6rem; font-weight: 600; }
+    details summary:hover { color: #93c5fd; }
+    details pre { margin-top: 0.35rem; margin-bottom: 0; padding: 0.5rem; font-size: 0.72rem; max-height: 160px; overflow-y: auto; background: #020617; border-radius: 0.5rem; }
     pre {
       background: #020617;
       border: 1px solid var(--border);
@@ -614,19 +638,38 @@ public partial class Program
                 : "<span class=\"pill pill-readonly\">QUERY (Read-Only)</span>";
             var tenantPill = tool.TenantScoped
                 ? "<span class=\"pill pill-tenant\">Tenant Scoped</span>"
+                : "<span class=\"pill pill-tenant\" style=\"border-color:rgba(148,163,184,0.3); color:#94a3b8; background:rgba(148,163,184,0.1);\">Public / Fleet</span>";
+            var riskPillClass = tool.RiskLevel switch
+            {
+                "high" => "pill-risk-high",
+                "medium" => "pill-risk-medium",
+                _ => "pill-risk-low"
+            };
+            var sideEffectPill = tool.SideEffect != "none"
+                ? $"<span class=\"pill pill-sideeffect\">{System.Net.WebUtility.HtmlEncode(tool.SideEffect)}</span>"
                 : "";
+
+            var schemaJson = tool.InputSchema != null
+                ? JsonConvert.SerializeObject(tool.InputSchema, Formatting.Indented)
+                : "{}";
 
             sb.Append($"""
       <div class="tool-card">
         <div class="tool-header">
           <div class="tool-name">{System.Net.WebUtility.HtmlEncode(tool.Name)}</div>
-          <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
+          <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
             <span class="pill pill-category">{System.Net.WebUtility.HtmlEncode(tool.Category)}</span>
             {mutatingPill}
+            <span class="pill {riskPillClass}">Risk: {System.Net.WebUtility.HtmlEncode(tool.RiskLevel.ToUpperInvariant())}</span>
+            {sideEffectPill}
             {tenantPill}
           </div>
         </div>
         <div class="tool-desc">{System.Net.WebUtility.HtmlEncode(tool.Description)}</div>
+        <details>
+          <summary>▸ Argument Schema (inputSchema)</summary>
+          <pre><code>{System.Net.WebUtility.HtmlEncode(schemaJson)}</code></pre>
+        </details>
       </div>
 
 """);
@@ -677,9 +720,13 @@ public record ToolDiscoveryItem(
     string Description,
     string Category,
     string Access,
+    bool AuthenticationRequired,
+    bool AuthorizationRequired,
     bool Mutating,
+    string SideEffect,
     bool TenantScoped,
-    bool RequiresAuthorization
+    string RiskLevel,
+    object? InputSchema
 );
 
 public class McpHostedService : BackgroundService

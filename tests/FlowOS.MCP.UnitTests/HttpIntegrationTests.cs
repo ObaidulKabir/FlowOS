@@ -175,6 +175,107 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         Assert.Equal(httpNames, stdioNames);
     }
 
+    [Fact]
+    public async Task Discovery_exposes_inputSchema_and_complete_security_metadata_for_all_tools()
+    {
+        var response = await _client.GetAsync("/mcp");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+        var tools = Assert.IsType<JArray>(json["tools"]);
+        Assert.Equal(21, tools.Count);
+
+        foreach (var tool in tools)
+        {
+            var name = tool["name"]?.ToString();
+            Assert.False(string.IsNullOrWhiteSpace(name));
+
+            // Formal inputSchema check
+            var schema = tool["inputSchema"];
+            Assert.NotNull(schema);
+            Assert.Equal("object", schema["type"]?.ToString());
+
+            // Security metadata consistency check
+            Assert.NotNull(tool["authenticationRequired"]);
+            Assert.NotNull(tool["authorizationRequired"]);
+
+            if (name is "describe_workflowclass_schema" or "explain_validation_violation")
+            {
+                Assert.False(tool["authenticationRequired"]!.Value<bool>());
+                Assert.False(tool["authorizationRequired"]!.Value<bool>());
+            }
+            else
+            {
+                Assert.True(tool["authenticationRequired"]!.Value<bool>());
+            }
+
+            var riskLevel = tool["riskLevel"]?.ToString();
+            Assert.Contains(riskLevel, new[] { "low", "medium", "high" });
+
+            var sideEffect = tool["sideEffect"]?.ToString();
+            Assert.Contains(sideEffect, new[] { "none", "reversible", "irreversible" });
+        }
+
+        // Also verify HTML discovery rendering
+        using var htmlReq = new HttpRequestMessage(HttpMethod.Get, "/mcp");
+        htmlReq.Headers.Add("Accept", "text/html");
+        var htmlResponse = await _client.SendAsync(htmlReq);
+        var html = await htmlResponse.Content.ReadAsStringAsync();
+        Assert.Contains("Argument Schema (inputSchema)", html);
+        Assert.Contains("Risk:", html);
+    }
+
+    [Fact]
+    public async Task Cross_tenant_header_mismatch_returns_403_forbidden()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        const string tenantKey = "flw_live_cross_tenant_test_key_12345";
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            var apiKey = new FlowOS.Domain.Entities.TenantApiKey(tenantA, "Tenant A Test Key", tenantKey);
+            db.TenantApiKeys.Add(apiKey);
+            await db.SaveChangesAsync();
+        }
+
+        // Attempt to access Tenant B with Tenant A's key
+        using var request = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"tests","version":"1"},"capabilities":{}}}""");
+        request.Headers.Add("X-MCP-API-Key", tenantKey);
+        request.Headers.Add("x-tenant-id", tenantB.ToString());
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        var body = await response.Content.ReadAsStringAsync();
+        var json = JObject.Parse(body);
+        Assert.Equal(-32003, json["error"]?["code"]?.Value<int>());
+        Assert.Contains("Cross-tenant access forbidden", json["error"]?["message"]?.ToString());
+    }
+
+    [Fact]
+    public async Task Tenant_api_key_without_header_automatically_resolves_owning_tenant()
+    {
+        var tenantA = Guid.NewGuid();
+        const string tenantKey = "flw_live_auto_resolve_test_key_67890";
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            var apiKey = new FlowOS.Domain.Entities.TenantApiKey(tenantA, "Tenant A Auto Resolve", tenantKey);
+            db.TenantApiKeys.Add(apiKey);
+            await db.SaveChangesAsync();
+        }
+
+        // Omit x-tenant-id header entirely: should auto-bind to tenantA
+        using var request = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"tests","version":"1"},"capabilities":{}}}""");
+        request.Headers.Add("X-MCP-API-Key", tenantKey);
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     private async Task<HttpResponseMessage> SendAsync(string body, bool includeProtocol = true)
     {
         using var request = JsonRequest(body);
