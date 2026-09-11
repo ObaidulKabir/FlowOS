@@ -174,7 +174,7 @@ public static class McpToolDescriptions
             ["get_draft_workflowclass"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["list_draft_workflowclasses"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["fork_public_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
-            ["publish_workflowclass"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high"),
+            ["publish_workflowclass"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
             ["start_workflow"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["publish_event"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["complete_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium")
@@ -183,7 +183,7 @@ public static class McpToolDescriptions
     public static ToolSecurityProfile ProfileFor(string toolName) =>
         SecurityProfiles.TryGetValue(toolName, out var profile)
             ? profile
-            : new ToolSecurityProfile("unknown", "authenticated", true, true, false, "none", true, "medium");
+            : new ToolSecurityProfile("unknown", "authenticated", true, true, false, "none", true, "medium", false);
 }
 
 public record ToolSecurityProfile(
@@ -194,5 +194,6 @@ public record ToolSecurityProfile(
     bool Mutating,
     string SideEffect,
     bool TenantScoped,
-    string RiskLevel
+    string RiskLevel,
+    bool RequiresHumanConfirmation = false
 );

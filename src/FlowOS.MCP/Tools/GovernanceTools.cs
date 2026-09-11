@@ -243,6 +243,19 @@ public class GovernanceTools
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
 
+            // Enforced Agent Safety Policy Gate for high-risk irreversible operations
+            var profile = McpToolDescriptions.ProfileFor("publish_workflowclass");
+            if (profile.RequiresHumanConfirmation)
+            {
+                var confirmed = args["confirmHumanApproval"]?.Value<bool>() ?? false;
+                if (!confirmed)
+                {
+                    return McpToolResults.Fail(
+                        "MCP-APPROVAL-REQUIRED",
+                        "High-risk irreversible operation 'publish_workflowclass' requires explicit human confirmation. Supply 'confirmHumanApproval: true' in arguments to execute.");
+                }
+            }
+
             var result = await _mediator.Send(new PublishWorkflowClassCommand(tenantId, id));
             return McpToolResults.Success(new { id = result.Id, tenantId, status = "Published", message = "WorkflowClass published successfully." });
         }

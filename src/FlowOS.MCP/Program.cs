@@ -285,6 +285,7 @@ public partial class Program
                         profile.SideEffect,
                         profile.TenantScoped,
                         profile.RiskLevel,
+                        profile.RequiresHumanConfirmation,
                         t.InputSchema
                     );
                 })
@@ -321,6 +322,7 @@ public partial class Program
                     sideEffect = t.SideEffect,
                     tenantScoped = t.TenantScoped,
                     riskLevel = t.RiskLevel,
+                    requiresHumanConfirmation = t.RequiresHumanConfirmation,
                     inputSchema = t.InputSchema
                 }).ToList(),
                 securityContract = new
@@ -330,7 +332,7 @@ public partial class Program
                     {
                         low = "Safe read-only query, informational inspection, or non-destructive draft operations. Eligible for autonomous agent execution.",
                         medium = "Operational mutations, event publication, workflow initialization, and task progression. Must execute within defined tenant authorization boundaries.",
-                        high = "Irreversible governance actions such as publishing a workflow class definition to public/fleet status. Recommended for explicit human confirmation."
+                        high = "Irreversible governance actions such as publishing a workflow class definition to public/fleet status. Enforced machine policy: Requires explicit human confirmation (confirmHumanApproval: true) before execution."
                     },
                     sideEffects = new
                     {
@@ -664,6 +666,9 @@ public partial class Program
             var sideEffectPill = tool.SideEffect != "none"
                 ? $"<span class=\"pill pill-sideeffect\">{System.Net.WebUtility.HtmlEncode(tool.SideEffect)}</span>"
                 : "";
+            var confirmationPill = tool.RequiresHumanConfirmation
+                ? "<span class=\"pill\" style=\"background:rgba(239,68,68,0.2); color:#fca5a5; border:1px solid rgba(239,68,68,0.4);\">Approval Enforced</span>"
+                : "";
 
             var schemaJson = tool.InputSchema != null
                 ? JsonConvert.SerializeObject(tool.InputSchema, Formatting.Indented)
@@ -678,6 +683,7 @@ public partial class Program
             {mutatingPill}
             <span class="pill {riskPillClass}">Risk: {System.Net.WebUtility.HtmlEncode(tool.RiskLevel.ToUpperInvariant())}</span>
             {sideEffectPill}
+            {confirmationPill}
             {tenantPill}
           </div>
         </div>
@@ -758,6 +764,7 @@ public record ToolDiscoveryItem(
     string SideEffect,
     bool TenantScoped,
     string RiskLevel,
+    bool RequiresHumanConfirmation,
     object? InputSchema
 );
 

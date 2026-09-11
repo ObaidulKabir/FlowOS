@@ -105,11 +105,17 @@ public class WorkflowCommandHandlers :
              
              int version = WorkflowVersion.Parse(wc.Version).RuntimeVersion;
 
-             fullDefinition = await _unitOfWork.WorkflowDefinitions
-                 .GetByNameAndVersionAsync(wc.Name, version, request.TenantId, cancellationToken);
-                 
-             if (fullDefinition == null) 
-             {
+              fullDefinition = await _unitOfWork.WorkflowDefinitions
+                  .GetByNameAndVersionAsync(wc.Name, version, request.TenantId, cancellationToken);
+                  
+              if (fullDefinition == null && wc.Scope == Domain.Enums.WorkflowClassScope.Public)
+              {
+                  fullDefinition = await _unitOfWork.WorkflowDefinitions
+                      .GetByNameAndVersionAsync(wc.Name, version, wc.TenantId, cancellationToken);
+              }
+
+              if (fullDefinition == null) 
+              {
                  var anyDef = await _unitOfWork.WorkflowDefinitions
                      .GetAnyByNameAsync(wc.Name, request.TenantId, cancellationToken);
                  

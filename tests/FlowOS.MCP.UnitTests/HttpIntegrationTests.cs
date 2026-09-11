@@ -215,6 +215,18 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
             var sideEffect = tool["sideEffect"]?.ToString();
             Assert.Contains(sideEffect, new[] { "none", "reversible", "irreversible" });
+
+            var requiresHumanConfirmation = tool["requiresHumanConfirmation"];
+            Assert.NotNull(requiresHumanConfirmation);
+            if (name == "publish_workflowclass")
+            {
+                Assert.True(requiresHumanConfirmation.Value<bool>());
+                Assert.NotNull(schema["properties"]?["confirmHumanApproval"]);
+            }
+            else
+            {
+                Assert.False(requiresHumanConfirmation.Value<bool>());
+            }
         }
 
         // Formal securityContract checks in JSON
@@ -388,8 +400,8 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         Assert.True(lintDraftRes["result"]?["isError"]?.Value<bool>());
         Assert.Contains("MCP-NOTFOUND-001", lintDraftRes.ToString());
 
-        // 4. Tenant A attempts to publish Tenant B's private draft
-        var publishRes = await CallToolAsTenantA("publish_workflowclass", new { id = tenantBPrivateDraftId });
+        // 4. Tenant A attempts to publish Tenant B's private draft (with confirmation) -> blocked by tenant boundary
+        var publishRes = await CallToolAsTenantA("publish_workflowclass", new { id = tenantBPrivateDraftId, confirmHumanApproval = true });
         Assert.True(publishRes["result"]?["isError"]?.Value<bool>());
         Assert.Contains("MCP-NOTFOUND-001", publishRes.ToString());
 
@@ -417,6 +429,281 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         });
         Assert.True(agentRes["result"]?["isError"]?.Value<bool>());
         Assert.Contains("MCP-NOTFOUND-001", agentRes.ToString());
+    }
+
+    [Fact]
+    public async Task High_risk_irreversible_action_enforces_human_confirmation_policy()
+    {
+        var tenantA = Guid.NewGuid();
+        const string tenantAKey = "flw_live_tenant_a_policy_key_11111";
+        Guid draftId;
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            db.TenantApiKeys.Add(new FlowOS.Domain.Entities.TenantApiKey(tenantA, "Tenant A Key", tenantAKey));
+            
+            var blueprint = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+            {
+                Events = new() { new() { EventId = "EVT-DONE", Name = "Done" } },
+                StateMachine = new() { InitialState = "S1", States = new() { "S1" } },
+                Workflow = new()
+                {
+                    StartStepId = "S1",
+                    Steps = new()
+                    {
+                        new()
+                        {
+                            StepId = "S1",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-DONE", "END" } }
+                        }
+                    }
+                }
+            };
+            var draft = new FlowOS.Domain.Entities.WorkflowClass(tenantA, "PolicyGateWorkflow", "1.0.0", blueprint);
+            db.WorkflowClasses.Add(draft);
+            draftId = draft.Id;
+            await db.SaveChangesAsync();
+        }
+
+        async Task<JObject> CallPublish(bool? confirmApproval)
+        {
+            var argsObj = confirmApproval.HasValue
+                ? (object)new { id = draftId, confirmHumanApproval = confirmApproval.Value }
+                : new { id = draftId };
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+            {
+                Content = JsonContent($$"""
+                {
+                  "jsonrpc": "2.0",
+                  "id": 1,
+                  "method": "tools/call",
+                  "params": {
+                    "name": "publish_workflowclass",
+                    "arguments": {{JsonConvert.SerializeObject(argsObj)}}
+                  }
+                }
+                """)
+            };
+            req.Headers.Add("X-MCP-API-Key", tenantAKey);
+            req.Headers.Add("x-tenant-id", tenantA.ToString());
+            req.Headers.Add("MCP-Protocol-Version", "2025-03-26");
+            AddAccept(req);
+
+            var res = await _client.SendAsync(req);
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+            return JObject.Parse(await res.Content.ReadAsStringAsync());
+        }
+
+        // 1. Without explicit confirmation -> rejected with MCP-APPROVAL-REQUIRED
+        var rejectedRes = await CallPublish(null);
+        Assert.True(rejectedRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-APPROVAL-REQUIRED", rejectedRes.ToString());
+
+        var rejectedFalseRes = await CallPublish(false);
+        Assert.True(rejectedFalseRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-APPROVAL-REQUIRED", rejectedFalseRes.ToString());
+
+        // 2. With explicit confirmHumanApproval: true -> succeeds
+        var approvedRes = await CallPublish(true);
+        Assert.False(approvedRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("Published", approvedRes.ToString());
+    }
+
+    [Fact]
+    public async Task Public_workflow_classes_are_accessible_cross_tenant_while_private_remain_isolated()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        const string tenantAKey = "flw_live_tenant_a_public_access_key_22222";
+
+        Guid tenantBPublicClassId;
+        Guid tenantBPrivateClassId;
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            db.TenantApiKeys.Add(new FlowOS.Domain.Entities.TenantApiKey(tenantA, "Tenant A Key", tenantAKey));
+            var adminRole = new FlowOS.Security.Models.Role(tenantA, "Admin");
+            adminRole.AddPermission("workflow.start");
+            db.Roles.Add(adminRole);
+
+            var blueprint = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+            {
+                Events = new() { new() { EventId = "EVT-DONE", Name = "Done" } },
+                StateMachine = new() { InitialState = "S1", States = new() { "S1" } },
+                Workflow = new()
+                {
+                    StartStepId = "S1",
+                    Steps = new()
+                    {
+                        new()
+                        {
+                            StepId = "S1",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-DONE", "END" } }
+                        }
+                    }
+                }
+            };
+
+            // Public WorkflowClass owned by Tenant B
+            var publicClass = new FlowOS.Domain.Entities.WorkflowClass(tenantB, "FleetSharedBlueprint", "1.0.0", blueprint);
+            var manager = new FlowOS.Domain.Services.WorkflowClassManager();
+            manager.Publish(publicClass);
+            manager.SubmitForReview(publicClass);
+            manager.ApproveAsPublic(publicClass);
+            db.WorkflowClasses.Add(publicClass);
+            tenantBPublicClassId = publicClass.Id;
+
+            // Runtime WorkflowDefinition for the public class
+            var runtimeDef = FlowOS.Application.Services.WorkflowClassCompiler.MapToRuntimeDefinition(publicClass);
+            runtimeDef.Publish();
+            db.WorkflowDefinitions.Add(runtimeDef);
+
+            // Private WorkflowClass owned by Tenant B
+            var privateClass = new FlowOS.Domain.Entities.WorkflowClass(tenantB, "SecretInternalBlueprint", "1.0.0", blueprint);
+            db.WorkflowClasses.Add(privateClass);
+            tenantBPrivateClassId = privateClass.Id;
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task<JObject> CallTool(string toolName, object args)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+            {
+                Content = JsonContent($$"""
+                {
+                  "jsonrpc": "2.0",
+                  "id": 1,
+                  "method": "tools/call",
+                  "params": {
+                    "name": "{{toolName}}",
+                    "arguments": {{JsonConvert.SerializeObject(args)}}
+                  }
+                }
+                """)
+            };
+            req.Headers.Add("X-MCP-API-Key", tenantAKey);
+            req.Headers.Add("x-tenant-id", tenantA.ToString());
+            req.Headers.Add("MCP-Protocol-Version", "2025-03-26");
+            AddAccept(req);
+
+            var res = await _client.SendAsync(req);
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+            return JObject.Parse(await res.Content.ReadAsStringAsync());
+        }
+
+        // 1. Tenant A forks Tenant B's public workflow class -> allowed
+        var forkRes = await CallTool("fork_public_workflowclass", new { publicId = tenantBPublicClassId });
+        Assert.False(forkRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("Forked from FleetSharedBlueprint", forkRes.ToString());
+
+        // 2. Tenant A starts an instance of Tenant B's public workflow class -> allowed
+        var startRes = await CallTool("start_workflow", new { workflowClassId = tenantBPublicClassId });
+        Assert.False(startRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("Running", startRes.ToString());
+
+        // 3. Tenant A attempts to access Tenant B's private workflow class -> rejected (not found)
+        var privateRes = await CallTool("get_draft_workflowclass", new { id = tenantBPrivateClassId });
+        Assert.True(privateRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", privateRes.ToString());
+    }
+
+    [Fact]
+    public async Task Side_channel_uniformity_for_foreign_vs_nonexistent_ids()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        const string tenantAKey = "flw_live_tenant_a_timing_key_33333";
+
+        Guid tenantBPrivateClassId;
+        Guid tenantBWorkflowInstanceId;
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            db.TenantApiKeys.Add(new FlowOS.Domain.Entities.TenantApiKey(tenantA, "Tenant A Key", tenantAKey));
+
+            var blueprint = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+            {
+                Events = new() { new() { EventId = "EVT-DONE", Name = "Done" } },
+                StateMachine = new() { InitialState = "S1", States = new() { "S1" } },
+                Workflow = new()
+                {
+                    StartStepId = "S1",
+                    Steps = new()
+                    {
+                        new()
+                        {
+                            StepId = "S1",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-DONE", "END" } }
+                        }
+                    }
+                }
+            };
+            var privateClass = new FlowOS.Domain.Entities.WorkflowClass(tenantB, "SecretTimingBlueprint", "1.0.0", blueprint);
+            db.WorkflowClasses.Add(privateClass);
+            tenantBPrivateClassId = privateClass.Id;
+
+            var instance = new FlowOS.Workflows.Domain.WorkflowInstance(
+                tenantB, Guid.NewGuid(), tenantBPrivateClassId, 1, "S1", Guid.NewGuid());
+            db.WorkflowInstances.Add(instance);
+            tenantBWorkflowInstanceId = instance.Id;
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task<(HttpStatusCode status, JObject body)> CallTool(string toolName, object args)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+            {
+                Content = JsonContent($$"""
+                {
+                  "jsonrpc": "2.0",
+                  "id": 1,
+                  "method": "tools/call",
+                  "params": {
+                    "name": "{{toolName}}",
+                    "arguments": {{JsonConvert.SerializeObject(args)}}
+                  }
+                }
+                """)
+            };
+            req.Headers.Add("X-MCP-API-Key", tenantAKey);
+            req.Headers.Add("x-tenant-id", tenantA.ToString());
+            req.Headers.Add("MCP-Protocol-Version", "2025-03-26");
+            AddAccept(req);
+
+            var res = await _client.SendAsync(req);
+            var parsed = JObject.Parse(await res.Content.ReadAsStringAsync());
+            return (res.StatusCode, parsed);
+        }
+
+        var nonexistentId = Guid.NewGuid();
+
+        // 1. Compare get_draft_workflowclass on nonexistent ID vs. foreign private ID
+        var (nonExistentDraftStatus, nonExistentDraftBody) = await CallTool("get_draft_workflowclass", new { id = nonexistentId });
+        var (foreignDraftStatus, foreignDraftBody) = await CallTool("get_draft_workflowclass", new { id = tenantBPrivateClassId });
+
+        Assert.Equal(nonExistentDraftStatus, foreignDraftStatus);
+        Assert.Equal(nonExistentDraftBody["result"]?["isError"]?.Value<bool>(), foreignDraftBody["result"]?["isError"]?.Value<bool>());
+        Assert.Equal(
+            nonExistentDraftBody["result"]?["content"]?[0]?["text"]?.ToString(),
+            foreignDraftBody["result"]?["content"]?[0]?["text"]?.ToString());
+
+        // 2. Compare get_workflow_history on nonexistent ID vs. foreign instance ID
+        var (nonExistentHistStatus, nonExistentHistBody) = await CallTool("get_workflow_history", new { workflowInstanceId = nonexistentId });
+        var (foreignHistStatus, foreignHistBody) = await CallTool("get_workflow_history", new { workflowInstanceId = tenantBWorkflowInstanceId });
+
+        Assert.Equal(nonExistentHistStatus, foreignHistStatus);
+        Assert.Equal(nonExistentHistBody["result"]?["isError"]?.Value<bool>(), foreignHistBody["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", nonExistentHistBody.ToString());
+        Assert.Contains("MCP-NOTFOUND-001", foreignHistBody.ToString());
     }
 
     private async Task<HttpResponseMessage> SendAsync(string body, bool includeProtocol = true)

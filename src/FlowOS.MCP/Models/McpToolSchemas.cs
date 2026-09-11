@@ -77,6 +77,23 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject PublishWorkflowClass() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["id"],
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"},
+            "confirmHumanApproval":{
+              "type":"boolean",
+              "description":"Explicit confirmation of human approval for high-risk irreversible publication."
+            }
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject WorkflowInstanceStatus() => JObject.Parse(
         """
         {
