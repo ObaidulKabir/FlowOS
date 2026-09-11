@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.UnitTests;
@@ -216,6 +217,16 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             Assert.Contains(sideEffect, new[] { "none", "reversible", "irreversible" });
         }
 
+        // Formal securityContract checks in JSON
+        var securityContract = json["securityContract"];
+        Assert.NotNull(securityContract);
+        Assert.NotNull(securityContract["riskLevels"]?["low"]);
+        Assert.NotNull(securityContract["riskLevels"]?["medium"]);
+        Assert.NotNull(securityContract["riskLevels"]?["high"]);
+        Assert.NotNull(securityContract["sideEffects"]?["none"]);
+        Assert.NotNull(securityContract["sideEffects"]?["reversible"]);
+        Assert.NotNull(securityContract["sideEffects"]?["irreversible"]);
+
         // Also verify HTML discovery rendering
         using var htmlReq = new HttpRequestMessage(HttpMethod.Get, "/mcp");
         htmlReq.Headers.Add("Accept", "text/html");
@@ -223,6 +234,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         var html = await htmlResponse.Content.ReadAsStringAsync();
         Assert.Contains("Argument Schema (inputSchema)", html);
         Assert.Contains("Risk:", html);
+        Assert.Contains("Agent Governance & Security Policy", html);
     }
 
     [Fact]
@@ -274,6 +286,137 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Cross_tenant_object_level_IDOR_cannot_access_foreign_resources()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        const string tenantAKey = "flw_live_tenant_a_idor_key_99999";
+
+        Guid tenantBPrivateDraftId;
+        Guid tenantBWorkflowInstanceId;
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            
+            // Seed Tenant A API key and Admin role with workflow.start permission
+            db.TenantApiKeys.Add(new FlowOS.Domain.Entities.TenantApiKey(tenantA, "Tenant A Key", tenantAKey));
+            var adminRole = new FlowOS.Security.Models.Role(tenantA, "Admin");
+            adminRole.AddPermission("workflow.start");
+            db.Roles.Add(adminRole);
+
+            // Seed Tenant B Private WorkflowClass
+            var blueprint = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+            {
+                Events = new() { new() { EventId = "EVT-DONE", Name = "Done" } },
+                StateMachine = new() { InitialState = "S1", States = new() { "S1" } },
+                Workflow = new()
+                {
+                    StartStepId = "S1",
+                    Steps = new()
+                    {
+                        new()
+                        {
+                            StepId = "S1",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-DONE", "END" } }
+                        }
+                    }
+                }
+            };
+            var tenantBClass = new FlowOS.Domain.Entities.WorkflowClass(tenantB, "TenantBSecretWorkflow", "1.0.0", blueprint);
+            db.WorkflowClasses.Add(tenantBClass);
+            tenantBPrivateDraftId = tenantBClass.Id;
+
+            // Seed Tenant B WorkflowInstance
+            var tenantBInstance = new FlowOS.Workflows.Domain.WorkflowInstance(
+                tenantB, Guid.NewGuid(), tenantBPrivateDraftId, 1, "S1", Guid.NewGuid());
+            db.WorkflowInstances.Add(tenantBInstance);
+            tenantBWorkflowInstanceId = tenantBInstance.Id;
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task<JObject> CallToolAsTenantA(string toolName, object arguments)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+            {
+                Content = JsonContent($$"""
+                {
+                  "jsonrpc": "2.0",
+                  "id": 1,
+                  "method": "tools/call",
+                  "params": {
+                    "name": "{{toolName}}",
+                    "arguments": {{JsonConvert.SerializeObject(arguments)}}
+                  }
+                }
+                """)
+            };
+            req.Headers.Add("X-MCP-API-Key", tenantAKey);
+            req.Headers.Add("x-tenant-id", tenantA.ToString());
+            req.Headers.Add("MCP-Protocol-Version", "2025-03-26");
+            AddAccept(req);
+
+            var res = await _client.SendAsync(req);
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+            var content = await res.Content.ReadAsStringAsync();
+            return JObject.Parse(content);
+        }
+
+        // 1. Tenant A attempts to get Tenant B's private draft
+        var getDraftRes = await CallToolAsTenantA("get_draft_workflowclass", new { id = tenantBPrivateDraftId });
+        Assert.True(getDraftRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", getDraftRes.ToString());
+        Assert.DoesNotContain("TenantBSecretWorkflow", getDraftRes.ToString());
+
+        // 2. Tenant A attempts to update Tenant B's private draft
+        var updateDraftRes = await CallToolAsTenantA("update_draft_workflowclass", new
+        {
+            id = tenantBPrivateDraftId,
+            name = "HackedName",
+            blueprint = new { }
+        });
+        Assert.True(updateDraftRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", updateDraftRes.ToString());
+
+        // 3. Tenant A attempts to lint Tenant B's private draft
+        var lintDraftRes = await CallToolAsTenantA("lint_draft_workflowclass", new { id = tenantBPrivateDraftId });
+        Assert.True(lintDraftRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", lintDraftRes.ToString());
+
+        // 4. Tenant A attempts to publish Tenant B's private draft
+        var publishRes = await CallToolAsTenantA("publish_workflowclass", new { id = tenantBPrivateDraftId });
+        Assert.True(publishRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", publishRes.ToString());
+
+        // 5. Tenant A attempts to start workflow with Tenant B's private workflowClassId
+        var startRes = await CallToolAsTenantA("start_workflow", new { workflowClassId = tenantBPrivateDraftId });
+        Assert.True(startRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", startRes.ToString());
+        Assert.DoesNotContain("TenantBSecretWorkflow", startRes.ToString());
+
+        // 6. Tenant A attempts to query workflow history of Tenant B's instance
+        var historyRes = await CallToolAsTenantA("get_workflow_history", new { workflowInstanceId = tenantBWorkflowInstanceId });
+        Assert.True(historyRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", historyRes.ToString());
+
+        // 7. Tenant A attempts to query status of Tenant B's instance
+        var statusRes = await CallToolAsTenantA("get_workflow_instance_status", new { instanceId = tenantBWorkflowInstanceId });
+        Assert.True(statusRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", statusRes.ToString());
+
+        // 8. Tenant A attempts to run advisory agent against Tenant B's instance
+        var agentRes = await CallToolAsTenantA("suggest_agent_action", new
+        {
+            workflowInstanceId = tenantBWorkflowInstanceId,
+            agentId = "RiskAnalysisAgent"
+        });
+        Assert.True(agentRes["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", agentRes.ToString());
     }
 
     private async Task<HttpResponseMessage> SendAsync(string body, bool includeProtocol = true)

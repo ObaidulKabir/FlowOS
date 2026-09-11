@@ -84,6 +84,10 @@ public class ExecutionTools
         {
             return McpToolResults.Fail(ex.Code, ex.Message);
         }
+        catch (ArgumentException ex)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", ex.Message);
+        }
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to start workflow instance: {ex.Message}");
@@ -132,7 +136,7 @@ public class ExecutionTools
 
             if (!result)
             {
-                return McpToolResults.Fail("MCP-EXEC-001", $"Event '{eventType}' was not accepted by the workflow state machine.");
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{instanceId}' not found or event '{eventType}' was not accepted.");
             }
 
             return McpToolResults.Success(new
@@ -186,9 +190,14 @@ public class ExecutionTools
 
             var result = await _mediator.Send(command);
 
+            if (!result)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{instanceId}' or task '{taskId}' not found.");
+            }
+
             return McpToolResults.Success(new
             {
-                success = result,
+                success = true,
                 workflowInstanceId = instanceId,
                 taskId,
                 message = "Task completed successfully."
@@ -255,7 +264,7 @@ public class ExecutionTools
 
             if (detail == null)
             {
-                return McpToolResults.Fail("MCP-NOT-FOUND", $"Workflow instance '{instanceId}' not found for tenant '{tenantId}'.");
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{instanceId}' not found.");
             }
 
             return McpToolResults.Success(new

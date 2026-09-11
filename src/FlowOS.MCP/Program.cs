@@ -323,6 +323,22 @@ public partial class Program
                     riskLevel = t.RiskLevel,
                     inputSchema = t.InputSchema
                 }).ToList(),
+                securityContract = new
+                {
+                    description = "Formal policy contract governing autonomous agent tool execution and safety boundaries.",
+                    riskLevels = new
+                    {
+                        low = "Safe read-only query, informational inspection, or non-destructive draft operations. Eligible for autonomous agent execution.",
+                        medium = "Operational mutations, event publication, workflow initialization, and task progression. Must execute within defined tenant authorization boundaries.",
+                        high = "Irreversible governance actions such as publishing a workflow class definition to public/fleet status. Recommended for explicit human confirmation."
+                    },
+                    sideEffects = new
+                    {
+                        none = "Pure idempotent query, linting, violation explanation, or blueprint schema retrieval. No system state is modified.",
+                        reversible = "Modifications to private drafts, notification read states, or configuration templates that can be subsequently edited, reverted, or overwritten.",
+                        irreversible = "Active workflow state transitions, state machine event dispatching, task completions, and immutable publication of versioned workflow classes."
+                    }
+                },
                 agentSetup = new
                 {
                     description = "Connect your AI agent to FlowOS via MCP streamable HTTP transport",
@@ -675,6 +691,22 @@ public partial class Program
 """);
         }
         sb.Append("""
+    </div>
+
+    <h2>Agent Governance & Security Policy</h2>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+      <div class="card" style="border-left: 4px solid #34d399;">
+        <h3 style="color:#34d399;">Risk Level Semantics</h3>
+        <p style="margin-bottom:0.4rem;"><strong style="color:#6ee7b7;">LOW:</strong> Safe read-only queries or non-destructive drafts. Eligible for autonomous execution.</p>
+        <p style="margin-bottom:0.4rem;"><strong style="color:#fcd34d;">MEDIUM:</strong> Operational mutations (starting workflows, events, tasks). Executed within tenant policy.</p>
+        <p><strong style="color:#fca5a5;">HIGH:</strong> Irreversible governance releases (e.g. publishing to public fleet). Requires human approval.</p>
+      </div>
+      <div class="card" style="border-left: 4px solid #c084fc;">
+        <h3 style="color:#c084fc;">Side-Effect Classification</h3>
+        <p style="margin-bottom:0.4rem;"><strong style="color:#e2e8f0;">none:</strong> Pure idempotent query, lint, or schema inspection. Zero state modified.</p>
+        <p style="margin-bottom:0.4rem;"><strong style="color:#e2e8f0;">reversible:</strong> Changes to drafts or read states that can be edited, overwritten, or updated.</p>
+        <p><strong style="color:#e2e8f0;">irreversible:</strong> Real-time workflow state advancements, task completion, and version releases.</p>
+      </div>
     </div>
 
     <h2>Connect Claude Desktop</h2>

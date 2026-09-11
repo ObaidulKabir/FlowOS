@@ -57,6 +57,11 @@ public class WorkflowCommandHandlers :
             definitionId = request.WorkflowDefinitionId.Value;
             fullDefinition = await _unitOfWork.WorkflowDefinitions
                 .GetByIdAsNoTrackingAsync(definitionId, cancellationToken);
+
+            if (fullDefinition == null || fullDefinition.TenantId != request.TenantId)
+            {
+                throw new ArgumentException($"Workflow definition '{definitionId}' not found.");
+            }
         }
         else if (!string.IsNullOrEmpty(request.WorkflowName))
         {
@@ -95,7 +100,8 @@ public class WorkflowCommandHandlers :
              var wc = await _unitOfWork.WorkflowClasses
                  .GetByIdAsNoTrackingAsync(request.WorkflowClassId, cancellationToken);
              
-             if (wc == null) throw new ArgumentException($"WorkflowClass {request.WorkflowClassId} not found.");
+             if (wc == null || (wc.TenantId != request.TenantId && wc.Scope != Domain.Enums.WorkflowClassScope.Public))
+                 throw new ArgumentException($"WorkflowClass '{request.WorkflowClassId}' not found.");
              
              int version = WorkflowVersion.Parse(wc.Version).RuntimeVersion;
 
