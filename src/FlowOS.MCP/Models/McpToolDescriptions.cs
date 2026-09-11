@@ -153,4 +153,43 @@ public static class McpToolDescriptions
         All.TryGetValue(toolName, out var description)
             ? description
             : throw new ArgumentOutOfRangeException(nameof(toolName), toolName, "Unknown MCP tool.");
+
+    public static readonly IReadOnlyDictionary<string, ToolSecurityProfile> SecurityProfiles =
+        new Dictionary<string, ToolSecurityProfile>(StringComparer.Ordinal)
+        {
+            ["describe_workflowclass_schema"] = new("info", "public", false, false, false),
+            ["list_public_workflowclasses"] = new("query", "authenticated", false, true, true),
+            ["list_notifications"] = new("notification", "authenticated", false, true, true),
+            ["mark_notification_as_read"] = new("command", "authenticated", true, true, true),
+            ["list_available_agents"] = new("analysis", "authenticated", false, false, false),
+            ["suggest_agent_action"] = new("analysis", "authenticated", false, true, true),
+            ["explain_validation_violation"] = new("analysis", "authenticated", false, false, false),
+            ["lint_draft_workflowclass"] = new("analysis", "authenticated", false, true, true),
+            ["create_draft_workflowclass"] = new("governance", "authenticated", true, true, true),
+            ["update_draft_workflowclass"] = new("governance", "authenticated", true, true, true),
+            ["validate_draft_workflowclass"] = new("governance", "authenticated", false, true, true),
+            ["get_draft_workflowclass"] = new("governance", "authenticated", false, true, true),
+            ["list_draft_workflowclasses"] = new("governance", "authenticated", false, true, true),
+            ["get_workflow_instance_status"] = new("query", "authenticated", false, true, true),
+            ["fork_public_workflowclass"] = new("governance", "authenticated", true, true, true),
+            ["publish_workflowclass"] = new("governance", "authenticated", true, true, true),
+            ["start_workflow"] = new("command", "authenticated", true, true, true),
+            ["publish_event"] = new("command", "authenticated", true, true, true),
+            ["complete_task"] = new("command", "authenticated", true, true, true),
+            ["list_workflow_instances"] = new("query", "authenticated", false, true, true),
+            ["get_workflow_history"] = new("query", "authenticated", false, true, true)
+        };
+
+    public static ToolSecurityProfile ProfileFor(string toolName) =>
+        SecurityProfiles.TryGetValue(toolName, out var profile)
+            ? profile
+            : new ToolSecurityProfile("unknown", "authenticated", false, true, true);
 }
+
+public record ToolSecurityProfile(
+    string Category,
+    string Access,
+    bool Mutating,
+    bool TenantScoped,
+    bool RequiresAuthorization
+);

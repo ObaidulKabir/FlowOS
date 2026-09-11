@@ -7,7 +7,14 @@ namespace FlowOS.MCP.Server;
 
 public sealed class McpJsonRpcDispatcher : IMcpJsonRpcDispatcher
 {
-    public const string SupportedProtocolVersion = "2025-03-26";
+    public const string DefaultProtocolVersion = "2025-03-26";
+    public const string SupportedProtocolVersion = DefaultProtocolVersion;
+    public static readonly string[] SupportedProtocolVersions = ["2025-03-26", "2024-11-05"];
+
+    public static bool IsSupportedProtocolVersion(string? version) =>
+        !string.IsNullOrWhiteSpace(version) &&
+        SupportedProtocolVersions.Contains(version, StringComparer.OrdinalIgnoreCase);
+
     private readonly IToolRegistry _toolRegistry;
 
     public McpJsonRpcDispatcher(IToolRegistry toolRegistry)
@@ -85,17 +92,21 @@ public sealed class McpJsonRpcDispatcher : IMcpJsonRpcDispatcher
                         return Response(Error(id, -32602, "Invalid params"));
 
                     var requestedVersion = parameters["protocolVersion"]?.ToString();
-                    if (requestedVersion != SupportedProtocolVersion)
+                    var negotiatedVersion = IsSupportedProtocolVersion(requestedVersion)
+                        ? requestedVersion!
+                        : null;
+
+                    if (negotiatedVersion == null)
                     {
                         return Response(Error(id, -32602, "Unsupported protocol version", new
                         {
-                            supportedVersions = new[] { SupportedProtocolVersion }
+                            supportedVersions = SupportedProtocolVersions
                         }));
                     }
 
                     result = new
                     {
-                        protocolVersion = SupportedProtocolVersion,
+                        protocolVersion = negotiatedVersion,
                         capabilities = new 
                         { 
                             tools = new { listChanged = false },

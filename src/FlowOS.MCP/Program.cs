@@ -8,6 +8,7 @@ using FlowOS.Infrastructure.Persistence;
 using FlowOS.Infrastructure.Services;
 using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Engine;
+using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
 using FlowOS.MCP.Tools;
@@ -262,14 +263,26 @@ public partial class Program
             var accepts = context.Request.Headers.Accept.ToString();
             var isHtml = accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase);
 
-            var tools = toolRegistry.GetTools()
+            var toolItems = toolRegistry.GetTools()
                 .OrderBy(t => t.Name)
-                .Select(t => new { name = t.Name, description = t.Description })
+                .Select(t =>
+                {
+                    var profile = McpToolDescriptions.ProfileFor(t.Name);
+                    return new ToolDiscoveryItem(
+                        t.Name,
+                        t.Description,
+                        profile.Category,
+                        profile.Access,
+                        profile.Mutating,
+                        profile.TenantScoped,
+                        profile.RequiresAuthorization
+                    );
+                })
                 .ToList();
 
             if (isHtml)
             {
-                var html = GenerateDiscoveryHtml(tools.Select(t => (t.name, t.description)).ToList());
+                var html = GenerateDiscoveryHtml(toolItems);
                 return Results.Content(html, "text/html; charset=utf-8");
             }
 
@@ -279,13 +292,23 @@ public partial class Program
                 status = "online",
                 protocol = "Model Context Protocol (MCP)",
                 transport = "Streamable HTTP (JSON-RPC 2.0 over POST)",
-                supportedProtocolVersion = McpJsonRpcDispatcher.SupportedProtocolVersion,
-                toolsCount = tools.Count,
+                defaultProtocolVersion = McpJsonRpcDispatcher.DefaultProtocolVersion,
+                supportedProtocolVersions = McpJsonRpcDispatcher.SupportedProtocolVersions,
+                toolsCount = toolItems.Count,
                 description = "FlowOS Agentic Control Plane: Multi-tenant state machine and declarative workflow engine.",
                 endpoint = "/mcp",
                 methodsSupported = new[] { "GET", "POST", "OPTIONS" },
                 authentication = "Header X-MCP-API-Key or Authorization: Bearer, plus x-tenant-id header",
-                tools = tools,
+                tools = toolItems.Select(t => new
+                {
+                    name = t.Name,
+                    description = t.Description,
+                    category = t.Category,
+                    access = t.Access,
+                    mutating = t.Mutating,
+                    tenantScoped = t.TenantScoped,
+                    requiresAuthorization = t.RequiresAuthorization
+                }).ToList(),
                 agentSetup = new
                 {
                     claudeDesktop = new
@@ -332,10 +355,10 @@ public partial class Program
             if (IsInitializeRequest(body) == false)
             {
                 var protocolVersion = request.Headers["MCP-Protocol-Version"].FirstOrDefault();
-                if (protocolVersion != McpJsonRpcDispatcher.SupportedProtocolVersion)
+                if (!McpJsonRpcDispatcher.IsSupportedProtocolVersion(protocolVersion))
                 {
                     return JsonRpcHttpError(StatusCodes.Status400BadRequest, -32602,
-                        $"MCP-Protocol-Version must be {McpJsonRpcDispatcher.SupportedProtocolVersion}.");
+                        $"MCP-Protocol-Version must be one of: {string.Join(", ", McpJsonRpcDispatcher.SupportedProtocolVersions)}.");
                 }
             }
 
@@ -448,7 +471,7 @@ public partial class Program
         services.AddScoped<NotificationTools>();
     }
 
-    private static string GenerateDiscoveryHtml(List<(string name, string description)> tools)
+    private static string GenerateDiscoveryHtml(IReadOnlyList<ToolDiscoveryItem> tools)
     {
         var sb = new StringBuilder();
         sb.Append("""
@@ -478,7 +501,7 @@ public partial class Program
       line-height: 1.6;
       padding: 2rem 1rem;
     }
-    .container { max-width: 1000px; margin: 0 auto; }
+    .container { max-width: 1050px; margin: 0 auto; }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -507,15 +530,40 @@ public partial class Program
     .card h3 { font-size: 1rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.5rem; }
     .card p { font-size: 0.85rem; color: var(--text-muted); }
     h2 { font-size: 1.5rem; margin: 2rem 0 1rem; font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
-    .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.85rem; margin-bottom: 2.5rem; }
+    .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
     .tool-card {
-      background: rgba(15, 23, 42, 0.6);
+      background: rgba(15, 23, 42, 0.65);
       border: 1px solid #1e293b;
       border-radius: 0.75rem;
-      padding: 1rem;
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
-    .tool-name { font-family: monospace; font-size: 0.875rem; font-weight: bold; color: #60a5fa; margin-bottom: 0.25rem; }
-    .tool-desc { font-size: 0.8rem; color: var(--text-muted); }
+    .tool-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .tool-name { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #60a5fa; }
+    .tool-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.375rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pill-mutating { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .pill-readonly { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .pill-tenant { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .pill-category { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
     pre {
       background: #020617;
       border: 1px solid var(--border);
@@ -533,7 +581,7 @@ public partial class Program
 </head>
 <body>
   <div class="container">
-    <div class="badge"><div class="badge-dot"></div> MCP SERVER ONLINE</div>
+    <div class="badge"><div class="badge-dot"></div> MCP SERVER ONLINE &bull; PROTOCOL 2025-03-26 &amp; 2024-11-05</div>
     <h1>Flow<span>OS</span> MCP Control Plane</h1>
     <p class="lead">Model Context Protocol (MCP) server providing autonomous AI agents with governed execution, mathematical state enforcement, and real-time event telemetry.</p>
 
@@ -561,10 +609,24 @@ public partial class Program
 """);
         foreach (var tool in tools)
         {
+            var mutatingPill = tool.Mutating
+                ? "<span class=\"pill pill-mutating\">COMMAND (Mutating)</span>"
+                : "<span class=\"pill pill-readonly\">QUERY (Read-Only)</span>";
+            var tenantPill = tool.TenantScoped
+                ? "<span class=\"pill pill-tenant\">Tenant Scoped</span>"
+                : "";
+
             sb.Append($"""
       <div class="tool-card">
-        <div class="tool-name">{System.Net.WebUtility.HtmlEncode(tool.name)}</div>
-        <div class="tool-desc">{System.Net.WebUtility.HtmlEncode(tool.description)}</div>
+        <div class="tool-header">
+          <div class="tool-name">{System.Net.WebUtility.HtmlEncode(tool.Name)}</div>
+          <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
+            <span class="pill pill-category">{System.Net.WebUtility.HtmlEncode(tool.Category)}</span>
+            {mutatingPill}
+            {tenantPill}
+          </div>
+        </div>
+        <div class="tool-desc">{System.Net.WebUtility.HtmlEncode(tool.Description)}</div>
       </div>
 
 """);
@@ -609,6 +671,16 @@ public partial class Program
         return sb.ToString();
     }
 }
+
+public record ToolDiscoveryItem(
+    string Name,
+    string Description,
+    string Category,
+    string Access,
+    bool Mutating,
+    bool TenantScoped,
+    bool RequiresAuthorization
+);
 
 public class McpHostedService : BackgroundService
 {

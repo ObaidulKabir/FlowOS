@@ -56,6 +56,10 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         var jsonContent = await unauthResponse.Content.ReadAsStringAsync();
         Assert.Contains("FlowOS MCP Server", jsonContent);
         Assert.Contains("toolsCount", jsonContent);
+        Assert.Contains("supportedProtocolVersions", jsonContent);
+        Assert.Contains("mutating", jsonContent);
+        Assert.Contains("category", jsonContent);
+        Assert.Contains("tenantScoped", jsonContent);
 
         // HTML discovery test
         using var htmlReq = new HttpRequestMessage(HttpMethod.Get, "/mcp");
