@@ -40,17 +40,31 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Health_is_public_and_get_has_allow_header()
+    public async Task Health_and_mcp_discovery_are_public_with_allow_headers()
     {
         Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/health")).StatusCode);
 
-        using var request = Authorized(HttpMethod.Get, "/mcp");
-        var response = await _client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
-        var hasAllow = response.Headers.TryGetValues("Allow", out var allowedMethods)
-            || response.Content.Headers.TryGetValues("Allow", out allowedMethods);
+        // GET /mcp should be publicly accessible for discovery without API keys
+        var unauthResponse = await _client.GetAsync("/mcp");
+        Assert.Equal(HttpStatusCode.OK, unauthResponse.StatusCode);
+        var hasAllow = unauthResponse.Headers.TryGetValues("Allow", out var allowedMethods)
+            || unauthResponse.Content.Headers.TryGetValues("Allow", out allowedMethods);
         Assert.True(hasAllow);
         Assert.Contains("POST", allowedMethods!);
+        Assert.Contains("GET", allowedMethods!);
+
+        var jsonContent = await unauthResponse.Content.ReadAsStringAsync();
+        Assert.Contains("FlowOS MCP Server", jsonContent);
+        Assert.Contains("toolsCount", jsonContent);
+
+        // HTML discovery test
+        using var htmlReq = new HttpRequestMessage(HttpMethod.Get, "/mcp");
+        htmlReq.Headers.Add("Accept", "text/html");
+        var htmlResponse = await _client.SendAsync(htmlReq);
+        Assert.Equal(HttpStatusCode.OK, htmlResponse.StatusCode);
+        var html = await htmlResponse.Content.ReadAsStringAsync();
+        Assert.Contains("FlowOS MCP Control Plane", html);
+        Assert.Contains("Registered Agent Tools", html);
     }
 
     [Fact]

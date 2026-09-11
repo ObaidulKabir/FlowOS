@@ -122,6 +122,17 @@ public partial class Program
                 return;
             }
 
+            if (HttpMethods.IsGet(context.Request.Method))
+            {
+                if (!string.IsNullOrWhiteSpace(origin))
+                {
+                    context.Response.Headers.AccessControlAllowOrigin = origin;
+                    context.Response.Headers.Vary = "Origin";
+                }
+                await next();
+                return;
+            }
+
             string? suppliedApiKey = null;
             Guid? dbResolvedTenantId = null;
 
@@ -243,11 +254,60 @@ public partial class Program
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-        app.MapGet("/mcp", (HttpContext context) =>
+        app.MapGet("/", () => Results.Redirect("/mcp"));
+
+        app.MapGet("/mcp", (HttpContext context, IToolRegistry toolRegistry) =>
         {
-            context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
-            context.Response.Headers.Append("Allow", "POST");
-            return Task.CompletedTask;
+            context.Response.Headers.Append("Allow", "GET, POST, OPTIONS");
+            var accepts = context.Request.Headers.Accept.ToString();
+            var isHtml = accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase);
+
+            var tools = toolRegistry.GetTools()
+                .OrderBy(t => t.Name)
+                .Select(t => new { name = t.Name, description = t.Description })
+                .ToList();
+
+            if (isHtml)
+            {
+                var html = GenerateDiscoveryHtml(tools.Select(t => (t.name, t.description)).ToList());
+                return Results.Content(html, "text/html; charset=utf-8");
+            }
+
+            return Results.Ok(new
+            {
+                name = "FlowOS MCP Server",
+                status = "online",
+                protocol = "Model Context Protocol (MCP)",
+                transport = "Streamable HTTP (JSON-RPC 2.0 over POST)",
+                supportedProtocolVersion = McpJsonRpcDispatcher.SupportedProtocolVersion,
+                toolsCount = tools.Count,
+                description = "FlowOS Agentic Control Plane: Multi-tenant state machine and declarative workflow engine.",
+                endpoint = "/mcp",
+                methodsSupported = new[] { "GET", "POST", "OPTIONS" },
+                authentication = "Header X-MCP-API-Key or Authorization: Bearer, plus x-tenant-id header",
+                tools = tools,
+                agentSetup = new
+                {
+                    claudeDesktop = new
+                    {
+                        mcpServers = new
+                        {
+                            flowos = new
+                            {
+                                command = "npx",
+                                args = new[]
+                                {
+                                    "-y",
+                                    "mcp-remote-client",
+                                    "https://flowos.prospectbdltd.com/mcp",
+                                    "--header", "X-MCP-API-Key: YOUR_TENANT_API_KEY",
+                                    "--header", "x-tenant-id: YOUR_TENANT_ID"
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         });
 
         var mcpPostHandler = async (HttpRequest request, IMcpJsonRpcDispatcher dispatcher, CancellationToken ct) =>
@@ -386,6 +446,167 @@ public partial class Program
         services.AddScoped<INotificationRepository>(sp => sp.GetRequiredService<NotificationRepository>());
         services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredService<NotificationRepository>());
         services.AddScoped<NotificationTools>();
+    }
+
+    private static string GenerateDiscoveryHtml(List<(string name, string description)> tools)
+    {
+        var sb = new StringBuilder();
+        sb.Append("""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlowOS MCP Control Plane</title>
+  <meta name="description" content="FlowOS Model Context Protocol (MCP) server: Agentic control plane for multi-tenant state machine workflows." />
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-purple: #a855f7;
+      --accent-emerald: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+    .container { max-width: 1000px; margin: 0 auto; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      margin-bottom: 1rem;
+    }
+    .badge-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+    h1 { font-size: 2.25rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.025em; }
+    h1 span { color: var(--accent); }
+    p.lead { color: var(--text-muted); font-size: 1.05rem; margin-bottom: 2rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      backdrop-filter: blur(8px);
+    }
+    .card h3 { font-size: 1rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.5rem; }
+    .card p { font-size: 0.85rem; color: var(--text-muted); }
+    h2 { font-size: 1.5rem; margin: 2rem 0 1rem; font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.85rem; margin-bottom: 2.5rem; }
+    .tool-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1rem;
+    }
+    .tool-name { font-family: monospace; font-size: 0.875rem; font-weight: bold; color: #60a5fa; margin-bottom: 0.25rem; }
+    .tool-desc { font-size: 0.8rem; color: var(--text-muted); }
+    pre {
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      overflow-x: auto;
+      font-family: monospace;
+      font-size: 0.825rem;
+      color: #e2e8f0;
+      margin-bottom: 1.5rem;
+    }
+    footer { text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
+    footer a { color: var(--accent); text-decoration: none; margin: 0 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge"><div class="badge-dot"></div> MCP SERVER ONLINE</div>
+    <h1>Flow<span>OS</span> MCP Control Plane</h1>
+    <p class="lead">Model Context Protocol (MCP) server providing autonomous AI agents with governed execution, mathematical state enforcement, and real-time event telemetry.</p>
+
+    <div class="grid-3">
+      <div class="card">
+        <h3>⚖️ State Machine = Law</h3>
+        <p>Zero unvalidated state mutations. The deterministic state machine validates transition legality before any event can alter workflow state.</p>
+      </div>
+      <div class="card">
+        <h3>⚙️ Workflow = Work</h3>
+        <p>Declarative, versioned DAG business processes executing coordinated steps with granular compensation logic.</p>
+      </div>
+      <div class="card">
+        <h3>📜 Event = Truth</h3>
+        <p>PostgreSQL transactional event log providing immutable audit trails, multi-tenant isolation, and reactive notifications.</p>
+      </div>
+    </div>
+
+    <h2>Registered Agent Tools (
+""");
+        sb.Append(tools.Count);
+        sb.Append("""
+)</h2>
+    <div class="tools-grid">
+""");
+        foreach (var tool in tools)
+        {
+            sb.Append($"""
+      <div class="tool-card">
+        <div class="tool-name">{System.Net.WebUtility.HtmlEncode(tool.name)}</div>
+        <div class="tool-desc">{System.Net.WebUtility.HtmlEncode(tool.description)}</div>
+      </div>
+
+""");
+        }
+        sb.Append("""
+    </div>
+
+    <h2>Connect Claude Desktop</h2>
+    <pre><code>{
+  "mcpServers": {
+    "flowos": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote-client",
+        "https://flowos.prospectbdltd.com/mcp",
+        "--header", "X-MCP-API-Key: &lt;YOUR_TENANT_API_KEY&gt;",
+        "--header", "x-tenant-id: &lt;YOUR_TENANT_ID&gt;"
+      ]
+    }
+  }
+}</code></pre>
+
+    <h2>Quick cURL Discovery</h2>
+    <pre><code>curl -X POST https://flowos.prospectbdltd.com/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "X-MCP-API-Key: &lt;YOUR_API_KEY&gt;" \
+  -H "x-tenant-id: &lt;YOUR_TENANT_ID&gt;" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</code></pre>
+
+    <footer>
+      <span>&copy; 2026 FlowOS &bull; Prospect BD Ltd.</span>
+      <a href="/">Dashboard</a>
+      <a href="/swagger">Swagger API</a>
+      <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank">GitHub</a>
+    </footer>
+  </div>
+</body>
+</html>
+""");
+        return sb.ToString();
     }
 }
 
