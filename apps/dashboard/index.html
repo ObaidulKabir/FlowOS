@@ -45,6 +45,11 @@
       "url": "https://flowos.prospectbdltd.com"
     }
     </script>
+      <!-- Semantic Discovery Links for AI Agents & Crawlers -->
+    <link rel="service-desc" type="application/json" href="/mcp" title="FlowOS MCP Machine-Readable Discovery" />
+    <link rel="alternate" type="application/json" href="/mcp" title="FlowOS MCP Machine-Readable Discovery" />
+    <link rel="alternate" type="text/html" href="/mcp" title="FlowOS MCP Interactive Portal" />
+    <link rel="mcp-server" href="/mcp" />
   </head>
   <body class="bg-slate-900 text-slate-100">
     <div id="root">
@@ -53,9 +58,23 @@
         <h1 style="font-size: 2rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;">
           Flow<span style="color: #3b82f6;">OS</span> Orchestration Platform
         </h1>
-        <p style="color: #94a3b8; max-width: 600px; margin: 0 auto; font-size: 0.95rem;">
+        <p style="color: #94a3b8; max-width: 600px; margin: 0 auto 1.25rem auto; font-size: 0.95rem;">
           Dual-kernel mathematical state authority, zero-trust multi-tenancy, and native Model Context Protocol (MCP) agent control plane.
         </p>
+        <nav style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem;">
+          <a href="/mcp" style="background: #065f46; color: #a7f3d0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #059669;">
+            🤖 Explore MCP Tools & Discovery (/mcp) ↗
+          </a>
+          <a href="/mcp" headers="Accept: application/json" style="background: #1e293b; color: #93c5fd; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #334155;">
+            📄 Machine-Readable JSON Schema
+          </a>
+          <a href="/swagger" style="background: #1e293b; color: #cbd5e1; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; border: 1px solid #334155;">
+            📚 Swagger API ↗
+          </a>
+          <a href="/health" style="background: #1e293b; color: #cbd5e1; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; border: 1px solid #334155;">
+            🩺 Health (/health)
+          </a>
+        </nav>
       </header>
 
       <main style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
@@ -80,16 +99,65 @@
           </article>
         </section>
 
-        <section style="background: #1e293b; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #334155; margin-bottom: 2rem;">
-          <h2 style="font-size: 1.25rem; color: #ffffff; margin-bottom: 0.75rem;">🤖 Native Model Context Protocol (MCP) Server</h2>
-          <p style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1rem;">
-            FlowOS exposes a dedicated 21-tool MCP endpoint at <code style="background: #0f172a; padding: 0.2rem 0.4rem; border-radius: 0.25rem; color: #93c5fd;">/mcp</code> using JSON-RPC 2.0. Autonomous AI agents (such as Claude Desktop, Cursor, and custom LLMs) can securely discover, start, monitor, and advance tenant workflows under zero-trust governance boundaries.
+        <section style="background: #1e293b; padding: 1.75rem; border-radius: 0.75rem; border: 1px solid #334155; margin-bottom: 2rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+            <h2 style="font-size: 1.35rem; color: #ffffff; margin: 0;">🤖 AI Agent & Browser Guideline: How to Get MCP Tools</h2>
+            <span style="background: #065f46; color: #a7f3d0; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold;">
+              21 Production Tools • 10/10 Score
+            </span>
+          </div>
+
+          <p style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.25rem;">
+            FlowOS is an authoritative <strong>multi-tenant, state-machine-governed workflow control plane with an Model Context Protocol (MCP) interface</strong>. Any autonomous AI agent, web crawler, or browser-based AI model can discover, validate, execute, and monitor workflows under strict zero-trust governance.
           </p>
-          <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; margin-left: 1.5rem;">
-            <li><strong>Workflow Discovery:</strong> <code>describe_workflowclass_schema</code>, <code>list_public_workflowclasses</code>, <code>list_draft_workflowclasses</code></li>
-            <li><strong>Execution Control:</strong> <code>start_workflow</code>, <code>publish_event</code>, <code>complete_task</code>, <code>list_workflow_instances</code>, <code>get_workflow_history</code></li>
-            <li><strong>Intelligent Diagnostics:</strong> <code>suggest_agent_action</code>, <code>explain_validation_violation</code>, <code>lint_draft_workflowclass</code></li>
-            <li><strong>Governance Lifecycle:</strong> <code>create_draft_workflowclass</code>, <code>validate_draft_workflowclass</code>, <code>publish_workflowclass</code></li>
+
+          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-bottom: 1.25rem;">
+            <h3 style="color: #60a5fa; font-size: 1rem; margin-bottom: 0.5rem; margin-top: 0;">Step 1: Public Tool Discovery (Zero Credentials Required)</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.5rem;">
+              Navigate to or fetch the discovery endpoint. FlowOS separates public discovery from authenticated execution:
+            </p>
+            <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0.75rem;">
+              <li><strong>Interactive Browser Portal:</strong> Open <a href="/mcp" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">https://flowos.prospectbdltd.com/mcp</a> in any browser or web agent to view the interactive tool documentation and security contract.</li>
+              <li><strong>Machine-Readable JSON:</strong> Issue an HTTP <code>GET /mcp</code> with header <code>Accept: application/json</code> to receive all 21 tools, formal parameter JSON schemas, risk ratings, and human confirmation policies:</li>
+            </ul>
+            <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #38bdf8; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s https://flowos.prospectbdltd.com/mcp -H "Accept: application/json"</pre>
+          </div>
+
+          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-bottom: 1.25rem;">
+            <h3 style="color: #a855f7; font-size: 1rem; margin-bottom: 0.5rem; margin-top: 0;">Step 2: Connect & Execute Tools (Streamable JSON-RPC 2.0)</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.5rem;">
+              All agent mutations, task completions, and status inspections run via <code>POST /mcp</code> over Streamable HTTP:
+            </p>
+            <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0.75rem;">
+              <li><strong>Transport URL:</strong> <code>https://flowos.prospectbdltd.com/mcp</code></li>
+              <li><strong>Required Headers:</strong> <code>x-tenant-id: &lt;tenant-guid&gt;</code>, <code>X-MCP-API-Key: &lt;key&gt;</code>, <code>MCP-Protocol-Version: 2025-03-26</code></li>
+              <li><strong>Sandbox Mode:</strong> When API key is unconfigured or set to "disabled", full tool execution is open for instant evaluation!</li>
+            </ul>
+            <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #34d399; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s -X POST https://flowos.prospectbdltd.com/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "x-tenant-id: 22222222-2222-2222-2222-222222222222" \
+  -H "X-MCP-API-Key: flowos_prod_secret_key_32_chars_min" \
+  -H "MCP-Protocol-Version: 2025-03-26" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
+          </div>
+
+          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-bottom: 1.25rem;">
+            <h3 style="color: #f59e0b; font-size: 1rem; margin-bottom: 0.5rem; margin-top: 0;">Step 3: Governance Policies & Human Confirmation Gates</h3>
+            <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0;">
+              <li><strong>Machine-Enforced Human Gate:</strong> High-risk operations (e.g. <code>publish_workflowclass</code>) strictly require <code>confirmHumanApproval: true</code>. Invocations without explicit human confirmation fail with <code>MCP-APPROVAL-REQUIRED</code>.</li>
+              <li><strong>Object-Level IDOR Protection:</strong> Resources of foreign tenants yield uniform <code>MCP-NOTFOUND-001</code> errors with zero metadata leakage (anti-enumeration).</li>
+              <li><strong>Cross-Tenant Public Blueprints:</strong> Blueprints with <code>Scope == Public</code> can be launched across any tenant via <code>start_workflow</code>, while runtime state is completely isolated to the caller.</li>
+            </ul>
+          </div>
+
+          <h3 style="font-size: 1rem; color: #ffffff; margin-bottom: 0.5rem;">Catalog of 21 Registered MCP Tools</h3>
+          <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; margin-left: 1.25rem; margin-bottom: 0;">
+            <li><strong>Discovery & Inspection:</strong> <code>describe_workflowclass_schema</code>, <code>list_public_workflowclasses</code>, <code>list_draft_workflowclasses</code>, <code>get_draft_workflowclass</code></li>
+            <li><strong>Workflow Execution:</strong> <code>start_workflow</code>, <code>publish_event</code>, <code>complete_task</code>, <code>list_workflow_instances</code>, <code>get_workflow_instance_status</code>, <code>get_workflow_history</code></li>
+            <li><strong>Authoring & Governance:</strong> <code>create_draft_workflowclass</code>, <code>update_draft_workflowclass</code>, <code>validate_draft_workflowclass</code>, <code>fork_public_workflowclass</code>, <code>publish_workflowclass</code></li>
+            <li><strong>Advisory & Diagnostics:</strong> <code>suggest_agent_action</code>, <code>explain_validation_violation</code>, <code>lint_draft_workflowclass</code>, <code>list_available_agents</code></li>
+            <li><strong>Notifications:</strong> <code>list_notifications</code>, <code>mark_notification_as_read</code></li>
           </ul>
         </section>
       </main>

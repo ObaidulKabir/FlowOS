@@ -4,7 +4,8 @@ import { getAuthSession, setAuthSession } from './api/client';
 import { LoginView } from './components/LoginView';
 import { TenantDashboard } from './components/TenantDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
-import { Shield, Building2, LogOut, CheckCircle } from 'lucide-react';
+import { McpAgentGuideline } from './components/McpAgentGuideline';
+import { Shield, Building2, LogOut, CheckCircle, Bot } from 'lucide-react';
 
 function App() {
   const [session, setSession] = useState<AuthSession>(getAuthSession());
@@ -108,6 +109,16 @@ function App() {
               <span>Switch User</span>
             </button>
 
+            <a 
+              href="/mcp" 
+              target="_blank" 
+              className="inline-flex px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all items-center gap-1.5 shadow-sm"
+              title="Access Model Context Protocol (MCP) tool discovery & catalog"
+            >
+              <Bot size={13} />
+              <span>MCP Tools ↗</span>
+            </a>
+
             <a href="/swagger" target="_blank" className="hidden sm:inline-flex px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition-all">
               Swagger ↗
             </a>
@@ -138,6 +149,11 @@ function App() {
           />
         )}
       </main>
+
+      {/* AI Agent & Browser Guideline Section */}
+      <section className="max-w-7xl mx-auto px-6">
+        <McpAgentGuideline />
+      </section>
 
       {/* Competitor Comparison Section */}
       <section id="comparison" className="py-16 px-6 max-w-7xl mx-auto border-t border-slate-800">

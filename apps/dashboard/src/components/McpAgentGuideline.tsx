@@ -1,0 +1,289 @@
+import React, { useState } from 'react';
+import { Bot, Terminal, Copy, Check, ExternalLink, ShieldCheck, Code, Sparkles, BookOpen } from 'lucide-react';
+
+export const McpAgentGuideline: React.FC = () => {
+  const [copiedTab, setCopiedTab] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'browser' | 'curl' | 'config' | 'javascript'>('browser');
+
+  const copyToClipboard = (text: string, tabId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedTab(tabId);
+    setTimeout(() => setCopiedTab(null), 2000);
+  };
+
+  const curlDiscovery = 'curl -s https://flowos.prospectbdltd.com/mcp -H "Accept: application/json"';
+
+  const curlToolList = `curl -s -X POST https://flowos.prospectbdltd.com/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -H "x-tenant-id: 22222222-2222-2222-2222-222222222222" \\
+  -H "X-MCP-API-Key: flowos_prod_secret_key_32_chars_min" \\
+  -H "MCP-Protocol-Version: 2025-03-26" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'`;
+
+  const mcpConfig = JSON.stringify({
+    mcpServers: {
+      flowos: {
+        url: "https://flowos.prospectbdltd.com/mcp",
+        headers: {
+          "x-tenant-id": "22222222-2222-2222-2222-222222222222",
+          "X-MCP-API-Key": "flowos_prod_secret_key_32_chars_min"
+        }
+      }
+    }
+  }, null, 2);
+
+  const jsSnippet = `// 1. Zero-Auth Public Discovery
+const discovery = await fetch('https://flowos.prospectbdltd.com/mcp', {
+  headers: { 'Accept': 'application/json' }
+}).then(res => res.json());
+
+console.log(\`FlowOS MCP: \${discovery.name} - \${discovery.toolsCount} tools registered\`);
+
+// 2. Call an MCP Tool over Streamable JSON-RPC 2.0
+const rpcResponse = await fetch('https://flowos.prospectbdltd.com/mcp', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-tenant-id': '22222222-2222-2222-2222-222222222222',
+    'X-MCP-API-Key': 'flowos_prod_secret_key_32_chars_min',
+    'MCP-Protocol-Version': '2025-03-26'
+  },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'list_public_workflowclasses',
+      arguments: {}
+    }
+  })
+}).then(res => res.json());
+
+console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
+
+  return (
+    <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl mb-10 backdrop-blur-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700/80 pb-5 mb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30">
+              <Bot size={18} />
+            </span>
+            <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+              AI Agent & Browser Guideline: How to Get MCP Tools
+            </h2>
+            <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
+              21 Production Tools
+            </span>
+          </div>
+          <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+            FlowOS is an authoritative, multi-tenant workflow control plane. Autonomous AI agents, browser bots, and LLM crawlers can discover schemas, inspect invariants, and orchestrate stateful processes under zero-trust governance.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <a
+            href="/mcp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg shadow-blue-500/20 transition-all border border-blue-400/30"
+          >
+            <Sparkles size={14} />
+            <span>Open /mcp Portal</span>
+            <ExternalLink size={12} />
+          </a>
+        </div>
+      </div>
+
+      {/* Safety Policy Badges */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 text-xs">
+        <div className="bg-slate-900/60 border border-slate-700/50 p-3 rounded-xl">
+          <div className="text-blue-400 font-semibold mb-1 flex items-center gap-1.5">
+            <Sparkles size={14} />
+            <span>Public GET Discovery</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Fetch <code className="text-blue-300 bg-slate-800 px-1 rounded">GET /mcp</code> without credentials to read full schemas and security metadata.
+          </p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-slate-700/50 p-3 rounded-xl">
+          <div className="text-purple-400 font-semibold mb-1 flex items-center gap-1.5">
+            <ShieldCheck size={14} />
+            <span>Anti-BOLA / IDOR</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Object-level tenant isolation. Foreign tenant IDs yield identical <code className="text-purple-300 bg-slate-800 px-1 rounded">MCP-NOTFOUND-001</code> errors.
+          </p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-slate-700/50 p-3 rounded-xl">
+          <div className="text-amber-400 font-semibold mb-1 flex items-center gap-1.5">
+            <BookOpen size={14} />
+            <span>Human Approval Gate</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            High-risk publishing mandates <code className="text-amber-300 bg-slate-800 px-1 rounded">confirmHumanApproval: true</code> to prevent rogue mutations.
+          </p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-slate-700/50 p-3 rounded-xl">
+          <div className="text-emerald-400 font-semibold mb-1 flex items-center gap-1.5">
+            <Code size={14} />
+            <span>Public Blueprints</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Launch shared public workflows cross-tenant while execution state remains private to caller.
+          </p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center space-x-2 border-b border-slate-700 pb-2 mb-4">
+        <button
+          onClick={() => setActiveTab('browser')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+            activeTab === 'browser'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+          }`}
+        >
+          <Bot size={13} />
+          <span>AI Browser / Web Agent</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('curl')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+            activeTab === 'curl'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+          }`}
+        >
+          <Terminal size={13} />
+          <span>cURL Commands</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('config')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+            activeTab === 'config'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+          }`}
+        >
+          <Code size={13} />
+          <span>mcp.json (Cursor / Claude)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('javascript')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+            activeTab === 'javascript'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+          }`}
+        >
+          <Code size={13} />
+          <span>JavaScript Fetch</span>
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'browser' && (
+        <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs">
+          <h3 className="font-semibold text-white mb-2 flex items-center gap-2">
+            <span>🌐 Browser Model & Crawler Discovery Procedure</span>
+          </h3>
+          <ol className="list-decimal list-inside space-y-2 text-slate-300 leading-relaxed">
+            <li>
+              <strong>Discover Endpoint:</strong> Navigate directly to <a href="/mcp" className="text-blue-400 underline hover:text-blue-300">/mcp</a> (or <code className="text-blue-300">https://flowos.prospectbdltd.com/mcp</code>). In human/browser mode, it renders a live interactive HTML tool catalog.
+            </li>
+            <li>
+              <strong>Machine-Readable Discovery:</strong> For programmatic bots, make an HTTP <code className="text-blue-300">GET /mcp</code> with header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">Accept: application/json</code>. No API keys or authentication credentials are required.
+            </li>
+            <li>
+              <strong>Ingest Tools & Constraints:</strong> The payload delivers all 21 tools, parameter types, <code className="text-blue-300">riskLevel</code> (<code className="text-emerald-300">low</code>, <code className="text-amber-300">medium</code>, <code className="text-rose-300">high</code>), <code className="text-blue-300">sideEffect</code>, and <code className="text-blue-300">requiresHumanConfirmation</code>.
+            </li>
+            <li>
+              <strong>Execute via POST:</strong> Switch to <code className="text-blue-300">POST /mcp</code> for JSON-RPC 2.0 tool execution with your tenant header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">x-tenant-id</code>.
+            </li>
+          </ol>
+        </div>
+      )}
+
+      {activeTab === 'curl' && (
+        <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-slate-300 font-semibold">1. Public Discovery (Zero Credentials Required):</span>
+              <button
+                onClick={() => copyToClipboard(curlDiscovery, 'curl1')}
+                className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px]"
+              >
+                {copiedTab === 'curl1' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                <span>{copiedTab === 'curl1' ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            <pre className="bg-slate-950 p-3 rounded-lg font-mono text-[11px] text-blue-300 overflow-x-auto border border-slate-800/80">
+              {curlDiscovery}
+            </pre>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-slate-300 font-semibold">2. Handshake & List Tools (Authenticated Streamable JSON-RPC):</span>
+              <button
+                onClick={() => copyToClipboard(curlToolList, 'curl2')}
+                className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px]"
+              >
+                {copiedTab === 'curl2' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                <span>{copiedTab === 'curl2' ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            <pre className="bg-slate-950 p-3 rounded-lg font-mono text-[11px] text-emerald-300 overflow-x-auto border border-slate-800/80">
+              {curlToolList}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'config' && (
+        <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-slate-300 font-semibold">Place in your Cursor or Claude Desktop mcp.json:</span>
+            <button
+              onClick={() => copyToClipboard(mcpConfig, 'mcpcfg')}
+              className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px]"
+            >
+              {copiedTab === 'mcpcfg' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              <span>{copiedTab === 'mcpcfg' ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <pre className="bg-slate-950 p-3 rounded-lg font-mono text-[11px] text-purple-300 overflow-x-auto border border-slate-800/80">
+            {mcpConfig}
+          </pre>
+        </div>
+      )}
+
+      {activeTab === 'javascript' && (
+        <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-slate-300 font-semibold">Client Integration Snippet:</span>
+            <button
+              onClick={() => copyToClipboard(jsSnippet, 'jscode')}
+              className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px]"
+            >
+              {copiedTab === 'jscode' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              <span>{copiedTab === 'jscode' ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <pre className="bg-slate-950 p-3 rounded-lg font-mono text-[11px] text-amber-300 overflow-x-auto border border-slate-800/80 max-h-64">
+            {jsSnippet}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+};
