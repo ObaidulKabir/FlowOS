@@ -134,6 +134,47 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
     Predicate = check => true
 });
 
+app.MapGet("/.well-known/mcp", (HttpContext context) =>
+{
+    var accepts = context.Request.Headers.Accept.ToString();
+    if (accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.Redirect("/mcp");
+    }
+
+    return Results.Ok(new
+    {
+        schema = "https://modelcontextprotocol.io/schema/discovery.json",
+        name = "FlowOS MCP Control Plane",
+        version = "1.0.0",
+        description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction.",
+        transport = "streamable-http",
+        protocolVersion = "2025-03-26",
+        endpoint = "/mcp",
+        url = "https://flowos.prospectbdltd.com/mcp",
+        documentation = "https://flowos.prospectbdltd.com/mcp",
+        toolsEndpoint = "/mcp",
+        auth = new
+        {
+            type = "apiKey",
+            header = "X-MCP-API-Key",
+            tenantHeader = "x-tenant-id",
+            sandboxAllowed = true
+        },
+        endpoints = new
+        {
+            discovery = "/mcp",
+            jsonrpc = "/mcp",
+            wellKnown = "/.well-known/mcp",
+            sse = "/mcp",
+            health = "/health/ready"
+        }
+    });
+});
+
+app.MapGet("/.well-known/mcp.json", () => Results.Redirect("/.well-known/mcp"));
+app.MapGet("/sse", () => Results.Redirect("/mcp"));
+
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();

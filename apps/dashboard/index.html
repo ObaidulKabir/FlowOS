@@ -45,14 +45,42 @@
       "url": "https://flowos.prospectbdltd.com"
     }
     </script>
-      <!-- Semantic Discovery Links for AI Agents & Crawlers -->
-    <link rel="service-desc" type="application/json" href="/mcp" title="FlowOS MCP Machine-Readable Discovery" />
-    <link rel="alternate" type="application/json" href="/mcp" title="FlowOS MCP Machine-Readable Discovery" />
+          <!-- Semantic Discovery Links for AI Agents & Crawlers -->
+    <link rel="mcp" href="https://flowos.prospectbdltd.com/mcp" />
+    <link rel="mcp-server" href="https://flowos.prospectbdltd.com/mcp" />
+    <link rel="service-desc" type="application/json" href="/.well-known/mcp" />
+    <link rel="alternate" type="application/json" href="/.well-known/mcp" title="FlowOS MCP Machine-Readable Discovery" />
+    <link rel="alternate" type="application/json" href="/mcp" title="FlowOS MCP Tools JSON" />
     <link rel="alternate" type="text/html" href="/mcp" title="FlowOS MCP Interactive Portal" />
-    <link rel="mcp-server" href="/mcp" />
   </head>
   <body class="bg-slate-900 text-slate-100">
     <div id="root">
+      <div id="mcp-agent-bar" style="background: #1e1b4b; border-bottom: 2px solid #6366f1; padding: 1rem 1.5rem; text-align: center;">
+        <div style="max-width: 900px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem;">
+          <div style="text-align: left;">
+            <span style="background: #4338ca; color: #e0e7ff; font-size: 0.75rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 9999px; text-transform: uppercase;">
+              Model Context Protocol (MCP) Control Plane
+            </span>
+            <h2 style="margin: 0.25rem 0 0 0; font-size: 1.15rem; color: #ffffff; font-weight: 700;">
+              FlowOS AI Agent Endpoint
+            </h2>
+            <p style="margin: 0; color: #a5b4fc; font-size: 0.85rem;">
+              Endpoint: <a href="https://flowos.prospectbdltd.com/mcp" style="color: #67e8f9; font-weight: bold; text-decoration: underline;">https://flowos.prospectbdltd.com/mcp</a> | Transport: <strong style="color: #ffffff;">Streamable HTTP / SSE (JSON-RPC 2.0)</strong>
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <a href="/mcp" id="connect-mcp-btn" style="background: #10b981; color: #ffffff; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; text-decoration: none; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">
+              ⚡ Connect AI Agent (/mcp) ↗
+            </a>
+            <a href="/.well-known/mcp" id="well-known-mcp-link" style="background: #334155; color: #f8fafc; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; text-decoration: none; font-size: 0.85rem; display: inline-flex; align-items: center;">
+              📋 /.well-known/mcp
+            </a>
+            <a href="/mcp" rel="mcp-sse" style="background: #334155; color: #93c5fd; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; text-decoration: none; font-size: 0.85rem;">
+              📡 /sse Stream
+            </a>
+          </div>
+        </div>
+      </div>
       <!-- Semantic Fallback for AI Browsing Bots & Crawlers (replaced when React mounts) -->
       <header style="padding: 2rem; background: #0f172a; border-bottom: 1px solid #1e293b; text-align: center;">
         <h1 style="font-size: 2rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;">
@@ -99,20 +127,64 @@
           </article>
         </section>
 
-        <section style="background: #1e293b; padding: 1.75rem; border-radius: 0.75rem; border: 1px solid #334155; margin-bottom: 2rem;">
+                <section id="mcp-specification-and-connect" style="background: #1e293b; padding: 1.75rem; border-radius: 0.75rem; border: 2px solid #3b82f6; margin-bottom: 2rem;">
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
-            <h2 style="font-size: 1.35rem; color: #ffffff; margin: 0;">🤖 AI Agent & Browser Guideline: How to Get MCP Tools</h2>
+            <h2 style="font-size: 1.35rem; color: #ffffff; margin: 0;">🤖 MCP Endpoint Specification & Connect Guide</h2>
             <span style="background: #065f46; color: #a7f3d0; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold;">
               21 Production Tools • 10/10 Score
             </span>
           </div>
 
-          <p style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.25rem;">
-            FlowOS is an authoritative <strong>multi-tenant, state-machine-governed workflow control plane with an Model Context Protocol (MCP) interface</strong>. Any autonomous AI agent, web crawler, or browser-based AI model can discover, validate, execute, and monitor workflows under strict zero-trust governance.
-          </p>
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 1.25rem;">
+            <tr style="border-bottom: 1px solid #334155;">
+              <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8; width: 190px;">Endpoint URL</td>
+              <td style="padding: 0.6rem;"><a href="https://flowos.prospectbdltd.com/mcp" style="color: #38bdf8; font-family: monospace; font-weight: bold;">https://flowos.prospectbdltd.com/mcp</a></td>
+            </tr>
+            <tr style="border-bottom: 1px solid #334155;">
+              <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8;">Transport Type</td>
+              <td style="padding: 0.6rem;"><code style="background: #0f172a; padding: 0.2rem 0.5rem; border-radius: 0.25rem; color: #34d399; font-weight: bold;">Streamable HTTP / SSE (JSON-RPC 2.0 over POST /mcp)</code></td>
+            </tr>
+            <tr style="border-bottom: 1px solid #334155;">
+              <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8;">Discovery Manifest</td>
+              <td style="padding: 0.6rem;"><a href="/.well-known/mcp" style="color: #a78bfa; font-family: monospace; font-weight: bold;">/.well-known/mcp</a> (or <a href="/.well-known/mcp.json" style="color: #a78bfa; font-family: monospace;">/.well-known/mcp.json</a>)</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #334155;">
+              <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8;">SSE Stream Route</td>
+              <td style="padding: 0.6rem;"><a href="/mcp" rel="mcp-sse" style="color: #93c5fd; text-decoration: underline;">/sse (POST /mcp with Accept: text/event-stream)</a></td>
+            </tr>
+            <tr style="border-bottom: 1px solid #334155;">
+              <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8;">Protocol Version</td>
+              <td style="padding: 0.6rem;"><code style="background: #0f172a; padding: 0.2rem 0.4rem; border-radius: 0.25rem; color: #f59e0b;">2025-03-26</code></td>
+            </tr>
+            <tr>
+              <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8;">Human Approval Gate</td>
+              <td style="padding: 0.6rem;"><code style="background: #0f172a; padding: 0.2rem 0.4rem; border-radius: 0.25rem; color: #fbbf24;">confirmHumanApproval: true</code> on publish_workflowclass</td>
+            </tr>
+          </table>
 
-          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-bottom: 1.25rem;">
-            <h3 style="color: #60a5fa; font-size: 1rem; margin-bottom: 0.5rem; margin-top: 0;">Step 1: Public Tool Discovery (Zero Credentials Required)</h3>
+          <h3 style="color: #ffffff; font-size: 1rem; margin-bottom: 0.5rem;">Pre-Configured Client Configuration (mcp.json)</h3>
+          <p style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.5rem;">Copy and paste this client configuration directly into Claude Desktop, Cursor, or your AI Agent config:</p>
+          <pre id="mcp-client-config" style="background: #020617; padding: 1rem; border-radius: 0.5rem; border: 1px solid #1e293b; color: #e2e8f0; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin-bottom: 1rem;">{
+  "mcpServers": {
+    "flowos": {
+      "url": "https://flowos.prospectbdltd.com/mcp",
+      "headers": {
+        "x-tenant-id": "22222222-2222-2222-2222-222222222222",
+        "X-MCP-API-Key": "flowos_prod_secret_key_32_chars_min",
+        "MCP-Protocol-Version": "2025-03-26"
+      }
+    }
+  }
+}</pre>
+
+          <div style="text-align: center; margin: 1.25rem 0;">
+            <a href="/mcp" id="connect-now-btn" style="background: #2563eb; color: #ffffff; padding: 0.75rem 2rem; border-radius: 0.5rem; font-weight: bold; text-decoration: none; font-size: 1rem; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37,99,235,0.4);">
+              ⚡ Connect to FlowOS MCP Control Plane (/mcp) ↗
+            </a>
+          </div>
+
+          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-top: 1.25rem;">
+            <h3 style="color: #60a5fa; font-size: 0.95rem; margin-bottom: 0.5rem; margin-top: 0;">Step 1: Public Tool Discovery (Zero Credentials Required)</h3>
             <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.5rem;">
               Navigate to or fetch the discovery endpoint. FlowOS separates public discovery from authenticated execution:
             </p>
@@ -123,8 +195,8 @@
             <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #38bdf8; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s https://flowos.prospectbdltd.com/mcp -H "Accept: application/json"</pre>
           </div>
 
-          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-bottom: 1.25rem;">
-            <h3 style="color: #a855f7; font-size: 1rem; margin-bottom: 0.5rem; margin-top: 0;">Step 2: Connect & Execute Tools (Streamable JSON-RPC 2.0)</h3>
+          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-top: 1rem;">
+            <h3 style="color: #a855f7; font-size: 0.95rem; margin-bottom: 0.5rem; margin-top: 0;">Step 2: Connect & Execute Tools (Streamable JSON-RPC 2.0)</h3>
             <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.5rem;">
               All agent mutations, task completions, and status inspections run via <code>POST /mcp</code> over Streamable HTTP:
             </p>
@@ -142,16 +214,7 @@
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
           </div>
 
-          <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-bottom: 1.25rem;">
-            <h3 style="color: #f59e0b; font-size: 1rem; margin-bottom: 0.5rem; margin-top: 0;">Step 3: Governance Policies & Human Confirmation Gates</h3>
-            <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0;">
-              <li><strong>Machine-Enforced Human Gate:</strong> High-risk operations (e.g. <code>publish_workflowclass</code>) strictly require <code>confirmHumanApproval: true</code>. Invocations without explicit human confirmation fail with <code>MCP-APPROVAL-REQUIRED</code>.</li>
-              <li><strong>Object-Level IDOR Protection:</strong> Resources of foreign tenants yield uniform <code>MCP-NOTFOUND-001</code> errors with zero metadata leakage (anti-enumeration).</li>
-              <li><strong>Cross-Tenant Public Blueprints:</strong> Blueprints with <code>Scope == Public</code> can be launched across any tenant via <code>start_workflow</code>, while runtime state is completely isolated to the caller.</li>
-            </ul>
-          </div>
-
-          <h3 style="font-size: 1rem; color: #ffffff; margin-bottom: 0.5rem;">Catalog of 21 Registered MCP Tools</h3>
+          <h3 style="font-size: 1rem; color: #ffffff; margin: 1.25rem 0 0.5rem 0;">Catalog of 21 Registered MCP Tools</h3>
           <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; margin-left: 1.25rem; margin-bottom: 0;">
             <li><strong>Discovery & Inspection:</strong> <code>describe_workflowclass_schema</code>, <code>list_public_workflowclasses</code>, <code>list_draft_workflowclasses</code>, <code>get_draft_workflowclass</code></li>
             <li><strong>Workflow Execution:</strong> <code>start_workflow</code>, <code>publish_event</code>, <code>complete_task</code>, <code>list_workflow_instances</code>, <code>get_workflow_instance_status</code>, <code>get_workflow_history</code></li>
