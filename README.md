@@ -44,5 +44,11 @@ Run the full automated test suite (192 tests across MCP, Unit, and End-to-End in
 dotnet test FlowOS.sln
 ```
 
-## 🤖 AI Capabilities
-FlowOS exposes a **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) over **stdio** or authenticated **Streamable HTTP** (`MCP_TRANSPORT=http`, `POST /mcp`). HTTP calls require an API key and authoritative tenant header, and expose 15 design-time, observability, and advisory tools and schemas. The separate runtime **Agent Insights API** (`/api/agents/insight`) provides advisory, human-in-the-loop suggestions during live workflow execution. See [Chapter 13 — MCP & AI Agent Automation](docs/13-mcp-and-ai-agent-integration.md) and [Chapter 7 — AI Agents & Insights](docs/07-ai-agents-and-insights.md).
+## 🤖 MCP AI Control Plane
+FlowOS is a **multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction**. It exposes a standalone **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) supporting both **stdio** and **Streamable HTTP** (`MCP_TRANSPORT=http`, `GET /mcp` and `POST /mcp`):
+* **Public Discovery (`GET /mcp`)**: Self-documenting endpoint returning interactive HTML or machine-readable JSON discovery metadata, tool schemas, tenant security semantics, risk ratings, and human confirmation requirements.
+* **Protected Execution (`POST /mcp`)**: Authenticated JSON-RPC 2.0 interface exposing **21 tools** across workflow design, state machine verification, execution, human tasks, notifications, and advisory agents.
+* **Enforced Agent Governance Policy**: High-risk, irreversible actions (such as `publish_workflowclass`) mandate explicit human confirmation (`confirmHumanApproval: true`), failing deterministically with `MCP-APPROVAL-REQUIRED` if omitted.
+* **Object-Level Tenant Isolation & Anti-Enumeration**: Strict anti-BOLA/IDOR boundaries prevent foreign resource access, while normalizing foreign and non-existent IDs to `MCP-NOTFOUND-001` to eliminate enumeration oracles. Public blueprints (`Scope == Public`) remain safely executable cross-tenant with caller-isolated runtime state.
+
+See [Chapter 13 — MCP & AI Agent Control Plane](docs/13-mcp-and-ai-agent-integration.md) and [Chapter 7 — AI Agents & Insights](docs/07-ai-agents-and-insights.md).

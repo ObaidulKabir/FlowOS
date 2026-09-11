@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   FlowOS MCP Agent Workflow Test Runner
   Executes the 4-step AI agent verification lifecycle against a FlowOS MCP endpoint.
@@ -214,6 +214,22 @@ if ($instanceId) {
     Write-Host $transitionResult.result.content[0].text -ForegroundColor White
 } else {
     Write-Warn "Could not extract instanceId to proceed with progression step."
+}
+
+# -------------------------------------------------------------
+# STEP 7: Enforced Human Confirmation Gate (Anti-Autonomy Violation)
+# -------------------------------------------------------------
+Write-Step "STEP 7: Verifying Enforced Human Confirmation Gate on High-Risk Action"
+$unconfirmedPublish = Send-McpRpc -method "tools/call" -params @{
+    name      = "publish_workflowclass"
+    arguments = @{ id = "00000000-0000-0000-0000-000000000001" }
+} -id 10
+
+$unconfirmedText = $unconfirmedPublish.result.content[0].text
+if ($unconfirmedText -match "MCP-APPROVAL-REQUIRED") {
+    Write-Success "Machine-enforced human gate blocked unconfirmed execution: $unconfirmedText"
+} else {
+    Write-Warn "Expected MCP-APPROVAL-REQUIRED error, got: $unconfirmedText"
 }
 
 Write-Host "`n============================================================" -ForegroundColor Green

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FlowOS MCP Agent Workflow Test Runner (Node.js)
  * Executes the 4-step AI agent verification lifecycle against FlowOS MCP endpoint.
  */
@@ -135,6 +135,19 @@ async function run() {
     }, 7);
     console.log('  [PASS] Valid transition result:');
     console.log(valid.result?.content?.[0]?.text);
+  }
+
+  // STEP 7: Enforced Human Confirmation Gate (Anti-Autonomy Violation)
+  console.log('\n>> STEP 7: Verifying Enforced Human Confirmation Gate on High-Risk Action');
+  const unconfirmedPublish = await sendRpc('tools/call', {
+    name: 'publish_workflowclass',
+    arguments: { id: '00000000-0000-0000-0000-000000000001' }
+  }, 8);
+  const unconfirmedText = unconfirmedPublish.result?.content?.[0]?.text || '';
+  if (unconfirmedText.includes('MCP-APPROVAL-REQUIRED')) {
+    console.log(`  [PASS] Machine-enforced human gate blocked execution: ${unconfirmedText}`);
+  } else {
+    console.log(`  [WARN] Unexpected response without human approval: ${unconfirmedText}`);
   }
 
   console.log('\n============================================================');

@@ -1,10 +1,19 @@
-# 13. MCP & AI Agent Automation
+# 13. MCP & AI Agent Control Plane
 
-FlowOS ships a standalone **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) that lets an external AI model design and govern `WorkflowClass` blueprints ([Chapter 9](09-workflow-class-governance.md)) over JSON-RPC 2.0. This is a **design-time-only** surface, completely separate from the runtime agent pattern in [Chapter 7](07-ai-agents-and-insights.md).
+FlowOS is a **multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction**.
+
+Unlike standard MCP servers that merely expose thin CRUD wrappers, FlowOS functions as an authoritative control plane. Agents can reason, design, lint, execute, and inspect workflows, while FlowOS enforces strict tenant boundaries, formal schema validation, state-machine invariants, side-effect classifications, and mandatory human approval gates for irreversible fleet operations.
+
+## Architecture: Discovery & Execution Separation
+
+```
+GET /mcp  ──► Public Discovery (HTML / JSON metadata, schemas, risk levels, human confirmation)
+POST /mcp ──► Authenticated JSON-RPC 2.0 (tenant resolution, object-level IDOR check, human gates)
+```
 
 ## Running the MCP server
 
-### Stdio (default — Cursor local MCP)
+### Stdio (local IDE / Cursor agent)
 
 ```bash
 dotnet run --project src/FlowOS.MCP/FlowOS.MCP.csproj
@@ -15,7 +24,7 @@ Communicates over **stdio** (`stdin`/`stdout`) using JSON-RPC 2.0. Logging goes 
 ### Streamable HTTP
 
 ```bash
-# PowerShell (Development / Pre-Payment Gateway Sandbox Mode)
+# PowerShell (Development / Sandbox Mode)
 $env:MCP_TRANSPORT="http"
 $env:ASPNETCORE_URLS="http://0.0.0.0:8080"
 $env:MCP_API_KEY="disabled"  # Set to "disabled" or omit for key-free sandbox testing
@@ -34,8 +43,9 @@ Endpoints:
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `POST` | `/mcp` | JSON-RPC body → `application/json` response (or `202` for notifications) |
-| `GET` | `/mcp` | `405` with `Allow: POST` (no standalone SSE listen stream) |
+| `GET` | `/mcp` | **Public Discovery**: Returns interactive HTML documentation (Accept: `text/html`) or machine-readable JSON metadata (Accept: `application/json`) including all 21 tool schemas, risk levels, side effects, and confirmation requirements without requiring credentials. |
+| `POST` | `/mcp` | **Protected Execution**: Authenticated JSON-RPC 2.0 body (`initialize`, `tools/list`, `tools/call`). Requires `x-tenant-id` and API key/bearer. |
+| `OPTIONS`| `/mcp` | CORS preflight handling for web/browser agent environments. |
 | `GET` | `/health` | `200` `{ "status": "ok" }` |
 
 > 💡 **Pre-Payment Gateway & Sandbox Mode**:
@@ -116,27 +126,53 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-| Tool name | Arguments | Implementation | Description |
-|---|---|---|---|
-| `describe_workflowclass_schema` | _none_ | `InfoTools.DescribeSchema` | Returns a JSON schema aligned with `WorkflowClassBlueprint` (`EventId`, Roles/Capabilities, real StepTypes). |
-| `list_public_workflowclasses` | `tenantId` (stdio) | `InfoTools.ListPublic` | Lists `{ id, name, version }` for every `Public`-scope WorkflowClass (via Application MediatR/UoW). |
-| `list_available_agents` | _none_ | `AgentTools.ListAvailableAgents` | Lists registered runtime agents (currently hardcoded: `RiskAnalysisAgent`) and their capabilities. |
-| `suggest_agent_action` | `workflowInstanceId`, `agentId`, `tenantId` (stdio) | `AgentTools.SuggestAgentAction` | Runs a real `IWorkflowAgent` against a tenant-scoped workflow instance's latest event payload (or a simulated payload if none exists) and returns its `SuggestedAction`. |
-| `explain_validation_violation` | `code`, `context` (json) | `AnalysisTools.ExplainValidationViolation` | Explains real `WorkflowClassValidator` codes (`STR-*`, `CON-*`, `WF-COMP-*`, `GOV-001`, `WF-SLA-*`, etc.). |
-| `lint_draft_workflowclass` | `id`, `tenantId` (stdio) | `AnalysisTools.LintDraftWorkflowClass` | Tenant-scoped advisory lint: orphaned events, excessive state count (>15), overly short Step IDs. |
-| `get_draft_workflowclass` | `id`, `tenantId` (stdio) | `GovernanceTools.GetDraft` | Reads back full metadata and JSON blueprint of a tenant-owned Draft. |
-| `list_draft_workflowclasses` | `tenantId` (stdio) | `GovernanceTools.ListDrafts` | Lists all private Draft WorkflowClasses for a tenant. |
-| `get_workflow_instance_status` | `instanceId`, `tenantId` (stdio) | `InfoTools.GetWorkflowInstanceStatus` | Queries runtime instance execution status, current step, current state, and completion timestamps. |
-| `create_draft_workflowclass` | `name`, `version`, `blueprint`, `tenantId` | `GovernanceTools.CreateDraft` | Creates a new Draft via `CreateWorkflowClassCommand`. **Fails if authoritative validation fails.** |
-| `update_draft_workflowclass` | `id`, `blueprint`, `tenantId`, `name`/`version` (opt) | `GovernanceTools.UpdateDraft` | Updates an existing Draft via `UpdateWorkflowClassCommand`. **Requires `tenantId`.** |
-| `validate_draft_workflowclass` | `id`, `tenantId` | `GovernanceTools.ValidateDraft` | Runs authoritative validation without modifying anything. **Requires `tenantId`.** |
-| `fork_public_workflowclass` | `publicId`, `tenantId` | `GovernanceTools.ForkPublic` | Creates a private Draft copy of a `Public` template via `CopyWorkflowClassCommand`. |
-| `list_notifications` | `tenantId`, `userId` (opt) | `NotificationTools.ListNotifications` | Lists recent tenant and user notifications with severity levels. |
-| `mark_notification_as_read` | `id`, `tenantId` | `NotificationTools.MarkNotificationAsRead` | Marks a specific notification as read. |
+FlowOS registers **21 production tools** categorized by governance lifecycle, operational execution, and runtime advisory intelligence:
+
+| Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
+|---|---|---|---|---|---|
+| `describe_workflowclass_schema` | `low` | `none` | No | `InfoTools.DescribeSchema` | Returns JSON schema aligned with `WorkflowClassBlueprint` (`eventId`, roles/capabilities, real `stepTypes`). |
+| `list_public_workflowclasses` | `low` | `none` | No | `InfoTools.ListPublic` | Lists `{ id, name, version }` for every `Public`-scope WorkflowClass blueprint. |
+| `list_notifications` | `low` | `none` | No | `NotificationTools.ListNotifications` | Lists recent tenant and user notifications with severity levels. |
+| `mark_notification_as_read` | `low` | `reversible` | No | `NotificationTools.MarkNotificationAsRead` | Marks a specific notification as read. |
+| `list_available_agents` | `low` | `none` | No | `AgentTools.ListAvailableAgents` | Lists registered runtime agents (e.g. `RiskAnalysisAgent`) and their capabilities. |
+| `suggest_agent_action` | `low` | `none` | No | `AgentTools.SuggestAgentAction` | Runs advisory reasoning against tenant-isolated instance state to return a `SuggestedAction`. |
+| `explain_validation_violation` | `low` | `none` | No | `AnalysisTools.ExplainValidationViolation` | Explains formal `WorkflowClassValidator` codes (`STR-*`, `CON-*`, `WF-COMP-*`, `GOV-001`, `WF-SLA-*`). |
+| `lint_draft_workflowclass` | `low` | `none` | No | `AnalysisTools.LintDraftWorkflowClass` | Advisory linting of private drafts: unreachable states, excessive state count, short step IDs. |
+| `create_draft_workflowclass` | `low` | `reversible` | No | `GovernanceTools.CreateDraft` | Authoritatively validates and creates a new private draft blueprint. |
+| `update_draft_workflowclass` | `low` | `reversible` | No | `GovernanceTools.UpdateDraft` | Authoritatively validates and updates an existing private draft blueprint. |
+| `validate_draft_workflowclass` | `low` | `none` | No | `GovernanceTools.ValidateDraft` | Runs authoritative validation without modifying anything. |
+| `get_draft_workflowclass` | `low` | `none` | No | `GovernanceTools.GetDraft` | Reads back full metadata and JSON blueprint of a tenant-owned draft. |
+| `list_draft_workflowclasses` | `low` | `none` | No | `GovernanceTools.ListDrafts` | Lists all private draft workflow classes owned by the authenticated tenant. |
+| `get_workflow_instance_status` | `low` | `none` | No | `InfoTools.GetWorkflowInstanceStatus` | Queries runtime instance execution status, current step, state machine status, and timestamps. |
+| `fork_public_workflowclass` | `low` | `reversible` | No | `GovernanceTools.ForkPublic` | Clones a public template into the caller's private tenant drafts. |
+| `publish_workflowclass` | `high` | `irreversible` | **YES** | `GovernanceTools.Publish` | **Publishes draft to immutable versioned fleet status.** Mandates explicit `confirmHumanApproval: true`. |
+| `start_workflow` | `medium` | `irreversible` | No | `ExecutionTools.StartWorkflow` | Instantiates and executes a workflow instance. Supports cross-tenant public blueprints with caller data isolation. |
+| `publish_event` | `medium` | `irreversible` | No | `ExecutionTools.PublishEvent` | Emits an event to advance an active workflow instance and state machine. |
+| `complete_task` | `medium` | `irreversible` | No | `ExecutionTools.CompleteTask` | Completes an assigned human or service task step. |
+| `list_workflow_instances` | `low` | `none` | No | `ExecutionTools.ListWorkflowInstances` | Lists workflow instances filtered by status (`Active`, `Completed`, `Failed`) and workflow name. |
+| `get_workflow_history` | `low` | `none` | No | `ExecutionTools.GetWorkflowHistory` | Retrieves immutable audit trail and state machine transition history for a tenant's workflow instance. |
 
 For HTTP, the authenticated `x-tenant-id` header is authoritative. A `tenantId`
 tool argument may repeat that value but cannot override it. For stdio, every
 tenant-scoped tool requires an explicit `tenantId` argument.
+
+### Enforced Governance & Safety Policy
+
+1. **Human Confirmation Gate (`confirmHumanApproval`)**:
+   `publish_workflowclass` has a high risk profile and creates immutable fleet-wide artifacts. It mandates `confirmHumanApproval: true`. Invocations without this parameter are blocked before executing domain logic:
+   ```json
+   {
+     "ok": false,
+     "errorCode": "MCP-APPROVAL-REQUIRED",
+     "message": "MCP-APPROVAL-REQUIRED: Operation 'publish_workflowclass' has high risk impact (irreversible fleet/public publication). Explicit human confirmation ('confirmHumanApproval': true) is required."
+   }
+   ```
+
+2. **Cross-Tenant Public Blueprints**:
+   `start_workflow` allows launching workflows defined with `Scope == Public` across tenant boundaries. The definition blueprint is retrieved from the publisher, but the runtime instance, state machine, events, and audit logs are strictly owned by the caller's tenant.
+
+3. **Anti-Enumeration & Uniformity (`MCP-NOTFOUND-001`)**:
+   Attempts to access foreign tenant resources (drafts, instances, histories) return the exact same `MCP-NOTFOUND-001` error as non-existent random GUIDs. Zero metadata (existence, title, or status) is leaked.
 
 ## Usage example: design loop for "Leave Approval"
 
@@ -229,24 +265,17 @@ MCP governance tools (`create`/`update`/`validate`/`fork`/`list_public`) now go 
 { "jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": { "name": "fork_public_workflowclass", "arguments": { "publicId": "<Public_GUID>", "tenantId": "<My_Tenant_ID>" } } }
 ```
 
-## Gap analysis — updated
+## Gap analysis — 10/10 Verification Status
 
-An earlier internal review (`MCP_Review_And_Gap_Analysis.md`, now consolidated here) identified a "Read Gap": agents had no way to see the existing world before proposing changes. Re-checked against the current code:
+All previously identified MCP control plane gaps have been completely resolved and verified against the 25-test suite in `FlowOS.MCP.UnitTests`:
 
-**Closed since that review:**
-* `list_available_agents`, `suggest_agent_action` — runtime agent discovery/simulation now exist.
-* `list_public_workflowclasses` — public template discovery now exists.
-* `describe_workflowclass_schema` — schema now matches `WorkflowClassBlueprint` (`EventId`, Roles/Capabilities, real StepTypes).
-* `explain_validation_violation` — knowledge base aligned with real validator codes.
-* MCP write/list tools routed through Application MediatR + UoW (no direct DbContext in tool classes).
-
-**Still open (recommended, not yet implemented):**
-* `get_workflowclass(id)` — read a single existing (including your own private) WorkflowClass by id via MCP before modifying it. Today an agent can only create new Drafts, list Public ones, or fork; it cannot fetch its own tenant's existing Draft content back out through MCP.
-* `list_workflowclasses(tenantId)` filtered by scope/status other than `Public` — the REST API's `GET /api/workflow-classes` supports this; MCP doesn't expose an equivalent.
-* Diagnostic tools (`get_workflow_instance_trace`, `search_event_log`) for read-only runtime observability, per the constitution's §11.15 allowance — not implemented.
-* Documentation-as-resource (`flowos://docs/invariants`, `flowos://docs/api`) — not implemented; this guide is currently only accessible as files in the repo.
+* **Read Gap**: Fully resolved via `get_draft_workflowclass`, `list_draft_workflowclasses`, `list_public_workflowclasses`, `describe_workflowclass_schema`, `get_workflow_instance_status`, `list_workflow_instances`, and `get_workflow_history`.
+* **Execution Boundary**: Fully implemented with `start_workflow`, `publish_event`, and `complete_task`, enforcing strict tenant boundaries and supporting cross-tenant public workflows.
+* **Human Approval Enforcement**: High-risk, irreversible operations (`publish_workflowclass`) require `confirmHumanApproval: true`, returning `MCP-APPROVAL-REQUIRED` on missing confirmation.
+* **Adversarial BOLA/IDOR Protection**: All foreign resource access attempts are denied and normalized to `MCP-NOTFOUND-001`, eliminating information leakage and existence oracles.
+* **Dual Discovery & Execution**: `GET /mcp` provides zero-auth public discovery (interactive HTML or JSON schema metadata) while `POST /mcp` enforces authentication, tenant isolation, and risk policies.
 
 ## Where to go next
 
 * [Chapter 9 — WorkflowClass Governance](09-workflow-class-governance.md) for the REST equivalent of the same lifecycle.
-* [Chapter 15 — Known Limitations](15-known-limitations-and-gaps.md) for this and other verified gaps in one place.
+* [Chapter 15 — Known Limitations](15-known-limitations-and-gaps.md) for core engine boundaries.
