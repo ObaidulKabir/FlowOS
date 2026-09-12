@@ -3,7 +3,8 @@ import mermaid from 'mermaid';
 import { 
   GitCommit, 
   Shield, 
-  Layers
+  Layers,
+  UserCheck
 } from 'lucide-react';
 
 export interface WorkflowGraphVisualizerProps {
@@ -100,8 +101,14 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     const stepId = getProp(s, 'stepId', 'StepId') || '';
     const stepType = (getProp(s, 'stepType', 'StepType') || 'Command').toString();
     const label = getProp(s, 'label', 'Label') || stepId;
-    const allowed = getProp(s, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles') || [];
-    const roles: string[] = Array.isArray(allowed) ? allowed : allowed ? [allowed.toString()] : [];
+    const allowed = getProp(s, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles', 'roles', 'Roles') || [];
+    const roles: string[] = Array.isArray(allowed)
+      ? allowed.map((r: any) => r.toString().trim()).filter(Boolean)
+      : typeof allowed === 'string'
+      ? allowed.split(',').map((r: string) => r.trim()).filter(Boolean)
+      : allowed
+      ? [allowed.toString()]
+      : [];
     const nextSteps = getProp(s, 'nextSteps', 'NextSteps') || {};
     const conditions = getProp(s, 'conditions', 'Conditions') || {};
     
@@ -293,8 +300,8 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
               <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
             </span>
             <div>
-              <div className="text-xs font-semibold text-white flex items-center gap-2">
-                Active Execution Step:
+              <div className="text-xs font-semibold text-white flex flex-wrap items-center gap-2">
+                <span>Active Execution Step:</span>
                 <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-xs border border-amber-500/30">
                   {currentStepId}
                 </span>
@@ -307,11 +314,21 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
                     </span>
                   </>
                 )}
+                <span className="text-slate-500">•</span>
+                <span>Active Role:</span>
+                <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-xs border border-indigo-500/30 flex items-center gap-1 font-semibold">
+                  <UserCheck size={12} className="text-indigo-400" />
+                  {activeStep?.roles && activeStep.roles.length > 0 
+                    ? activeStep.roles.join(', ') 
+                    : (activeStep?.stepType.toLowerCase().includes('human') ? 'Unassigned' : 'System')}
+                </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {activeStep?.roles && activeStep.roles.length > 0 
                   ? `Pausing in engine: Awaiting Human Task sign-off by role [${activeStep.roles.join(', ')}]`
-                  : `Instance currently advancing through step [${currentStepId}]`}
+                  : activeStep?.stepType.toLowerCase().includes('human')
+                  ? `Pausing in engine: Awaiting Human Task sign-off (Any Role)`
+                  : `Automated engine action executing under System role for step [${currentStepId}]`}
               </p>
             </div>
           </div>
