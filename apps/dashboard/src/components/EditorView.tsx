@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { WorkflowClass, CreateDraftRequest, ValidationResult } from '../types';
-import { X, Save, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { X, Save, AlertTriangle, CheckCircle, Info, Layers } from 'lucide-react';
+import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 
 interface Props {
   item?: WorkflowClass; // If null, creating new
@@ -38,7 +39,10 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
     stepId: string, 
     stepType: string, 
     nextSteps: {outcome: string, target: string}[],
-    roles: string
+    roles: string,
+    slaDuration: string,
+    slaTimeoutEvent: string,
+    slaEscalationStepId: string
   }[]>([]);
 
   const [jsonMode, setJsonMode] = useState(false);
@@ -85,12 +89,16 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                   target: nextStepsDict[k]
               }));
               const rolesList = getProp(s, 'RequiredRoles') || [];
+              const slaRaw = getProp(s, 'Sla') || {};
               
               return {
                   stepId: getProp(s, 'StepId') || '',
                   stepType: getProp(s, 'StepType') || 'Command',
                   nextSteps: nextStepsArray,
-                  roles: rolesList.join(', ')
+                  roles: rolesList.join(', '),
+                  slaDuration: getProp(slaRaw, 'Duration') || '',
+                  slaTimeoutEvent: getProp(slaRaw, 'TimeoutEvent') || '',
+                  slaEscalationStepId: getProp(slaRaw, 'EscalationStepId') || ''
               };
           }));
 
@@ -116,12 +124,22 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                         if (ns.outcome) nextStepsDict[ns.outcome] = ns.target;
                     });
                     
-                    return {
+                    const stepObj: any = {
                         StepId: s.stepId,
                         StepType: s.stepType,
                         NextSteps: nextStepsDict,
                         RequiredRoles: s.roles ? s.roles.split(',').map(r => r.trim()).filter(r => r) : []
                     };
+                    
+                    if (s.slaDuration || s.slaTimeoutEvent || s.slaEscalationStepId) {
+                        stepObj.Sla = {
+                            Duration: s.slaDuration,
+                            TimeoutEvent: s.slaTimeoutEvent,
+                            EscalationStepId: s.slaEscalationStepId
+                        };
+                    }
+                    
+                    return stepObj;
                 })
             }
         };
@@ -163,10 +181,10 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
         setTransitions(commonTransitions);
         setStartStepId('Draft');
         setSteps([
-            { stepId: 'Draft', stepType: 'Command', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'Pending' }], roles: 'User' },
-            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'Approved' }, { outcome: 'EVT-REJECT', target: 'Rejected' }], roles: 'Manager' },
-            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '' },
-            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '' }
+            { stepId: 'Draft', stepType: 'Command', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'Pending' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'Approved' }, { outcome: 'EVT-REJECT', target: 'Rejected' }], roles: 'Manager', slaDuration: '48h', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'Rejected' },
+            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' }
         ]);
     } else if (templateName === 'Complex') {
         setEvents(commonEvents);
@@ -176,14 +194,14 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
         
         setStartStepId('ValidateInput'); 
         setSteps([
-            { stepId: 'ValidateInput', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Draft' }], roles: 'System' },
-            { stepId: 'Draft', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'FraudCheck' }], roles: 'User' },
-            { stepId: 'FraudCheck', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Pending' }], roles: 'System' },
-            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'NotifyApproval' }, { outcome: 'EVT-REJECT', target: 'NotifyRejection' }], roles: 'Manager' },
-            { stepId: 'NotifyApproval', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Approved' }], roles: 'System' },
-            { stepId: 'NotifyRejection', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Rejected' }], roles: 'System' },
-            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '' },
-            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '' }
+            { stepId: 'ValidateInput', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Draft' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'Draft', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'FraudCheck' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'FraudCheck', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Pending' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'NotifyApproval' }, { outcome: 'EVT-REJECT', target: 'NotifyRejection' }], roles: 'Manager', slaDuration: '7d', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'NotifyRejection' },
+            { stepId: 'NotifyApproval', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Approved' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'NotifyRejection', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Rejected' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
+            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' }
         ]);
     }
   };
@@ -439,10 +457,51 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                     placeholder="Required Roles (comma separated)"
                                                 />
                                             </div>
+
+                                            <div className="mt-3 pt-3 border-t border-gray-100">
+                                                <label className="block text-[11px] font-semibold text-indigo-500 uppercase tracking-wider mb-2">SLA / Timeouts</label>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <div>
+                                                        <label className="block text-[10px] text-gray-500">Duration (e.g. 24h)</label>
+                                                        <input 
+                                                            value={step.slaDuration || ''}
+                                                            onChange={e => {
+                                                                const newSteps = [...steps]; newSteps[idx].slaDuration = e.target.value; setSteps(newSteps);
+                                                            }}
+                                                            className="w-full border p-1 rounded text-xs"
+                                                            placeholder="Leave empty for none"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] text-gray-500">Timeout Event</label>
+                                                        <select 
+                                                            value={step.slaTimeoutEvent || ''}
+                                                            onChange={e => {
+                                                                const newSteps = [...steps]; newSteps[idx].slaTimeoutEvent = e.target.value; setSteps(newSteps);
+                                                            }}
+                                                            className="w-full border p-1 rounded text-xs"
+                                                        >
+                                                            <option value="">(Select)</option>
+                                                            {events.map(e => <option key={e.eventId} value={e.eventId}>{e.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] text-gray-500">Escalation Target</label>
+                                                        <input 
+                                                            value={step.slaEscalationStepId || ''}
+                                                            onChange={e => {
+                                                                const newSteps = [...steps]; newSteps[idx].slaEscalationStepId = e.target.value; setSteps(newSteps);
+                                                            }}
+                                                            className="w-full border p-1 rounded text-xs"
+                                                            placeholder="Target Step ID"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     ))}
                                     <button 
-                                        onClick={() => setSteps([...steps, { stepId: '', stepType: 'Command', nextSteps: [], roles: '' }])}
+                                        onClick={() => setSteps([...steps, { stepId: '', stepType: 'Command', nextSteps: [], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' }])}
                                         className="w-full py-2 border-2 border-dashed border-gray-300 rounded text-gray-500 hover:border-blue-300 hover:text-blue-500 transition-colors"
                                     >
                                         + Add Workflow Step
@@ -463,48 +522,70 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
             </div>
         </div>
 
-        {/* Right: Validation Panel (Sticky) */}
-        <div className="w-[350px] bg-slate-950/80 border-l border-slate-800 flex flex-col">
-            <div className="p-4 border-b border-slate-800 bg-slate-950/90">
-                <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                    {validation ? (
-                        validation.isValid ? <CheckCircle className="text-emerald-400" size={18} /> : <AlertTriangle className="text-rose-400" size={18} />
-                    ) : (
-                        <Info className="text-slate-400" size={18} />
-                    )}
-                    Validation Report
-                </h3>
-            </div>
+        {/* Right: Live Preview & Validation */}
+        <div className="w-[45vw] bg-slate-950 border-l border-slate-800 flex flex-col overflow-hidden">
             
-            <div className="flex-1 overflow-y-auto p-4">
-                {!validation ? (
-                    <div className="text-center text-slate-500 mt-10 space-y-2">
-                        <p className="text-xs">Save the draft to run full validation.</p>
-                        <p className="text-[11px] text-slate-600">Validation verifies Schema, Graph Completeness, and Governance Rules.</p>
-                    </div>
-                ) : validation.isValid ? (
-                    <div className="text-center text-emerald-400 mt-10 space-y-1">
-                        <p className="font-semibold text-sm">No issues found.</p>
-                        <p className="text-xs text-slate-400">Blueprint is valid and ready to be published to engine.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {validation.errors.map((err, idx) => (
-                            <div key={idx} className="bg-slate-900 p-3 rounded-xl border border-rose-500/30 shadow-sm border-l-4 border-l-rose-500">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="text-[10px] font-bold text-rose-400 font-mono tracking-wider">{err.code}</span>
-                                    <span className="text-[10px] text-slate-500">{err.category}</span>
-                                </div>
-                                <p className="text-xs font-medium text-slate-200 mb-1">{err.message}</p>
-                                {err.element && (
-                                    <div className="text-[10px] text-slate-400 mt-1.5 bg-slate-950 p-1.5 rounded font-mono">
-                                        Location: <span className="text-blue-300">{err.element}</span>
+            {/* Live Graph Section */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-3 border-b border-slate-800 bg-slate-900/90 flex justify-between items-center">
+                    <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                        <Layers className="text-blue-400" size={18} />
+                        Live Blueprint Preview
+                    </h3>
+                    <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Updates as you type</span>
+                </div>
+                <div className="flex-1 overflow-auto bg-slate-950 p-2">
+                    <WorkflowGraphVisualizer 
+                        definition={(() => {
+                            try { return JSON.parse(rawJson); } catch (e) { return null; }
+                        })()} 
+                        initialView="both" 
+                    />
+                </div>
+            </div>
+
+            {/* Validation Report Section */}
+            <div className="h-[30vh] border-t border-slate-800 flex flex-col bg-slate-900/50">
+                <div className="p-3 border-b border-slate-800 bg-slate-900/90">
+                    <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                        {validation ? (
+                            validation.isValid ? <CheckCircle className="text-emerald-400" size={18} /> : <AlertTriangle className="text-rose-400" size={18} />
+                        ) : (
+                            <Info className="text-slate-400" size={18} />
+                        )}
+                        Validation Report
+                    </h3>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                    {!validation ? (
+                        <div className="text-center text-slate-500 mt-4 space-y-2">
+                            <p className="text-xs">Save the draft to run full validation.</p>
+                            <p className="text-[11px] text-slate-600">Validation verifies Schema, Graph Completeness, and Governance Rules.</p>
+                        </div>
+                    ) : validation.isValid ? (
+                        <div className="text-center text-emerald-400 mt-4 space-y-1">
+                            <p className="font-semibold text-sm">No issues found.</p>
+                            <p className="text-xs text-slate-400">Blueprint is valid and ready to be published to engine.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {validation.errors.map((err, idx) => (
+                                <div key={idx} className="bg-slate-900 p-3 rounded-xl border border-rose-500/30 shadow-sm border-l-4 border-l-rose-500">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="text-[10px] font-bold text-rose-400 font-mono tracking-wider">{err.code}</span>
+                                        <span className="text-[10px] text-slate-500">{err.category}</span>
                                     </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
+                                    <p className="text-xs font-medium text-slate-200 mb-1">{err.message}</p>
+                                    {err.element && (
+                                        <div className="text-[10px] text-slate-400 mt-1.5 bg-slate-950 p-1.5 rounded font-mono">
+                                            Location: <span className="text-blue-300">{err.element}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
 
