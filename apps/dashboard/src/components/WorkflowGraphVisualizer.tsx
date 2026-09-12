@@ -86,7 +86,6 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
   const startStepId = getProp(wfObj, 'startStepId', 'StartStepId') || 'Start';
   const rawSteps: any[] = getProp(wfObj, 'steps', 'Steps') || [];
 
-  // Normalize steps
   interface NormalizedStep {
     stepId: string;
     stepType: string;
@@ -94,6 +93,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     roles: string[];
     nextSteps: Record<string, string>;
     conditions: Record<string, string>;
+    sla?: { duration?: string; timeoutEvent?: string; escalationStepId?: string };
   }
 
   const steps: NormalizedStep[] = rawSteps.map(s => {
@@ -104,6 +104,13 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     const roles: string[] = Array.isArray(allowed) ? allowed : allowed ? [allowed.toString()] : [];
     const nextSteps = getProp(s, 'nextSteps', 'NextSteps') || {};
     const conditions = getProp(s, 'conditions', 'Conditions') || {};
+    
+    const slaRaw = getProp(s, 'sla', 'Sla', 'SLA');
+    const sla = slaRaw ? {
+      duration: getProp(slaRaw, 'duration', 'Duration'),
+      timeoutEvent: getProp(slaRaw, 'timeoutEvent', 'TimeoutEvent'),
+      escalationStepId: getProp(slaRaw, 'escalationStepId', 'EscalationStepId')
+    } : undefined;
 
     return {
       stepId,
@@ -111,7 +118,8 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       label,
       roles,
       nextSteps,
-      conditions
+      conditions,
+      sla
     };
   });
 
@@ -128,6 +136,9 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       // Follow next step targets
       Object.values(found.nextSteps).forEach(target => addStepRecursive(target as string));
       Object.values(found.conditions).forEach(target => addStepRecursive(target as string));
+      if (found.sla?.escalationStepId) {
+        addStepRecursive(found.sla.escalationStepId);
+      }
     }
   };
 
@@ -169,7 +180,10 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       }
       
       const cleanLabel = (step.label || step.stepId).replace(/["{[\]}]/g, '');
-      const displayLabel = step.roles.length > 0 ? `${cleanLabel}<br/>(Role: ${step.roles.join(', ')})` : cleanLabel;
+      let displayLabel = step.roles.length > 0 ? `${cleanLabel}<br/>(Role: ${step.roles.join(', ')})` : cleanLabel;
+      if (step.sla?.duration) {
+         displayLabel += `<br/>⏱️ SLA: ${step.sla.duration}`;
+      }
       chart += `  ${safeId(step.stepId)}${shapeStart}"${displayLabel}"${shapeEnd}${className}\n`;
     });
 
@@ -182,6 +196,10 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       Object.entries(step.conditions).forEach(([expr, target]) => {
         chart += `  ${safeId(step.stepId)} -->|"${expr}"| ${safeId(target)}\n`;
       });
+      if (step.sla?.escalationStepId) {
+        const timeoutEvt = step.sla.timeoutEvent || 'TIMEOUT';
+        chart += `  ${safeId(step.stepId)} -.->|"${timeoutEvt}"| ${safeId(step.sla.escalationStepId)}\n`;
+      }
     });
 
     return chart;
