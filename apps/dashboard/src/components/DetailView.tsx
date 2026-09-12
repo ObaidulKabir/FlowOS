@@ -3,6 +3,8 @@ import { WorkflowClass, ValidationResult, WorkflowClassScope, WorkflowClassStatu
 import { X, CheckCircle, AlertTriangle, ShieldCheck, FileCode, Tag } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { DraftSimulator } from './DraftSimulator';
+import { VersionDiffVisualizer } from './VersionDiffVisualizer';
+import { api } from '../api/client';
 
 interface Props {
   item: WorkflowClass;
@@ -12,7 +14,16 @@ interface Props {
 }
 
 export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValidate }) => {
-  const [viewMode, setViewMode] = useState<'visual' | 'simulate' | 'json'>('visual');
+  const [viewMode, setViewMode] = useState<'visual' | 'simulate' | 'compare' | 'json'>('visual');
+  const [previousItem, setPreviousItem] = useState<WorkflowClass | null>(null);
+
+  React.useEffect(() => {
+    if (item.previousVersionId) {
+       api.get(item.previousVersionId, 'Admin')
+          .then(res => setPreviousItem(res))
+          .catch(err => console.error("Could not load previous version for diff", err));
+    }
+  }, [item]);
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm overflow-y-auto h-full w-full flex justify-center items-center z-50 p-4">
@@ -128,6 +139,16 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
               >
                 Simulate (Sandbox)
               </button>
+              {previousItem && (
+                <button
+                  onClick={() => setViewMode('compare')}
+                  className={`px-2.5 py-1 rounded transition-all font-medium flex items-center gap-1 ${
+                    viewMode === 'compare' ? 'bg-purple-600 text-white shadow' : 'text-purple-400 hover:text-white'
+                  }`}
+                >
+                  Compare v{previousItem.version}
+                </button>
+              )}
               <button
                 onClick={() => setViewMode('json')}
                 className={`px-2.5 py-1 rounded transition-all font-medium ${
@@ -143,6 +164,8 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
             <WorkflowGraphVisualizer definition={item.definition} />
           ) : viewMode === 'simulate' ? (
             <DraftSimulator definition={item.definition} />
+          ) : viewMode === 'compare' && previousItem ? (
+            <VersionDiffVisualizer baseDef={previousItem.definition} newDef={item.definition} />
           ) : (
             <pre className="bg-slate-950 border border-slate-800 p-4 rounded-xl overflow-x-auto text-xs font-mono text-blue-300/90 leading-relaxed max-h-80">
               {JSON.stringify(item.definition, null, 2)}
