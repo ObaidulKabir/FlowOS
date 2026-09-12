@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import mermaid from 'mermaid';
-import { FileDiff, AlertCircle } from 'lucide-react';
+import { FileDiff } from 'lucide-react';
 
 interface Props {
   baseDef: any;

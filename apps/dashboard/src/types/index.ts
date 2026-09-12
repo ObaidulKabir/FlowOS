@@ -34,6 +34,7 @@ export interface WorkflowClass {
   status: WorkflowClassStatus;
   createdAt: string;
   publishedAt?: string;
+  previousVersionId?: string;
   definition: any; // We can type this strictly later if needed, for now 'any' allows rendering JSON
 }
 
