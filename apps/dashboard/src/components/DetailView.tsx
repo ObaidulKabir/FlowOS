@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { WorkflowClass, ValidationResult, WorkflowClassScope, WorkflowClassStatus } from '../types';
 import { X, CheckCircle, AlertTriangle, ShieldCheck, FileCode, Tag } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
+import { DraftSimulator } from './DraftSimulator';
 
 interface Props {
   item: WorkflowClass;
@@ -11,7 +12,7 @@ interface Props {
 }
 
 export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValidate }) => {
-  const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
+  const [viewMode, setViewMode] = useState<'visual' | 'simulate' | 'json'>('visual');
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm overflow-y-auto h-full w-full flex justify-center items-center z-50 p-4">
@@ -120,6 +121,14 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
                 Visual Blueprint
               </button>
               <button
+                onClick={() => setViewMode('simulate')}
+                className={`px-2.5 py-1 rounded transition-all font-medium ${
+                  viewMode === 'simulate' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Simulate (Sandbox)
+              </button>
+              <button
                 onClick={() => setViewMode('json')}
                 className={`px-2.5 py-1 rounded transition-all font-medium ${
                   viewMode === 'json' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
@@ -132,6 +141,8 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
 
           {viewMode === 'visual' ? (
             <WorkflowGraphVisualizer definition={item.definition} />
+          ) : viewMode === 'simulate' ? (
+            <DraftSimulator definition={item.definition} />
           ) : (
             <pre className="bg-slate-950 border border-slate-800 p-4 rounded-xl overflow-x-auto text-xs font-mono text-blue-300/90 leading-relaxed max-h-80">
               {JSON.stringify(item.definition, null, 2)}
