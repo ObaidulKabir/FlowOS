@@ -63,6 +63,21 @@ public record StepBlueprint
 
     // Declarative Step SLA & Boundary Timer
     public StepSlaBlueprint? Sla { get; init; }
+
+    // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks)
+    public List<StepActionBlueprint> OnEntry { get; init; } = new();
+    public List<StepActionBlueprint> OnExit { get; init; } = new();
+}
+
+public record StepActionBlueprint
+{
+    public string ActionType { get; init; } = "Notification"; // "Notification", "Webhook", "PublishEvent"
+    public string? Target { get; init; } // Role, User ID, or Event name
+    public string? Url { get; init; } // Webhook URL
+    public string? Method { get; init; } = "POST";
+    public string? Template { get; init; } // Template identifier or message text
+    public Dictionary<string, string>? PayloadMapping { get; init; } // Key -> Expression
+    public string? Condition { get; init; } // Optional execution guard
 }
 
 public record StepSlaBlueprint

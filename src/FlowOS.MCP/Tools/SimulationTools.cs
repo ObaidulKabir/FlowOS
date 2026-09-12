@@ -124,7 +124,16 @@ public class SimulationTools
             var executionTrace = new List<object>();
             var decisionsEvaluated = new List<object>();
             var stateTransitions = new List<object>();
+            var actionsTriggered = new List<object>();
             object? pendingHumanTask = null;
+
+            // Trigger OnEntry for initial step if present
+            var initialStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+            if (initialStepObj != null)
+            {
+                EvaluateAndRecordActions(initialStepObj.OnEntry, "OnEntry", initialStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+            }
 
             // 4. Execution Loop
             while (totalStepsExecuted < maxSteps)
@@ -237,7 +246,18 @@ public class SimulationTools
                             action = $"Condition '{winningExpr}' evaluated to TRUE => Advanced to '{winningTarget}'.",
                             state = currentState
                         });
+
+                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
                         currentStepId = winningTarget;
+                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                            if (targetStepObj != null)
+                            {
+                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            }
+                        }
                         continue;
                     }
                     else
@@ -345,7 +365,17 @@ public class SimulationTools
                             state = currentState
                         });
 
+                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
                         currentStepId = targetStep;
+                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                            if (targetStepObj != null)
+                            {
+                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            }
+                        }
                         continue;
                     }
                     else
@@ -402,7 +432,18 @@ public class SimulationTools
                                 action = $"Timer step triggered by event '{evt}'. Advanced to '{targetStep}'.",
                                 state = currentState
                             });
+
+                            EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
                             currentStepId = targetStep;
+                            if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                                    string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                                if (targetStepObj != null)
+                                {
+                                    EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                                }
+                            }
                             continue;
                         }
                     }
@@ -511,7 +552,17 @@ public class SimulationTools
                         state = currentState
                     });
 
+                    EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
                     currentStepId = targetStep;
+                    if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                            string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                        if (targetStepObj != null)
+                        {
+                            EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                        }
+                    }
                 }
             }
 
@@ -541,6 +592,7 @@ public class SimulationTools
                 pendingHumanTask,
                 decisionsEvaluated,
                 stateTransitions,
+                actionsTriggered,
                 executionTrace,
                 payload
             });
@@ -548,6 +600,69 @@ public class SimulationTools
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Simulation execution failed: {ex.Message}");
+        }
+    }
+
+    private static void EvaluateAndRecordActions(
+        List<StepActionBlueprint>? actions,
+        string hookType,
+        string stepId,
+        Dictionary<string, object> payload,
+        List<object> actionsTriggered,
+        List<object> executionTrace,
+        int stepNumber)
+    {
+        if (actions == null || actions.Count == 0) return;
+
+        foreach (var action in actions)
+        {
+            bool conditionMatched = true;
+            if (!string.IsNullOrWhiteSpace(action.Condition))
+            {
+                conditionMatched = EvaluateExpressionSafely(action.Condition, payload);
+            }
+
+            if (conditionMatched)
+            {
+                actionsTriggered.Add(new
+                {
+                    stepId,
+                    hook = hookType,
+                    actionType = action.ActionType,
+                    target = action.Target,
+                    condition = action.Condition,
+                    status = "Executed"
+                });
+                executionTrace.Add(new
+                {
+                    stepNumber,
+                    stepId,
+                    stepType = "LifecycleAction",
+                    action = $"[Hook {hookType}] Executed {action.ActionType} action targeting '{action.Target}'" +
+                             (!string.IsNullOrWhiteSpace(action.Condition) ? $" (Condition '{action.Condition}' matched)." : "."),
+                    state = ""
+                });
+            }
+            else
+            {
+                actionsTriggered.Add(new
+                {
+                    stepId,
+                    hook = hookType,
+                    actionType = action.ActionType,
+                    target = action.Target,
+                    condition = action.Condition,
+                    status = "Skipped"
+                });
+                executionTrace.Add(new
+                {
+                    stepNumber,
+                    stepId,
+                    stepType = "LifecycleAction",
+                    action = $"[Hook {hookType}] Skipped {action.ActionType} action targeting '{action.Target}' (Condition '{action.Condition}' evaluated to FALSE).",
+                    state = ""
+                });
+            }
         }
     }
 

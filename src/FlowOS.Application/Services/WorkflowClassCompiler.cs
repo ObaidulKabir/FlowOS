@@ -42,7 +42,25 @@ public static class WorkflowClassCompiler
                     stepBp.Sla.TimeoutEvent,
                     stepBp.Sla.EscalationStepId,
                     stepBp.Sla.EscalationRole,
-                    stepBp.Sla.IsInterrupting) : null
+                    stepBp.Sla.IsInterrupting) : null,
+                OnEntry = stepBp.OnEntry?.Select(a => new StepActionDefinition(a.ActionType)
+                {
+                    Target = a.Target,
+                    Url = a.Url,
+                    Method = a.Method,
+                    Template = a.Template,
+                    PayloadMapping = a.PayloadMapping,
+                    Condition = a.Condition
+                }).ToList() ?? new List<StepActionDefinition>(),
+                OnExit = stepBp.OnExit?.Select(a => new StepActionDefinition(a.ActionType)
+                {
+                    Target = a.Target,
+                    Url = a.Url,
+                    Method = a.Method,
+                    Template = a.Template,
+                    PayloadMapping = a.PayloadMapping,
+                    Condition = a.Condition
+                }).ToList() ?? new List<StepActionDefinition>()
             };
             def.AddStep(stepDef);
         }

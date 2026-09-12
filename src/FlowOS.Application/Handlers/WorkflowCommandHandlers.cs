@@ -30,6 +30,7 @@ public class WorkflowCommandHandlers :
     private readonly ICurrentUser _currentUser;
     private readonly ICapabilityService _capabilityService;
     private readonly FlowOS.Application.Common.Interfaces.IWorkflowTimerService? _timerService;
+    private readonly FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? _actionDispatcher;
 
     public WorkflowCommandHandlers(
         IUnitOfWork unitOfWork, 
@@ -37,7 +38,8 @@ public class WorkflowCommandHandlers :
         ICurrentUser currentUser,
         ICapabilityService capabilityService,
         WorkflowEngine engine,
-        FlowOS.Application.Common.Interfaces.IWorkflowTimerService? timerService = null)
+        FlowOS.Application.Common.Interfaces.IWorkflowTimerService? timerService = null,
+        FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? actionDispatcher = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
@@ -45,6 +47,7 @@ public class WorkflowCommandHandlers :
         _currentUser = currentUser;
         _capabilityService = capabilityService;
         _timerService = timerService;
+        _actionDispatcher = actionDispatcher;
     }
 
     public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
@@ -193,6 +196,22 @@ public class WorkflowCommandHandlers :
 
         if (fullDefinition != null)
         {
+            if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
+            {
+                var initialStep = fullDefinition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+                if (initialStep?.OnEntry != null && initialStep.OnEntry.Count > 0)
+                {
+                    await _actionDispatcher.QueueActionsAsync(
+                        request.TenantId,
+                        instance.Id,
+                        initialStep.StepId,
+                        "OnEntry",
+                        initialStep.OnEntry,
+                        null,
+                        cancellationToken);
+                }
+            }
+
             RunAutoAdvance(instance, fullDefinition, request.TenantId, new FlowOS.StateMachines.Models.ExecutionContext());
             await CheckAndScheduleTimerAsync(instance, fullDefinition, request.TenantId, cancellationToken);
         }
@@ -296,6 +315,40 @@ public class WorkflowCommandHandlers :
                 await _timerService.CancelTimerAsync(instance.Id, previousStepId, cancellationToken);
             }
 
+            // Trigger OnExit actions of departed step
+            if (_actionDispatcher != null && !string.IsNullOrEmpty(previousStepId))
+            {
+                var departedStep = definition.Steps.FirstOrDefault(s => s.StepId == previousStepId);
+                if (departedStep?.OnExit != null && departedStep.OnExit.Count > 0)
+                {
+                    await _actionDispatcher.QueueActionsAsync(
+                        request.TenantId,
+                        instance.Id,
+                        previousStepId,
+                        "OnExit",
+                        departedStep.OnExit,
+                        context.Payload,
+                        cancellationToken);
+                }
+            }
+
+            // Trigger OnEntry actions of new step
+            if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
+            {
+                var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+                if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                {
+                    await _actionDispatcher.QueueActionsAsync(
+                        request.TenantId,
+                        instance.Id,
+                        instance.CurrentStepId,
+                        "OnEntry",
+                        enteredStep.OnEntry,
+                        context.Payload,
+                        cancellationToken);
+                }
+            }
+
             domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");
             domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
             domainEvent.AddMetadata("FromState", previousState ?? "Draft");
@@ -364,6 +417,40 @@ public class WorkflowCommandHandlers :
             if (_timerService != null && !string.IsNullOrEmpty(previousStepId))
             {
                 await _timerService.CancelTimerAsync(instance.Id, previousStepId, cancellationToken);
+            }
+
+            // Trigger OnExit actions of departed step
+            if (_actionDispatcher != null && !string.IsNullOrEmpty(previousStepId))
+            {
+                var departedStep = definition.Steps.FirstOrDefault(s => s.StepId == previousStepId);
+                if (departedStep?.OnExit != null && departedStep.OnExit.Count > 0)
+                {
+                    await _actionDispatcher.QueueActionsAsync(
+                        request.TenantId,
+                        instance.Id,
+                        previousStepId,
+                        "OnExit",
+                        departedStep.OnExit,
+                        null,
+                        cancellationToken);
+                }
+            }
+
+            // Trigger OnEntry actions of new step
+            if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
+            {
+                var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+                if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                {
+                    await _actionDispatcher.QueueActionsAsync(
+                        request.TenantId,
+                        instance.Id,
+                        instance.CurrentStepId,
+                        "OnEntry",
+                        enteredStep.OnEntry,
+                        null,
+                        cancellationToken);
+                }
             }
 
             domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");

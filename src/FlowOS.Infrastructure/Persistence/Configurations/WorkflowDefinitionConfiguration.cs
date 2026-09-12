@@ -43,6 +43,19 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                     d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
                     s => JsonSerializer.Deserialize<Dictionary<string, string>>(s, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
                 );
+
+            // Map OnEntry and OnExit action lists
+            step.Property(s => s.OnEntry)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => JsonSerializer.Deserialize<List<StepActionDefinition>>(s, (JsonSerializerOptions)null) ?? new List<StepActionDefinition>()
+                );
+
+            step.Property(s => s.OnExit)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => JsonSerializer.Deserialize<List<StepActionDefinition>>(s, (JsonSerializerOptions)null) ?? new List<StepActionDefinition>()
+                );
         });
 
         // Current Index (Non-Unique)

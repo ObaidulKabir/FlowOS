@@ -22,11 +22,33 @@ public class WorkflowStepDefinition
     // Declarative Step SLA / Boundary Timer & Escalation
     public StepSlaDefinition? Sla { get; set; }
 
+    // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks)
+    public List<StepActionDefinition> OnEntry { get; set; } = new();
+    public List<StepActionDefinition> OnExit { get; set; } = new();
+
     public WorkflowStepDefinition() { }
 
     public WorkflowStepDefinition(string stepId, WorkflowStepType type)
     {
         StepId = stepId;
         StepType = type;
+    }
+}
+
+public class StepActionDefinition
+{
+    public string ActionType { get; set; } = "Notification";
+    public string? Target { get; set; }
+    public string? Url { get; set; }
+    public string? Method { get; set; } = "POST";
+    public string? Template { get; set; }
+    public Dictionary<string, string>? PayloadMapping { get; set; }
+    public string? Condition { get; set; }
+
+    public StepActionDefinition() { }
+
+    public StepActionDefinition(string actionType)
+    {
+        ActionType = actionType;
     }
 }

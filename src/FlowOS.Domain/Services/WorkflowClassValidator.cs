@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text.Json; // Added for JSON validation
+using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Validation;
 
@@ -221,6 +222,43 @@ public class WorkflowClassValidator
                 if (!string.IsNullOrEmpty(step.Sla.EscalationStepId) && step.Sla.EscalationStepId != "END" && !stepIds.Contains(step.Sla.EscalationStepId))
                 {
                     result.AddError("CON-004", "Consistency", $"Step '{step.StepId}' SLA references unknown EscalationStepId '{step.Sla.EscalationStepId}'", "Workflow");
+                }
+            }
+
+            // Check Step Lifecycle Actions (OnEntry / OnExit)
+            var entryActions = step.OnEntry != null ? step.OnEntry.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
+            var exitActions = step.OnExit != null ? step.OnExit.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
+            var allActions = entryActions.Concat(exitActions);
+
+            foreach (var action in allActions)
+            {
+                var actionType = action.ActionType?.ToLowerInvariant() ?? "";
+                if (actionType != "notification" && actionType != "webhook" && actionType != "publishevent")
+                {
+                    result.AddError("WF-ACT-001", "ActionValidation", $"Step '{step.StepId}' defines an action with unknown ActionType '{action.ActionType}'. Supported types: Notification, Webhook, PublishEvent", "Steps");
+                }
+
+                if (actionType == "webhook")
+                {
+                    var webhookUrl = !string.IsNullOrWhiteSpace(action.Url) ? action.Url : action.Target;
+                    if (string.IsNullOrWhiteSpace(webhookUrl) || !Uri.TryCreate(webhookUrl, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
+                    {
+                        result.AddError("WF-ACT-002", "ActionValidation", $"Step '{step.StepId}' defines a Webhook action without a valid absolute HTTP/HTTPS Url", "Steps");
+                    }
+                }
+                else if (actionType == "notification")
+                {
+                    if (string.IsNullOrWhiteSpace(action.Target) && string.IsNullOrWhiteSpace(action.Template))
+                    {
+                        result.AddError("WF-ACT-003", "ActionValidation", $"Step '{step.StepId}' defines a Notification action without a Target or Template", "Steps");
+                    }
+                }
+                else if (actionType == "publishevent")
+                {
+                    if (string.IsNullOrWhiteSpace(action.Target) || !declaredEvents.Contains(action.Target))
+                    {
+                        result.AddError("WF-ACT-004", "ActionValidation", $"Step '{step.StepId}' defines a PublishEvent action with undeclared event '{action.Target}'", "Steps");
+                    }
                 }
             }
         }

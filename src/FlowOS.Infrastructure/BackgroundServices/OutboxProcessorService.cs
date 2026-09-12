@@ -72,31 +72,105 @@ public class OutboxProcessorService : BackgroundService
         {
             try
             {
-                DomainEvent? domainEvent = null;
-                try
+                if (message.Type.StartsWith("WorkflowAction:", StringComparison.OrdinalIgnoreCase))
                 {
-                    domainEvent = JsonSerializer.Deserialize<StandardEvent>(message.Payload);
+                    await ProcessWorkflowActionMessageAsync(message, scope.ServiceProvider, cancellationToken);
+                    message.MarkAsProcessed();
                 }
-                catch
+                else
                 {
-                    domainEvent = null;
-                }
+                    DomainEvent? domainEvent = null;
+                    try
+                    {
+                        domainEvent = JsonSerializer.Deserialize<StandardEvent>(message.Payload);
+                    }
+                    catch
+                    {
+                        domainEvent = null;
+                    }
 
-                if (domainEvent == null)
-                {
-                    domainEvent = new StandardEvent(message.TenantId, message.Type);
-                }
+                    if (domainEvent == null)
+                    {
+                        domainEvent = new StandardEvent(message.TenantId, message.Type);
+                    }
 
-                await publisher.Publish(new DomainEventNotification<DomainEvent>(domainEvent), cancellationToken);
-                message.MarkAsProcessed();
+                    await publisher.Publish(new DomainEventNotification<DomainEvent>(domainEvent), cancellationToken);
+                    message.MarkAsProcessed();
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to publish outbox message {MessageId} of type {MessageType}", message.Id, message.Type);
+                _logger.LogWarning(ex, "Failed to process outbox message {MessageId} of type {MessageType}", message.Id, message.Type);
                 message.RecordFailure(ex.Message);
             }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task ProcessWorkflowActionMessageAsync(
+        OutboxMessage message,
+        IServiceProvider sp,
+        CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(message.Payload);
+        var root = doc.RootElement;
+        var actionType = root.TryGetProperty("actionType", out var at) ? at.GetString() : "";
+
+        if (string.Equals(actionType, "Webhook", StringComparison.OrdinalIgnoreCase))
+        {
+            var url = root.TryGetProperty("url", out var u) ? u.GetString() : null;
+            var method = root.TryGetProperty("method", out var m) ? m.GetString() : "POST";
+
+            if (!string.IsNullOrWhiteSpace(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var httpMethod = new System.Net.Http.HttpMethod(method ?? "POST");
+                using var request = new System.Net.Http.HttpRequestMessage(httpMethod, uri);
+                request.Headers.Add("x-tenant-id", message.TenantId.ToString());
+                request.Headers.Add("x-flowos-action", "webhook");
+
+                if (root.TryGetProperty("payload", out var payloadElem))
+                {
+                    request.Content = new System.Net.Http.StringContent(payloadElem.GetRawText(), System.Text.Encoding.UTF8, "application/json");
+                }
+
+                var response = await client.SendAsync(request, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"Webhook to {url} returned HTTP {(int)response.StatusCode}");
+                }
+            }
+        }
+        else if (string.Equals(actionType, "Notification", StringComparison.OrdinalIgnoreCase))
+        {
+            var target = root.TryGetProperty("target", out var tg) ? tg.GetString() : "User";
+            var template = root.TryGetProperty("template", out var tm) ? tm.GetString() : "Workflow action triggered";
+            var stepId = root.TryGetProperty("stepId", out var sid) ? sid.GetString() : "";
+
+            var dbContext = sp.GetService<FlowOSDbContext>();
+            if (dbContext != null)
+            {
+                var notif = new FlowOS.Notifications.Domain.Notification(
+                    message.TenantId,
+                    "WorkflowAction",
+                    $"[{stepId}] {template} (Target: {target})",
+                    "Info",
+                    null
+                );
+                dbContext.Notifications.Add(notif);
+                await dbContext.SaveChangesAsync(ct);
+            }
+        }
+        else if (string.Equals(actionType, "PublishEvent", StringComparison.OrdinalIgnoreCase))
+        {
+            var eventName = root.TryGetProperty("target", out var tg) ? tg.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(eventName))
+            {
+                var publisher = sp.GetRequiredService<IPublisher>();
+                var evt = new StandardEvent(message.TenantId, eventName);
+                await publisher.Publish(new DomainEventNotification<DomainEvent>(evt), ct);
+            }
+        }
     }
 }

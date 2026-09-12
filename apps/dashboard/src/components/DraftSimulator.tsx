@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Play, RotateCcw, Activity, ArrowRight, Clock, UserCheck, Cpu, 
-  Sparkles, Sliders, Database, AlertTriangle, Check
+  Sparkles, Sliders, Database, AlertTriangle, Check,
+  Zap, Bell, Send, Radio
 } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 
@@ -103,53 +104,6 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return Array.from(roleSet);
   }, [rawSteps]);
 
-  // Initialize
-  useEffect(() => {
-    resetSimulation();
-  }, [definition]);
-
-  const resetSimulation = () => {
-    setCurrentStepId(startStepId);
-    setCurrentState(initialState);
-    setHistory([]);
-  };
-
-  const currentStep = rawSteps.find((s: any) => 
-    (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (currentStepId || '').toLowerCase()
-  );
-
-  const currentStepRoles = getStepRoles(currentStep);
-  const stepType = (getProp(currentStep, 'stepType', 'StepType') || 'Command').toString();
-  const stepTypeLower = stepType.toLowerCase();
-  const isHumanTask = stepTypeLower.includes('human');
-  const isDecisionStep = stepTypeLower.includes('decision') || stepTypeLower.includes('choice');
-  const activeRoleDisplay = currentStepRoles.length > 0 ? currentStepRoles.join(', ') : (isHumanTask ? 'Unassigned' : 'System');
-
-  // Payload text editing handler
-  const handlePayloadChange = (text: string) => {
-    setPayloadText(text);
-    try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        setPayload(parsed);
-        setPayloadError(null);
-      } else {
-        setPayloadError('Payload must be a valid JSON object.');
-      }
-    } catch (err: any) {
-      setPayloadError(err.message);
-    }
-  };
-
-  const loadPresetPayload = (key: string) => {
-    const preset = PRESET_PAYLOADS[key];
-    if (preset) {
-      setPayload(preset.data);
-      setPayloadText(JSON.stringify(preset.data, null, 2));
-      setPayloadError(null);
-    }
-  };
-
   // Evaluates a condition expression string against the payload dictionary
   const evaluateExpression = (expression: string, currentPayload: Record<string, any>): { result: boolean; error?: string } => {
     if (!expression || expression.trim() === '') return { result: true };
@@ -173,6 +127,92 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       return { result: Boolean(res) };
     } catch (err: any) {
       return { result: false, error: err.message };
+    }
+  };
+
+  const getStepActions = (step: any, hook: 'onEntry' | 'onExit'): any[] => {
+    if (!step) return [];
+    const raw = getProp(step, hook, hook === 'onEntry' ? 'OnEntry' : 'OnExit');
+    if (Array.isArray(raw)) return raw;
+    return [];
+  };
+
+  const evaluateStepHooks = (actions: any[], hookType: 'OnEntry' | 'OnExit', stepId: string, currentPayload: Record<string, any>): string[] => {
+    const logs: string[] = [];
+    actions.forEach((act: any) => {
+      const type = getProp(act, 'actionType', 'ActionType') || 'Action';
+      const target = getProp(act, 'target', 'Target') || '';
+      const cond = getProp(act, 'condition', 'Condition');
+      if (cond && cond.trim() !== '') {
+        const evalRes = evaluateExpression(cond, currentPayload);
+        if (evalRes.result) {
+          logs.push(`[${stepId} | Hook: ${hookType}] ${type} -> "${target}" (Condition "${cond}" matched)`);
+        } else {
+          logs.push(`[${stepId} | Hook: ${hookType} SKIPPED] ${type} -> "${target}" (Condition "${cond}" evaluated to FALSE)`);
+        }
+      } else {
+        logs.push(`[${stepId} | Hook: ${hookType}] ${type} -> "${target}"`);
+      }
+    });
+    return logs;
+  };
+
+  // Initialize
+  useEffect(() => {
+    resetSimulation();
+  }, [definition]);
+
+  const resetSimulation = () => {
+    setCurrentStepId(startStepId);
+    setCurrentState(initialState);
+    const startStep = rawSteps.find((s: any) => 
+      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (startStepId || '').toLowerCase()
+    );
+    const initialLogs: string[] = [];
+    if (startStep) {
+      const entryActions = getStepActions(startStep, 'onEntry');
+      if (entryActions.length > 0) {
+        initialLogs.push(...evaluateStepHooks(entryActions, 'OnEntry', startStepId, payload));
+      }
+    }
+    setHistory(initialLogs);
+  };
+
+  const currentStep = rawSteps.find((s: any) => 
+    (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (currentStepId || '').toLowerCase()
+  );
+
+  const currentStepRoles = getStepRoles(currentStep);
+  const stepType = (getProp(currentStep, 'stepType', 'StepType') || 'Command').toString();
+  const stepTypeLower = stepType.toLowerCase();
+  const isHumanTask = stepTypeLower.includes('human');
+  const isDecisionStep = stepTypeLower.includes('decision') || stepTypeLower.includes('choice');
+  const activeRoleDisplay = currentStepRoles.length > 0 ? currentStepRoles.join(', ') : (isHumanTask ? 'Unassigned' : 'System');
+  const currentOnEntry = getStepActions(currentStep, 'onEntry');
+  const currentOnExit = getStepActions(currentStep, 'onExit');
+
+  // Payload text editing handler
+  const handlePayloadChange = (text: string) => {
+    setPayloadText(text);
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        setPayload(parsed);
+        setPayloadError(null);
+      } else {
+        setPayloadError('Payload must be a valid JSON object.');
+      }
+    } catch (err: any) {
+      setPayloadError(err.message);
+    }
+  };
+
+  const loadPresetPayload = (key: string) => {
+    const preset = PRESET_PAYLOADS[key];
+    if (preset) {
+      setPayload(preset.data);
+      setPayloadText(JSON.stringify(preset.data, null, 2));
+      setPayloadError(null);
     }
   };
 
@@ -219,7 +259,30 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const handleDecisionAdvance = (targetStepId: string, winningExpr: string) => {
     const payloadSummary = Object.entries(payload).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(', ');
     const logMsg = `[Decision: ${currentStepId}] Condition "${winningExpr}" -> TRUE (${payloadSummary}) => Advanced to [${targetStepId}]`;
-    setHistory(prev => [...prev, logMsg]);
+    const newLogs: string[] = [];
+
+    // OnExit hooks for departed step
+    if (currentStep) {
+      const exitActions = getStepActions(currentStep, 'onExit');
+      if (exitActions.length > 0) {
+        newLogs.push(...evaluateStepHooks(exitActions, 'OnExit', currentStepId, payload));
+      }
+    }
+
+    newLogs.push(logMsg);
+
+    // OnEntry hooks for entered step
+    const targetStep = rawSteps.find((s: any) => 
+      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (targetStepId || '').toLowerCase()
+    );
+    if (targetStep) {
+      const entryActions = getStepActions(targetStep, 'onEntry');
+      if (entryActions.length > 0) {
+        newLogs.push(...evaluateStepHooks(entryActions, 'OnEntry', targetStepId, payload));
+      }
+    }
+
+    setHistory(prev => [...prev, ...newLogs]);
     setCurrentStepId(targetStepId);
   };
 
@@ -261,7 +324,30 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
     // 2. Advance
     const actingRole = simulatedRole || activeRoleDisplay;
-    setHistory(prev => [...prev, `[Role: ${actingRole}] Fired "${eventId}" -> Step: ${targetStepId} (State: ${nextState})`]);
+    const newLogs: string[] = [];
+
+    // OnExit hooks for departed step
+    if (currentStep) {
+      const exitActions = getStepActions(currentStep, 'onExit');
+      if (exitActions.length > 0) {
+        newLogs.push(...evaluateStepHooks(exitActions, 'OnExit', currentStepId, payload));
+      }
+    }
+
+    newLogs.push(`[Role: ${actingRole}] Fired "${eventId}" -> Step: ${targetStepId} (State: ${nextState})`);
+
+    // OnEntry hooks for entered step
+    const targetStep = rawSteps.find((s: any) => 
+      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (targetStepId || '').toLowerCase()
+    );
+    if (targetStep) {
+      const entryActions = getStepActions(targetStep, 'onEntry');
+      if (entryActions.length > 0) {
+        newLogs.push(...evaluateStepHooks(entryActions, 'OnEntry', targetStepId, payload));
+      }
+    }
+
+    setHistory(prev => [...prev, ...newLogs]);
     setCurrentStepId(targetStepId);
     setCurrentState(nextState);
   };
@@ -569,6 +655,64 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                       </button>
                     </div>
                   </div>
+
+                  {/* Lifecycle Hooks Display */}
+                  {(currentOnEntry.length > 0 || currentOnExit.length > 0) && (
+                    <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-amber-400 font-bold flex items-center gap-1">
+                          <Zap size={12} /> Lifecycle Hooks:
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {currentOnEntry.length} onEntry · {currentOnExit.length} onExit
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {currentOnEntry.map((act: any, idx: number) => {
+                          const type = getProp(act, 'actionType', 'ActionType') || 'Action';
+                          const target = getProp(act, 'target', 'Target') || '';
+                          const cond = getProp(act, 'condition', 'Condition');
+                          const evalRes = cond ? evaluateExpression(cond, payload) : null;
+                          return (
+                            <div key={`entry-${idx}`} className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[10px] flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">OnEntry</span>
+                                {type === 'Webhook' ? <Send size={10} className="text-cyan-400 shrink-0" /> : type === 'Notification' ? <Bell size={10} className="text-amber-400 shrink-0" /> : <Radio size={10} className="text-indigo-400 shrink-0" />}
+                                <span className="text-slate-200 font-medium">{type}</span>
+                                <span className="text-slate-400 truncate max-w-[110px] font-mono">{target}</span>
+                              </div>
+                              {cond && (
+                                <span className={`text-[8px] px-1 py-0.2 rounded font-bold uppercase ${evalRes?.result ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                                  {evalRes?.result ? 'True' : 'False'}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {currentOnExit.map((act: any, idx: number) => {
+                          const type = getProp(act, 'actionType', 'ActionType') || 'Action';
+                          const target = getProp(act, 'target', 'Target') || '';
+                          const cond = getProp(act, 'condition', 'Condition');
+                          const evalRes = cond ? evaluateExpression(cond, payload) : null;
+                          return (
+                            <div key={`exit-${idx}`} className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[10px] flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[9px] font-bold">OnExit</span>
+                                {type === 'Webhook' ? <Send size={10} className="text-cyan-400 shrink-0" /> : type === 'Notification' ? <Bell size={10} className="text-amber-400 shrink-0" /> : <Radio size={10} className="text-indigo-400 shrink-0" />}
+                                <span className="text-slate-200 font-medium">{type}</span>
+                                <span className="text-slate-400 truncate max-w-[110px] font-mono">{target}</span>
+                              </div>
+                              {cond && (
+                                <span className={`text-[8px] px-1 py-0.2 rounded font-bold uppercase ${evalRes?.result ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                                  {evalRes?.result ? 'True' : 'False'}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
