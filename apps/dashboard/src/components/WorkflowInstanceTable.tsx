@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { WorkflowInstance } from '../types';
-import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson } from 'lucide-react';
-import { getActiveTenantId } from '../api/client';
+import { WorkflowInstance, WorkflowClass } from '../types';
+import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson, Layers } from 'lucide-react';
+import { getActiveTenantId, api } from '../api/client';
+import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 
 interface Props {
   items: WorkflowInstance[];
+  blueprints?: WorkflowClass[];
 }
 
 interface AuditTimelineEvent {
@@ -17,6 +19,7 @@ interface AuditTimelineEvent {
 
 interface AuditDetail {
   id: string;
+  definitionId?: string;
   definitionName: string;
   version: number;
   currentStepId: string;
@@ -26,12 +29,14 @@ interface AuditDetail {
   timeline: AuditTimelineEvent[];
 }
 
-export const WorkflowInstanceTable: React.FC<Props> = ({ items }) => {
+export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [inspectingInstance, setInspectingInstance] = useState<string | null>(null);
   const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [inspectTab, setInspectTab] = useState<'visual' | 'timeline'>('visual');
+  const [resolvedDefinition, setResolvedDefinition] = useState<any | null>(null);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -44,6 +49,20 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items }) => {
     setLoadingAudit(true);
     setAuditError(null);
     setAuditDetail(null);
+    setInspectTab('visual');
+
+    // Pre-resolve blueprint definition if available in passed blueprints
+    const matchedInstance = items.find(i => (i.id || i.workflowId) === instanceId);
+    let bp = blueprints.find(b => 
+      b.id === matchedInstance?.workflowClassId || 
+      b.name.toLowerCase() === (matchedInstance?.workflowClassName || '').toLowerCase()
+    );
+
+    if (bp?.definition) {
+      setResolvedDefinition(bp.definition);
+    } else {
+      setResolvedDefinition(null);
+    }
 
     try {
       const tenantId = getActiveTenantId();
@@ -58,6 +77,61 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items }) => {
       }
       const data = await res.json();
       setAuditDetail(data);
+
+      // Attempt to resolve blueprint if not yet resolved
+      if (!bp?.definition) {
+        let foundBp = blueprints.find(b => 
+          b.name.toLowerCase() === (data.definitionName || '').toLowerCase() ||
+          b.id === data.definitionId
+        );
+
+        if (foundBp?.definition) {
+          setResolvedDefinition(foundBp.definition);
+        } else {
+          try {
+            const list = await api.list();
+            foundBp = list.find(b => 
+              b.name.toLowerCase() === (data.definitionName || '').toLowerCase() ||
+              b.id === data.definitionId
+            );
+            if (foundBp?.definition) {
+              setResolvedDefinition(foundBp.definition);
+            }
+          } catch {
+            // Ignore fetch error, fallback to synthetic definition
+          }
+        }
+
+        // Fallback: If no blueprint found, synthesize a visual step graph from audit timeline
+        if (!foundBp?.definition) {
+          const stepSet = new Set<string>();
+          if (data.currentStepId) stepSet.add(data.currentStepId);
+          (data.timeline || []).forEach((t: any) => {
+            if (t.keyData?.CurrentStep) stepSet.add(t.keyData.CurrentStep);
+            if (t.keyData?.TargetStep) stepSet.add(t.keyData.TargetStep);
+            if (t.keyData?.Step) stepSet.add(t.keyData.Step);
+          });
+          const stepList = Array.from(stepSet);
+          if (stepList.length > 0) {
+            setResolvedDefinition({
+              workflow: {
+                startStepId: stepList[0],
+                steps: stepList.map((s, idx) => ({
+                  stepId: s,
+                  stepType: idx === stepList.length - 1 && data.status === 'Completed' ? 'End' : 'HumanTask',
+                  nextSteps: idx < stepList.length - 1 ? { 'Advance': stepList[idx + 1] } : {}
+                }))
+              },
+              stateMachine: {
+                entityType: data.definitionName || 'WorkflowProcess',
+                initialState: 'Draft',
+                states: ['Draft', data.status || 'Active'],
+                transitions: []
+              }
+            });
+          }
+        }
+      }
     } catch (err: any) {
       setAuditError(err.message || 'Error fetching audit history');
     } finally {
@@ -150,17 +224,42 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items }) => {
         </tbody>
       </table>
 
-      {/* Live Audit Trail & Telemetry Modal */}
+      {/* Live Audit Trail & Visual Execution Modal */}
       {inspectingInstance && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-5xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <History className="text-blue-400" size={20} />
-                <h3 className="text-base font-bold text-white">
-                  Workflow Audit Trail
-                </h3>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="text-blue-400" size={20} />
+                  <h3 className="text-base font-bold text-white">
+                    Workflow Instance Telemetry
+                  </h3>
+                </div>
+
+                {/* Tab Switcher */}
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                  <button
+                    onClick={() => setInspectTab('visual')}
+                    className={`px-3 py-1 rounded transition-all font-medium flex items-center gap-1.5 ${
+                      inspectTab === 'visual' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Layers size={13} />
+                    Visual Execution Tracer
+                  </button>
+                  <button
+                    onClick={() => setInspectTab('timeline')}
+                    className={`px-3 py-1 rounded transition-all font-medium flex items-center gap-1.5 ${
+                      inspectTab === 'timeline' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <History size={13} />
+                    Audit Timeline {auditDetail?.timeline?.length ? `(${auditDetail.timeline.length})` : ''}
+                  </button>
+                </div>
               </div>
+
               <button
                 onClick={() => setInspectingInstance(null)}
                 className="text-slate-400 hover:text-white p-1 rounded transition-colors"
@@ -177,7 +276,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items }) => {
                 <div className="flex items-center gap-3 pt-1">
                   <span>Class: <strong className="text-white">{auditDetail.definitionName} v{auditDetail.version}</strong></span>
                   <span>•</span>
-                  <span>Current Step: <strong className="text-blue-400">{auditDetail.currentStepId}</strong></span>
+                  <span>Current Step: <strong className="text-amber-400 font-mono">{auditDetail.currentStepId}</strong></span>
                   <span>•</span>
                   <span>Status: <strong className="text-emerald-400">{auditDetail.status}</strong></span>
                 </div>
@@ -188,11 +287,26 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items }) => {
               {loadingAudit ? (
                 <div className="py-12 text-center text-slate-400 text-xs">
                   <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-2"></div>
-                  <div>Loading immutable event log from database...</div>
+                  <div>Loading telemetry & event log from kernel...</div>
                 </div>
               ) : auditError ? (
                 <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300">
                   {auditError}
+                </div>
+              ) : inspectTab === 'visual' ? (
+                <div className="py-1">
+                  {resolvedDefinition ? (
+                    <WorkflowGraphVisualizer
+                      definition={resolvedDefinition}
+                      currentStepId={auditDetail?.currentStepId}
+                      currentState={auditDetail?.status}
+                      completedSteps={Array.from(new Set((auditDetail?.timeline || []).map(e => e.keyData?.CurrentStep || e.keyData?.Step || e.keyData?.TargetStep || '').filter(Boolean)))}
+                    />
+                  ) : (
+                    <div className="py-12 text-center text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-slate-800">
+                      Resolving definition schema for this instance...
+                    </div>
+                  )}
                 </div>
               ) : (!auditDetail?.timeline || auditDetail.timeline.length === 0) ? (
                 <div className="py-12 text-center text-slate-500 text-xs italic">

@@ -307,7 +307,7 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
               <div className="text-xs text-slate-400">
                 Fleet-wide workflow instance executions across all tenant clusters.
               </div>
-              <WorkflowInstanceTable items={instances} />
+              <WorkflowInstanceTable items={instances} blueprints={blueprints} />
             </div>
           )}
 

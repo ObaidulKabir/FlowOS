@@ -369,7 +369,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                   <Play size={13} /> Launch Workflow
                 </button>
               </div>
-              <WorkflowInstanceTable items={instances} />
+              <WorkflowInstanceTable items={instances} blueprints={blueprints} />
             </div>
           )}
 

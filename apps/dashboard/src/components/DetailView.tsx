@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { WorkflowClass, ValidationResult, WorkflowClassScope, WorkflowClassStatus } from '../types';
 import { X, CheckCircle, AlertTriangle, ShieldCheck, FileCode, Tag } from 'lucide-react';
+import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 
 interface Props {
   item: WorkflowClass;
@@ -10,9 +11,11 @@ interface Props {
 }
 
 export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValidate }) => {
+  const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
+
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm overflow-y-auto h-full w-full flex justify-center items-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto space-y-6">
+      <div className="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto space-y-6">
         
         {/* Header */}
         <div className="flex justify-between items-start border-b border-slate-800 pb-4">
@@ -103,15 +106,37 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
           </div>
         </div>
 
-        {/* JSON Blueprint Definition */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-200">Raw JSON Blueprint</h3>
-            <span className="text-[10px] text-slate-500 font-mono">Declarative DSL</span>
+        {/* Blueprint Architecture & Definition */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 className="text-sm font-semibold text-slate-200">Workflow Blueprint Architecture</h3>
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+              <button
+                onClick={() => setViewMode('visual')}
+                className={`px-2.5 py-1 rounded transition-all font-medium ${
+                  viewMode === 'visual' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Visual Blueprint
+              </button>
+              <button
+                onClick={() => setViewMode('json')}
+                className={`px-2.5 py-1 rounded transition-all font-medium ${
+                  viewMode === 'json' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Raw JSON DSL
+              </button>
+            </div>
           </div>
-          <pre className="bg-slate-950 border border-slate-800 p-4 rounded-xl overflow-x-auto text-xs font-mono text-blue-300/90 leading-relaxed max-h-72">
-            {JSON.stringify(item.definition, null, 2)}
-          </pre>
+
+          {viewMode === 'visual' ? (
+            <WorkflowGraphVisualizer definition={item.definition} />
+          ) : (
+            <pre className="bg-slate-950 border border-slate-800 p-4 rounded-xl overflow-x-auto text-xs font-mono text-blue-300/90 leading-relaxed max-h-80">
+              {JSON.stringify(item.definition, null, 2)}
+            </pre>
+          )}
         </div>
 
         {/* Footer */}
