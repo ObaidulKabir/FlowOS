@@ -5,7 +5,8 @@ import { LoginView } from './components/LoginView';
 import { TenantDashboard } from './components/TenantDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { McpAgentGuideline } from './components/McpAgentGuideline';
-import { Shield, Building2, LogOut, CheckCircle, Bot } from 'lucide-react';
+import { PlatformComparison } from './components/PlatformComparison';
+import { Shield, Building2, LogOut, CheckCircle, Bot, Layers } from 'lucide-react';
 
 function App() {
   const [session, setSession] = useState<AuthSession>(getAuthSession());
@@ -110,6 +111,15 @@ function App() {
             </button>
 
             <a 
+              href="#comparison" 
+              className="hidden sm:inline-flex px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl transition-all items-center gap-1.5 shadow-sm"
+              title="Compare FlowOS with Temporal, Camunda, and AWS Step Functions"
+            >
+              <Layers size={13} className="text-blue-400" />
+              <span>Compare Platforms</span>
+            </a>
+
+            <a 
               href="/mcp" 
               target="_blank" 
               className="inline-flex px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all items-center gap-1.5 shadow-sm"
@@ -158,56 +168,17 @@ function App() {
       {/* Competitor Comparison Section */}
       <section id="comparison" className="py-16 px-6 max-w-7xl mx-auto border-t border-slate-800">
         <div className="text-center mb-10">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Why Enterprises Choose FlowOS</h2>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold mb-3">
+            <Layers size={13} />
+            <span>Platform Benchmark & Architecture</span>
+          </div>
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">FlowOS vs. Industry Orchestration Engines</h2>
           <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-            Dual-kernel mathematical state authority vs token replay engines.
+            How FlowOS's Dual-Kernel FSM, Transactional Outbox, and Native MCP stack compares against Temporal.io, Camunda 8, and AWS Step Functions.
           </p>
         </div>
 
-        <div className="overflow-x-auto bg-slate-800 border border-slate-700 rounded-2xl">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-900 border-b border-slate-700 uppercase tracking-wider text-slate-400">
-                <th className="p-4">Feature</th>
-                <th className="p-4 text-blue-400 font-bold">FlowOS 1.0.0</th>
-                <th className="p-4">Temporal.io</th>
-                <th className="p-4">Camunda 8</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700">
-              <tr>
-                <td className="p-4 font-semibold text-slate-200">State Machine Authority</td>
-                <td className="p-4 text-emerald-400 font-bold">✓ Dual-Kernel Separation</td>
-                <td className="p-4 text-slate-400">Code Replay Engine</td>
-                <td className="p-4 text-slate-400">BPMN Token Flow</td>
-              </tr>
-              <tr>
-                <td className="p-4 font-semibold text-slate-200">Native AI Agent Tools</td>
-                <td className="p-4 text-emerald-400 font-bold">✓ 21-Tool MCP Server</td>
-                <td className="p-4 text-slate-400">Custom SDK Wrapper</td>
-                <td className="p-4 text-slate-400">REST Connectors</td>
-              </tr>
-              <tr>
-                <td className="p-4 font-semibold text-slate-200">Multi-Tenancy Isolation</td>
-                <td className="p-4 text-emerald-400 font-bold">✓ Zero-Trust Isolation & API Keys</td>
-                <td className="p-4 text-slate-400">Namespaces Only</td>
-                <td className="p-4 text-slate-400">Tenant IDs in BPMN</td>
-              </tr>
-              <tr>
-                <td className="p-4 font-semibold text-slate-200">Specification Format</td>
-                <td className="p-4 text-emerald-400 font-bold">✓ 100% Declarative JSON</td>
-                <td className="p-4 text-slate-400">TypeScript/Go/Java Code</td>
-                <td className="p-4 text-slate-400">BPMN 2.0 XML</td>
-              </tr>
-              <tr>
-                <td className="p-4 font-semibold text-slate-200">Zero-Setup Sandbox</td>
-                <td className="p-4 text-emerald-400 font-bold">✓ Native In-Memory TTL</td>
-                <td className="p-4 text-slate-400">Requires Server Container</td>
-                <td className="p-4 text-slate-400">Requires Zeebe Cluster</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <PlatformComparison />
       </section>
 
       {/* Pricing Section */}
