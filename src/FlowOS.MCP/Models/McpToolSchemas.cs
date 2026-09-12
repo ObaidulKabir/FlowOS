@@ -323,4 +323,48 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject SimulateWorkflowClass() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "id":{
+              "type":"string",
+              "format":"uuid",
+              "description":"Optional ID of an existing draft or published WorkflowClass to simulate."
+            },
+            "blueprint":{
+              "type":"object",
+              "description":"Optional inline WorkflowClass blueprint object to simulate without requiring an existing draft."
+            },
+            "payload":{
+              "type":"object",
+              "description":"Business context payload dictionary used to evaluate decision conditions and state machine transition guards."
+            },
+            "role":{
+              "type":"string",
+              "description":"Simulated user role invoking tasks (e.g. 'User', 'Manager', 'Director', 'Admin'). Defaults to 'User'."
+            },
+            "events":{
+              "type":"array",
+              "items":{"type":"string"},
+              "description":"Optional sequence of event IDs to simulate dispatching sequentially (e.g. ['EVT-SUBMIT', 'EVT-APPROVE']). Automated steps advance automatically."
+            },
+            "maxSteps":{
+              "type":"integer",
+              "minimum":1,
+              "maximum":100,
+              "default":25,
+              "description":"Maximum step evaluation cap to prevent infinite loops."
+            },
+            "tenantId":{
+              "type":"string",
+              "format":"uuid",
+              "description":"Tenant ID scope (optional for inline blueprints, required when querying by id in stdio)."
+            }
+          },
+          "additionalProperties":false
+        }
+        """);
 }

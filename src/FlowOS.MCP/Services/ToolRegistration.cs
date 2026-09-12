@@ -32,6 +32,9 @@ public static class ToolRegistration
         registry.Register("lint_draft_workflowclass", McpToolDescriptions.For("lint_draft_workflowclass"), McpToolSchemas.DraftById(),
             async (args) => await ExecuteScopedAsync<AnalysisTools>(serviceProvider, t => t.LintDraftWorkflowClass(args)));
 
+        registry.Register("simulate_workflowclass", McpToolDescriptions.For("simulate_workflowclass"), McpToolSchemas.SimulateWorkflowClass(),
+            async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateWorkflowClass(args)));
+
         registry.Register("create_draft_workflowclass", McpToolDescriptions.For("create_draft_workflowclass"), McpToolSchemas.CreateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.CreateDraft(args)));
 

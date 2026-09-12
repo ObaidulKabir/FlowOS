@@ -146,7 +146,15 @@ public static class McpToolDescriptions
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{workflowInstanceId,definitionName,status,timeline:[{eventId,eventType,timestamp,summary,keyData}]}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOT-FOUND, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}"
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}",
+
+            ["simulate_workflowclass"] =
+                "[Simulator] Runs a zero-side-effect, in-memory dry-run simulation of a WorkflowClass using either an existing draft/published ID or an inline blueprint. " +
+                "Evaluates decision conditions against context payloads, validates state machine guards, enforces human-task role permissions, and advances automated steps. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,executionTrace,payload}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"]}"
         };
 
     public static string For(string toolName) =>
@@ -162,6 +170,7 @@ public static class McpToolDescriptions
             ["list_available_agents"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["suggest_agent_action"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["lint_draft_workflowclass"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["simulate_workflowclass"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["list_public_workflowclasses"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_instance_status"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),

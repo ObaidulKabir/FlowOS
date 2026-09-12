@@ -39,6 +39,8 @@ public record TransitionBlueprint
     public string FromState { get; init; } = string.Empty;
     public string ToState { get; init; } = string.Empty;
     public string EventId { get; init; } = string.Empty;
+    public string? Condition { get; init; }
+    public Dictionary<string, string>? Constraints { get; init; }
 }
 
 // Orchestration
@@ -54,6 +56,7 @@ public record StepBlueprint
     public string StepType { get; init; } = "Command"; // Enum mapped to string for blueprint
     public Dictionary<string, string> NextSteps { get; init; } = new();
     public List<string> RequiredRoles { get; init; } = new();
+    public List<string>? AllowedRoles { get; init; }
     
     // For Decision steps: Condition -> NextStepId
     public Dictionary<string, string> Conditions { get; init; } = new();
