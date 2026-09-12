@@ -143,6 +143,8 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
 
   const activeStep = steps.find(s => s.stepId.toLowerCase() === (currentStepId || '').toLowerCase());
 
+  const safeId = (id: string) => (id || '').toString().replace(/[^a-zA-Z0-9_]/g, '_');
+
   const buildWorkflowMermaid = () => {
     let chart = 'flowchart TD\n';
     chart += 'classDef current fill:#f59e0b,stroke:#b45309,color:#000,stroke-width:3px\n';
@@ -168,17 +170,17 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       
       const cleanLabel = (step.label || step.stepId).replace(/["{[\]}]/g, '');
       const displayLabel = step.roles.length > 0 ? `${cleanLabel}<br/>(Role: ${step.roles.join(', ')})` : cleanLabel;
-      chart += `  ${step.stepId}${shapeStart}"${displayLabel}"${shapeEnd}${className}\n`;
+      chart += `  ${safeId(step.stepId)}${shapeStart}"${displayLabel}"${shapeEnd}${className}\n`;
     });
 
     chart += '\n';
 
     orderedSteps.forEach(step => {
       Object.entries(step.nextSteps).forEach(([evt, target]) => {
-        chart += `  ${step.stepId} -->|"${evt}"| ${target}\n`;
+        chart += `  ${safeId(step.stepId)} -->|"${evt}"| ${safeId(target)}\n`;
       });
       Object.entries(step.conditions).forEach(([expr, target]) => {
-        chart += `  ${step.stepId} -->|"${expr}"| ${target}\n`;
+        chart += `  ${safeId(step.stepId)} -->|"${expr}"| ${safeId(target)}\n`;
       });
     });
 
@@ -191,7 +193,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     chart += 'classDef normal fill:#1e293b,stroke:#334155,color:#cbd5e1\n\n';
 
     if (initialState) {
-      chart += `  [*] --> ${initialState}\n`;
+      chart += `  [*] --> ${safeId(initialState)}\n`;
     }
 
     smTransitions.forEach((t) => {
@@ -202,21 +204,25 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       if (from === '*') {
         smStates.forEach(s => {
            if (s !== to) {
-              chart += `  ${s} --> ${to} : ${evt}\n`;
+              chart += `  ${safeId(s)} --> ${safeId(to)} : ${evt}\n`;
            }
         });
       } else {
-        chart += `  ${from} --> ${to} : ${evt}\n`;
+        chart += `  ${safeId(from)} --> ${safeId(to)} : ${evt}\n`;
       }
     });
 
     chart += '\n';
     smStates.forEach(st => {
        const isCurrent = currentState && currentState.toLowerCase() === st.toLowerCase();
+       const sId = safeId(st);
+       if (sId !== st) {
+          chart += `  state "${st}" as ${sId}\n`;
+       }
        if (isCurrent) {
-          chart += `  class ${st} current\n`;
+          chart += `  class ${sId} current\n`;
        } else {
-          chart += `  class ${st} normal\n`;
+          chart += `  class ${sId} normal\n`;
        }
     });
 
