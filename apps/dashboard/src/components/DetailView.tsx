@@ -11,9 +11,11 @@ interface Props {
   validation?: ValidationResult | null;
   onClose: () => void;
   onValidate: () => void;
+  onApprove?: (id: string) => void;
+  onReject?: (id: string) => void;
 }
 
-export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValidate }) => {
+export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValidate, onApprove, onReject }) => {
   const [viewMode, setViewMode] = useState<'visual' | 'simulate' | 'compare' | 'json'>('visual');
   const [previousItem, setPreviousItem] = useState<WorkflowClass | null>(null);
 
@@ -165,7 +167,32 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
           ) : viewMode === 'simulate' ? (
             <DraftSimulator definition={item.definition} />
           ) : viewMode === 'compare' && previousItem ? (
-            <VersionDiffVisualizer baseDef={previousItem.definition} newDef={item.definition} />
+            <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex-1 overflow-auto">
+                    <VersionDiffVisualizer baseDef={previousItem.definition} newDef={item.definition} />
+                </div>
+                {(onApprove || onReject) && (
+                    <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-end gap-3 mt-4">
+                        {onReject && (
+                            <button 
+                                onClick={() => { onReject(item.id); onClose(); }} 
+                                className="px-4 py-2 border border-rose-500/50 text-rose-400 hover:bg-rose-500/10 rounded-xl font-semibold text-xs transition-colors"
+                            >
+                                Reject & Withdraw
+                            </button>
+                        )}
+                        {onApprove && (
+                            <button 
+                                onClick={() => { onApprove(item.id); onClose(); }} 
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs shadow-lg transition-colors flex items-center gap-2"
+                            >
+                                <CheckCircle size={14} />
+                                Approve & Publish to Catalog
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
           ) : (
             <pre className="bg-slate-950 border border-slate-800 p-4 rounded-xl overflow-x-auto text-xs font-mono text-blue-300/90 leading-relaxed max-h-80">
               {JSON.stringify(item.definition, null, 2)}

@@ -398,6 +398,8 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
               setValidationResult(res);
             }
           }}
+          onApprove={activeTab === 'ReviewQueue' ? handleApprove : undefined}
+          onReject={activeTab === 'ReviewQueue' ? handleAbandon : undefined}
         />
       )}
 

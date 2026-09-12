@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { WorkflowClass, CreateDraftRequest, ValidationResult } from '../types';
 import { X, Save, AlertTriangle, CheckCircle, Info, Layers } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
+import { DraftSimulator } from './DraftSimulator';
 
 interface Props {
   item?: WorkflowClass; // If null, creating new
@@ -14,6 +15,7 @@ interface Props {
 export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave }) => {
   const [name, setName] = useState(item?.name || 'New Workflow');
   const [version, setVersion] = useState(item?.version || '0.1.0');
+  const [rightPanelMode, setRightPanelMode] = useState<'visual' | 'simulate'>('visual');
   
   // Structured State for "Smart" Editing
   const [events, setEvents] = useState<{eventId: string, name: string}[]>(
@@ -525,22 +527,46 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
         {/* Right: Live Preview & Validation */}
         <div className="w-[45vw] bg-slate-950 border-l border-slate-800 flex flex-col overflow-hidden">
             
-            {/* Live Graph Section */}
+            {/* Live Graph / Simulator Section */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="p-3 border-b border-slate-800 bg-slate-900/90 flex justify-between items-center">
-                    <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                        <Layers className="text-blue-400" size={18} />
-                        Live Blueprint Preview
-                    </h3>
-                    <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Updates as you type</span>
+                    <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                        <button
+                            onClick={() => setRightPanelMode('visual')}
+                            className={`px-2.5 py-1 rounded transition-all font-medium flex items-center gap-1.5 ${
+                                rightPanelMode === 'visual' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            <Layers size={14} /> Live Blueprint Preview
+                        </button>
+                        <button
+                            onClick={() => setRightPanelMode('simulate')}
+                            className={`px-2.5 py-1 rounded transition-all font-medium flex items-center gap-1.5 ${
+                                rightPanelMode === 'simulate' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            Sandbox Simulator
+                        </button>
+                    </div>
+                    {rightPanelMode === 'visual' && (
+                        <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Updates as you type</span>
+                    )}
                 </div>
                 <div className="flex-1 overflow-auto bg-slate-950 p-2">
-                    <WorkflowGraphVisualizer 
-                        definition={(() => {
-                            try { return JSON.parse(rawJson); } catch (e) { return null; }
-                        })()} 
-                        initialView="both" 
-                    />
+                    {rightPanelMode === 'visual' ? (
+                        <WorkflowGraphVisualizer 
+                            definition={(() => {
+                                try { return JSON.parse(rawJson); } catch (e) { return null; }
+                            })()} 
+                            initialView="both" 
+                        />
+                    ) : (
+                        <DraftSimulator 
+                            definition={(() => {
+                                try { return JSON.parse(rawJson); } catch (e) { return null; }
+                            })()}
+                        />
+                    )}
                 </div>
             </div>
 
