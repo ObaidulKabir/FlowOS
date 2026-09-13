@@ -280,4 +280,30 @@ public class GovernanceTools
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to publish workflow class: {ex.Message}");
         }
     }
+
+    public async Task<CallToolResult> GenerateBlueprintFromNaturalLanguage(JObject args)
+    {
+        try
+        {
+            var prompt = args["prompt"]?.ToString();
+            if (string.IsNullOrWhiteSpace(prompt))
+                return McpToolResults.Fail("MCP-ARG-001", "prompt is required.");
+
+            var currentBpObj = args["currentBlueprint"] as JObject;
+            WorkflowClassBlueprint? currentBp = currentBpObj?.ToObject<WorkflowClassBlueprint>();
+            var mode = args["mode"]?.ToString() ?? "create";
+
+            var result = await _mediator.Send(new GenerateWorkflowClassCopilotCommand(prompt, currentBp, mode));
+            return McpToolResults.Success(result);
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to generate blueprint: {ex.Message}");
+        }
+    }
 }
+

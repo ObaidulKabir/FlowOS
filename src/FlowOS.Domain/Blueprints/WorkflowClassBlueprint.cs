@@ -67,12 +67,12 @@ public record StepBlueprint
     public List<string> InboundSteps { get; init; } = new(); // Steps that must converge at this Join
 
     // Declarative Step SLA & Boundary Timer
-    public StepSlaBlueprint? Sla { get; init; }
+    public StepSlaBlueprint? Sla { get; set; }
 
     // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks, Saga Rollback)
-    public List<StepActionBlueprint> OnEntry { get; init; } = new();
-    public List<StepActionBlueprint> OnExit { get; init; } = new();
-    public List<StepActionBlueprint> OnFailure { get; init; } = new();
+    public List<StepActionBlueprint> OnEntry { get; set; } = new();
+    public List<StepActionBlueprint> OnExit { get; set; } = new();
+    public List<StepActionBlueprint> OnFailure { get; set; } = new();
 }
 
 public record StepActionBlueprint

@@ -59,6 +59,9 @@ public static class ToolRegistration
         registry.Register("list_draft_workflowclasses", McpToolDescriptions.For("list_draft_workflowclasses"), McpToolSchemas.TenantOptional(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.ListDrafts(args)));
 
+        registry.Register("generate_workflow_blueprint_from_nl", McpToolDescriptions.For("generate_workflow_blueprint_from_nl"), McpToolSchemas.GenerateBlueprintFromNaturalLanguage(),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.GenerateBlueprintFromNaturalLanguage(args)));
+
         registry.Register("get_workflow_instance_status", McpToolDescriptions.For("get_workflow_instance_status"), McpToolSchemas.WorkflowInstanceStatus(),
             async (args) => await ExecuteScopedAsync<InfoTools>(serviceProvider, t => t.GetWorkflowInstanceStatus(args)));
 

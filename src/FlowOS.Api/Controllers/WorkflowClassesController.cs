@@ -125,6 +125,27 @@ public class WorkflowClassesController : ControllerBase
         catch (ArgumentException ex) { return BadRequest(ex.Message); }
     }
 
+    [HttpPost("copilot/generate")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GenerateCopilotBlueprint([FromBody] GenerateBlueprintCopilotRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Prompt))
+        {
+            return BadRequest(new { Error = "Prompt cannot be empty." });
+        }
+
+        try
+        {
+            var result = await _mediator.Send(new GenerateWorkflowClassCopilotCommand(
+                request.Prompt, request.CurrentBlueprint, request.Mode ?? "create"));
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
     [HttpPost("{id}/deprecate")]
     public async Task<IActionResult> Deprecate(Guid id)
         => await Mutate(new DeprecateWorkflowClassCommand(_currentUser.TenantId, id));

@@ -78,9 +78,11 @@ builder.Services.AddSingleton<WorkflowEngine>();
 builder.Services.AddSingleton<StateMachineEngine>();
 
 builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassValidator>();
+builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassValidator, FlowOS.Domain.Services.WorkflowClassValidator>();
 builder.Services.AddScoped<IWorkflowJsonLinter, WorkflowJsonLinter>();
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassManager, FlowOS.Domain.Services.WorkflowClassManager>();
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassVersionManager, FlowOS.Domain.Services.WorkflowClassVersionManager>();
+builder.Services.AddScoped<FlowOS.Application.Common.Interfaces.IWorkflowCopilotService, FlowOS.Application.Services.WorkflowCopilotService>();
 
 builder.Services.AddMediatR(cfg =>
 {

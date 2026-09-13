@@ -256,3 +256,19 @@ public class WorkflowClassValidationException : Exception
         ValidationResult = validationResult;
     }
 }
+
+public class GenerateWorkflowClassCopilotCommandHandler : IRequestHandler<GenerateWorkflowClassCopilotCommand, GenerateBlueprintCopilotResponse>
+{
+    private readonly Common.Interfaces.IWorkflowCopilotService _copilotService;
+
+    public GenerateWorkflowClassCopilotCommandHandler(Common.Interfaces.IWorkflowCopilotService copilotService)
+    {
+        _copilotService = copilotService;
+    }
+
+    public async Task<GenerateBlueprintCopilotResponse> Handle(GenerateWorkflowClassCopilotCommand request, CancellationToken cancellationToken)
+    {
+        return await _copilotService.GenerateBlueprintAsync(request.Prompt, request.CurrentBlueprint, request.Mode, cancellationToken);
+    }
+}
+

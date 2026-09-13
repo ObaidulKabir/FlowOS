@@ -7,8 +7,20 @@ using FlowOS.Domain.Validation;
 
 namespace FlowOS.Domain.Services;
 
-public class WorkflowClassValidator
+public interface IWorkflowClassValidator
 {
+    ValidationResult Validate(WorkflowClass workflowClass);
+    ValidationResult Validate(WorkflowClassBlueprint blueprint, string name = "DraftWorkflow");
+}
+
+public class WorkflowClassValidator : IWorkflowClassValidator
+{
+    public ValidationResult Validate(WorkflowClassBlueprint blueprint, string name = "DraftWorkflow")
+    {
+        var wc = new WorkflowClass(Guid.Empty, name, "1.0.0", blueprint);
+        return Validate(wc);
+    }
+
     public ValidationResult Validate(WorkflowClass workflowClass)
     {
         var result = new ValidationResult();

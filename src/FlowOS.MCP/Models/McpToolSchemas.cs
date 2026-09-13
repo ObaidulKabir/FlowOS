@@ -552,4 +552,20 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject GenerateBlueprintFromNaturalLanguage() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["prompt"],
+          "properties":{
+            "prompt":{"type":"string","minLength":1,"description":"Natural language description of the desired workflow (e.g. 'Insurance Claim with parallel damage inspection and medical assessment')."},
+            "currentBlueprint":{"type":"object","description":"Optional existing WorkflowClassBlueprint to refine or augment."},
+            "mode":{"type":"string","enum":["create","refine"],"default":"create","description":"Whether to create a new blueprint from scratch or refine the existing one."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
 }
+

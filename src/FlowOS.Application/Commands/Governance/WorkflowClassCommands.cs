@@ -50,3 +50,6 @@ public record CreateNewWorkflowClassVersionCommand(Guid TenantId, Guid Id)
 public record LintWorkflowClassCommand(string JsonContent)
     : IRequest<IReadOnlyList<LintError>>;
 
+public record GenerateWorkflowClassCopilotCommand(string Prompt, WorkflowClassBlueprint? CurrentBlueprint = null, string Mode = "create")
+    : IRequest<GenerateBlueprintCopilotResponse>;
+

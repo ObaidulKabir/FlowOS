@@ -137,3 +137,19 @@ export interface DeadLetterDto {
   stepId?: string;
 }
 
+export interface GenerateBlueprintCopilotRequest {
+  prompt: string;
+  currentBlueprint?: any;
+  mode?: 'create' | 'refine';
+}
+
+export interface GenerateBlueprintCopilotResponse {
+  suggestedName: string;
+  suggestedVersion: string;
+  summary: string;
+  explanation: string;
+  blueprint: any;
+  validation: ValidationResult;
+}
+
+

@@ -232,7 +232,14 @@ public static class McpToolDescriptions
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{workflowInstanceId,totalActions,actions:[{id,stepId,triggerPhase,actionType,target,status,executedAtUtc,durationMs,httpStatusCode,requestPayloadSnippet,responseSnippet,errorMessage,attemptNumber}]}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\"}"
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["generate_workflow_blueprint_from_nl"] =
+                "[AI Copilot & Synthesis] Generates a complete, compliant WorkflowClassBlueprint from natural language instructions (or refines an existing blueprint). " +
+                "Automatically configures pure State Machine lifecycles, procedural steps, parallel Fork/Join execution branches, Decision rules, SLA timers, and Outbox hooks. " +
+                "Returns: {ok:true,data:{suggestedName,suggestedVersion,summary,explanation,blueprint,validation}}. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"prompt\":\"Insurance claim with parallel vehicle appraisal and medical assessment, 24h SLA, and payment webhook.\"}"
         };
 
     public static string For(string toolName) =>
@@ -243,6 +250,7 @@ public static class McpToolDescriptions
     public static readonly IReadOnlyDictionary<string, ToolSecurityProfile> SecurityProfiles =
         new Dictionary<string, ToolSecurityProfile>(StringComparer.Ordinal)
         {
+            ["generate_workflow_blueprint_from_nl"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["describe_workflowclass_schema"] = new("info", "public", false, false, false, "none", false, "low"),
             ["explain_validation_violation"] = new("analysis", "public", false, false, false, "none", false, "low"),
             ["list_available_agents"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),

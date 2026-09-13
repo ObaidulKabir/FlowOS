@@ -348,5 +348,26 @@ export const api = {
       headers
     });
     return handleResponse(response, 'Failed to purge dead letter');
+  },
+
+  copilotGenerate: async (
+    prompt: string,
+    currentBlueprint?: any,
+    mode: 'create' | 'refine' = 'create',
+    role?: 'Tenant' | 'Admin'
+  ): Promise<import('../types').GenerateBlueprintCopilotResponse> => {
+    const headers = getHeaders(role);
+    const tenantId = getActiveTenantId();
+    const response = await fetch(`${API_BASE}/copilot/generate?tenantId=${tenantId}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        prompt,
+        currentBlueprint,
+        mode
+      })
+    });
+    return handleResponse(response, 'Failed to generate blueprint with AI Copilot');
   }
 };
+

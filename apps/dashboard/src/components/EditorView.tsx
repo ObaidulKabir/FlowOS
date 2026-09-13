@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { WorkflowClass, CreateDraftRequest, ValidationResult } from '../types';
-import { X, Save, AlertTriangle, CheckCircle, Info, Layers } from 'lucide-react';
+import { WorkflowClass, CreateDraftRequest, ValidationResult, GenerateBlueprintCopilotResponse } from '../types';
+import { X, Save, AlertTriangle, CheckCircle, Info, Layers, Sparkles } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { DraftSimulator } from './DraftSimulator';
 import { StepActionBuilder, StepAction } from './StepActionBuilder';
+import { CopilotDrawer } from './CopilotDrawer';
 
 interface Props {
   item?: WorkflowClass; // If null, creating new
@@ -17,6 +18,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
   const [name, setName] = useState(item?.name || 'New Workflow');
   const [version, setVersion] = useState(item?.version || '0.1.0');
   const [rightPanelMode, setRightPanelMode] = useState<'visual' | 'simulate'>('visual');
+  const [copilotOpen, setCopilotOpen] = useState(false);
   
   // Structured State for "Smart" Editing
   const [events, setEvents] = useState<{eventId: string, name: string}[]>(
@@ -789,15 +791,111 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
     }
   };
 
+  const handleApplyCopilotBlueprint = (generated: GenerateBlueprintCopilotResponse) => {
+    if (!generated || !generated.blueprint) return;
+    const def = generated.blueprint;
+    setName(generated.suggestedName || name);
+    setVersion(generated.suggestedVersion || version);
+
+    const getProp = (obj: any, key: string) => {
+      if (!obj) return undefined;
+      return obj[key] || obj[key.toLowerCase()] || obj[key.charAt(0).toLowerCase() + key.slice(1)];
+    };
+
+    const eventsList = getProp(def, 'Events') || [];
+    const sm = getProp(def, 'StateMachine') || {};
+    const statesList = getProp(sm, 'States') || ['Draft'];
+    const transitionsList = getProp(sm, 'Transitions') || [];
+
+    setEvents(eventsList.map((e: any) => ({
+      eventId: getProp(e, 'EventId') || '',
+      name: getProp(e, 'Name') || ''
+    })));
+
+    setStates(statesList);
+    setInitialState(getProp(sm, 'InitialState') || statesList[0] || 'Draft');
+
+    setTransitions(transitionsList.map((t: any) => ({
+      from: getProp(t, 'FromState') || '',
+      to: getProp(t, 'ToState') || '',
+      evt: getProp(t, 'EventId') || ''
+    })));
+
+    const wf = getProp(def, 'Workflow') || {};
+    setStartStepId(getProp(wf, 'StartStepId') || 'Start');
+    const stepsList = getProp(wf, 'Steps') || [];
+
+    setSteps(stepsList.map((s: any) => {
+      const conditionsDict = getProp(s, 'Conditions') || {};
+      const nextStepsDict = getProp(s, 'NextSteps') || {};
+      const rawRoutes = (getProp(s, 'StepType') === 'Decision' && Object.keys(conditionsDict).length > 0)
+        ? conditionsDict
+        : nextStepsDict;
+
+      const nextStepsArray = Object.keys(rawRoutes).map(k => ({
+        outcome: k,
+        target: rawRoutes[k]
+      }));
+
+      const rolesList = getProp(s, 'RequiredRoles') || [];
+      const rawBranches = getProp(s, 'Branches') || [];
+      const branches: string[] = Array.isArray(rawBranches)
+        ? rawBranches
+        : typeof rawBranches === 'string'
+        ? rawBranches.split(',').map((b: string) => b.trim()).filter(Boolean)
+        : [];
+
+      const joinPolicy = getProp(s, 'JoinPolicy') || 'WaitAll';
+      const rawInbound = getProp(s, 'InboundSteps') || [];
+      const inboundSteps: string[] = Array.isArray(rawInbound)
+        ? rawInbound
+        : typeof rawInbound === 'string'
+        ? rawInbound.split(',').map((b: string) => b.trim()).filter(Boolean)
+        : [];
+
+      const slaRaw = getProp(s, 'Sla') || {};
+      const onEntryRaw = getProp(s, 'OnEntry') || getProp(s, 'onEntry') || [];
+      const onExitRaw = getProp(s, 'OnExit') || getProp(s, 'onExit') || [];
+      const onFailureRaw = getProp(s, 'OnFailure') || getProp(s, 'onFailure') || [];
+
+      return {
+        stepId: getProp(s, 'StepId') || '',
+        stepType: getProp(s, 'StepType') || 'Command',
+        nextSteps: nextStepsArray,
+        branches,
+        joinPolicy,
+        inboundSteps,
+        roles: rolesList.join(', '),
+        slaDuration: getProp(slaRaw, 'Duration') || '',
+        slaTimeoutEvent: getProp(slaRaw, 'TimeoutEvent') || '',
+        slaEscalationStepId: getProp(slaRaw, 'EscalationStepId') || '',
+        onEntry: Array.isArray(onEntryRaw) ? onEntryRaw : [],
+        onExit: Array.isArray(onExitRaw) ? onExitRaw : [],
+        onFailure: Array.isArray(onFailureRaw) ? onFailureRaw : []
+      };
+    }));
+
+    setRawJson(JSON.stringify(def, null, 2));
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-hidden h-full w-full flex justify-center items-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-700 text-slate-100 w-[96vw] h-[92vh] rounded-2xl shadow-2xl flex overflow-hidden">
+      <div className="bg-slate-900 border border-slate-700 text-slate-100 w-[96vw] h-[92vh] rounded-2xl shadow-2xl flex overflow-hidden relative">
         
         {/* Left: Editor (Scrollable) */}
         <div className="flex-1 flex flex-col border-r border-slate-800 overflow-hidden">
             <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/70">
-                <h2 className="text-lg font-bold text-white">{item ? `Edit ${item.name}` : 'Create WorkflowClass Draft'}</h2>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <span>{item ? `Edit ${item.name}` : 'Create WorkflowClass Draft'}</span>
+                </h2>
                 <div className="space-x-2 flex items-center">
+                    <button
+                        onClick={() => setCopilotOpen(true)}
+                        className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition-all border border-indigo-400/30"
+                    >
+                        <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                        <span>AI Copilot</span>
+                    </button>
                     {!item && (
                         <select onChange={(e) => loadTemplate(e.target.value)} className="text-xs bg-slate-800 border border-slate-700 text-slate-200 p-1.5 rounded-lg mr-2" defaultValue="">
                             <option value="" disabled>Load Blueprint Example...</option>
@@ -1324,7 +1422,21 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
             </div>
         </div>
 
+        {/* AI Copilot Drawer */}
+        <CopilotDrawer
+          isOpen={copilotOpen}
+          onClose={() => setCopilotOpen(false)}
+          currentBlueprint={(() => {
+            try {
+              return JSON.parse(rawJson);
+            } catch {
+              return undefined;
+            }
+          })()}
+          onApplyBlueprint={handleApplyCopilotBlueprint}
+        />
       </div>
     </div>
   );
 };
+
