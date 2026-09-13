@@ -89,10 +89,14 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
           setStartStepId(getProp(wf, 'StartStepId') || 'Start');
           const stepsList = getProp(wf, 'Steps') || [];
           setSteps(stepsList.map((s: any) => {
+              const conditionsDict = getProp(s, 'Conditions') || {};
               const nextStepsDict = getProp(s, 'NextSteps') || {};
-              const nextStepsArray = Object.keys(nextStepsDict).map(k => ({
+              const rawRoutes = (getProp(s, 'StepType') === 'Decision' && Object.keys(conditionsDict).length > 0)
+                  ? conditionsDict
+                  : nextStepsDict;
+              const nextStepsArray = Object.keys(rawRoutes).map(k => ({
                   outcome: k,
-                  target: nextStepsDict[k]
+                  target: rawRoutes[k]
               }));
               const rolesList = getProp(s, 'RequiredRoles') || [];
               const slaRaw = getProp(s, 'Sla') || {};
@@ -146,6 +150,10 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                         OnFailure: s.onFailure && s.onFailure.length > 0 ? s.onFailure : undefined
                     };
                     
+                    if (s.stepType === 'Decision') {
+                        stepObj.Conditions = nextStepsDict;
+                    }
+
                     if (s.slaDuration || s.slaTimeoutEvent || s.slaEscalationStepId) {
                         stepObj.Sla = {
                             Duration: s.slaDuration,
@@ -190,6 +198,8 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
     const commonInitialState = 'Draft';
 
     if (templateName === 'Simple') {
+        setName('ExpenseApproval');
+        setVersion('1.0.0');
         setEvents(commonEvents);
         setStates(commonStates);
         setInitialState(commonInitialState);
@@ -202,6 +212,8 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
             { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] }
         ]);
     } else if (templateName === 'Complex') {
+        setName('ExpenseApprovalV2');
+        setVersion('1.0.0');
         setEvents(commonEvents);
         setStates(commonStates);
         setInitialState(commonInitialState);
@@ -218,6 +230,390 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
             { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
             { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] , onFailure: []}
         ]);
+    } else if (templateName === 'OrderSaga') {
+        setName('OrderSagaFulfillment');
+        setVersion('1.0.0');
+        setEvents([
+            { eventId: 'EVT-VALIDATE', name: 'Validate Order' },
+            { eventId: 'EVT-PAY-SUCCESS', name: 'Payment Authorized' },
+            { eventId: 'EVT-STOCK-LOCKED', name: 'Inventory Reserved' },
+            { eventId: 'EVT-SHIP-FAIL', name: 'Shipping Generation Failed' },
+            { eventId: 'EVT-COMPENSATE', name: 'Rollback Completed' }
+        ]);
+        setStates(['Draft', 'PaymentAuthorized', 'InventoryReserved', 'Compensating', 'RolledBack', 'Completed']);
+        setInitialState('Draft');
+        setTransitions([
+            { from: 'Draft', to: 'PaymentAuthorized', evt: 'EVT-PAY-SUCCESS' },
+            { from: 'PaymentAuthorized', to: 'InventoryReserved', evt: 'EVT-STOCK-LOCKED' },
+            { from: 'InventoryReserved', to: 'Compensating', evt: 'EVT-SHIP-FAIL' },
+            { from: 'Compensating', to: 'RolledBack', evt: 'EVT-COMPENSATE' }
+        ]);
+        setStartStepId('ValidateOrder');
+        setSteps([
+            {
+                stepId: 'ValidateOrder',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'AuthorizePayment' }],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{ actionType: 'Notification', target: 'System', template: 'Validating order {{OrderId}} with amount ${{Amount}}' }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'AuthorizePayment',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-PAY-SUCCESS', target: 'ReserveInventory' }],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Webhook',
+                    target: 'https://api.stripe.com/v1/charges/hold',
+                    template: 'Holding payment for order {{OrderId}}',
+                    payloadMapping: { orderRef: 'OrderId', taxedAmount: 'Amount * 1.05' },
+                    signPayload: true
+                }],
+                onExit: [],
+                onFailure: [{
+                    actionType: 'Webhook',
+                    target: 'https://api.stripe.com/v1/refunds/void-hold',
+                    template: 'Voiding payment hold for {{OrderId}} due to downstream failure',
+                    payloadMapping: { orderRef: 'OrderId' }
+                }]
+            },
+            {
+                stepId: 'ReserveInventory',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-STOCK-LOCKED', target: 'GenerateShippingLabel' }],
+                roles: 'Warehouse',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Webhook',
+                    target: 'https://warehouse.internal/api/lock-sku',
+                    payloadMapping: { sku: 'ItemSku', quantity: 'Quantity' }
+                }],
+                onExit: [],
+                onFailure: [
+                    {
+                        actionType: 'Webhook',
+                        target: 'https://warehouse.internal/api/release-sku',
+                        payloadMapping: { sku: 'ItemSku', quantity: 'Quantity' }
+                    },
+                    {
+                        actionType: 'Notification',
+                        target: 'WarehouseOps',
+                        template: 'Saga rollback: released SKU {{ItemSku}} for canceled order {{OrderId}}'
+                    }
+                ]
+            },
+            {
+                stepId: 'GenerateShippingLabel',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'END' }, { outcome: 'EVT-SHIP-FAIL', target: 'CompensateOrder' }],
+                roles: 'Logistics',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [],
+                onExit: [],
+                onFailure: [{
+                    actionType: 'Notification',
+                    target: 'CustomerSupport',
+                    template: 'Shipping label generation failed for {{OrderId}}. Triggering full Saga rollback.'
+                }]
+            },
+            {
+                stepId: 'CompensateOrder',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-COMPENSATE', target: 'END' }],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'Customer',
+                    template: 'Order {{OrderId}} could not be fulfilled. All holds and inventory reservations were safely rolled back.'
+                }],
+                onExit: [],
+                onFailure: []
+            }
+        ]);
+    } else if (templateName === 'LoanUnderwriting') {
+        setName('LoanUnderwritingFlow');
+        setVersion('1.0.0');
+        setEvents([
+            { eventId: 'EVT-APPLY', name: 'Application Submitted' },
+            { eventId: 'EVT-AUTO-APPROVE', name: 'Fast-Track Auto Approved' },
+            { eventId: 'EVT-MANUAL-REVIEW', name: 'Requires Underwriter Review' },
+            { eventId: 'EVT-FINAL-APPROVE', name: 'Underwriter Approved' },
+            { eventId: 'EVT-DECLINE', name: 'Application Declined' }
+        ]);
+        setStates(['Draft', 'Evaluating', 'UnderwritingReview', 'Approved', 'Declined']);
+        setInitialState('Draft');
+        setTransitions([
+            { from: 'Draft', to: 'Evaluating', evt: 'EVT-APPLY' },
+            { from: 'Evaluating', to: 'Approved', evt: 'EVT-AUTO-APPROVE' },
+            { from: 'Evaluating', to: 'UnderwritingReview', evt: 'EVT-MANUAL-REVIEW' },
+            { from: 'UnderwritingReview', to: 'Approved', evt: 'EVT-FINAL-APPROVE' },
+            { from: 'UnderwritingReview', to: 'Declined', evt: 'EVT-DECLINE' },
+            { from: 'Evaluating', to: 'Declined', evt: 'EVT-DECLINE' }
+        ]);
+        setStartStepId('IntakeApplication');
+        setSteps([
+            {
+                stepId: 'IntakeApplication',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-APPLY', target: 'EvaluateRisk' }],
+                roles: 'Applicant',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'Applicant',
+                    template: 'Loan application received for applicant {{ApplicantName}} (Principal: ${{Amount}})'
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'EvaluateRisk',
+                stepType: 'Decision',
+                nextSteps: [
+                    { outcome: 'CreditScore >= 720 && DebtToIncome < 0.35', target: 'FastTrackDisbursement' },
+                    { outcome: 'CreditScore < 580', target: 'DeclineApplication' },
+                    { outcome: 'Default', target: 'UnderwriterReview' }
+                ],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'UnderwriterReview',
+                stepType: 'HumanTask',
+                roles: 'Manager, Director',
+                nextSteps: [
+                    { outcome: 'EVT-FINAL-APPROVE', target: 'DisburseFunds' },
+                    { outcome: 'EVT-DECLINE', target: 'DeclineApplication' }
+                ],
+                slaDuration: '48h',
+                slaTimeoutEvent: 'EVT-DECLINE',
+                slaEscalationStepId: 'DeclineApplication',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'Underwriters',
+                    template: 'Manual underwriting required for loan ${{Amount}} (CreditScore: {{CreditScore}})'
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'FastTrackDisbursement',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-AUTO-APPROVE', target: 'DisburseFunds' }],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'DisburseFunds',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'END' }],
+                roles: 'Finance',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [
+                    {
+                        actionType: 'Webhook',
+                        target: 'https://core-banking.partner.com/api/v2/disbursements',
+                        template: 'Disbursing ${{Amount}} to recipient account {{AccountNum}}',
+                        payloadMapping: {
+                            applicant: 'ApplicantName',
+                            principal: 'Amount',
+                            riskTier: 'CreditScore >= 720 ? "Prime" : "Standard"'
+                        },
+                        signPayload: true
+                    },
+                    {
+                        actionType: 'Notification',
+                        target: 'Applicant',
+                        template: 'Congratulations {{ApplicantName}}! Your loan of ${{Amount}} has been approved and funds are being wired.'
+                    }
+                ],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'DeclineApplication',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'END' }],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'Applicant',
+                    template: 'We regret to inform you that your application for ${{Amount}} could not be approved at this time.'
+                }],
+                onExit: [],
+                onFailure: []
+            }
+        ]);
+    } else if (templateName === 'SecOpsAccess') {
+        setName('SecOpsAccessGovernance');
+        setVersion('1.0.0');
+        setEvents([
+            { eventId: 'EVT-REQUEST-ACCESS', name: 'Request Privileged Access' },
+            { eventId: 'EVT-APPROVE', name: 'Manager Approved' },
+            { eventId: 'EVT-ESCALATE', name: 'SLA Breached - Auto Escalated' },
+            { eventId: 'EVT-DIRECTOR-APPROVE', name: 'SecOps Director Approved' },
+            { eventId: 'EVT-REVOKE', name: 'Session Expired / Revoked' }
+        ]);
+        setStates(['Draft', 'PendingManager', 'PendingDirector', 'AccessActive', 'Revoked']);
+        setInitialState('Draft');
+        setTransitions([
+            { from: 'Draft', to: 'PendingManager', evt: 'EVT-REQUEST-ACCESS' },
+            { from: 'PendingManager', to: 'AccessActive', evt: 'EVT-APPROVE' },
+            { from: 'PendingManager', to: 'PendingDirector', evt: 'EVT-ESCALATE' },
+            { from: 'PendingDirector', to: 'AccessActive', evt: 'EVT-DIRECTOR-APPROVE' },
+            { from: 'AccessActive', to: 'Revoked', evt: 'EVT-REVOKE' }
+        ]);
+        setStartStepId('RequestAccess');
+        setSteps([
+            {
+                stepId: 'RequestAccess',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-REQUEST-ACCESS', target: 'ManagerApproval' }],
+                roles: 'Employee',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'SecurityTeam',
+                    template: 'Access requested by {{UserEmail}} for environment {{Environment}}'
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'ManagerApproval',
+                stepType: 'HumanTask',
+                roles: 'Manager',
+                nextSteps: [
+                    { outcome: 'EVT-APPROVE', target: 'ProvisionCredentials' },
+                    { outcome: 'EVT-ESCALATE', target: 'DirectorEscalation' }
+                ],
+                slaDuration: '24h',
+                slaTimeoutEvent: 'EVT-ESCALATE',
+                slaEscalationStepId: 'DirectorEscalation',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'DirectManager',
+                    template: 'Action Required: Access approval pending for {{UserEmail}} (24h SLA remaining)'
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'DirectorEscalation',
+                stepType: 'HumanTask',
+                roles: 'Director',
+                nextSteps: [{ outcome: 'EVT-DIRECTOR-APPROVE', target: 'ProvisionCredentials' }],
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'SecOpsDirector',
+                    template: 'SLA BREACH ALERT: Manager did not respond in 24h. Access request for {{UserEmail}} escalated to SecOps Director.'
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'ProvisionCredentials',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'SessionExpirationTimer' }],
+                roles: 'SecOps',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [
+                    {
+                        actionType: 'Webhook',
+                        target: 'https://iam.internal/api/v1/temp-creds',
+                        template: 'Provisioning temporary 8h IAM credentials for {{UserEmail}}',
+                        payloadMapping: {
+                            user: 'UserEmail',
+                            scope: 'Environment',
+                            ttlHours: '8'
+                        },
+                        signPayload: true
+                    },
+                    {
+                        actionType: 'Notification',
+                        target: 'User',
+                        template: 'Temporary access to {{Environment}} granted for 8 hours.'
+                    }
+                ],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'SessionExpirationTimer',
+                stepType: 'Timer',
+                nextSteps: [{ outcome: 'EVT-REVOKE', target: 'RevokeAccess' }],
+                roles: 'System',
+                slaDuration: '8h',
+                slaTimeoutEvent: 'EVT-REVOKE',
+                slaEscalationStepId: '',
+                onEntry: [],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'RevokeAccess',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'END' }],
+                roles: 'SecOps',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [
+                    {
+                        actionType: 'Webhook',
+                        target: 'https://iam.internal/api/v1/revoke-creds',
+                        template: 'Revoking credentials for {{UserEmail}} upon 8h timer expiration',
+                        payloadMapping: { user: 'UserEmail' }
+                    },
+                    {
+                        actionType: 'Notification',
+                        target: 'User',
+                        template: 'Your temporary access session for {{Environment}} has expired and credentials have been revoked.'
+                    }
+                ],
+                onExit: [],
+                onFailure: []
+            }
+        ]);
     }
   };
 
@@ -233,8 +629,11 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                     {!item && (
                         <select onChange={(e) => loadTemplate(e.target.value)} className="text-xs bg-slate-800 border border-slate-700 text-slate-200 p-1.5 rounded-lg mr-2" defaultValue="">
                             <option value="" disabled>Load Blueprint Example...</option>
-                            <option value="Simple">Example 1: Simple (Direct Mapping)</option>
-                            <option value="Complex">Example 2: Complex (Decoupled)</option>
+                            <option value="OrderSaga">Flagship: Order Saga Fulfillment (Distributed Saga & Rollback)</option>
+                            <option value="LoanUnderwriting">Flagship: Loan Underwriting (Decision Engine & HMAC)</option>
+                            <option value="SecOpsAccess">Flagship: SecOps Access Governance (24h SLA Timers)</option>
+                            <option value="Complex">Legacy: Expense Approval V2 (Decoupled)</option>
+                            <option value="Simple">Legacy: Expense Approval V1 (Direct Mapping)</option>
                         </select>
                     )}
                     <button onClick={() => setJsonMode(!jsonMode)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors">
@@ -409,6 +808,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                         <option value="HumanTask">HumanTask</option>
                                                         <option value="Event">Event</option>
                                                         <option value="Decision">Decision</option>
+                                                        <option value="Timer">Timer</option>
                                                     </select>
                                                 </div>
                                             </div>

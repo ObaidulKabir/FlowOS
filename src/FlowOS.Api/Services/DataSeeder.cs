@@ -14,6 +14,8 @@ using FlowOS.Security.Models; // Ensure this is present
 using FlowOS.Domain.Enums; // Ensure this is present for WorkflowClassStatus
 using FlowOS.Domain.Services; // For WorkflowClassManager
 using FlowOS.Events.Models; // For StandardEvent
+using FlowOS.Application.Services;
+using FlowOS.Domain.Blueprints;
 
 namespace FlowOS.API.Services;
 
@@ -681,6 +683,502 @@ public static class DataSeeder
                 await context.SaveChangesAsync();
             }
         }
+
+        // 7. Seed Enterprise Flagship Workflows
+        await SeedFlagshipWorkflowsAsync(context, clientTenantId);
+    }
+
+    public static async Task SeedFlagshipWorkflowsAsync(FlowOSDbContext context, Guid clientTenantId)
+    {
+        var manager = new WorkflowClassManager();
+
+        // -------------------------------------------------------------------------------------------------
+        // FLAGSHIP 1: OrderSagaFulfillment (Distributed Sagas & OnFailure Rollback Compensations)
+        // -------------------------------------------------------------------------------------------------
+        const string sagaName = "OrderSagaFulfillment";
+        if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == sagaName))
+        {
+            var sagaBp = new WorkflowClassBlueprint
+            {
+                Events = new()
+                {
+                    new() { EventId = "EVT-VALIDATE", Name = "Validate Order" },
+                    new() { EventId = "EVT-PAY-SUCCESS", Name = "Payment Authorized" },
+                    new() { EventId = "EVT-STOCK-LOCKED", Name = "Inventory Reserved" },
+                    new() { EventId = "EVT-SHIP-FAIL", Name = "Shipping Generation Failed" },
+                    new() { EventId = "EVT-COMPENSATE", Name = "Rollback Completed" }
+                },
+                StateMachine = new StateMachineBlueprint
+                {
+                    InitialState = "Draft",
+                    States = new() { "Draft", "PaymentAuthorized", "InventoryReserved", "Compensating", "RolledBack", "Completed" },
+                    Transitions = new()
+                    {
+                        new() { FromState = "Draft", ToState = "PaymentAuthorized", EventId = "EVT-PAY-SUCCESS" },
+                        new() { FromState = "PaymentAuthorized", ToState = "InventoryReserved", EventId = "EVT-STOCK-LOCKED" },
+                        new() { FromState = "InventoryReserved", ToState = "Compensating", EventId = "EVT-SHIP-FAIL" },
+                        new() { FromState = "Compensating", ToState = "RolledBack", EventId = "EVT-COMPENSATE" }
+                    }
+                },
+                Workflow = new WorkflowBlueprint
+                {
+                    StartStepId = "ValidateOrder",
+                    Steps = new()
+                    {
+                        new()
+                        {
+                            StepId = "ValidateOrder",
+                            StepType = "Command",
+                            NextSteps = new() { { "Default", "AuthorizePayment" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "System",
+                                    Template = "Validating order {{OrderId}} with amount ${{Amount}}"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "AuthorizePayment",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-PAY-SUCCESS", "ReserveInventory" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://api.stripe.com/v1/charges/hold",
+                                    Template = "Holding payment for order {{OrderId}}",
+                                    PayloadMapping = new()
+                                    {
+                                        { "orderRef", "OrderId" },
+                                        { "taxedAmount", "Amount * 1.05" }
+                                    },
+                                    SignPayload = true
+                                }
+                            },
+                            OnFailure = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://api.stripe.com/v1/refunds/void-hold",
+                                    Template = "Voiding payment hold for {{OrderId}} due to downstream failure",
+                                    PayloadMapping = new() { { "orderRef", "OrderId" } }
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "ReserveInventory",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-STOCK-LOCKED", "GenerateShippingLabel" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://warehouse.internal/api/lock-sku",
+                                    PayloadMapping = new()
+                                    {
+                                        { "sku", "ItemSku" },
+                                        { "quantity", "Quantity" }
+                                    }
+                                }
+                            },
+                            OnFailure = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://warehouse.internal/api/release-sku",
+                                    PayloadMapping = new()
+                                    {
+                                        { "sku", "ItemSku" },
+                                        { "quantity", "Quantity" }
+                                    }
+                                },
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "WarehouseOps",
+                                    Template = "Saga rollback: released SKU {{ItemSku}} for canceled order {{OrderId}}"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "GenerateShippingLabel",
+                            StepType = "Command",
+                            NextSteps = new() { { "Default", "END" }, { "EVT-SHIP-FAIL", "CompensateOrder" } },
+                            OnFailure = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "CustomerSupport",
+                                    Template = "Shipping label generation failed for {{OrderId}}. Triggering full Saga rollback."
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "CompensateOrder",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-COMPENSATE", "END" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "Customer",
+                                    Template = "Order {{OrderId}} could not be fulfilled. All holds and inventory reservations were safely rolled back."
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var sagaWc = new WorkflowClass(clientTenantId, sagaName, "1.0.0", sagaBp);
+            manager.Publish(sagaWc);
+            manager.SubmitForReview(sagaWc);
+            manager.ApproveAsPublic(sagaWc);
+            context.WorkflowClasses.Add(sagaWc);
+
+            var sagaDef = WorkflowClassCompiler.MapToRuntimeDefinition(sagaWc);
+            sagaDef.Publish();
+            context.WorkflowDefinitions.Add(sagaDef);
+        }
+
+        // -------------------------------------------------------------------------------------------------
+        // FLAGSHIP 2: LoanUnderwritingFlow (Decision Routing, HMAC Webhooks & Senior Underwriter HITL)
+        // -------------------------------------------------------------------------------------------------
+        const string loanName = "LoanUnderwritingFlow";
+        if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == loanName))
+        {
+            var loanBp = new WorkflowClassBlueprint
+            {
+                Events = new()
+                {
+                    new() { EventId = "EVT-APPLY", Name = "Application Submitted" },
+                    new() { EventId = "EVT-AUTO-APPROVE", Name = "Fast-Track Auto Approved" },
+                    new() { EventId = "EVT-MANUAL-REVIEW", Name = "Requires Underwriter Review" },
+                    new() { EventId = "EVT-FINAL-APPROVE", Name = "Underwriter Approved" },
+                    new() { EventId = "EVT-DECLINE", Name = "Application Declined" }
+                },
+                StateMachine = new StateMachineBlueprint
+                {
+                    InitialState = "Draft",
+                    States = new() { "Draft", "Evaluating", "UnderwritingReview", "Approved", "Declined" },
+                    Transitions = new()
+                    {
+                        new() { FromState = "Draft", ToState = "Evaluating", EventId = "EVT-APPLY" },
+                        new() { FromState = "Evaluating", ToState = "Approved", EventId = "EVT-AUTO-APPROVE" },
+                        new() { FromState = "Evaluating", ToState = "UnderwritingReview", EventId = "EVT-MANUAL-REVIEW" },
+                        new() { FromState = "UnderwritingReview", ToState = "Approved", EventId = "EVT-FINAL-APPROVE" },
+                        new() { FromState = "UnderwritingReview", ToState = "Declined", EventId = "EVT-DECLINE" },
+                        new() { FromState = "Evaluating", ToState = "Declined", EventId = "EVT-DECLINE" }
+                    }
+                },
+                Workflow = new WorkflowBlueprint
+                {
+                    StartStepId = "IntakeApplication",
+                    Steps = new()
+                    {
+                        new()
+                        {
+                            StepId = "IntakeApplication",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-APPLY", "EvaluateRisk" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "Applicant",
+                                    Template = "Loan application received for applicant {{ApplicantName}} (Principal: ${{Amount}})"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "EvaluateRisk",
+                            StepType = "Decision",
+                            Conditions = new()
+                            {
+                                { "CreditScore >= 720 && DebtToIncome < 0.35", "FastTrackDisbursement" },
+                                { "CreditScore < 580", "DeclineApplication" },
+                                { "Default", "UnderwriterReview" }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "UnderwriterReview",
+                            StepType = "HumanTask",
+                            RequiredRoles = new() { "Manager", "Director" },
+                            NextSteps = new()
+                            {
+                                { "EVT-FINAL-APPROVE", "DisburseFunds" },
+                                { "EVT-DECLINE", "DeclineApplication" }
+                            },
+                            Sla = new()
+                            {
+                                Duration = "48h",
+                                TimeoutEvent = "EVT-DECLINE",
+                                EscalationStepId = "DeclineApplication"
+                            },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "Underwriters",
+                                    Template = "Manual underwriting required for loan ${{Amount}} (CreditScore: {{CreditScore}})"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "FastTrackDisbursement",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-AUTO-APPROVE", "DisburseFunds" } }
+                        },
+                        new()
+                        {
+                            StepId = "DisburseFunds",
+                            StepType = "Command",
+                            NextSteps = new() { { "Default", "END" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://core-banking.partner.com/api/v2/disbursements",
+                                    Url = "https://core-banking.partner.com/api/v2/disbursements",
+                                    Template = "Disbursing ${{Amount}} to recipient account {{AccountNum}}",
+                                    PayloadMapping = new()
+                                    {
+                                        { "applicant", "ApplicantName" },
+                                        { "principal", "Amount" },
+                                        { "riskTier", "CreditScore >= 720 ? \"Prime\" : \"Standard\"" }
+                                    },
+                                    SignPayload = true
+                                },
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "Applicant",
+                                    Template = "Congratulations {{ApplicantName}}! Your loan of ${{Amount}} has been approved and funds are being wired."
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "DeclineApplication",
+                            StepType = "Command",
+                            NextSteps = new() { { "Default", "END" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "Applicant",
+                                    Template = "We regret to inform you that your application for ${{Amount}} could not be approved at this time."
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var loanWc = new WorkflowClass(clientTenantId, loanName, "1.0.0", loanBp);
+            manager.Publish(loanWc);
+            manager.SubmitForReview(loanWc);
+            manager.ApproveAsPublic(loanWc);
+            context.WorkflowClasses.Add(loanWc);
+
+            var loanDef = WorkflowClassCompiler.MapToRuntimeDefinition(loanWc);
+            loanDef.Publish();
+            context.WorkflowDefinitions.Add(loanDef);
+        }
+
+        // -------------------------------------------------------------------------------------------------
+        // FLAGSHIP 3: SecOpsAccessGovernance (HumanTask SLAs, Zero-Zombie Escalation & Auto-Revocation)
+        // -------------------------------------------------------------------------------------------------
+        const string secOpsName = "SecOpsAccessGovernance";
+        if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == secOpsName))
+        {
+            var secOpsBp = new WorkflowClassBlueprint
+            {
+                Events = new()
+                {
+                    new() { EventId = "EVT-REQUEST-ACCESS", Name = "Request Privileged Access" },
+                    new() { EventId = "EVT-APPROVE", Name = "Manager Approved" },
+                    new() { EventId = "EVT-ESCALATE", Name = "SLA Breached - Auto Escalated" },
+                    new() { EventId = "EVT-DIRECTOR-APPROVE", Name = "SecOps Director Approved" },
+                    new() { EventId = "EVT-REVOKE", Name = "Session Expired / Revoked" }
+                },
+                StateMachine = new StateMachineBlueprint
+                {
+                    InitialState = "Draft",
+                    States = new() { "Draft", "PendingManager", "PendingDirector", "AccessActive", "Revoked" },
+                    Transitions = new()
+                    {
+                        new() { FromState = "Draft", ToState = "PendingManager", EventId = "EVT-REQUEST-ACCESS" },
+                        new() { FromState = "PendingManager", ToState = "AccessActive", EventId = "EVT-APPROVE" },
+                        new() { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-ESCALATE" },
+                        new() { FromState = "PendingDirector", ToState = "AccessActive", EventId = "EVT-DIRECTOR-APPROVE" },
+                        new() { FromState = "AccessActive", ToState = "Revoked", EventId = "EVT-REVOKE" }
+                    }
+                },
+                Workflow = new WorkflowBlueprint
+                {
+                    StartStepId = "RequestAccess",
+                    Steps = new()
+                    {
+                        new()
+                        {
+                            StepId = "RequestAccess",
+                            StepType = "Command",
+                            NextSteps = new() { { "EVT-REQUEST-ACCESS", "ManagerApproval" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "SecurityTeam",
+                                    Template = "Access requested by {{UserEmail}} for environment {{Environment}}"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "ManagerApproval",
+                            StepType = "HumanTask",
+                            RequiredRoles = new() { "Manager" },
+                            NextSteps = new()
+                            {
+                                { "EVT-APPROVE", "ProvisionCredentials" },
+                                { "EVT-ESCALATE", "DirectorEscalation" }
+                            },
+                            Sla = new()
+                            {
+                                Duration = "24h",
+                                TimeoutEvent = "EVT-ESCALATE",
+                                EscalationStepId = "DirectorEscalation",
+                                EscalationRole = "Director"
+                            },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "DirectManager",
+                                    Template = "Action Required: Access approval pending for {{UserEmail}} (24h SLA remaining)"
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "DirectorEscalation",
+                            StepType = "HumanTask",
+                            RequiredRoles = new() { "Director" },
+                            NextSteps = new()
+                            {
+                                { "EVT-DIRECTOR-APPROVE", "ProvisionCredentials" }
+                            },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "SecOpsDirector",
+                                    Template = "SLA BREACH ALERT: Manager did not respond in 24h. Access request for {{UserEmail}} escalated to SecOps Director."
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "ProvisionCredentials",
+                            StepType = "Command",
+                            NextSteps = new() { { "Default", "SessionExpirationTimer" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://iam.internal/api/v1/temp-creds",
+                                    Url = "https://iam.internal/api/v1/temp-creds",
+                                    Template = "Provisioning temporary 8h IAM credentials for {{UserEmail}}",
+                                    PayloadMapping = new()
+                                    {
+                                        { "user", "UserEmail" },
+                                        { "scope", "Environment" },
+                                        { "ttlHours", "8" }
+                                    },
+                                    SignPayload = true
+                                },
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "User",
+                                    Template = "Temporary access to {{Environment}} granted for 8 hours."
+                                }
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "SessionExpirationTimer",
+                            StepType = "Timer",
+                            NextSteps = new() { { "EVT-REVOKE", "RevokeAccess" } },
+                            Sla = new()
+                            {
+                                Duration = "8h",
+                                TimeoutEvent = "EVT-REVOKE"
+                            }
+                        },
+                        new()
+                        {
+                            StepId = "RevokeAccess",
+                            StepType = "Command",
+                            NextSteps = new() { { "Default", "END" } },
+                            OnEntry = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://iam.internal/api/v1/revoke-creds",
+                                    Template = "Revoking credentials for {{UserEmail}} upon 8h timer expiration",
+                                    PayloadMapping = new() { { "user", "UserEmail" } }
+                                },
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "User",
+                                    Template = "Your temporary access session for {{Environment}} has expired and credentials have been revoked."
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var secOpsWc = new WorkflowClass(clientTenantId, secOpsName, "1.0.0", secOpsBp);
+            manager.Publish(secOpsWc);
+            manager.SubmitForReview(secOpsWc);
+            manager.ApproveAsPublic(secOpsWc);
+            context.WorkflowClasses.Add(secOpsWc);
+
+            var secOpsDef = WorkflowClassCompiler.MapToRuntimeDefinition(secOpsWc);
+            secOpsDef.Publish();
+            context.WorkflowDefinitions.Add(secOpsDef);
+        }
+
+        await context.SaveChangesAsync();
     }
 
     private static void SetPrivateProperty(object obj, string propName, object value)

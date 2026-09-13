@@ -581,31 +581,85 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
       {/* Start Instance Modal */}
       {showStartModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Play className="text-emerald-400" size={18} />
                 Launch Workflow Instance
               </h3>
-              <button onClick={() => setShowStartModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowStartModal(false)} className="text-slate-400 hover:text-white text-lg">
                 &times;
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-300 font-medium block mb-1">Published Workflow Name</label>
+                <label className="text-slate-300 font-semibold block mb-2">Select Flagship Enterprise Preset</label>
+                <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
+                  {[
+                    {
+                      name: 'OrderSagaFulfillment',
+                      title: 'Order Saga Fulfillment',
+                      badge: 'Distributed Sagas',
+                      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                      desc: 'Stripe payment hold, warehouse inventory locking, and OnFailure rollback compensations.'
+                    },
+                    {
+                      name: 'LoanUnderwritingFlow',
+                      title: 'Loan Underwriting Flow',
+                      badge: 'Decision Engine & HMAC',
+                      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                      desc: 'Credit score / DTI routing rules, 48h SLA underwriter tasks, and HMAC-SHA256 signed wire webhooks.'
+                    },
+                    {
+                      name: 'SecOpsAccessGovernance',
+                      title: 'SecOps Access Governance',
+                      badge: 'Zero-Trust SLAs',
+                      badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+                      desc: 'Privileged access with 24h SLA auto-escalation to SecOps Director and 8h automated revocation timers.'
+                    },
+                    {
+                      name: 'ExpenseApprovalV2',
+                      title: 'Expense Approval V2',
+                      badge: 'Multi-Tier Approval',
+                      badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+                      desc: 'Multi-tier manager/director approval with role permissions and audit trail logging.'
+                    }
+                  ].map(preset => (
+                    <div
+                      key={preset.name}
+                      onClick={() => setStartWorkflowName(preset.name)}
+                      className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                        startWorkflowName === preset.name
+                          ? 'bg-blue-900/30 border-blue-500 shadow-sm'
+                          : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-white text-xs">{preset.title}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${preset.badgeColor}`}>
+                          {preset.badge}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-[11px] leading-relaxed">{preset.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-medium block mb-1">Target Workflow Blueprint Name</label>
                 <input
                   type="text"
                   value={startWorkflowName}
                   onChange={e => setStartWorkflowName(e.target.value)}
-                  placeholder="e.g. ExpenseApprovalV2"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  placeholder="e.g. OrderSagaFulfillment"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-400 text-[11px]">
-                Workflow instance will be created and bound to tenant <strong>{session.tenantName}</strong> ({session.tenantId}).
+                Workflow instance will be created and bound to tenant <strong>{session.tenantName}</strong> (<span className="font-mono">{session.tenantId.substring(0, 8)}...</span>).
               </div>
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
@@ -617,10 +671,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                 </button>
                 <button
                   onClick={handleStartInstance}
-                  disabled={startingInstance}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold flex items-center gap-1.5"
+                  disabled={startingInstance || !startWorkflowName.trim()}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-900/20"
                 >
-                  {startingInstance ? 'Starting...' : 'Start Workflow'}
+                  {startingInstance ? 'Starting...' : 'Launch Workflow'}
                 </button>
               </div>
             </div>
