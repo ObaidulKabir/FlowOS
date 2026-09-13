@@ -119,3 +119,21 @@ export interface AuthSession {
   username?: string;
 }
 
+export interface DeadLetterDto {
+  id: string;
+  tenantId: string;
+  type: string;
+  payload: string;
+  occurredOnUtc: string;
+  processedOnUtc?: string;
+  error?: string;
+  retryCount: number;
+  maxRetries: number;
+  nextRetryUtc?: string;
+  isDeadLetter: boolean;
+  actionType?: string;
+  targetUrl?: string;
+  httpMethod?: string;
+  stepId?: string;
+}
+

@@ -432,4 +432,44 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject ListDeadLetters() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID filter."},
+            "type":{"type":"string","description":"Optional event or action type filter (e.g. WorkflowAction:Webhook)."},
+            "limit":{"type":"integer","minimum":1,"maximum":200,"default":50,"description":"Maximum number of dead letters to retrieve."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RetryDeadLetter() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "id":{"type":"string","format":"uuid","description":"UUID of the dead letter outbox message to replay."},
+            "all":{"type":"boolean","default":false,"description":"Set to true to replay all dead letters for the tenant."},
+            "type":{"type":"string","description":"Optional filter when replaying all dead letters."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject PurgeDeadLetter() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["id"],
+          "properties":{
+            "id":{"type":"string","format":"uuid","description":"UUID of the dead letter outbox message to permanently purge."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
 }

@@ -121,7 +121,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(25, httpNames.Length);
+        Assert.Equal(28, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);
@@ -184,7 +184,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var json = JObject.Parse(await response.Content.ReadAsStringAsync());
         var tools = Assert.IsType<JArray>(json["tools"]);
-        Assert.Equal(25, tools.Count);
+        Assert.Equal(28, tools.Count);
 
         foreach (var tool in tools)
         {

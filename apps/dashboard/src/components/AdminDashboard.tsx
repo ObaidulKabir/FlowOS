@@ -6,6 +6,7 @@ import { WorkflowTable } from './WorkflowTable';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { DetailView } from './DetailView';
+import { DeadLetterQueueViewer } from './DeadLetterQueueViewer';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
   Globe, Cpu, Clock, Terminal, AlertTriangle
@@ -17,7 +18,7 @@ interface Props {
 }
 
 export const AdminDashboard: React.FC<Props> = ({ session }) => {
-  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel'>('Tenants');
+  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters'>('Tenants');
   const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Public' | 'Shared' | 'Published'>('All');
 
   const [tenantsCount, setTenantsCount] = useState(0);
@@ -234,6 +235,15 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
               <Cpu size={15} />
               <span>⚙️ Engine Kernel</span>
             </button>
+            <button
+              onClick={() => setActiveTab('DeadLetters')}
+              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'DeadLetters' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <AlertTriangle size={15} className="text-red-400" />
+              <span>🚨 Dead Letters (DLQ)</span>
+            </button>
           </nav>
         </div>
 
@@ -382,6 +392,10 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'DeadLetters' && (
+            <DeadLetterQueueViewer session={session} />
           )}
         </div>
       </div>

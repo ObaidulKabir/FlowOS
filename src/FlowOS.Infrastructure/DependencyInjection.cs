@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<IConfigurationPublisher, ConfigurationPublisher>();
         services.AddScoped<IWorkflowTimerService, WorkflowTimerService>();
         services.AddScoped<IWorkflowActionDispatcher, WorkflowActionDispatcher>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.IDeadLetterService, DeadLetterService>();
         return services;
     }
 }

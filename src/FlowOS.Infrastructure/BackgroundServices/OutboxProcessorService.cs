@@ -60,8 +60,9 @@ public class OutboxProcessorService : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
         var publisher = scope.ServiceProvider.GetRequiredService<IPublisher>();
 
+        var now = DateTime.UtcNow;
         var pendingMessages = await dbContext.OutboxMessages
-            .Where(m => m.ProcessedOnUtc == null && m.RetryCount < 5)
+            .Where(m => m.ProcessedOnUtc == null && !m.IsDeadLetter && (m.NextRetryUtc == null || m.NextRetryUtc <= now))
             .OrderBy(m => m.OccurredOnUtc)
             .Take(50)
             .ToListAsync(cancellationToken);
@@ -100,8 +101,17 @@ public class OutboxProcessorService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to process outbox message {MessageId} of type {MessageType}", message.Id, message.Type);
                 message.RecordFailure(ex.Message);
+                if (message.IsDeadLetter)
+                {
+                    _logger.LogError(ex, "Outbox message {MessageId} of type {MessageType} reached max retries ({MaxRetries}) and moved to Dead Letter Queue (DLQ).",
+                        message.Id, message.Type, message.MaxRetries);
+                }
+                else
+                {
+                    _logger.LogWarning(ex, "Failed to process outbox message {MessageId} of type {MessageType}. Retry {RetryCount}/{MaxRetries}, next retry at {NextRetryUtc}",
+                        message.Id, message.Type, message.RetryCount, message.MaxRetries, message.NextRetryUtc);
+                }
             }
         }
 

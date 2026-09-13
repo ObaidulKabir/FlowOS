@@ -1,6 +1,6 @@
 import { 
   WorkflowClass, CreateDraftRequest, CopyRequest, ValidationResult, 
-  WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession 
+  WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession, DeadLetterDto 
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -308,5 +308,45 @@ export const api = {
     if (!response.ok) {
       throw new Error(`Failed to revoke API key (HTTP ${response.status})`);
     }
+  },
+
+  listDeadLetters: async (tenantId?: string, type?: string, role?: 'Tenant' | 'Admin'): Promise<DeadLetterDto[]> => {
+    const headers = getHeaders(role);
+    const params = new URLSearchParams();
+    if (tenantId) params.append('tenantId', tenantId);
+    if (type) params.append('type', type);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`/api/dead-letters${query}`, { headers });
+    return handleResponse(response, 'Failed to list dead letters');
+  },
+
+  retryDeadLetter: async (id: string, role?: 'Tenant' | 'Admin'): Promise<{ success: boolean; message: string }> => {
+    const headers = getHeaders(role);
+    const response = await fetch(`/api/dead-letters/${id}/retry`, {
+      method: 'POST',
+      headers
+    });
+    return handleResponse(response, 'Failed to retry dead letter');
+  },
+
+  retryAllDeadLetters: async (type?: string, role?: 'Tenant' | 'Admin'): Promise<{ success: boolean; replayedCount: number }> => {
+    const headers = getHeaders(role);
+    const params = new URLSearchParams();
+    if (type) params.append('type', type);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`/api/dead-letters/retry-all${query}`, {
+      method: 'POST',
+      headers
+    });
+    return handleResponse(response, 'Failed to retry all dead letters');
+  },
+
+  purgeDeadLetter: async (id: string, role?: 'Tenant' | 'Admin'): Promise<{ success: boolean; message: string }> => {
+    const headers = getHeaders(role);
+    const response = await fetch(`/api/dead-letters/${id}`, {
+      method: 'DELETE',
+      headers
+    });
+    return handleResponse(response, 'Failed to purge dead letter');
   }
 };

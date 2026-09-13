@@ -82,6 +82,15 @@ public static class ToolRegistration
 
         registry.Register("get_workflow_history", McpToolDescriptions.For("get_workflow_history"), McpToolSchemas.GetWorkflowHistory(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.GetWorkflowHistory(args)));
+
+        registry.Register("list_dead_letters", McpToolDescriptions.For("list_dead_letters"), McpToolSchemas.ListDeadLetters(),
+            async (args) => await ExecuteScopedAsync<DeadLetterMcpTools>(serviceProvider, t => t.ListDeadLetters(args)));
+
+        registry.Register("retry_dead_letter", McpToolDescriptions.For("retry_dead_letter"), McpToolSchemas.RetryDeadLetter(),
+            async (args) => await ExecuteScopedAsync<DeadLetterMcpTools>(serviceProvider, t => t.RetryDeadLetter(args)));
+
+        registry.Register("purge_dead_letter", McpToolDescriptions.For("purge_dead_letter"), McpToolSchemas.PurgeDeadLetter(),
+            async (args) => await ExecuteScopedAsync<DeadLetterMcpTools>(serviceProvider, t => t.PurgeDeadLetter(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

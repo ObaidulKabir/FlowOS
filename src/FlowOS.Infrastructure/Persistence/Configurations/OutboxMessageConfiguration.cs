@@ -19,8 +19,12 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
         builder.Property(m => m.ProcessedOnUtc);
         builder.Property(m => m.Error);
         builder.Property(m => m.RetryCount).IsRequired();
+        builder.Property(m => m.NextRetryUtc);
+        builder.Property(m => m.IsDeadLetter).IsRequired();
+        builder.Property(m => m.MaxRetries).IsRequired();
 
         builder.HasIndex(m => m.TenantId);
         builder.HasIndex(m => new { m.ProcessedOnUtc, m.OccurredOnUtc });
+        builder.HasIndex(m => new { m.IsDeadLetter, m.ProcessedOnUtc, m.NextRetryUtc });
     }
 }

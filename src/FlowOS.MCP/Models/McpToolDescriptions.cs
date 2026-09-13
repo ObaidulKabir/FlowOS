@@ -175,7 +175,30 @@ public static class McpToolDescriptions
                 "HTTP uses authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{workflow,stepCount,steps:[{stepId,stepType,onEntry,onExit,totalHooks}]}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\"}"
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\"}",
+
+            ["list_dead_letters"] =
+                "[Resilience & DLQ] Lists dead-lettered outbox messages that failed execution retries (e.g. failing Webhooks, external notifications). " +
+                "Returns failure errors, payload details, and retry timestamps. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{totalCount,deadLetters:[{id,tenantId,type,occurredOnUtc,retryCount,maxRetries,error,actionType,targetUrl,httpMethod,stepId,payload}]}}. " +
+                "Errors: MCP-INTERNAL. " +
+                "Input example: {\"limit\":20,\"type\":\"WorkflowAction:Webhook\"}",
+
+            ["retry_dead_letter"] =
+                "[Resilience & DLQ] Resets retry counts and immediately reschedules one or all dead-lettered outbox messages for re-execution. " +
+                "Allows AI agents and operators to autonomously recover from transient downstream outages. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{success:true,id,replayedCount,message}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"77777777-7777-7777-7777-777777777777\"}",
+
+            ["purge_dead_letter"] =
+                "[Resilience & DLQ] Permanently purges an unrecoverable dead letter from the outbox queue. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{success:true,id,message}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"77777777-7777-7777-7777-777777777777\"}"
         };
 
     public static string For(string toolName) =>
@@ -195,6 +218,9 @@ public static class McpToolDescriptions
             ["attach_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["remove_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["list_step_actions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["list_dead_letters"] = new("resilience", "authenticated", true, true, false, "none", true, "low"),
+            ["retry_dead_letter"] = new("resilience", "authenticated", true, true, true, "reversible", true, "low"),
+            ["purge_dead_letter"] = new("resilience", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["list_public_workflowclasses"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_instance_status"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),
