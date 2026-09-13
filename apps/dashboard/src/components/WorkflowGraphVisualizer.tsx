@@ -95,6 +95,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     nextSteps: Record<string, string>;
     conditions: Record<string, string>;
     sla?: { duration?: string; timeoutEvent?: string; escalationStepId?: string };
+    totalHooks?: number;
   }
 
   const steps: NormalizedStep[] = rawSteps.map(s => {
@@ -119,6 +120,11 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       escalationStepId: getProp(slaRaw, 'escalationStepId', 'EscalationStepId')
     } : undefined;
 
+    const onEntryList = getProp(s, 'onEntry', 'OnEntry') || [];
+    const onExitList = getProp(s, 'onExit', 'OnExit') || [];
+    const totalHooks = (Array.isArray(onEntryList) ? onEntryList.length : 0) + 
+                       (Array.isArray(onExitList) ? onExitList.length : 0);
+
     return {
       stepId,
       stepType,
@@ -126,7 +132,8 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       roles,
       nextSteps,
       conditions,
-      sla
+      sla,
+      totalHooks
     };
   });
 
@@ -190,6 +197,9 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       let displayLabel = step.roles.length > 0 ? `${cleanLabel}<br/>(Role: ${step.roles.join(', ')})` : cleanLabel;
       if (step.sla?.duration) {
          displayLabel += `<br/>⏱️ SLA: ${step.sla.duration}`;
+      }
+      if (step.totalHooks && step.totalHooks > 0) {
+         displayLabel += `<br/>⚡ ${step.totalHooks} Hook${step.totalHooks > 1 ? 's' : ''}`;
       }
       chart += `  ${safeId(step.stepId)}${shapeStart}"${displayLabel}"${shapeEnd}${className}\n`;
     });

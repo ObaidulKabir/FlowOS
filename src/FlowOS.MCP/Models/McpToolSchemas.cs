@@ -367,4 +367,69 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject AttachStepAction() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["stepId","hook","action"],
+          "properties":{
+            "id":{"type":"string","format":"uuid","description":"WorkflowClass draft ID (required if blueprint not supplied)."},
+            "blueprint":{"type":"object","description":"Inline WorkflowClass blueprint (alternative to id)."},
+            "stepId":{"type":"string","minLength":1,"description":"Target step ID to attach action hook to."},
+            "hook":{"type":"string","enum":["OnEntry","OnExit"],"description":"Lifecycle phase to trigger action."},
+            "actionIndex":{"type":"integer","minimum":0,"description":"Optional 0-based index to overwrite an existing action."},
+            "action":{
+              "type":"object",
+              "required":["actionType"],
+              "properties":{
+                "actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]},
+                "target":{"type":"string","description":"Target URL, recipient role/user, or domain event name."},
+                "url":{"type":"string","description":"Webhook destination URL (supports dynamic tokens like {{OrderId}})."},
+                "method":{"type":"string","enum":["POST","GET","PUT"],"default":"POST"},
+                "template":{"type":"string","description":"Message template string with optional {{Expression}} placeholders."},
+                "payloadMapping":{"type":"object","description":"Key-to-expression mapping for dynamic payload transformation."},
+                "condition":{"type":"string","description":"Dynamic boolean expression guard required for execution."}
+              },
+              "additionalProperties":false
+            },
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RemoveStepAction() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["stepId","hook"],
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "blueprint":{"type":"object"},
+            "stepId":{"type":"string","minLength":1},
+            "hook":{"type":"string","enum":["OnEntry","OnExit"]},
+            "actionIndex":{"type":"integer","minimum":0,"description":"0-based index of the action to remove."},
+            "actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]},
+            "target":{"type":"string"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListStepActions() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "blueprint":{"type":"object"},
+            "stepId":{"type":"string","description":"Optional step filter."},
+            "hook":{"type":"string","enum":["OnEntry","OnExit"],"description":"Optional hook filter."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
 }

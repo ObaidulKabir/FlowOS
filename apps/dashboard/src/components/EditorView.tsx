@@ -3,6 +3,7 @@ import { WorkflowClass, CreateDraftRequest, ValidationResult } from '../types';
 import { X, Save, AlertTriangle, CheckCircle, Info, Layers } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { DraftSimulator } from './DraftSimulator';
+import { StepActionBuilder, StepAction } from './StepActionBuilder';
 
 interface Props {
   item?: WorkflowClass; // If null, creating new
@@ -44,7 +45,9 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
     roles: string,
     slaDuration: string,
     slaTimeoutEvent: string,
-    slaEscalationStepId: string
+    slaEscalationStepId: string,
+    onEntry: StepAction[],
+    onExit: StepAction[]
   }[]>([]);
 
   const [jsonMode, setJsonMode] = useState(false);
@@ -92,6 +95,8 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
               }));
               const rolesList = getProp(s, 'RequiredRoles') || [];
               const slaRaw = getProp(s, 'Sla') || {};
+              const onEntryRaw = getProp(s, 'OnEntry') || getProp(s, 'onEntry') || [];
+              const onExitRaw = getProp(s, 'OnExit') || getProp(s, 'onExit') || [];
               
               return {
                   stepId: getProp(s, 'StepId') || '',
@@ -100,7 +105,9 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                   roles: rolesList.join(', '),
                   slaDuration: getProp(slaRaw, 'Duration') || '',
                   slaTimeoutEvent: getProp(slaRaw, 'TimeoutEvent') || '',
-                  slaEscalationStepId: getProp(slaRaw, 'EscalationStepId') || ''
+                  slaEscalationStepId: getProp(slaRaw, 'EscalationStepId') || '',
+                  onEntry: Array.isArray(onEntryRaw) ? onEntryRaw : [],
+                  onExit: Array.isArray(onExitRaw) ? onExitRaw : []
               };
           }));
 
@@ -130,7 +137,9 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                         StepId: s.stepId,
                         StepType: s.stepType,
                         NextSteps: nextStepsDict,
-                        RequiredRoles: s.roles ? s.roles.split(',').map(r => r.trim()).filter(r => r) : []
+                        RequiredRoles: s.roles ? s.roles.split(',').map(r => r.trim()).filter(r => r) : [],
+                        OnEntry: s.onEntry && s.onEntry.length > 0 ? s.onEntry : undefined,
+                        OnExit: s.onExit && s.onExit.length > 0 ? s.onExit : undefined
                     };
                     
                     if (s.slaDuration || s.slaTimeoutEvent || s.slaEscalationStepId) {
@@ -183,10 +192,10 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
         setTransitions(commonTransitions);
         setStartStepId('Draft');
         setSteps([
-            { stepId: 'Draft', stepType: 'Command', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'Pending' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'Approved' }, { outcome: 'EVT-REJECT', target: 'Rejected' }], roles: 'Manager', slaDuration: '48h', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'Rejected' },
-            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' }
+            { stepId: 'Draft', stepType: 'Command', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'Pending' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'Approved' }, { outcome: 'EVT-REJECT', target: 'Rejected' }], roles: 'Manager', slaDuration: '48h', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'Rejected', onEntry: [], onExit: [] },
+            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] }
         ]);
     } else if (templateName === 'Complex') {
         setEvents(commonEvents);
@@ -196,14 +205,14 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
         
         setStartStepId('ValidateInput'); 
         setSteps([
-            { stepId: 'ValidateInput', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Draft' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'Draft', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'FraudCheck' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'FraudCheck', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Pending' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'NotifyApproval' }, { outcome: 'EVT-REJECT', target: 'NotifyRejection' }], roles: 'Manager', slaDuration: '7d', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'NotifyRejection' },
-            { stepId: 'NotifyApproval', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Approved' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'NotifyRejection', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Rejected' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' },
-            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' }
+            { stepId: 'ValidateInput', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Draft' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'Draft', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'FraudCheck' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'FraudCheck', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Pending' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'NotifyApproval' }, { outcome: 'EVT-REJECT', target: 'NotifyRejection' }], roles: 'Manager', slaDuration: '7d', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'NotifyRejection', onEntry: [], onExit: [] },
+            { stepId: 'NotifyApproval', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Approved' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'NotifyRejection', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Rejected' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] },
+            { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] }
         ]);
     }
   };
@@ -500,10 +509,24 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* Lifecycle Hooks Builder (OnEntry / OnExit) */}
+                                            <StepActionBuilder
+                                                stepId={step.stepId}
+                                                onEntry={step.onEntry || []}
+                                                onExit={step.onExit || []}
+                                                availableEvents={events}
+                                                onChange={(newOnEntry, newOnExit) => {
+                                                    const newSteps = [...steps];
+                                                    newSteps[idx].onEntry = newOnEntry;
+                                                    newSteps[idx].onExit = newOnExit;
+                                                    setSteps(newSteps);
+                                                }}
+                                            />
                                         </div>
                                     ))}
                                     <button 
-                                        onClick={() => setSteps([...steps, { stepId: '', stepType: 'Command', nextSteps: [], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '' }])}
+                                        onClick={() => setSteps([...steps, { stepId: '', stepType: 'Command', nextSteps: [], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [] }])}
                                         className="w-full py-2 border-2 border-dashed border-gray-300 rounded text-gray-500 hover:border-blue-300 hover:text-blue-500 transition-colors"
                                     >
                                         + Add Workflow Step

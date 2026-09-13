@@ -35,6 +35,15 @@ public static class ToolRegistration
         registry.Register("simulate_workflowclass", McpToolDescriptions.For("simulate_workflowclass"), McpToolSchemas.SimulateWorkflowClass(),
             async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateWorkflowClass(args)));
 
+        registry.Register("attach_step_action", McpToolDescriptions.For("attach_step_action"), McpToolSchemas.AttachStepAction(),
+            async (args) => await ExecuteScopedAsync<LifecycleActionMcpTools>(serviceProvider, t => t.AttachStepAction(args)));
+
+        registry.Register("remove_step_action", McpToolDescriptions.For("remove_step_action"), McpToolSchemas.RemoveStepAction(),
+            async (args) => await ExecuteScopedAsync<LifecycleActionMcpTools>(serviceProvider, t => t.RemoveStepAction(args)));
+
+        registry.Register("list_step_actions", McpToolDescriptions.For("list_step_actions"), McpToolSchemas.ListStepActions(),
+            async (args) => await ExecuteScopedAsync<LifecycleActionMcpTools>(serviceProvider, t => t.ListStepActions(args)));
+
         registry.Register("create_draft_workflowclass", McpToolDescriptions.For("create_draft_workflowclass"), McpToolSchemas.CreateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.CreateDraft(args)));
 

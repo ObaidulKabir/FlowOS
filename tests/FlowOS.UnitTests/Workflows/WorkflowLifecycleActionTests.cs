@@ -399,6 +399,150 @@ public class WorkflowLifecycleActionTests
         Assert.Contains("Transformed Payload", actionDesc);
     }
 
+    [Fact]
+    public async Task LifecycleActionMcpTools_ShouldAttachValidAction_ToInlineBlueprint()
+    {
+        var mediatorMock = new Mock<IMediator>();
+        var validator = new WorkflowClassValidator();
+        var tools = new LifecycleActionMcpTools(mediatorMock.Object, validator);
+
+        var bp = CreateBaseBlueprint();
+
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(bp),
+            ["stepId"] = "SubmitStep",
+            ["hook"] = "OnEntry",
+            ["action"] = new JObject
+            {
+                ["actionType"] = "Webhook",
+                ["url"] = "https://api.example.com/v1/orders/{{OrderId}}",
+                ["condition"] = "Amount > 500",
+                ["payloadMapping"] = new JObject
+                {
+                    ["orderRef"] = "OrderId",
+                    ["taxedTotal"] = "Amount * 1.15"
+                }
+            }
+        };
+
+        var result = await tools.AttachStepAction(args);
+        Assert.False(result.IsError);
+
+        var output = JObject.Parse(result.Content[0].Text);
+        var data = output["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("SubmitStep", data["stepId"]?.ToString());
+        Assert.Equal("OnEntry", data["hook"]?.ToString());
+        Assert.Equal(1, data["totalActions"]?.Value<int>());
+
+        // Verify the action was attached in the returned updated blueprint
+        var updatedBp = data["blueprint"]?.ToObject<WorkflowClassBlueprint>();
+        Assert.NotNull(updatedBp);
+        Assert.Single(updatedBp.Workflow.Steps[0].OnEntry);
+        Assert.Equal("Webhook", updatedBp.Workflow.Steps[0].OnEntry[0].ActionType);
+        Assert.Equal("https://api.example.com/v1/orders/{{OrderId}}", updatedBp.Workflow.Steps[0].OnEntry[0].Url);
+    }
+
+    [Fact]
+    public async Task LifecycleActionMcpTools_ShouldRejectInvalidAction_ViaValidator()
+    {
+        var mediatorMock = new Mock<IMediator>();
+        var validator = new WorkflowClassValidator();
+        var tools = new LifecycleActionMcpTools(mediatorMock.Object, validator);
+
+        var bp = CreateBaseBlueprint();
+
+        // 1. Invalid ActionType
+        var invalidTypeArgs = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(bp),
+            ["stepId"] = "SubmitStep",
+            ["hook"] = "OnEntry",
+            ["action"] = new JObject
+            {
+                ["actionType"] = "InvalidActionType",
+                ["target"] = "https://example.com"
+            }
+        };
+
+        var result = await tools.AttachStepAction(invalidTypeArgs);
+        Assert.True(result.IsError);
+        Assert.Contains("WF-ACT-001", result.Content[0].Text);
+
+        // 2. Invalid Webhook URL
+        var invalidUrlArgs = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(bp),
+            ["stepId"] = "SubmitStep",
+            ["hook"] = "OnEntry",
+            ["action"] = new JObject
+            {
+                ["actionType"] = "Webhook",
+                ["url"] = "not-a-valid-http-url"
+            }
+        };
+
+        var urlResult = await tools.AttachStepAction(invalidUrlArgs);
+        Assert.True(urlResult.IsError);
+        Assert.Contains("WF-ACT-002", urlResult.Content[0].Text);
+    }
+
+    [Fact]
+    public async Task LifecycleActionMcpTools_ShouldRemoveAction_AndListActions()
+    {
+        var mediatorMock = new Mock<IMediator>();
+        var validator = new WorkflowClassValidator();
+        var tools = new LifecycleActionMcpTools(mediatorMock.Object, validator);
+
+        var bp = CreateBaseBlueprint();
+        bp.Workflow.Steps[0].OnEntry.Add(new StepActionBlueprint
+        {
+            ActionType = "Notification",
+            Target = "AdminRole",
+            Template = "New order"
+        });
+        bp.Workflow.Steps[0].OnExit.Add(new StepActionBlueprint
+        {
+            ActionType = "Webhook",
+            Url = "https://api.example.com/done"
+        });
+
+        // 1. List actions
+        var listArgs = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(bp),
+            ["stepId"] = "SubmitStep"
+        };
+        var listResult = await tools.ListStepActions(listArgs);
+        Assert.False(listResult.IsError);
+        var listOutput = JObject.Parse(listResult.Content[0].Text);
+        var stepsArray = listOutput["data"]?["steps"] as JArray;
+        Assert.NotNull(stepsArray);
+        Assert.Single(stepsArray);
+        Assert.Equal(2, stepsArray[0]["totalHooks"]?.Value<int>());
+
+        // 2. Remove action
+        var removeArgs = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(bp),
+            ["stepId"] = "SubmitStep",
+            ["hook"] = "OnEntry",
+            ["actionIndex"] = 0
+        };
+        var removeResult = await tools.RemoveStepAction(removeArgs);
+        Assert.False(removeResult.IsError);
+        var removeOutput = JObject.Parse(removeResult.Content[0].Text);
+        var removeData = removeOutput["data"] as JObject;
+        Assert.NotNull(removeData);
+        Assert.Equal(0, removeData["remainingActions"]?.Value<int>());
+
+        var updatedBp = removeData["blueprint"]?.ToObject<WorkflowClassBlueprint>();
+        Assert.NotNull(updatedBp);
+        Assert.Empty(updatedBp.Workflow.Steps[0].OnEntry);
+        Assert.Single(updatedBp.Workflow.Steps[0].OnExit);
+    }
+
     private static WorkflowClassBlueprint CreateBaseBlueprint()
     {
         return new WorkflowClassBlueprint

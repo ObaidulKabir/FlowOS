@@ -154,7 +154,28 @@ public static class McpToolDescriptions
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,executionTrace,payload}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"]}"
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"]}",
+
+            ["attach_step_action"] =
+                "[Lifecycle Hooks] Attaches or updates a declarative lifecycle action (Webhook, Notification, or PublishEvent) on a step's OnEntry or OnExit hook in a draft WorkflowClass, with immediate validation and persistence. " +
+                "HTTP uses authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{stepId,hook,totalActions,actionAttached,persisted,message}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-NOTFOUND-002, MCP-VALIDATION-FAILED, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnEntry\",\"action\":{\"actionType\":\"Webhook\",\"url\":\"https://api.example.com/notify\",\"payloadMapping\":{\"order\":\"OrderId\"}}}",
+
+            ["remove_step_action"] =
+                "[Lifecycle Hooks] Removes a declarative lifecycle action from a step's OnEntry or OnExit hook in a draft WorkflowClass by index, actionType, or target. " +
+                "HTTP uses authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{stepId,hook,remainingActions,persisted,message}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-NOTFOUND-002, MCP-NOTFOUND-003, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnEntry\",\"actionIndex\":0}",
+
+            ["list_step_actions"] =
+                "[Lifecycle Hooks] Lists configured OnEntry and OnExit lifecycle actions for a specific step (or all steps) in a draft or published WorkflowClass. " +
+                "HTTP uses authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{workflow,stepCount,steps:[{stepId,stepType,onEntry,onExit,totalHooks}]}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\"}"
         };
 
     public static string For(string toolName) =>
@@ -171,6 +192,9 @@ public static class McpToolDescriptions
             ["suggest_agent_action"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["lint_draft_workflowclass"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_workflowclass"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
+            ["attach_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["remove_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["list_step_actions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_public_workflowclasses"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_instance_status"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),

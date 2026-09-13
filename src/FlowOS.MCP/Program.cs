@@ -540,6 +540,7 @@ public partial class Program
         services.AddScoped<InfoTools>();
         services.AddScoped<AnalysisTools>();
         services.AddScoped<SimulationTools>();
+        services.AddScoped<LifecycleActionMcpTools>();
         services.AddScoped<AgentTools>();
         services.AddScoped<ExecutionTools>();
         services.AddScoped<NotificationRepository>();
