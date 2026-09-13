@@ -8,9 +8,10 @@ import { EventAuditViewer } from './EventAuditViewer';
 import { DetailView } from './DetailView';
 import { DeadLetterQueueViewer } from './DeadLetterQueueViewer';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
+import { CompetitiveComparison } from './CompetitiveComparison';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
-  Globe, Cpu, Clock, Terminal, AlertTriangle, Sparkles
+  Globe, Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale
 } from 'lucide-react';
 
 interface Props {
@@ -19,7 +20,7 @@ interface Props {
 }
 
 export const AdminDashboard: React.FC<Props> = ({ session }) => {
-  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities'>('Tenants');
+  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities' | 'Comparison'>('Tenants');
   const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Public' | 'Shared' | 'Published'>('All');
 
   const [tenantsCount, setTenantsCount] = useState(0);
@@ -254,6 +255,15 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
               <Sparkles size={15} className="text-amber-400" />
               <span>✨ Engine Capabilities</span>
             </button>
+            <button
+              onClick={() => setActiveTab('Comparison')}
+              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'Comparison' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'text-indigo-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <Scale size={15} className="text-indigo-400" />
+              <span>⚖️ vs Competitors</span>
+            </button>
           </nav>
         </div>
 
@@ -261,6 +271,9 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
         <div className="p-6">
           {activeTab === 'Capabilities' && (
             <CapabilitiesShowcase />
+          )}
+          {activeTab === 'Comparison' && (
+            <CompetitiveComparison />
           )}
           {activeTab === 'Tenants' && (
             <TenantManager

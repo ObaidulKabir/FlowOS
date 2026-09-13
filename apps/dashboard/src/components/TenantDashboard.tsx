@@ -8,9 +8,10 @@ import { TenantApiKeyManager } from './TenantApiKeyManager';
 import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
+import { CompetitiveComparison } from './CompetitiveComparison';
 import { 
   Building2, Plus, Play, RefreshCw, Key, Activity, FileText, 
-  Cpu, Copy, Check, Filter, Sparkles
+  Cpu, Copy, Check, Filter, Sparkles, Scale
 } from 'lucide-react';
 
 interface Props {
@@ -20,7 +21,7 @@ interface Props {
 }
 
 export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
-  const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities'>('Instances');
+  const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Instances');
   const [blueprintSubTab, setBlueprintSubTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared'>('All');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
@@ -361,7 +362,16 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               }`}
             >
               <Sparkles size={15} className="text-amber-400" />
-              <span>✨ Engine Capabilities & Scenarios</span>
+              <span>✨ Engine Capabilities</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('Comparison')}
+              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'Comparison' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'text-indigo-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <Scale size={15} className="text-indigo-400" />
+              <span>⚖️ vs Competitors</span>
             </button>
           </nav>
         </div>
@@ -370,6 +380,9 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
         <div className="p-6">
           {activeTab === 'Capabilities' && (
             <CapabilitiesShowcase />
+          )}
+          {activeTab === 'Comparison' && (
+            <CompetitiveComparison />
           )}
           {activeTab === 'Instances' && (
             <div className="space-y-4">
