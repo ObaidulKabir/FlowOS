@@ -296,6 +296,78 @@ public class SimulationTools
                     }
                 }
 
+                // --- FORK STEP ---
+                if (stepTypeLower.Contains("fork"))
+                {
+                    var forkBranches = (step.Branches != null && step.Branches.Any())
+                        ? step.Branches
+                        : (step.NextSteps != null ? step.NextSteps.Values.Distinct().ToList() : new List<string>());
+
+                    totalStepsExecuted++;
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted,
+                        stepId = step.StepId,
+                        stepType = "Fork",
+                        action = $"Fork gateway activated. Concurrently spawned {forkBranches.Count} branches: [{string.Join(", ", forkBranches)}].",
+                        state = currentState
+                    });
+
+                    EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+
+                    if (forkBranches.Any())
+                    {
+                        currentStepId = forkBranches.First();
+                        var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                            string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                        if (targetStepObj != null)
+                        {
+                            EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                        }
+                        continue;
+                    }
+                    break;
+                }
+
+                // --- JOIN STEP ---
+                if (stepTypeLower.Contains("join"))
+                {
+                    var policy = !string.IsNullOrWhiteSpace(step.JoinPolicy) ? step.JoinPolicy : "WaitAll";
+                    var inbounds = step.InboundSteps ?? new List<string>();
+
+                    totalStepsExecuted++;
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted,
+                        stepId = step.StepId,
+                        stepType = "Join",
+                        action = $"Join gateway reached. Synchronized parallel inbound branches [{string.Join(", ", inbounds)}] with policy '{policy}'.",
+                        state = currentState
+                    });
+
+                    EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+
+                    string? nextTarget = null;
+                    if (step.NextSteps != null && step.NextSteps.TryGetValue("Default", out var dt)) nextTarget = dt;
+                    else if (step.NextSteps != null && step.NextSteps.Any()) nextTarget = step.NextSteps.First().Value;
+
+                    if (!string.IsNullOrEmpty(nextTarget))
+                    {
+                        currentStepId = nextTarget;
+                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                            if (targetStepObj != null)
+                            {
+                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            }
+                        }
+                        continue;
+                    }
+                    break;
+                }
+
                 // --- HUMAN TASK STEP ---
                 if (stepTypeLower.Contains("human"))
                 {

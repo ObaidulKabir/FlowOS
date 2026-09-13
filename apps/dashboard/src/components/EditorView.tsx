@@ -42,6 +42,9 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
     stepId: string, 
     stepType: string, 
     nextSteps: {outcome: string, target: string}[],
+    branches?: string[],
+    joinPolicy?: string,
+    inboundSteps?: string[],
     roles: string,
     slaDuration: string,
     slaTimeoutEvent: string,
@@ -99,6 +102,20 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                   target: rawRoutes[k]
               }));
               const rolesList = getProp(s, 'RequiredRoles') || [];
+              const rawBranches = getProp(s, 'Branches') || [];
+              const branches: string[] = Array.isArray(rawBranches)
+                  ? rawBranches
+                  : typeof rawBranches === 'string'
+                  ? rawBranches.split(',').map((b: string) => b.trim()).filter(Boolean)
+                  : [];
+              const joinPolicy = getProp(s, 'JoinPolicy') || 'WaitAll';
+              const rawInbound = getProp(s, 'InboundSteps') || [];
+              const inboundSteps: string[] = Array.isArray(rawInbound)
+                  ? rawInbound
+                  : typeof rawInbound === 'string'
+                  ? rawInbound.split(',').map((b: string) => b.trim()).filter(Boolean)
+                  : [];
+
               const slaRaw = getProp(s, 'Sla') || {};
               const onEntryRaw = getProp(s, 'OnEntry') || getProp(s, 'onEntry') || [];
               const onExitRaw = getProp(s, 'OnExit') || getProp(s, 'onExit') || [];
@@ -108,6 +125,9 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                   stepId: getProp(s, 'StepId') || '',
                   stepType: getProp(s, 'StepType') || 'Command',
                   nextSteps: nextStepsArray,
+                  branches,
+                  joinPolicy,
+                  inboundSteps,
                   roles: rolesList.join(', '),
                   slaDuration: getProp(slaRaw, 'Duration') || '',
                   slaTimeoutEvent: getProp(slaRaw, 'TimeoutEvent') || '',
@@ -152,6 +172,13 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                     
                     if (s.stepType === 'Decision') {
                         stepObj.Conditions = nextStepsDict;
+                    }
+                    if (s.stepType === 'Fork') {
+                        stepObj.Branches = s.branches || [];
+                    }
+                    if (s.stepType === 'Join') {
+                        stepObj.JoinPolicy = s.joinPolicy || 'WaitAll';
+                        stepObj.InboundSteps = s.inboundSteps || [];
                     }
 
                     if (s.slaDuration || s.slaTimeoutEvent || s.slaEscalationStepId) {
@@ -614,6 +641,151 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 onFailure: []
             }
         ]);
+    } else if (templateName === 'ParallelKYC') {
+        setName('ParallelKYCVerification');
+        setVersion('1.0.0');
+        setEvents([
+            { eventId: 'EVT-START-KYC', name: 'Start KYC Verification' },
+            { eventId: 'EVT-KYC-PASS', name: 'KYC Passed' },
+            { eventId: 'EVT-KYC-FAIL', name: 'KYC Rejected' }
+        ]);
+        setStates(['Initiated', 'Verifying', 'Approved', 'Flagged']);
+        setInitialState('Initiated');
+        setTransitions([
+            { from: 'Initiated', to: 'Verifying', evt: 'EVT-START-KYC' },
+            { from: 'Verifying', to: 'Approved', evt: 'EVT-KYC-PASS' },
+            { from: 'Verifying', to: 'Flagged', evt: 'EVT-KYC-FAIL' }
+        ]);
+        setStartStepId('InitiateVerification');
+        setSteps([
+            {
+                stepId: 'InitiateVerification',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-START-KYC', target: 'ParallelFork' }],
+                branches: [],
+                joinPolicy: 'WaitAll',
+                inboundSteps: [],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'ComplianceLead',
+                    template: 'KYC verification started for customer {{CustomerId}}'
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'ParallelFork',
+                stepType: 'Fork',
+                nextSteps: [],
+                branches: ['CheckIdentity', 'CheckFinancials', 'CheckSanctions'],
+                joinPolicy: 'WaitAll',
+                inboundSteps: [],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'CheckIdentity',
+                stepType: 'HumanTask',
+                nextSteps: [{ outcome: 'Default', target: 'ParallelJoin' }],
+                branches: [],
+                joinPolicy: 'WaitAll',
+                inboundSteps: [],
+                roles: 'ComplianceOfficer',
+                slaDuration: '24h',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'ComplianceOfficer',
+                    template: 'Task: Review government ID and biometric scan for {{CustomerId}}'
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'CheckFinancials',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'ParallelJoin' }],
+                branches: [],
+                joinPolicy: 'WaitAll',
+                inboundSteps: [],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Webhook',
+                    target: 'https://financial-risk.internal/api/v1/score',
+                    template: 'Evaluating creditworthiness and financial health for {{CustomerId}}',
+                    payloadMapping: { customerId: 'CustomerId' }
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'CheckSanctions',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'Default', target: 'ParallelJoin' }],
+                branches: [],
+                joinPolicy: 'WaitAll',
+                inboundSteps: [],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Webhook',
+                    target: 'https://sanctions.internal/api/v1/screening',
+                    template: 'Screening OFAC, PEP, and global watchlists for {{CustomerId}}',
+                    payloadMapping: { customerId: 'CustomerId' }
+                }],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'ParallelJoin',
+                stepType: 'Join',
+                nextSteps: [{ outcome: 'Default', target: 'FinalApproval' }],
+                branches: [],
+                joinPolicy: 'WaitAll',
+                inboundSteps: ['CheckIdentity', 'CheckFinancials', 'CheckSanctions'],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [],
+                onExit: [],
+                onFailure: []
+            },
+            {
+                stepId: 'FinalApproval',
+                stepType: 'Command',
+                nextSteps: [{ outcome: 'EVT-KYC-PASS', target: 'END' }],
+                branches: [],
+                joinPolicy: 'WaitAll',
+                inboundSteps: [],
+                roles: 'System',
+                slaDuration: '',
+                slaTimeoutEvent: '',
+                slaEscalationStepId: '',
+                onEntry: [{
+                    actionType: 'Notification',
+                    target: 'Customer',
+                    template: 'Your KYC verification has been completed and approved!'
+                }],
+                onExit: [],
+                onFailure: []
+            }
+        ]);
     }
   };
 
@@ -629,6 +801,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                     {!item && (
                         <select onChange={(e) => loadTemplate(e.target.value)} className="text-xs bg-slate-800 border border-slate-700 text-slate-200 p-1.5 rounded-lg mr-2" defaultValue="">
                             <option value="" disabled>Load Blueprint Example...</option>
+                            <option value="ParallelKYC">Flagship: Parallel KYC Verification (Fork-Join / Scatter-Gather)</option>
                             <option value="OrderSaga">Flagship: Order Saga Fulfillment (Distributed Saga & Rollback)</option>
                             <option value="LoanUnderwriting">Flagship: Loan Underwriting (Decision Engine & HMAC)</option>
                             <option value="SecOpsAccess">Flagship: SecOps Access Governance (24h SLA Timers)</option>
@@ -809,9 +982,116 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                         <option value="Event">Event</option>
                                                         <option value="Decision">Decision</option>
                                                         <option value="Timer">Timer</option>
+                                                        <option value="Fork">Fork (Parallel Split)</option>
+                                                        <option value="Join">Join (Parallel Synchronization)</option>
                                                     </select>
                                                 </div>
                                             </div>
+
+                                            {/* Fork Specific Configuration */}
+                                            {step.stepType === 'Fork' && (
+                                                <div className="mb-3 p-3 bg-indigo-50/70 rounded-lg border border-indigo-200">
+                                                    <div className="flex items-center justify-between mb-1.5">
+                                                        <label className="text-xs font-bold text-indigo-900 flex items-center gap-1">
+                                                            <span>🔀 Parallel Branches (Target Step IDs)</span>
+                                                        </label>
+                                                        <span className="text-[10px] text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded font-mono">
+                                                            {(step.branches || []).length} branches
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[11px] text-indigo-700 mb-2 leading-relaxed">
+                                                        Spawns concurrent execution tokens. Each branch step executes in parallel until arriving at a Join.
+                                                    </p>
+                                                    <div className="space-y-1.5">
+                                                        {(step.branches || []).map((branch, bIdx) => (
+                                                            <div key={bIdx} className="flex gap-2 items-center">
+                                                                <span className="text-xs text-indigo-600 font-mono font-medium min-w-[65px]">
+                                                                    Branch {bIdx + 1}:
+                                                                </span>
+                                                                <input
+                                                                    value={branch}
+                                                                    onChange={e => {
+                                                                        const newSteps = [...steps];
+                                                                        const newBranches = [...(newSteps[idx].branches || [])];
+                                                                        newBranches[bIdx] = e.target.value;
+                                                                        newSteps[idx].branches = newBranches;
+                                                                        setSteps(newSteps);
+                                                                    }}
+                                                                    placeholder="Target Branch Step ID (e.g. CheckIdentity)"
+                                                                    className="flex-1 border p-1 rounded text-xs font-mono"
+                                                                />
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const newSteps = [...steps];
+                                                                        newSteps[idx].branches = (newSteps[idx].branches || []).filter((_, i) => i !== bIdx);
+                                                                        setSteps(newSteps);
+                                                                    }}
+                                                                    className="text-red-400 hover:text-red-600 px-1"
+                                                                >×</button>
+                                                            </div>
+                                                        ))}
+                                                        <button
+                                                            onClick={() => {
+                                                                const newSteps = [...steps];
+                                                                newSteps[idx].branches = [...(newSteps[idx].branches || []), ''];
+                                                                setSteps(newSteps);
+                                                            }}
+                                                            className="text-xs text-indigo-600 hover:underline font-semibold mt-1 inline-block"
+                                                        >+ Add Parallel Branch</button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Join Specific Configuration */}
+                                            {step.stepType === 'Join' && (
+                                                <div className="mb-3 p-3 bg-teal-50/70 rounded-lg border border-teal-200">
+                                                    <div className="flex items-center justify-between mb-1.5">
+                                                        <label className="text-xs font-bold text-teal-900 flex items-center gap-1">
+                                                            <span>🔗 Join Barrier & Synchronization Policy</span>
+                                                        </label>
+                                                        <span className="text-[10px] text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded font-mono">
+                                                            Policy: {step.joinPolicy || 'WaitAll'}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[11px] text-teal-700 mb-2 leading-relaxed">
+                                                        Synchronizes concurrent branches before proceeding to the continuation step.
+                                                    </p>
+                                                    <div className="grid grid-cols-2 gap-3 mb-2">
+                                                        <div>
+                                                            <label className="block text-[11px] font-medium text-teal-900 mb-1">
+                                                                Synchronization Mode
+                                                            </label>
+                                                            <select
+                                                                value={step.joinPolicy || 'WaitAll'}
+                                                                onChange={e => {
+                                                                    const newSteps = [...steps];
+                                                                    newSteps[idx].joinPolicy = e.target.value;
+                                                                    setSteps(newSteps);
+                                                                }}
+                                                                className="w-full border p-1 rounded text-xs bg-white"
+                                                            >
+                                                                <option value="WaitAll">WaitAll (Wait for all inbound branches to complete)</option>
+                                                                <option value="WaitAny">WaitAny (First branch to finish satisfies join)</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[11px] font-medium text-teal-900 mb-1">
+                                                                Expected Inbound Step IDs
+                                                            </label>
+                                                            <input
+                                                                value={(step.inboundSteps || []).join(', ')}
+                                                                onChange={e => {
+                                                                    const newSteps = [...steps];
+                                                                    newSteps[idx].inboundSteps = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                                                    setSteps(newSteps);
+                                                                }}
+                                                                placeholder="e.g. CheckIdentity, CheckFinancials, CheckSanctions"
+                                                                className="w-full border p-1 rounded text-xs font-mono bg-white"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             <div className="mb-3">
                                                 <label className="block text-xs text-gray-500 mb-1">Next Steps (Routes)</label>
@@ -932,7 +1212,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                         </div>
                                     ))}
                                     <button 
-                                        onClick={() => setSteps([...steps, { stepId: '', stepType: 'Command', nextSteps: [], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] }])}
+                                        onClick={() => setSteps([...steps, { stepId: '', stepType: 'Command', nextSteps: [], branches: [], joinPolicy: 'WaitAll', inboundSteps: [], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] }])}
                                         className="w-full py-2 border-2 border-dashed border-gray-300 rounded text-gray-500 hover:border-blue-300 hover:text-blue-500 transition-colors"
                                     >
                                         + Add Workflow Step

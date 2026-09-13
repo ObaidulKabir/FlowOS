@@ -14,5 +14,7 @@ public enum WorkflowStepType
     HumanTask,
     Timer,
     Decision,
-    End
+    End,
+    Fork,
+    Join
 }

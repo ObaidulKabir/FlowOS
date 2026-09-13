@@ -33,9 +33,20 @@ public class WorkflowEngine : IWorkflowEngine
 
         if (instance.WorkflowVersion != definition.Version)
             return WorkflowAdvanceResult.Failed("Version mismatch.");
-        //picking the current step from the instance's CurrentStepId,
-        //which is set to "Start" when the workflow is initiated.
-        var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+        // 1. Locate current step (supports parallel tokens in ActiveStepIds)
+        WorkflowStepDefinition? currentStep = null;
+
+        if (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 1)
+        {
+            // Disambiguate: select active parallel branch that responds to this event
+            currentStep = definition.Steps.FirstOrDefault(s => instance.ActiveStepIds.Contains(s.StepId) && s.NextSteps.ContainsKey(domainEvent.EventType));
+        }
+
+        if (currentStep == null)
+        {
+            currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+        }
+
         if (currentStep == null)
             return WorkflowAdvanceResult.Failed($"Current step '{instance.CurrentStepId}' not found in definition.");
 
@@ -43,8 +54,7 @@ public class WorkflowEngine : IWorkflowEngine
         if (!currentStep.NextSteps.TryGetValue(domainEvent.EventType, out var nextStepId))
         {
             // Event does not trigger a transition from this step
-            // This is not an error, just no-op for the workflow
-            return WorkflowAdvanceResult.Failed($"No transition defined for event '{domainEvent.EventType}' from step '{instance.CurrentStepId}'.");
+            return WorkflowAdvanceResult.Failed($"No transition defined for event '{domainEvent.EventType}' from step '{currentStep.StepId}'.");
         }
 
         // 3. State Machine Enforcement (The Law)
@@ -55,11 +65,6 @@ public class WorkflowEngine : IWorkflowEngine
                 currentEntityState,
                 domainEvent,
                 context);
-
-            // We check ResultType. If Ignored, we proceed. If Allowed, we proceed. 
-            // If Denied, we fail.
-            // Note: ValidateTransition sets IsAllowed=true for Ignored, but false for Denied.
-            // So checking !IsAllowed covers Denied.
 
             if (!smResult.IsAllowed)
             {
@@ -73,8 +78,20 @@ public class WorkflowEngine : IWorkflowEngine
         }
 
         // 4. Handle End of Workflow
-        if (nextStepId == "END") // Convention for end
+        if (nextStepId == "END")
         {
+            if (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 1)
+            {
+                instance.CompleteBranch(currentStep.StepId);
+                if (instance.ActiveStepIds.Count == 0)
+                {
+                    instance.Complete();
+                    return WorkflowAdvanceResult.Completed();
+                }
+                instance.Wait();
+                return WorkflowAdvanceResult.Waiting($"Branch '{currentStep.StepId}' ended. Remaining parallel branch(es): {string.Join(", ", instance.ActiveStepIds)}.");
+            }
+
             instance.Complete();
             return WorkflowAdvanceResult.Completed();
         }
@@ -85,6 +102,120 @@ public class WorkflowEngine : IWorkflowEngine
             return WorkflowAdvanceResult.Failed($"Target step '{nextStepId}' not found.");
 
         // 6. Execute Step Logic
+
+        // --- FORK STEP ---
+        if (nextStep.StepType == WorkflowStepType.Fork)
+        {
+            var forkTargets = (nextStep.Branches != null && nextStep.Branches.Any())
+                ? nextStep.Branches
+                : nextStep.NextSteps.Values.Distinct().ToList();
+
+            if (forkTargets.Count < 2)
+                return WorkflowAdvanceResult.Failed($"Fork step '{nextStepId}' must declare at least 2 distinct branch targets.");
+
+            instance.ForkTo(forkTargets);
+
+            bool anyWaiting = false;
+            foreach (var targetId in forkTargets)
+            {
+                var targetStep = definition.Steps.FirstOrDefault(s => s.StepId == targetId);
+                if (targetStep != null && (targetStep.StepType == WorkflowStepType.HumanTask || targetStep.StepType == WorkflowStepType.Timer))
+                {
+                    anyWaiting = true;
+                }
+            }
+
+            if (anyWaiting)
+            {
+                instance.Wait();
+                return WorkflowAdvanceResult.Waiting($"Forked into {forkTargets.Count} parallel branches: {string.Join(", ", forkTargets)} (waiting for branch tasks).");
+            }
+
+            return WorkflowAdvanceResult.Advanced(instance.CurrentStepId);
+        }
+
+        // --- JOIN STEP ---
+        if (nextStep.StepType == WorkflowStepType.Join)
+        {
+            var policy = !string.IsNullOrWhiteSpace(nextStep.JoinPolicy) ? nextStep.JoinPolicy : "WaitAll";
+            var inbounds = (nextStep.InboundSteps != null && nextStep.InboundSteps.Any())
+                ? nextStep.InboundSteps
+                : new List<string>();
+
+            // Complete the current branch
+            instance.CompleteBranch(currentStep.StepId);
+
+            bool joinSatisfied = false;
+            if (policy.Equals("WaitAny", StringComparison.OrdinalIgnoreCase))
+            {
+                joinSatisfied = true;
+            }
+            else
+            {
+                // WaitAll: every inbound step must be in CompletedParallelStepIds
+                joinSatisfied = inbounds.All(s => instance.CompletedParallelStepIds.Contains(s));
+            }
+
+            if (joinSatisfied)
+            {
+                string? continuationStepId = null;
+                if (nextStep.NextSteps.TryGetValue("Default", out var defTarget))
+                {
+                    continuationStepId = defTarget;
+                }
+                else if (nextStep.NextSteps.Any())
+                {
+                    continuationStepId = nextStep.NextSteps.First().Value;
+                }
+
+                if (string.IsNullOrEmpty(continuationStepId))
+                {
+                    return WorkflowAdvanceResult.Failed($"Join step '{nextStepId}' has no exit path.");
+                }
+
+                if (continuationStepId == "END")
+                {
+                    instance.Complete();
+                    return WorkflowAdvanceResult.Completed();
+                }
+
+                var contStep = definition.Steps.FirstOrDefault(s => s.StepId == continuationStepId);
+                if (contStep == null)
+                    return WorkflowAdvanceResult.Failed($"Join continuation target '{continuationStepId}' not found.");
+
+                instance.JoinTo(continuationStepId);
+
+                if (contStep.StepType == WorkflowStepType.HumanTask || contStep.StepType == WorkflowStepType.Timer)
+                {
+                    instance.Wait();
+                    return WorkflowAdvanceResult.Waiting($"Parallel branches converged at join '{nextStepId}'. Waiting at '{continuationStepId}'.");
+                }
+
+                return WorkflowAdvanceResult.Advanced(continuationStepId);
+            }
+            else
+            {
+                instance.Wait();
+                var pending = inbounds.Where(s => !instance.CompletedParallelStepIds.Contains(s));
+                return WorkflowAdvanceResult.Waiting($"Branch '{currentStep.StepId}' arrived at join '{nextStepId}'. Waiting for remaining branch(es): {string.Join(", ", pending)}.");
+            }
+        }
+
+        // --- PARALLEL BRANCH CONTINUATION ---
+        if (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 1)
+        {
+            instance.CompleteBranch(currentStep.StepId, nextStepId);
+
+            if (nextStep.StepType == WorkflowStepType.HumanTask || nextStep.StepType == WorkflowStepType.Timer)
+            {
+                instance.Wait();
+                return WorkflowAdvanceResult.Waiting($"Branch '{currentStep.StepId}' advanced to '{nextStepId}' (waiting).");
+            }
+
+            return WorkflowAdvanceResult.Advanced(nextStepId);
+        }
+
+        // --- HUMAN TASK ---
         if (nextStep.StepType == WorkflowStepType.HumanTask)
         {
             instance.AdvanceTo(nextStepId);
@@ -99,8 +230,6 @@ public class WorkflowEngine : IWorkflowEngine
         }
         else if (nextStep.StepType == WorkflowStepType.Decision)
         {
-            // Evaluate each condition expression against the execution context payload.
-            // The first condition that evaluates to true determines the target step.
             string? decisionTarget = null;
 
             foreach (var condition in nextStep.Conditions)
@@ -122,7 +251,6 @@ public class WorkflowEngine : IWorkflowEngine
                 }
             }
 
-            // If no condition met, look for "Default" key in Conditions?
             if (decisionTarget == null && nextStep.Conditions.ContainsKey("Default"))
             {
                 decisionTarget = nextStep.Conditions["Default"];
@@ -130,17 +258,12 @@ public class WorkflowEngine : IWorkflowEngine
 
             if (decisionTarget != null)
             {
-                // Recursive Advance!
-                // We found where to go, so we advance the instance to this Decision Step (transiently)
-                // then immediately advance to the target.
-                instance.AdvanceTo(nextStepId); // Record we hit the decision
+                instance.AdvanceTo(nextStepId);
 
-                // Now verify target exists
                 var targetStep = definition.Steps.FirstOrDefault(s => s.StepId == decisionTarget);
                 if (targetStep == null)
                     return WorkflowAdvanceResult.Failed($"Decision target '{decisionTarget}' not found.");
 
-                // Move instance to target
                 if (decisionTarget == "END")
                 {
                     instance.Complete();

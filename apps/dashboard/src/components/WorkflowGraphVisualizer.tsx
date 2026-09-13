@@ -94,6 +94,9 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     roles: string[];
     nextSteps: Record<string, string>;
     conditions: Record<string, string>;
+    branches?: string[];
+    joinPolicy?: string;
+    inboundSteps?: string[];
     sla?: { duration?: string; timeoutEvent?: string; escalationStepId?: string };
     totalHooks?: number;
   }
@@ -113,6 +116,20 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     const nextSteps = getProp(s, 'nextSteps', 'NextSteps') || {};
     const conditions = getProp(s, 'conditions', 'Conditions') || {};
     
+    const rawBranches = getProp(s, 'branches', 'Branches') || [];
+    const branches: string[] = Array.isArray(rawBranches)
+      ? rawBranches
+      : typeof rawBranches === 'string'
+      ? rawBranches.split(',').map((b: string) => b.trim()).filter(Boolean)
+      : [];
+    const joinPolicy = getProp(s, 'joinPolicy', 'JoinPolicy') || 'WaitAll';
+    const rawInbound = getProp(s, 'inboundSteps', 'InboundSteps') || [];
+    const inboundSteps: string[] = Array.isArray(rawInbound)
+      ? rawInbound
+      : typeof rawInbound === 'string'
+      ? rawInbound.split(',').map((b: string) => b.trim()).filter(Boolean)
+      : [];
+
     const slaRaw = getProp(s, 'sla', 'Sla', 'SLA');
     const sla = slaRaw ? {
       duration: getProp(slaRaw, 'duration', 'Duration'),
@@ -132,6 +149,9 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       roles,
       nextSteps,
       conditions,
+      branches,
+      joinPolicy,
+      inboundSteps,
       sla,
       totalHooks
     };
@@ -150,6 +170,9 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       // Follow next step targets
       Object.values(found.nextSteps).forEach(target => addStepRecursive(target as string));
       Object.values(found.conditions).forEach(target => addStepRecursive(target as string));
+      if (found.branches && Array.isArray(found.branches)) {
+        found.branches.forEach((b: string) => addStepRecursive(b));
+      }
       if (found.sla?.escalationStepId) {
         addStepRecursive(found.sla.escalationStepId);
       }
@@ -176,8 +199,13 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     chart += 'classDef completed fill:#0f766e,stroke:#047857,color:#fff\n';
     chart += 'classDef pending fill:#1e293b,stroke:#334155,color:#cbd5e1\n\n';
 
+    const activeTokens = (currentStepId || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean);
+
     orderedSteps.forEach(step => {
-      const isCurrent = currentStepId && currentStepId.toLowerCase() === step.stepId.toLowerCase();
+      const isCurrent = activeTokens.includes(step.stepId.toLowerCase());
       const isCompleted = completedSteps.some(cs => cs.toLowerCase() === step.stepId.toLowerCase());
       
       const className = isCurrent ? ':::current' : isCompleted ? ':::completed' : ':::pending';
@@ -185,7 +213,11 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       let shapeEnd = '])';
       
       const t = step.stepType.toLowerCase();
-      if (t.includes('decision') || t.includes('choice')) {
+      if (t.includes('fork')) {
+        shapeStart = '{{'; shapeEnd = '}}';
+      } else if (t.includes('join')) {
+        shapeStart = '[/'; shapeEnd = '/]';
+      } else if (t.includes('decision') || t.includes('choice')) {
         shapeStart = '{'; shapeEnd = '}';
       } else if (t.includes('timer') || t.includes('delay')) {
         shapeStart = '(('; shapeEnd = '))';
@@ -194,7 +226,15 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       }
       
       const cleanLabel = (step.label || step.stepId).replace(/["{[\]}]/g, '');
-      let displayLabel = step.roles.length > 0 ? `${cleanLabel}<br/>(Role: ${step.roles.join(', ')})` : cleanLabel;
+      let displayLabel = cleanLabel;
+      if (t.includes('fork')) {
+        displayLabel = `🔀 FORK: ${cleanLabel}`;
+      } else if (t.includes('join')) {
+        displayLabel = `🔗 JOIN (${step.joinPolicy || 'WaitAll'}): ${cleanLabel}`;
+      }
+      if (step.roles.length > 0) {
+        displayLabel += `<br/>(Role: ${step.roles.join(', ')})`;
+      }
       if (step.sla?.duration) {
          displayLabel += `<br/>⏱️ SLA: ${step.sla.duration}`;
       }
@@ -207,6 +247,11 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     chart += '\n';
 
     orderedSteps.forEach(step => {
+      if (step.branches && Array.isArray(step.branches) && step.branches.length > 0) {
+        step.branches.forEach((branchTarget, bIdx) => {
+          chart += `  ${safeId(step.stepId)} ==>|"Branch ${bIdx + 1}"| ${safeId(branchTarget)}\n`;
+        });
+      }
       Object.entries(step.nextSteps).forEach(([evt, target]) => {
         chart += `  ${safeId(step.stepId)} -->|"${evt}"| ${safeId(target)}\n`;
       });
@@ -311,10 +356,12 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
             </span>
             <div>
               <div className="text-xs font-semibold text-white flex flex-wrap items-center gap-2">
-                <span>Active Execution Step:</span>
-                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-xs border border-amber-500/30">
-                  {currentStepId}
-                </span>
+                <span>Active Execution Step{(currentStepId || '').includes(',') ? 's' : ''}:</span>
+                {(currentStepId || '').split(',').map((tok, tIdx) => (
+                  <span key={tIdx} className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-xs border border-amber-500/30">
+                    {tok.trim()}
+                  </span>
+                ))}
                 {currentState && (
                   <>
                     <span className="text-slate-500">•</span>

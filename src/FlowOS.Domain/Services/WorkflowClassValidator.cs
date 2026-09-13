@@ -129,6 +129,24 @@ public class WorkflowClassValidator
                         }
                     }
                 }
+
+                // Enqueue Fork paths
+                if (string.Equals(step.StepType, "Fork", StringComparison.OrdinalIgnoreCase))
+                {
+                    var forkTargets = (step.Branches != null && step.Branches.Any())
+                        ? step.Branches
+                        : (step.NextSteps != null ? step.NextSteps.Values.ToList() : new List<string>());
+
+                    foreach (var next in forkTargets)
+                    {
+                        if (next == "END") continue;
+                        if (!reachableSteps.Contains(next) && stepIds.Contains(next))
+                        {
+                            reachableSteps.Add(next);
+                            queue.Enqueue(next);
+                        }
+                    }
+                }
             }
         }
 
@@ -140,6 +158,8 @@ public class WorkflowClassValidator
                  
             // Check Exit Path (Strict Rule from Prompt)
             bool isEndStep = string.Equals(step.StepType, "End", StringComparison.OrdinalIgnoreCase);
+            bool isFork = string.Equals(step.StepType, "Fork", StringComparison.OrdinalIgnoreCase);
+            bool isJoin = string.Equals(step.StepType, "Join", StringComparison.OrdinalIgnoreCase);
             bool isDecision = string.Equals(step.StepType, "Decision", StringComparison.OrdinalIgnoreCase);
             bool isCommand = string.Equals(step.StepType, "Command", StringComparison.OrdinalIgnoreCase);
             bool isSystem = string.Equals(step.StepType, "SystemTask", StringComparison.OrdinalIgnoreCase);
@@ -148,6 +168,28 @@ public class WorkflowClassValidator
             {
                 if (step.NextSteps != null && step.NextSteps.Any())
                     result.AddError("WF-STRUCT-005", "WorkflowStructure", $"End Step '{step.StepId}' should not have NextSteps", "Workflow");
+            }
+            else if (isFork)
+            {
+                var branches = (step.Branches != null && step.Branches.Any())
+                    ? step.Branches
+                    : (step.NextSteps != null ? step.NextSteps.Values.ToList() : new List<string>());
+
+                if (branches == null || branches.Distinct().Count() < 2)
+                {
+                    result.AddError("WF-FORK-001", "WorkflowStructure", $"Fork Step '{step.StepId}' must declare at least 2 distinct target branches", "Workflow");
+                }
+            }
+            else if (isJoin)
+            {
+                if (step.InboundSteps == null || step.InboundSteps.Distinct().Count() < 2)
+                {
+                    result.AddError("WF-JOIN-001", "WorkflowStructure", $"Join Step '{step.StepId}' must declare at least 2 distinct InboundSteps", "Workflow");
+                }
+                if (step.NextSteps == null || !step.NextSteps.Any())
+                {
+                    result.AddError("WF-COMP-002", "WorkflowCompleteness", $"Join Step '{step.StepId}' has no exit path", "Workflow");
+                }
             }
             else if (isDecision)
             {
@@ -200,6 +242,30 @@ public class WorkflowClassValidator
                 {
                     if (nextStepId != "END" && !stepIds.Contains(nextStepId))
                         result.AddError("CON-004", "Consistency", $"Step '{step.StepId}' Conditions references unknown NextStep '{nextStepId}'", "Workflow");
+                }
+            }
+
+            // Check Fork branch targets
+            if (string.Equals(step.StepType, "Fork", StringComparison.OrdinalIgnoreCase))
+            {
+                var forkTargets = (step.Branches != null && step.Branches.Any())
+                    ? step.Branches
+                    : (step.NextSteps != null ? step.NextSteps.Values.ToList() : new List<string>());
+
+                foreach (var nextStepId in forkTargets)
+                {
+                    if (nextStepId != "END" && !stepIds.Contains(nextStepId))
+                        result.AddError("CON-004", "Consistency", $"Fork Step '{step.StepId}' references unknown branch target '{nextStepId}'", "Workflow");
+                }
+            }
+
+            // Check Join inbound steps
+            if (string.Equals(step.StepType, "Join", StringComparison.OrdinalIgnoreCase) && step.InboundSteps != null)
+            {
+                foreach (var inboundId in step.InboundSteps)
+                {
+                    if (!stepIds.Contains(inboundId))
+                        result.AddError("CON-004", "Consistency", $"Join Step '{step.StepId}' references unknown InboundStep '{inboundId}'", "Workflow");
                 }
             }
 

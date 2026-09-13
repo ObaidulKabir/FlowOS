@@ -17,11 +17,17 @@ public class WorkflowInstance : IWorkflowInstance
     public string? CurrentState { get; private set; }
     public WorkflowInstanceStatus Status { get; private set; }
 
+    // Parallel Execution Tokens
+    public List<string> ActiveStepIds { get; private set; } = new();
+    public List<string> CompletedParallelStepIds { get; private set; } = new();
+
     // Orchestration state only - not business data
 
     protected WorkflowInstance()
     {
         CurrentStepId = null!;
+        ActiveStepIds = new List<string>();
+        CompletedParallelStepIds = new List<string>();
     }
 
     public WorkflowInstance(Guid tenantId, Guid definitionId, Guid workflowClassId, int version, string initialStepId, Guid? correlationId = null, string? initialState = null)
@@ -39,6 +45,8 @@ public class WorkflowInstance : IWorkflowInstance
         Status = WorkflowInstanceStatus.Running;
         CorrelationId = correlationId;
         CreatedAt = DateTime.UtcNow;
+        ActiveStepIds = new List<string> { initialStepId };
+        CompletedParallelStepIds = new List<string>();
     }
 
     public DateTime CreatedAt { get; private set; }
@@ -50,6 +58,51 @@ public class WorkflowInstance : IWorkflowInstance
             throw new InvalidOperationException("Cannot advance a terminated workflow.");
 
         CurrentStepId = nextStepId;
+        ActiveStepIds = new List<string> { nextStepId };
+        Status = WorkflowInstanceStatus.Running;
+    }
+
+    public void ForkTo(IEnumerable<string> branchStepIds)
+    {
+        if (Status == WorkflowInstanceStatus.Completed || Status == WorkflowInstanceStatus.Failed)
+            throw new InvalidOperationException("Cannot fork a terminated workflow.");
+
+        var list = branchStepIds.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+        if (list.Count < 2)
+            throw new InvalidOperationException("A fork must have at least 2 target branches.");
+
+        ActiveStepIds = list;
+        CurrentStepId = string.Join(", ", list);
+        Status = WorkflowInstanceStatus.Running;
+    }
+
+    public void CompleteBranch(string completedStepId, string? nextStepInBranch = null)
+    {
+        ActiveStepIds.Remove(completedStepId);
+        if (!CompletedParallelStepIds.Contains(completedStepId))
+        {
+            CompletedParallelStepIds.Add(completedStepId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(nextStepInBranch) && nextStepInBranch != "END")
+        {
+            if (!ActiveStepIds.Contains(nextStepInBranch))
+            {
+                ActiveStepIds.Add(nextStepInBranch);
+            }
+        }
+
+        CurrentStepId = ActiveStepIds.Count > 0 ? string.Join(", ", ActiveStepIds) : (nextStepInBranch ?? completedStepId);
+    }
+
+    public void JoinTo(string continuationStepId)
+    {
+        if (Status == WorkflowInstanceStatus.Completed || Status == WorkflowInstanceStatus.Failed)
+            throw new InvalidOperationException("Cannot advance a terminated workflow.");
+
+        CompletedParallelStepIds.Clear();
+        CurrentStepId = continuationStepId;
+        ActiveStepIds = new List<string> { continuationStepId };
         Status = WorkflowInstanceStatus.Running;
     }
 

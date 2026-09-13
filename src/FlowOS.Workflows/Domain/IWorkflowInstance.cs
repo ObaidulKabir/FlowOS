@@ -15,8 +15,12 @@ namespace FlowOS.Workflows.Domain
         Guid WorkflowClassId { get; }
         Guid WorkflowDefinitionId { get; }
         int WorkflowVersion { get; }
+        List<string> ActiveStepIds { get; }
 
         void AdvanceTo(string nextStepId);
+        void ForkTo(IEnumerable<string> branchStepIds);
+        void CompleteBranch(string completedStepId, string? nextStepInBranch = null);
+        void JoinTo(string continuationStepId);
         void SetCurrentState(string state);
         void Complete();
         void Wait();

@@ -37,6 +37,11 @@ public static class WorkflowClassCompiler
                 AllowedRoles = stepBp.RequiredRoles,
                 NextSteps = stepBp.NextSteps,
                 Conditions = stepBp.Conditions,
+                Branches = (stepBp.Branches != null && stepBp.Branches.Any())
+                    ? stepBp.Branches
+                    : (stepType == WorkflowStepType.Fork ? stepBp.NextSteps.Values.ToList() : new List<string>()),
+                JoinPolicy = !string.IsNullOrWhiteSpace(stepBp.JoinPolicy) ? stepBp.JoinPolicy : "WaitAll",
+                InboundSteps = stepBp.InboundSteps ?? new List<string>(),
                 Sla = stepBp.Sla != null ? new StepSlaDefinition(
                     stepBp.Sla.Duration,
                     stepBp.Sla.TimeoutEvent,

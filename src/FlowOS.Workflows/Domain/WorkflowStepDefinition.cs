@@ -19,6 +19,11 @@ public class WorkflowStepDefinition
     // Value: NextStepId
     public Dictionary<string, string> Conditions { get; set; } = new();
 
+    // For Parallel Fork/Join steps
+    public List<string> Branches { get; set; } = new();
+    public string JoinPolicy { get; set; } = "WaitAll"; // "WaitAll" or "WaitAny"
+    public List<string> InboundSteps { get; set; } = new();
+
     // Declarative Step SLA / Boundary Timer & Escalation
     public StepSlaDefinition? Sla { get; set; }
 

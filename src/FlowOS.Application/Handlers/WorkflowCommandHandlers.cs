@@ -332,20 +332,27 @@ public class WorkflowCommandHandlers :
                 }
             }
 
-            // Trigger OnEntry actions of new step
-            if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
+            // Trigger OnEntry actions of new step(s)
+            if (_actionDispatcher != null)
             {
-                var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
-                if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                var enteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                    ? instance.ActiveStepIds.ToList()
+                    : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+
+                foreach (var stepId in enteredStepIds)
                 {
-                    await _actionDispatcher.QueueActionsAsync(
-                        request.TenantId,
-                        instance.Id,
-                        instance.CurrentStepId,
-                        "OnEntry",
-                        enteredStep.OnEntry,
-                        context.Payload,
-                        cancellationToken);
+                    var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
+                    if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                    {
+                        await _actionDispatcher.QueueActionsAsync(
+                            request.TenantId,
+                            instance.Id,
+                            stepId,
+                            "OnEntry",
+                            enteredStep.OnEntry,
+                            context.Payload,
+                            cancellationToken);
+                    }
                 }
             }
 
@@ -461,20 +468,27 @@ public class WorkflowCommandHandlers :
                 }
             }
 
-            // Trigger OnEntry actions of new step
-            if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
+            // Trigger OnEntry actions of new step(s)
+            if (_actionDispatcher != null)
             {
-                var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
-                if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                var enteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                    ? instance.ActiveStepIds.ToList()
+                    : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+
+                foreach (var stepId in enteredStepIds)
                 {
-                    await _actionDispatcher.QueueActionsAsync(
-                        request.TenantId,
-                        instance.Id,
-                        instance.CurrentStepId,
-                        "OnEntry",
-                        enteredStep.OnEntry,
-                        null,
-                        cancellationToken);
+                    var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
+                    if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                    {
+                        await _actionDispatcher.QueueActionsAsync(
+                            request.TenantId,
+                            instance.Id,
+                            stepId,
+                            "OnEntry",
+                            enteredStep.OnEntry,
+                            null,
+                            cancellationToken);
+                    }
                 }
             }
 
@@ -582,23 +596,34 @@ public class WorkflowCommandHandlers :
         FlowOS.StateMachines.Models.ExecutionContext context,
         FlowOS.Domain.Entities.StateMachineDefinition? smDef = null)
     {
-        int autoAdvanceLimit = 5;
+        int autoAdvanceLimit = 10;
         while (autoAdvanceLimit > 0)
         {
-            var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
-            if (currentStep != null && currentStep.NextSteps.ContainsKey("Default"))
+            var activeSteps = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                ? instance.ActiveStepIds.ToList()
+                : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+
+            bool advancedAny = false;
+            foreach (var stepId in activeSteps)
             {
-                var defaultEvent = new StandardEvent(tenantId, "Default");
-                var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
-                var result = _engine.Advance(instance, definition, defaultEvent, context, smDef, currentEntityState);
-                
-                if (!result.Success) break;
-                autoAdvanceLimit--;
+                var step = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
+                if (step != null && step.NextSteps.ContainsKey("Default") && 
+                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.HumanTask && 
+                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.Timer)
+                {
+                    var defaultEvent = new StandardEvent(tenantId, "Default");
+                    var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
+                    var result = _engine.Advance(instance, definition, defaultEvent, context, smDef, currentEntityState);
+                    if (result.Success)
+                    {
+                        advancedAny = true;
+                        break;
+                    }
+                }
             }
-            else
-            {
-                break;
-            }
+
+            if (!advancedAny) break;
+            autoAdvanceLimit--;
         }
     }
 
@@ -615,26 +640,33 @@ public class WorkflowCommandHandlers :
             return;
         }
 
-        var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
-        if (currentStep == null) return;
+        var activeStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+            ? instance.ActiveStepIds.ToList()
+            : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
 
-        // 1. Standalone Timer Step
-        if (currentStep.StepType == FlowOS.Workflows.Enums.WorkflowStepType.Timer)
+        foreach (var stepId in activeStepIds)
         {
-            var triggerEvent = currentStep.NextSteps.Keys.FirstOrDefault() ?? "Default";
-            var durStr = currentStep.Conditions.TryGetValue("Duration", out var d) ? d :
-                         currentStep.Conditions.TryGetValue("duration", out d) ? d : null;
-            var duration = ParseDuration(durStr);
+            var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
+            if (currentStep == null) continue;
 
-            await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
-        }
-        // 2. Declarative Step SLA & Boundary Timer
-        else if (currentStep.Sla != null)
-        {
-            var triggerEvent = currentStep.Sla.TimeoutEvent;
-            var duration = ParseDuration(currentStep.Sla.Duration);
+            // 1. Standalone Timer Step
+            if (currentStep.StepType == FlowOS.Workflows.Enums.WorkflowStepType.Timer)
+            {
+                var triggerEvent = currentStep.NextSteps.Keys.FirstOrDefault() ?? "Default";
+                var durStr = currentStep.Conditions.TryGetValue("Duration", out var d) ? d :
+                             currentStep.Conditions.TryGetValue("duration", out d) ? d : null;
+                var duration = ParseDuration(durStr);
 
-            await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+                await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+            }
+            // 2. Declarative Step SLA & Boundary Timer
+            else if (currentStep.Sla != null)
+            {
+                var triggerEvent = currentStep.Sla.TimeoutEvent;
+                var duration = ParseDuration(currentStep.Sla.Duration);
+
+                await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+            }
         }
     }
 

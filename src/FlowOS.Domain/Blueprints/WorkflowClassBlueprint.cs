@@ -61,6 +61,11 @@ public record StepBlueprint
     // For Decision steps: Condition -> NextStepId
     public Dictionary<string, string> Conditions { get; init; } = new();
 
+    // For Parallel Fork/Join steps
+    public List<string> Branches { get; init; } = new(); // Target steps to execute concurrently
+    public string JoinPolicy { get; init; } = "WaitAll"; // "WaitAll" or "WaitAny"
+    public List<string> InboundSteps { get; init; } = new(); // Steps that must converge at this Join
+
     // Declarative Step SLA & Boundary Timer
     public StepSlaBlueprint? Sla { get; init; }
 
