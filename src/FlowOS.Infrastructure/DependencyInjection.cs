@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowTimerService, WorkflowTimerService>();
         services.AddScoped<IWorkflowActionDispatcher, WorkflowActionDispatcher>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.IDeadLetterService, DeadLetterService>();
+        services.AddSingleton<FlowOS.Core.Common.Interfaces.IWebhookSignatureService, FlowOS.Core.Common.Services.WebhookSignatureService>();
         return services;
     }
 }

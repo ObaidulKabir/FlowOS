@@ -22,6 +22,9 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.ConfigurationJson)
             .HasColumnType("jsonb");
 
+        builder.Property(t => t.WebhookSigningSecret)
+            .HasMaxLength(256);
+
         builder.HasIndex(t => t.Name).IsUnique();
     }
 }

@@ -44,6 +44,9 @@ public class StepActionDefinition
     public string? Template { get; set; }
     public Dictionary<string, string>? PayloadMapping { get; set; }
     public string? Condition { get; set; }
+    public Dictionary<string, string>? Headers { get; set; }
+    public bool SignPayload { get; set; } = true;
+    public string? SecretName { get; set; }
 
     public StepActionDefinition() { }
 

@@ -56,6 +56,17 @@ public class WorkflowActionDispatcher : IWorkflowActionDispatcher
             var resolvedTarget = ExpressionEvaluator.InterpolateTemplate(action.Target, contextPayload);
             var resolvedUrl = ExpressionEvaluator.InterpolateTemplate(action.Url, contextPayload);
 
+            // Resolve custom headers with token interpolation
+            Dictionary<string, string>? resolvedHeaders = null;
+            if (action.Headers != null && action.Headers.Count > 0)
+            {
+                resolvedHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (headerKey, headerVal) in action.Headers)
+                {
+                    resolvedHeaders[headerKey] = ExpressionEvaluator.InterpolateTemplate(headerVal, contextPayload);
+                }
+            }
+
             // Resolve action payload
             var actionData = new Dictionary<string, object>
             {
@@ -67,8 +78,15 @@ public class WorkflowActionDispatcher : IWorkflowActionDispatcher
                 ["target"] = resolvedTarget,
                 ["url"] = resolvedUrl,
                 ["method"] = action.Method ?? "POST",
-                ["template"] = resolvedTemplate
+                ["template"] = resolvedTemplate,
+                ["signPayload"] = action.SignPayload,
+                ["secretName"] = action.SecretName ?? string.Empty
             };
+
+            if (resolvedHeaders != null)
+            {
+                actionData["headers"] = resolvedHeaders;
+            }
 
             // Apply payload mappings with dynamic expression evaluation or include context payload
             if (action.PayloadMapping != null && action.PayloadMapping.Count > 0)

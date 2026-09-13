@@ -50,7 +50,10 @@ public static class WorkflowClassCompiler
                     Method = a.Method,
                     Template = a.Template,
                     PayloadMapping = a.PayloadMapping,
-                    Condition = a.Condition
+                    Condition = a.Condition,
+                    Headers = a.Headers,
+                    SignPayload = a.SignPayload,
+                    SecretName = a.SecretName
                 }).ToList() ?? new List<StepActionDefinition>(),
                 OnExit = stepBp.OnExit?.Select(a => new StepActionDefinition(a.ActionType)
                 {
@@ -59,7 +62,10 @@ public static class WorkflowClassCompiler
                     Method = a.Method,
                     Template = a.Template,
                     PayloadMapping = a.PayloadMapping,
-                    Condition = a.Condition
+                    Condition = a.Condition,
+                    Headers = a.Headers,
+                    SignPayload = a.SignPayload,
+                    SecretName = a.SecretName
                 }).ToList() ?? new List<StepActionDefinition>()
             };
             def.AddStep(stepDef);

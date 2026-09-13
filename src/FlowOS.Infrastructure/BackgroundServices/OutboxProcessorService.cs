@@ -137,12 +137,54 @@ public class OutboxProcessorService : BackgroundService
                 var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
                 var httpMethod = new System.Net.Http.HttpMethod(method ?? "POST");
                 using var request = new System.Net.Http.HttpRequestMessage(httpMethod, uri);
+
+                var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 request.Headers.Add("x-tenant-id", message.TenantId.ToString());
                 request.Headers.Add("x-flowos-action", "webhook");
+                request.Headers.Add("X-FlowOS-Timestamp", nowSeconds.ToString());
+                request.Headers.Add("X-FlowOS-Delivery", message.Id.ToString());
 
+                var rawPayload = "{}";
                 if (root.TryGetProperty("payload", out var payloadElem))
                 {
-                    request.Content = new System.Net.Http.StringContent(payloadElem.GetRawText(), System.Text.Encoding.UTF8, "application/json");
+                    rawPayload = payloadElem.GetRawText();
+                    request.Content = new System.Net.Http.StringContent(rawPayload, System.Text.Encoding.UTF8, "application/json");
+                }
+
+                // Attach custom headers if provided
+                if (root.TryGetProperty("headers", out var headersElem) && headersElem.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in headersElem.EnumerateObject())
+                    {
+                        var val = prop.Value.GetString();
+                        if (val != null)
+                        {
+                            if (!request.Headers.TryAddWithoutValidation(prop.Name, val) && request.Content != null)
+                            {
+                                request.Content.Headers.TryAddWithoutValidation(prop.Name, val);
+                            }
+                        }
+                    }
+                }
+
+                // Compute HMAC-SHA256 signature if enabled
+                var signPayload = !root.TryGetProperty("signPayload", out var spElem) || spElem.GetBoolean();
+                if (signPayload)
+                {
+                    var sigService = sp.GetService<FlowOS.Core.Common.Interfaces.IWebhookSignatureService>();
+                    if (sigService != null)
+                    {
+                        var db = sp.GetService<FlowOSDbContext>();
+                        var tenant = db != null ? await db.Tenants.FindAsync(new object[] { message.TenantId }, ct) : null;
+                        var signingSecret = tenant?.WebhookSigningSecret;
+                        if (string.IsNullOrWhiteSpace(signingSecret))
+                        {
+                            signingSecret = $"whsec_{message.TenantId.ToString("N")}";
+                        }
+
+                        var sigHeader = sigService.FormatSignatureHeader(signingSecret, rawPayload, nowSeconds);
+                        request.Headers.Add("X-FlowOS-Signature", sigHeader);
+                    }
                 }
 
                 var response = await client.SendAsync(request, ct);

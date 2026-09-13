@@ -12,6 +12,8 @@ public class Tenant
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
+    public string? WebhookSigningSecret { get; private set; }
+
     // Constructor for EF Core
     protected Tenant() 
     {
@@ -29,6 +31,30 @@ public class Tenant
         Status = TenantStatus.Active;
         ConfigurationJson = configurationJson;
         CreatedAt = DateTime.UtcNow;
+
+        var randomBytes = new byte[32];
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        rng.GetBytes(randomBytes);
+        WebhookSigningSecret = $"whsec_{Convert.ToHexString(randomBytes).ToLowerInvariant()}";
+    }
+
+    public void SetWebhookSigningSecret(string secret)
+    {
+        if (string.IsNullOrWhiteSpace(secret))
+            throw new ArgumentException("Webhook signing secret cannot be empty.", nameof(secret));
+        WebhookSigningSecret = secret;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public string RotateWebhookSigningSecret()
+    {
+        var randomBytes = new byte[32];
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        rng.GetBytes(randomBytes);
+        var hex = Convert.ToHexString(randomBytes).ToLowerInvariant();
+        WebhookSigningSecret = $"whsec_{hex}";
+        UpdatedAt = DateTime.UtcNow;
+        return WebhookSigningSecret;
     }
 
     public void UpdateConfiguration(string newConfigJson)

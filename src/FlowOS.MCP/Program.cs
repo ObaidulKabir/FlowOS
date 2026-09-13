@@ -548,6 +548,7 @@ public partial class Program
         services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredService<NotificationRepository>());
         services.AddScoped<NotificationTools>();
         services.AddScoped<DeadLetterMcpTools>();
+        services.AddScoped<WebhookSecurityMcpTools>();
     }
 
     private static string GenerateDiscoveryHtml(IReadOnlyList<ToolDiscoveryItem> tools)

@@ -472,4 +472,48 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject VerifyWebhookSignature() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["payload"],
+          "properties":{
+            "payload":{"type":"string","description":"The raw JSON payload to sign or verify."},
+            "secret":{"type":"string","description":"Optional signing secret (uses tenant secret by default)."},
+            "signature":{"type":"string","description":"Optional signature header (t=...,v1=...) to verify against payload."},
+            "timestamp":{"type":"integer","description":"Optional timestamp to use for signature."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject TestWebhookEndpoint() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["url"],
+          "properties":{
+            "url":{"type":"string","description":"Target endpoint URL to test with a signed ping."},
+            "method":{"type":"string","enum":["POST","GET","PUT"],"default":"POST","description":"HTTP method."},
+            "payload":{"type":"object","description":"Optional custom JSON payload."},
+            "headers":{"type":"object","description":"Optional custom HTTP request headers."},
+            "signPayload":{"type":"boolean","default":true,"description":"Whether to attach HMAC-SHA256 signature header."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RotateWebhookSecret() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid","description":"Tenant UUID whose signing secret should be rotated."}
+          },
+          "additionalProperties":false
+        }
+        """);
 }

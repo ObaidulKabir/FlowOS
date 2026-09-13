@@ -198,7 +198,28 @@ public static class McpToolDescriptions
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{success:true,id,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"77777777-7777-7777-7777-777777777777\"}"
+                "Input example: {\"id\":\"77777777-7777-7777-7777-777777777777\"}",
+
+            ["verify_webhook_signature"] =
+                "[Webhook Security] Computes or verifies cryptographic HMAC-SHA256 signatures for webhook payloads. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{isValid,signature,signatureHeader,timestamp,hash,algorithm,message}}. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"payload\":\"{\\\"orderId\\\":\\\"123\\\"}\",\"secret\":\"whsec_demo_secret\"}",
+
+            ["test_webhook_endpoint"] =
+                "[Webhook Security] Sends a live test ping webhook to a target URL with X-FlowOS-Signature, timestamp, and delivery headers, returning HTTP response status, latency, and response snippet. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{targetUrl,httpMethod,statusCode,statusText,latencyMs,isSuccess,signatureSent,timestampSent,responseSnippet}}. " +
+                "Errors: MCP-ARG-001, MCP-EXEC-001, MCP-INTERNAL. " +
+                "Input example: {\"url\":\"https://httpbin.org/post\",\"method\":\"POST\"}",
+
+            ["rotate_webhook_secret"] =
+                "[Webhook Security] Rotates the tenant's cryptographic HMAC-SHA256 webhook signing secret to a fresh 32-byte secret. " +
+                "HTTP uses authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{success:true,tenantId,webhookSigningSecret,message}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
         };
 
     public static string For(string toolName) =>
@@ -221,6 +242,9 @@ public static class McpToolDescriptions
             ["list_dead_letters"] = new("resilience", "authenticated", true, true, false, "none", true, "low"),
             ["retry_dead_letter"] = new("resilience", "authenticated", true, true, true, "reversible", true, "low"),
             ["purge_dead_letter"] = new("resilience", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["verify_webhook_signature"] = new("security", "authenticated", true, true, false, "none", true, "low"),
+            ["test_webhook_endpoint"] = new("security", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["rotate_webhook_secret"] = new("security", "authenticated", true, true, true, "irreversible", true, "high"),
             ["list_public_workflowclasses"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_instance_status"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),

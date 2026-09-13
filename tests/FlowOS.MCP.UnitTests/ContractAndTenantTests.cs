@@ -10,7 +10,7 @@ public sealed class ContractAndTenantTests
     [Fact]
     public void Every_tool_has_self_describing_behavior_and_valid_example()
     {
-        Assert.Equal(28, McpToolDescriptions.All.Count);
+        Assert.Equal(31, McpToolDescriptions.All.Count);
 
         Assert.All(McpToolDescriptions.All, contract =>
         {
@@ -50,7 +50,10 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.ListStepActions(),
             McpToolSchemas.ListDeadLetters(),
             McpToolSchemas.RetryDeadLetter(),
-            McpToolSchemas.PurgeDeadLetter()
+            McpToolSchemas.PurgeDeadLetter(),
+            McpToolSchemas.VerifyWebhookSignature(),
+            McpToolSchemas.TestWebhookEndpoint(),
+            McpToolSchemas.RotateWebhookSecret()
         };
 
         Assert.All(schemas, schema =>

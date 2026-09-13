@@ -91,6 +91,15 @@ public static class ToolRegistration
 
         registry.Register("purge_dead_letter", McpToolDescriptions.For("purge_dead_letter"), McpToolSchemas.PurgeDeadLetter(),
             async (args) => await ExecuteScopedAsync<DeadLetterMcpTools>(serviceProvider, t => t.PurgeDeadLetter(args)));
+
+        registry.Register("verify_webhook_signature", McpToolDescriptions.For("verify_webhook_signature"), McpToolSchemas.VerifyWebhookSignature(),
+            async (args) => await ExecuteScopedAsync<WebhookSecurityMcpTools>(serviceProvider, t => t.VerifyWebhookSignature(args)));
+
+        registry.Register("test_webhook_endpoint", McpToolDescriptions.For("test_webhook_endpoint"), McpToolSchemas.TestWebhookEndpoint(),
+            async (args) => await ExecuteScopedAsync<WebhookSecurityMcpTools>(serviceProvider, t => t.TestWebhookEndpoint(args)));
+
+        registry.Register("rotate_webhook_secret", McpToolDescriptions.For("rotate_webhook_secret"), McpToolSchemas.RotateWebhookSecret(),
+            async (args) => await ExecuteScopedAsync<WebhookSecurityMcpTools>(serviceProvider, t => t.RotateWebhookSecret(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

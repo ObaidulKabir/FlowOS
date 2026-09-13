@@ -78,6 +78,9 @@ public record StepActionBlueprint
     public string? Template { get; init; } // Template identifier or message text
     public Dictionary<string, string>? PayloadMapping { get; init; } // Key -> Expression
     public string? Condition { get; init; } // Optional execution guard
+    public Dictionary<string, string>? Headers { get; init; } // Custom HTTP request headers
+    public bool SignPayload { get; init; } = true; // Attach HMAC-SHA256 signature
+    public string? SecretName { get; init; } // Optional secret name/key
 }
 
 public record StepSlaBlueprint

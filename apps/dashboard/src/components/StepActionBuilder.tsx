@@ -9,6 +9,9 @@ export interface StepAction {
   template?: string;
   payloadMapping?: Record<string, string>;
   condition?: string;
+  headers?: Record<string, string>;
+  signPayload?: boolean;
+  secretName?: string;
 }
 
 interface Props {
@@ -37,6 +40,8 @@ export const StepActionBuilder: React.FC<Props> = ({
   const [method, setMethod] = useState<string>('POST');
   const [template, setTemplate] = useState<string>('');
   const [condition, setCondition] = useState<string>('');
+  const [signPayload, setSignPayload] = useState<boolean>(true);
+  const [headerPairs, setHeaderPairs] = useState<{ key: string; value: string }[]>([]);
   const [mappingPairs, setMappingPairs] = useState<{ key: string; expr: string }[]>([
     { key: '', expr: '' }
   ]);
@@ -52,6 +57,8 @@ export const StepActionBuilder: React.FC<Props> = ({
     setMethod('POST');
     setTemplate('');
     setCondition('');
+    setSignPayload(true);
+    setHeaderPairs([]);
     setMappingPairs([{ key: '', expr: '' }]);
     setFormError(null);
     setIsAdding(false);
@@ -67,6 +74,13 @@ export const StepActionBuilder: React.FC<Props> = ({
     setMethod(act.method || 'POST');
     setTemplate(act.template || '');
     setCondition(act.condition || '');
+    setSignPayload(act.signPayload !== false);
+
+    if (act.headers && Object.keys(act.headers).length > 0) {
+      setHeaderPairs(Object.entries(act.headers).map(([k, v]) => ({ key: k, value: v })));
+    } else {
+      setHeaderPairs([]);
+    }
     
     if (act.payloadMapping && Object.keys(act.payloadMapping).length > 0) {
       setMappingPairs(Object.entries(act.payloadMapping).map(([k, v]) => ({ key: k, expr: v })));
@@ -113,6 +127,15 @@ export const StepActionBuilder: React.FC<Props> = ({
       }
     });
 
+    const customHeaders: Record<string, string> = {};
+    headerPairs.forEach(p => {
+      const k = p.key.trim();
+      const v = p.value.trim();
+      if (k && v) {
+        customHeaders[k] = v;
+      }
+    });
+
     const newAction: StepAction = {
       actionType,
       target: finalTarget,
@@ -120,7 +143,9 @@ export const StepActionBuilder: React.FC<Props> = ({
       method: actionType === 'Webhook' ? method : undefined,
       template: template.trim() || undefined,
       payloadMapping: Object.keys(payloadMapping).length > 0 ? payloadMapping : undefined,
-      condition: condition.trim() || undefined
+      condition: condition.trim() || undefined,
+      headers: Object.keys(customHeaders).length > 0 ? customHeaders : undefined,
+      signPayload: actionType === 'Webhook' ? signPayload : undefined
     };
 
     if (activeHook === 'onEntry') {
@@ -431,6 +456,74 @@ export const StepActionBuilder: React.FC<Props> = ({
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Custom HTTP Headers */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">
+                    Custom HTTP Headers (Optional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setHeaderPairs([...headerPairs, { key: '', value: '' }])}
+                    className="text-[10px] text-cyan-700 dark:text-cyan-400 hover:underline flex items-center gap-0.5"
+                  >
+                    + Add Header
+                  </button>
+                </div>
+                {headerPairs.length > 0 && (
+                  <div className="space-y-1.5 max-h-24 overflow-y-auto mb-2">
+                    {headerPairs.map((pair, hIdx) => (
+                      <div key={hIdx} className="flex gap-1.5 items-center">
+                        <input
+                          type="text"
+                          value={pair.key}
+                          onChange={e => {
+                            const updated = [...headerPairs];
+                            updated[hIdx].key = e.target.value;
+                            setHeaderPairs(updated);
+                          }}
+                          placeholder="Header (e.g. Authorization)"
+                          className="w-1/2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-1 text-[11px] font-mono"
+                        />
+                        <span className="text-slate-600 dark:text-slate-300 text-xs">:</span>
+                        <input
+                          type="text"
+                          value={pair.value}
+                          onChange={e => {
+                            const updated = [...headerPairs];
+                            updated[hIdx].value = e.target.value;
+                            setHeaderPairs(updated);
+                          }}
+                          placeholder="Value (e.g. Bearer {{Token}})"
+                          className="w-1/2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-1 text-[11px] font-mono text-cyan-700 dark:text-cyan-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setHeaderPairs(headerPairs.filter((_, i) => i !== hIdx))}
+                          className="text-slate-400 hover:text-rose-500 text-xs px-1"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* HMAC-SHA256 Signing Toggle */}
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+                <input
+                  type="checkbox"
+                  id="signPayloadToggle"
+                  checked={signPayload}
+                  onChange={e => setSignPayload(e.target.checked)}
+                  className="rounded border-slate-400 dark:border-slate-700 text-cyan-500 focus:ring-0"
+                />
+                <label htmlFor="signPayloadToggle" className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                  Enable HMAC-SHA256 Signature (<code className="text-cyan-600 dark:text-cyan-400 font-mono text-[10px]">X-FlowOS-Signature</code>)
+                </label>
               </div>
             </div>
           )}
