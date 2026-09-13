@@ -7,9 +7,10 @@ import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { DetailView } from './DetailView';
 import { DeadLetterQueueViewer } from './DeadLetterQueueViewer';
+import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
-  Globe, Cpu, Clock, Terminal, AlertTriangle
+  Globe, Cpu, Clock, Terminal, AlertTriangle, Sparkles
 } from 'lucide-react';
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export const AdminDashboard: React.FC<Props> = ({ session }) => {
-  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters'>('Tenants');
+  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities'>('Tenants');
   const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Public' | 'Shared' | 'Published'>('All');
 
   const [tenantsCount, setTenantsCount] = useState(0);
@@ -244,11 +245,23 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
               <AlertTriangle size={15} className="text-red-400" />
               <span>🚨 Dead Letters (DLQ)</span>
             </button>
+            <button
+              onClick={() => setActiveTab('Capabilities')}
+              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'Capabilities' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white' : 'text-amber-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <Sparkles size={15} className="text-amber-400" />
+              <span>✨ Engine Capabilities</span>
+            </button>
           </nav>
         </div>
 
         {/* Tab Contents */}
         <div className="p-6">
+          {activeTab === 'Capabilities' && (
+            <CapabilitiesShowcase />
+          )}
           {activeTab === 'Tenants' && (
             <TenantManager
               openRegisterModal={openRegisterModal}
