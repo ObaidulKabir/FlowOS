@@ -66,6 +66,18 @@ public static class WorkflowClassCompiler
                     Headers = a.Headers,
                     SignPayload = a.SignPayload,
                     SecretName = a.SecretName
+                }).ToList() ?? new List<StepActionDefinition>(),
+                OnFailure = stepBp.OnFailure?.Select(a => new StepActionDefinition(a.ActionType)
+                {
+                    Target = a.Target,
+                    Url = a.Url,
+                    Method = a.Method,
+                    Template = a.Template,
+                    PayloadMapping = a.PayloadMapping,
+                    Condition = a.Condition,
+                    Headers = a.Headers,
+                    SignPayload = a.SignPayload,
+                    SecretName = a.SecretName
                 }).ToList() ?? new List<StepActionDefinition>()
             };
             def.AddStep(stepDef);

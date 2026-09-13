@@ -225,10 +225,11 @@ public class WorkflowClassValidator
                 }
             }
 
-            // Check Step Lifecycle Actions (OnEntry / OnExit)
+            // Check Step Lifecycle Actions (OnEntry / OnExit / OnFailure)
             var entryActions = step.OnEntry != null ? step.OnEntry.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
             var exitActions = step.OnExit != null ? step.OnExit.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
-            var allActions = entryActions.Concat(exitActions);
+            var failureActions = step.OnFailure != null ? step.OnFailure.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
+            var allActions = entryActions.Concat(exitActions).Concat(failureActions);
 
             foreach (var action in allActions)
             {

@@ -377,6 +377,31 @@ public class WorkflowCommandHandlers :
         else 
         {
             Console.WriteLine($"[Handler] Advance failed. Current Step: {instance.CurrentStepId}, Event: {request.EventType}. Reason: {result.FailureReason}");
+
+            if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
+            {
+                var failedStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+                if (failedStep?.OnFailure != null && failedStep.OnFailure.Count > 0)
+                {
+                    var failPayload = new Dictionary<string, object>(context.Payload ?? new Dictionary<string, object>())
+                    {
+                        ["FailureReason"] = result.FailureReason ?? "Transition failed",
+                        ["EventType"] = request.EventType
+                    };
+
+                    await _actionDispatcher.QueueActionsAsync(
+                        request.TenantId,
+                        instance.Id,
+                        instance.CurrentStepId,
+                        "OnFailure",
+                        failedStep.OnFailure,
+                        failPayload,
+                        cancellationToken);
+
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+            }
+
             throw new InvalidOperationException($"Workflow transition failed: {result.FailureReason}");
         }
     }
@@ -477,6 +502,32 @@ public class WorkflowCommandHandlers :
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
+        }
+        else
+        {
+            if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
+            {
+                var failedStep = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
+                if (failedStep?.OnFailure != null && failedStep.OnFailure.Count > 0)
+                {
+                    var failPayload = new Dictionary<string, object>
+                    {
+                        ["FailureReason"] = result.FailureReason ?? "Task advance failed",
+                        ["TaskId"] = request.TaskId.ToString()
+                    };
+
+                    await _actionDispatcher.QueueActionsAsync(
+                        request.TenantId,
+                        instance.Id,
+                        instance.CurrentStepId,
+                        "OnFailure",
+                        failedStep.OnFailure,
+                        failPayload,
+                        cancellationToken);
+
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+            }
         }
 
         return false;

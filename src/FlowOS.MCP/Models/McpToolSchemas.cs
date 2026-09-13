@@ -358,6 +358,10 @@ public static class McpToolSchemas
               "default":25,
               "description":"Maximum step evaluation cap to prevent infinite loops."
             },
+            "simulateFailureAtStep":{
+              "type":"string",
+              "description":"Optional step ID where a step failure should be simulated to verify OnFailure compensating actions and Saga rollback."
+            },
             "tenantId":{
               "type":"string",
               "format":"uuid",
@@ -377,7 +381,7 @@ public static class McpToolSchemas
             "id":{"type":"string","format":"uuid","description":"WorkflowClass draft ID (required if blueprint not supplied)."},
             "blueprint":{"type":"object","description":"Inline WorkflowClass blueprint (alternative to id)."},
             "stepId":{"type":"string","minLength":1,"description":"Target step ID to attach action hook to."},
-            "hook":{"type":"string","enum":["OnEntry","OnExit"],"description":"Lifecycle phase to trigger action."},
+            "hook":{"type":"string","enum":["OnEntry","OnExit","OnFailure"],"description":"Lifecycle phase to trigger action (OnEntry, OnExit, or OnFailure for Saga rollback)."},
             "actionIndex":{"type":"integer","minimum":0,"description":"Optional 0-based index to overwrite an existing action."},
             "action":{
               "type":"object",
@@ -389,7 +393,10 @@ public static class McpToolSchemas
                 "method":{"type":"string","enum":["POST","GET","PUT"],"default":"POST"},
                 "template":{"type":"string","description":"Message template string with optional {{Expression}} placeholders."},
                 "payloadMapping":{"type":"object","description":"Key-to-expression mapping for dynamic payload transformation."},
-                "condition":{"type":"string","description":"Dynamic boolean expression guard required for execution."}
+                "condition":{"type":"string","description":"Dynamic boolean expression guard required for execution."},
+                "headers":{"type":"object","description":"Custom HTTP headers."},
+                "signPayload":{"type":"boolean","default":true,"description":"Attach HMAC-SHA256 signature."},
+                "secretName":{"type":"string","description":"Optional custom secret name."}
               },
               "additionalProperties":false
             },
@@ -408,7 +415,7 @@ public static class McpToolSchemas
             "id":{"type":"string","format":"uuid"},
             "blueprint":{"type":"object"},
             "stepId":{"type":"string","minLength":1},
-            "hook":{"type":"string","enum":["OnEntry","OnExit"]},
+            "hook":{"type":"string","enum":["OnEntry","OnExit","OnFailure"]},
             "actionIndex":{"type":"integer","minimum":0,"description":"0-based index of the action to remove."},
             "actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]},
             "target":{"type":"string"},
@@ -426,7 +433,7 @@ public static class McpToolSchemas
             "id":{"type":"string","format":"uuid"},
             "blueprint":{"type":"object"},
             "stepId":{"type":"string","description":"Optional step filter."},
-            "hook":{"type":"string","enum":["OnEntry","OnExit"],"description":"Optional hook filter."},
+            "hook":{"type":"string","enum":["OnEntry","OnExit","OnFailure"],"description":"Optional hook filter."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false

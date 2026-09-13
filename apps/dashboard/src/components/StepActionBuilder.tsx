@@ -18,18 +18,20 @@ interface Props {
   stepId?: string;
   onEntry: StepAction[];
   onExit: StepAction[];
+  onFailure?: StepAction[];
   availableEvents: { eventId: string; name: string }[];
-  onChange: (onEntry: StepAction[], onExit: StepAction[]) => void;
+  onChange: (onEntry: StepAction[], onExit: StepAction[], onFailure: StepAction[]) => void;
 }
 
 export const StepActionBuilder: React.FC<Props> = ({
   stepId: _stepId,
   onEntry = [],
   onExit = [],
+  onFailure = [],
   availableEvents = [],
   onChange
 }) => {
-  const [activeHook, setActiveHook] = useState<'onEntry' | 'onExit'>('onEntry');
+  const [activeHook, setActiveHook] = useState<'onEntry' | 'onExit' | 'onFailure'>('onEntry');
   const [isAdding, setIsAdding] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
@@ -47,8 +49,8 @@ export const StepActionBuilder: React.FC<Props> = ({
   ]);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const currentList = activeHook === 'onEntry' ? onEntry : onExit;
-  const totalHooks = onEntry.length + onExit.length;
+  const currentList = activeHook === 'onEntry' ? onEntry : activeHook === 'onExit' ? onExit : onFailure;
+  const totalHooks = onEntry.length + onExit.length + onFailure.length;
 
   const resetForm = () => {
     setActionType('Webhook');
@@ -155,15 +157,23 @@ export const StepActionBuilder: React.FC<Props> = ({
       } else {
         updated.push(newAction);
       }
-      onChange(updated, onExit);
-    } else {
+      onChange(updated, onExit, onFailure);
+    } else if (activeHook === 'onExit') {
       const updated = [...onExit];
       if (editingIndex !== null && editingIndex >= 0 && editingIndex < updated.length) {
         updated[editingIndex] = newAction;
       } else {
         updated.push(newAction);
       }
-      onChange(onEntry, updated);
+      onChange(onEntry, updated, onFailure);
+    } else {
+      const updated = [...onFailure];
+      if (editingIndex !== null && editingIndex >= 0 && editingIndex < updated.length) {
+        updated[editingIndex] = newAction;
+      } else {
+        updated.push(newAction);
+      }
+      onChange(onEntry, onExit, updated);
     }
 
     resetForm();
@@ -172,10 +182,13 @@ export const StepActionBuilder: React.FC<Props> = ({
   const handleDeleteAction = (index: number) => {
     if (activeHook === 'onEntry') {
       const updated = onEntry.filter((_, i) => i !== index);
-      onChange(updated, onExit);
-    } else {
+      onChange(updated, onExit, onFailure);
+    } else if (activeHook === 'onExit') {
       const updated = onExit.filter((_, i) => i !== index);
-      onChange(onEntry, updated);
+      onChange(onEntry, updated, onFailure);
+    } else {
+      const updated = onFailure.filter((_, i) => i !== index);
+      onChange(onEntry, onExit, updated);
     }
   };
 
@@ -216,6 +229,17 @@ export const StepActionBuilder: React.FC<Props> = ({
           >
             OnExit ({onExit.length})
           </button>
+          <button
+            type="button"
+            onClick={() => { setActiveHook('onFailure'); resetForm(); }}
+            className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              activeHook === 'onFailure'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            OnFailure ({onFailure.length})
+          </button>
         </div>
       </div>
 
@@ -223,7 +247,9 @@ export const StepActionBuilder: React.FC<Props> = ({
       <div className="space-y-1.5">
         {currentList.length === 0 && !isAdding && (
           <p className="text-[11px] text-slate-600 dark:text-slate-300 italic py-1 bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-dashed border-slate-200 dark:border-slate-800">
-            No {activeHook} hooks configured. Side-effects run automatically during step transitions.
+            {activeHook === 'onFailure' 
+              ? 'No OnFailure compensation hooks configured. If this step fails or faults, compensating actions defined here run automatically.'
+              : `No ${activeHook} hooks configured. Side-effects run automatically during step transitions.`}
           </p>
         )}
 
@@ -304,7 +330,7 @@ export const StepActionBuilder: React.FC<Props> = ({
           onClick={() => setIsAdding(true)}
           className="text-xs text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-semibold flex items-center gap-1 pt-1"
         >
-          <Plus size={13} /> Add {activeHook === 'onEntry' ? 'OnEntry' : 'OnExit'} Action Hook
+          <Plus size={13} /> Add {activeHook === 'onEntry' ? 'OnEntry' : activeHook === 'onExit' ? 'OnExit' : 'OnFailure (Compensate)'} Action Hook
         </button>
       ) : (
         <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-amber-500/30 rounded-xl space-y-3 mt-2 shadow-xs">

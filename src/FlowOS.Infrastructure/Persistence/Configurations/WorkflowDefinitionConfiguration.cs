@@ -56,6 +56,12 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                     d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
                     s => JsonSerializer.Deserialize<List<StepActionDefinition>>(s, (JsonSerializerOptions)null) ?? new List<StepActionDefinition>()
                 );
+
+            step.Property(s => s.OnFailure)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => JsonSerializer.Deserialize<List<StepActionDefinition>>(s, (JsonSerializerOptions)null) ?? new List<StepActionDefinition>()
+                );
         });
 
         // Current Index (Non-Unique)

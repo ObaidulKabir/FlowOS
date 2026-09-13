@@ -64,9 +64,10 @@ public record StepBlueprint
     // Declarative Step SLA & Boundary Timer
     public StepSlaBlueprint? Sla { get; init; }
 
-    // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks)
+    // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks, Saga Rollback)
     public List<StepActionBlueprint> OnEntry { get; init; } = new();
     public List<StepActionBlueprint> OnExit { get; init; } = new();
+    public List<StepActionBlueprint> OnFailure { get; init; } = new();
 }
 
 public record StepActionBlueprint

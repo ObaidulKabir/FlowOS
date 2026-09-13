@@ -22,9 +22,10 @@ public class WorkflowStepDefinition
     // Declarative Step SLA / Boundary Timer & Escalation
     public StepSlaDefinition? Sla { get; set; }
 
-    // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks)
+    // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks, Saga Rollback)
     public List<StepActionDefinition> OnEntry { get; set; } = new();
     public List<StepActionDefinition> OnExit { get; set; } = new();
+    public List<StepActionDefinition> OnFailure { get; set; } = new();
 
     public WorkflowStepDefinition() { }
 

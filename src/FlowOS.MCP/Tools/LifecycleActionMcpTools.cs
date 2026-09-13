@@ -37,9 +37,10 @@ public class LifecycleActionMcpTools
             var hook = args["hook"]?.ToString()?.Trim();
             if (string.IsNullOrWhiteSpace(hook) ||
                 (!string.Equals(hook, "OnEntry", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(hook, "OnExit", StringComparison.OrdinalIgnoreCase)))
+                 !string.Equals(hook, "OnExit", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(hook, "OnFailure", StringComparison.OrdinalIgnoreCase)))
             {
-                return McpToolResults.Fail("MCP-ARG-001", "hook must be 'OnEntry' or 'OnExit'.");
+                return McpToolResults.Fail("MCP-ARG-001", "hook must be 'OnEntry', 'OnExit', or 'OnFailure'.");
             }
 
             var actionToken = args["action"] as JObject;
@@ -59,8 +60,9 @@ public class LifecycleActionMcpTools
             if (step == null)
                 return McpToolResults.Fail("MCP-NOTFOUND-002", $"Step '{stepId}' not found in workflow blueprint.");
 
-            bool isOnEntry = string.Equals(hook, "OnEntry", StringComparison.OrdinalIgnoreCase);
-            var targetList = isOnEntry ? step.OnEntry : step.OnExit;
+            var targetList = string.Equals(hook, "OnEntry", StringComparison.OrdinalIgnoreCase)
+                ? step.OnEntry
+                : (string.Equals(hook, "OnExit", StringComparison.OrdinalIgnoreCase) ? step.OnExit : step.OnFailure);
 
             int? actionIndex = args["actionIndex"]?.Value<int>();
             if (actionIndex.HasValue && actionIndex.Value >= 0 && actionIndex.Value < targetList.Count)
@@ -99,7 +101,7 @@ public class LifecycleActionMcpTools
             return McpToolResults.Success(new
             {
                 stepId = step.StepId,
-                hook = isOnEntry ? "OnEntry" : "OnExit",
+                hook,
                 totalActions = targetList.Count,
                 actionAttached = action,
                 blueprint,
@@ -128,9 +130,10 @@ public class LifecycleActionMcpTools
             var hook = args["hook"]?.ToString()?.Trim();
             if (string.IsNullOrWhiteSpace(hook) ||
                 (!string.Equals(hook, "OnEntry", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(hook, "OnExit", StringComparison.OrdinalIgnoreCase)))
+                 !string.Equals(hook, "OnExit", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(hook, "OnFailure", StringComparison.OrdinalIgnoreCase)))
             {
-                return McpToolResults.Fail("MCP-ARG-001", "hook must be 'OnEntry' or 'OnExit'.");
+                return McpToolResults.Fail("MCP-ARG-001", "hook must be 'OnEntry', 'OnExit', or 'OnFailure'.");
             }
 
             var (blueprint, workflowName, workflowVersion, tenantId, draftId, resolveErr) = await ResolveBlueprintAsync(args);
@@ -142,8 +145,9 @@ public class LifecycleActionMcpTools
             if (step == null)
                 return McpToolResults.Fail("MCP-NOTFOUND-002", $"Step '{stepId}' not found in workflow blueprint.");
 
-            bool isOnEntry = string.Equals(hook, "OnEntry", StringComparison.OrdinalIgnoreCase);
-            var targetList = isOnEntry ? step.OnEntry : step.OnExit;
+            var targetList = string.Equals(hook, "OnEntry", StringComparison.OrdinalIgnoreCase)
+                ? step.OnEntry
+                : (string.Equals(hook, "OnExit", StringComparison.OrdinalIgnoreCase) ? step.OnExit : step.OnFailure);
 
             int? actionIndex = args["actionIndex"]?.Value<int>();
             var actionType = args["actionType"]?.ToString()?.Trim();
@@ -155,11 +159,11 @@ public class LifecycleActionMcpTools
                 targetList.RemoveAt(actionIndex.Value);
                 removed = true;
             }
-            else if (!string.IsNullOrEmpty(actionType) || !string.IsNullOrEmpty(target))
+            else if (!string.IsNullOrEmpty(actionType))
             {
                 var match = targetList.FirstOrDefault(a =>
-                    (string.IsNullOrEmpty(actionType) || string.Equals(a.ActionType, actionType, StringComparison.OrdinalIgnoreCase)) &&
-                    (string.IsNullOrEmpty(target) || string.Equals(a.Target, target, StringComparison.OrdinalIgnoreCase)));
+                    string.Equals(a.ActionType, actionType, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrEmpty(target) || string.Equals(a.Target, target, StringComparison.OrdinalIgnoreCase) || string.Equals(a.Url, target, StringComparison.OrdinalIgnoreCase)));
 
                 if (match != null)
                 {
@@ -169,8 +173,9 @@ public class LifecycleActionMcpTools
             }
 
             if (!removed)
-                return McpToolResults.Fail("MCP-NOTFOUND-003", "No matching action found to remove.");
+                return McpToolResults.Fail("MCP-NOTFOUND-003", $"Matching action not found in step '{stepId}' ({hook}).");
 
+            // Persist draft if id was provided
             if (draftId.HasValue && tenantId.HasValue)
             {
                 await _mediator.Send(new UpdateWorkflowClassCommand(
@@ -184,7 +189,7 @@ public class LifecycleActionMcpTools
             return McpToolResults.Success(new
             {
                 stepId = step.StepId,
-                hook = isOnEntry ? "OnEntry" : "OnExit",
+                hook,
                 remainingActions = targetList.Count,
                 blueprint,
                 persisted = draftId.HasValue,
@@ -226,7 +231,8 @@ public class LifecycleActionMcpTools
                     stepType = s.StepType,
                     onEntry = (string.IsNullOrEmpty(hook) || string.Equals(hook, "OnEntry", StringComparison.OrdinalIgnoreCase)) ? s.OnEntry : null,
                     onExit = (string.IsNullOrEmpty(hook) || string.Equals(hook, "OnExit", StringComparison.OrdinalIgnoreCase)) ? s.OnExit : null,
-                    totalHooks = (s.OnEntry?.Count ?? 0) + (s.OnExit?.Count ?? 0)
+                    onFailure = (string.IsNullOrEmpty(hook) || string.Equals(hook, "OnFailure", StringComparison.OrdinalIgnoreCase)) ? s.OnFailure : null,
+                    totalHooks = (s.OnEntry?.Count ?? 0) + (s.OnExit?.Count ?? 0) + (s.OnFailure?.Count ?? 0)
                 };
                 results.Add(stepActions);
             }

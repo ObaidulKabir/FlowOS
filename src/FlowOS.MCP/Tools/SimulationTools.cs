@@ -107,6 +107,8 @@ public class SimulationTools
             if (maxSteps < 1) maxSteps = 1;
             if (maxSteps > 100) maxSteps = 100;
 
+            var simulateFailureAtStep = args["simulateFailureAtStep"]?.ToString()?.Trim();
+
             // 3. Initialize State Machine and Workflow Positions
             var startStepId = !string.IsNullOrWhiteSpace(blueprint.Workflow.StartStepId)
                 ? blueprint.Workflow.StartStepId
@@ -171,6 +173,25 @@ public class SimulationTools
 
                 var stepType = !string.IsNullOrWhiteSpace(step.StepType) ? step.StepType : "Command";
                 var stepTypeLower = stepType.ToLowerInvariant();
+
+                // --- SIMULATE FAILURE / SAGA ROLLBACK CHECK ---
+                if (!string.IsNullOrEmpty(simulateFailureAtStep) &&
+                    string.Equals(step.StepId, simulateFailureAtStep, StringComparison.OrdinalIgnoreCase))
+                {
+                    status = "Faulted";
+                    totalStepsExecuted++;
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted,
+                        stepId = step.StepId,
+                        stepType = stepType,
+                        action = $"[Saga Failure Injected] Step '{step.StepId}' encountered a simulated failure. Executing OnFailure compensating actions...",
+                        state = currentState
+                    });
+
+                    EvaluateAndRecordActions(step.OnFailure, "OnFailure", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                    break;
+                }
 
                 if (stepTypeLower.Contains("end"))
                 {
