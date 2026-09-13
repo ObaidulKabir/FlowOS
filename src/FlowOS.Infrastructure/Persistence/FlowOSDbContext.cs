@@ -24,6 +24,7 @@ public class FlowOSDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; } // Add this
     public DbSet<FlowOS.Core.Common.Models.OutboxMessage> OutboxMessages { get; set; }
     public DbSet<FlowOS.Core.Common.Models.WorkflowTimerJob> WorkflowTimerJobs { get; set; }
+    public DbSet<WorkflowActionExecutionLog> ActionExecutionLogs { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

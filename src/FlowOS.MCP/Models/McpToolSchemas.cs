@@ -516,4 +516,21 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject GetInstanceActionHistory() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Workflow instance UUID to retrieve action execution history for."},
+            "stepId":{"type":"string","description":"Optional step ID filter (e.g. 'SubmitStep')."},
+            "actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"],"description":"Optional action type filter."},
+            "status":{"type":"string","enum":["Succeeded","Failed"],"description":"Optional status filter."},
+            "limit":{"type":"integer","minimum":1,"maximum":200,"default":50,"description":"Maximum number of records to return (1-200)."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
 }

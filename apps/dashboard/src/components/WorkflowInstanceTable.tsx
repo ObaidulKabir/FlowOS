@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { WorkflowInstance, WorkflowClass } from '../types';
-import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson, Layers, ChevronDown, ChevronRight } from 'lucide-react';
+import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson, Layers, ChevronDown, ChevronRight, Zap } from 'lucide-react';
 import { getActiveTenantId, api } from '../api/client';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
+import { WorkflowActionAuditViewer } from './WorkflowActionAuditViewer';
 
 interface Props {
   items: WorkflowInstance[];
@@ -123,7 +124,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
   const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
-  const [inspectTab, setInspectTab] = useState<'visual' | 'timeline'>('visual');
+  const [inspectTab, setInspectTab] = useState<'visual' | 'timeline' | 'actions'>('visual');
   const [resolvedDefinition, setResolvedDefinition] = useState<any | null>(null);
 
   const handleCopy = (text: string, id: string) => {
@@ -345,6 +346,15 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
                     <History size={13} />
                     Audit Timeline {auditDetail?.timeline?.length ? `(${auditDetail.timeline.length})` : ''}
                   </button>
+                  <button
+                    onClick={() => setInspectTab('actions')}
+                    className={`px-3 py-1 rounded transition-all font-medium flex items-center gap-1.5 ${
+                      inspectTab === 'actions' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Zap size={13} />
+                    Lifecycle Actions Audit
+                  </button>
                 </div>
               </div>
 
@@ -396,6 +406,8 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
                     </div>
                   )}
                 </div>
+              ) : inspectTab === 'actions' ? (
+                <WorkflowActionAuditViewer workflowInstanceId={inspectingInstance} />
               ) : (!auditDetail?.timeline || auditDetail.timeline.length === 0) ? (
                 <div className="py-12 text-center text-slate-500 text-xs italic">
                   No recorded events found in timeline for this instance.

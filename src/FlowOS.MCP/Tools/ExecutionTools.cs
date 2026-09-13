@@ -15,10 +15,14 @@ namespace FlowOS.MCP.Tools;
 public class ExecutionTools
 {
     private readonly IMediator _mediator;
+    private readonly FlowOS.Core.Common.Interfaces.IWorkflowActionHistoryService? _actionHistoryService;
 
-    public ExecutionTools(IMediator mediator)
+    public ExecutionTools(
+        IMediator mediator,
+        FlowOS.Core.Common.Interfaces.IWorkflowActionHistoryService? actionHistoryService = null)
     {
         _mediator = mediator;
+        _actionHistoryService = actionHistoryService;
     }
 
     public async Task<CallToolResult> StartWorkflow(JObject args)
@@ -267,6 +271,19 @@ public class ExecutionTools
                 return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{instanceId}' not found.");
             }
 
+            IReadOnlyList<FlowOS.Core.Common.Interfaces.WorkflowActionExecutionLogDto>? actionLogs = null;
+            if (_actionHistoryService != null)
+            {
+                try
+                {
+                    actionLogs = await _actionHistoryService.GetActionHistoryAsync(tenantId, instanceId, pageSize: 20);
+                }
+                catch
+                {
+                    actionLogs = null;
+                }
+            }
+
             return McpToolResults.Success(new
             {
                 workflowInstanceId = detail.Id,
@@ -276,7 +293,20 @@ public class ExecutionTools
                 status = detail.Status,
                 correlationId = detail.CorrelationId,
                 createdAt = detail.CreatedAt,
-                timeline = detail.Timeline
+                timeline = detail.Timeline,
+                actions = actionLogs?.Select(a => (object)new
+                {
+                    id = a.Id,
+                    stepId = a.StepId,
+                    triggerPhase = a.TriggerPhase,
+                    actionType = a.ActionType,
+                    target = a.Target,
+                    status = a.Status,
+                    executedAtUtc = a.ExecutedAtUtc,
+                    durationMs = a.DurationMs,
+                    httpStatusCode = a.HttpStatusCode,
+                    errorMessage = a.ErrorMessage
+                }).ToList() ?? (object)Array.Empty<object>()
             });
         }
         catch (McpToolException ex)

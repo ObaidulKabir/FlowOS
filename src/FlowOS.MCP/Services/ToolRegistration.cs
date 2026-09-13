@@ -100,6 +100,9 @@ public static class ToolRegistration
 
         registry.Register("rotate_webhook_secret", McpToolDescriptions.For("rotate_webhook_secret"), McpToolSchemas.RotateWebhookSecret(),
             async (args) => await ExecuteScopedAsync<WebhookSecurityMcpTools>(serviceProvider, t => t.RotateWebhookSecret(args)));
+
+        registry.Register("get_instance_action_history", McpToolDescriptions.For("get_instance_action_history"), McpToolSchemas.GetInstanceActionHistory(),
+            async (args) => await ExecuteScopedAsync<ActionObservabilityMcpTools>(serviceProvider, t => t.GetInstanceActionHistory(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

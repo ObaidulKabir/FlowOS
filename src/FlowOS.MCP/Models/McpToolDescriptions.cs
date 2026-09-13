@@ -219,7 +219,14 @@ public static class McpToolDescriptions
                 "HTTP uses authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{success:true,tenantId,webhookSigningSecret,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}"
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["get_instance_action_history"] =
+                "[Observability] Retrieves the persistent execution history and audit trail of lifecycle actions (webhooks, notifications, events) for a workflow instance, including latency in ms, HTTP status codes, request/response snippets, and error diagnostics. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{workflowInstanceId,totalActions,actions:[{id,stepId,triggerPhase,actionType,target,status,executedAtUtc,durationMs,httpStatusCode,requestPayloadSnippet,responseSnippet,errorMessage,attemptNumber}]}}. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\"}"
         };
 
     public static string For(string toolName) =>
@@ -245,6 +252,7 @@ public static class McpToolDescriptions
             ["verify_webhook_signature"] = new("security", "authenticated", true, true, false, "none", true, "low"),
             ["test_webhook_endpoint"] = new("security", "authenticated", true, true, true, "reversible", true, "medium"),
             ["rotate_webhook_secret"] = new("security", "authenticated", true, true, true, "irreversible", true, "high"),
+            ["get_instance_action_history"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
             ["list_public_workflowclasses"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_instance_status"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),
