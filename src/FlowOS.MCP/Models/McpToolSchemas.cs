@@ -202,6 +202,18 @@ public static class McpToolSchemas
                       "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
                       "requiredRoles":{"type":"array","items":{"type":"string"}},
                       "conditions":{"type":"object","additionalProperties":{"type":"string"}},
+                      "onEntry":{
+                        "type":"array",
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]}}}
+                      },
+                      "onExit":{
+                        "type":"array",
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]}}}
+                      },
+                      "onFailure":{
+                        "type":"array",
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]}}}
+                      },
                       "sla":{
                         "type":"object",
                         "required":["duration","timeoutEvent"],

@@ -150,79 +150,85 @@ public static class McpToolDescriptions
 
             ["simulate_workflowclass"] =
                 "[Simulator] Runs a zero-side-effect, in-memory dry-run simulation of a WorkflowClass using either an existing draft/published ID or an inline blueprint. " +
-                "Evaluates decision conditions against context payloads, validates state machine guards, enforces human-task role permissions, and advances automated steps. " +
+                "Evaluates decision conditions against context payloads, validates state machine guards, enforces human-task role permissions, advances automated steps, " +
+                "evaluates dynamic payload mappings and Handlebars templates, and injects simulated step faults via `simulateFailureAtStep` to test OnFailure Saga rollback compensation actions. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
-                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,executionTrace,payload}}. " +
+                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"]}",
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"simulateFailureAtStep\":\"PaymentStep\"}",
 
             ["attach_step_action"] =
-                "[Lifecycle Hooks] Attaches or updates a declarative lifecycle action (Webhook, Notification, or PublishEvent) on a step's OnEntry or OnExit hook in a draft WorkflowClass, with immediate validation and persistence. " +
+                "[Lifecycle Hooks] Attaches or updates a declarative lifecycle action (Webhook, Notification, or PublishEvent) on a step's OnEntry, OnExit, or OnFailure (Saga rollback compensation) hook in a draft WorkflowClass, with immediate validation and persistence. " +
+                "Supports Handlebars templates, dynamic LINQ payload mapping (e.g. Amount * 1.15), HMAC-SHA256 signing, and custom HTTP headers. " +
                 "HTTP uses authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{stepId,hook,totalActions,actionAttached,persisted,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-NOTFOUND-002, MCP-VALIDATION-FAILED, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnEntry\",\"action\":{\"actionType\":\"Webhook\",\"url\":\"https://api.example.com/notify\",\"payloadMapping\":{\"order\":\"OrderId\"}}}",
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnFailure\",\"action\":{\"actionType\":\"Webhook\",\"url\":\"https://api.example.com/rollback\",\"payloadMapping\":{\"order\":\"OrderId\"}}}",
 
             ["remove_step_action"] =
-                "[Lifecycle Hooks] Removes a declarative lifecycle action from a step's OnEntry or OnExit hook in a draft WorkflowClass by index, actionType, or target. " +
+                "[Lifecycle Hooks] Removes a declarative lifecycle action from a step's OnEntry, OnExit, or OnFailure hook in a draft WorkflowClass by index, actionType, or target. " +
                 "HTTP uses authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{stepId,hook,remainingActions,persisted,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-NOTFOUND-002, MCP-NOTFOUND-003, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnEntry\",\"actionIndex\":0}",
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnFailure\",\"actionIndex\":0}",
 
             ["list_step_actions"] =
-                "[Lifecycle Hooks] Lists configured OnEntry and OnExit lifecycle actions for a specific step (or all steps) in a draft or published WorkflowClass. " +
+                "[Lifecycle Hooks] Lists configured OnEntry, OnExit, and OnFailure (Saga compensation) lifecycle actions for a specific step (or all steps) in a draft or published WorkflowClass. " +
                 "HTTP uses authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{workflow,stepCount,steps:[{stepId,stepType,onEntry,onExit,totalHooks}]}}. " +
+                "Returns: {ok:true,data:{workflow,stepCount,steps:[{stepId,stepType,onEntry,onExit,onFailure,totalHooks}]}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\"}",
 
             ["list_dead_letters"] =
-                "[Resilience & DLQ] Lists dead-lettered outbox messages that failed execution retries (e.g. failing Webhooks, external notifications). " +
-                "Returns failure errors, payload details, and retry timestamps. " +
+                "[Resilience & DLQ] Lists dead-lettered outbox messages that exhausted all retry attempts (e.g. downstream 5xx errors or persistent network timeouts). " +
+                "Returns failure error strings, target endpoints, attempt counts, and serialized payload details so autonomous AI agents can diagnose outages. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{totalCount,deadLetters:[{id,tenantId,type,occurredOnUtc,retryCount,maxRetries,error,actionType,targetUrl,httpMethod,stepId,payload}]}}. " +
                 "Errors: MCP-INTERNAL. " +
                 "Input example: {\"limit\":20,\"type\":\"WorkflowAction:Webhook\"}",
 
             ["retry_dead_letter"] =
-                "[Resilience & DLQ] Resets retry counts and immediately reschedules one or all dead-lettered outbox messages for re-execution. " +
-                "Allows AI agents and operators to autonomously recover from transient downstream outages. " +
+                "[Resilience & DLQ] Resets retry counts and immediately re-enqueues one specific dead letter or all dead letters for the tenant back into the active Outbox. " +
+                "Use this tool when a downstream API has recovered to resume processing without manual engineer intervention. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{success:true,id,replayedCount,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"77777777-7777-7777-7777-777777777777\"}",
 
             ["purge_dead_letter"] =
-                "[Resilience & DLQ] Permanently purges an unrecoverable dead letter from the outbox queue. " +
+                "[Resilience & DLQ] Permanently deletes an unrecoverable dead letter from the transactional outbox after diagnosis to maintain queue hygiene. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{success:true,id,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"77777777-7777-7777-7777-777777777777\"}",
 
             ["verify_webhook_signature"] =
-                "[Webhook Security] Computes or verifies cryptographic HMAC-SHA256 signatures for webhook payloads. " +
+                "[Webhook Security] Validates or generates bank-grade HMAC-SHA256 signatures (X-FlowOS-Signature: t={ts},v1={hash}) for a given payload string and signing secret. " +
+                "Use this tool to verify webhook authenticity, test receiver validation logic, and ensure non-repudiation. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{isValid,signature,signatureHeader,timestamp,hash,algorithm,message}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
                 "Input example: {\"payload\":\"{\\\"orderId\\\":\\\"123\\\"}\",\"secret\":\"whsec_demo_secret\"}",
 
             ["test_webhook_endpoint"] =
-                "[Webhook Security] Sends a live test ping webhook to a target URL with X-FlowOS-Signature, timestamp, and delivery headers, returning HTTP response status, latency, and response snippet. " +
+                "[Webhook Security] Dispatches a live pre-flight probe ping to an external HTTP endpoint with full cryptographic headers (X-FlowOS-Signature, timestamp, delivery id). " +
+                "Measures latency in milliseconds, reports HTTP status codes, and returns server response snippets before activating production webhooks. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{targetUrl,httpMethod,statusCode,statusText,latencyMs,isSuccess,signatureSent,timestampSent,responseSnippet}}. " +
                 "Errors: MCP-ARG-001, MCP-EXEC-001, MCP-INTERNAL. " +
                 "Input example: {\"url\":\"https://httpbin.org/post\",\"method\":\"POST\"}",
 
             ["rotate_webhook_secret"] =
-                "[Webhook Security] Rotates the tenant's cryptographic HMAC-SHA256 webhook signing secret to a fresh 32-byte secret. " +
+                "[Webhook Security] Zero-downtime key rotation: generates a fresh cryptographic 32-byte HMAC-SHA256 signing secret for the tenant. " +
+                "Existing webhooks will immediately sign using the new secret key. " +
                 "HTTP uses authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{success:true,tenantId,webhookSigningSecret,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["get_instance_action_history"] =
-                "[Observability] Retrieves the persistent execution history and audit trail of lifecycle actions (webhooks, notifications, events) for a workflow instance, including latency in ms, HTTP status codes, request/response snippets, and error diagnostics. " +
+                "[Observability & Forensics] Retrieves the complete immutable execution audit log of lifecycle actions (Webhooks, Notifications, PublishEvent) for a specific workflow instance. " +
+                "Includes microsecond duration (durationMs), HTTP status codes, request and response snippets, retry attempt counts, and error diagnostics for root-cause analysis. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{workflowInstanceId,totalActions,actions:[{id,stepId,triggerPhase,actionType,target,status,executedAtUtc,durationMs,httpStatusCode,requestPayloadSnippet,responseSnippet,errorMessage,attemptNumber}]}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
