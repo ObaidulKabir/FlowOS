@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Collections.Generic;
 using FlowOS.Domain.Entities;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Events.Abstractions;
 using FlowOS.StateMachines.Engine;
 using FlowOS.StateMachines.Models; // Reusing ExecutionContext
@@ -12,11 +13,15 @@ namespace FlowOS.Workflows.Engine;
 public class WorkflowEngine : IWorkflowEngine
 {
     private readonly StateMachineEngine _stateMachineEngine;
+    private readonly IPolicyDecisionPluginRegistry? _decisionPluginRegistry;
 
-    public WorkflowEngine(StateMachineEngine stateMachineEngine)
+    public WorkflowEngine(
+        StateMachineEngine stateMachineEngine,
+        IPolicyDecisionPluginRegistry? decisionPluginRegistry = null)
     {
         _stateMachineEngine = stateMachineEngine
             ?? throw new ArgumentNullException(nameof(stateMachineEngine));
+        _decisionPluginRegistry = decisionPluginRegistry;
     }
 
     public WorkflowAdvanceResult Advance(
@@ -119,7 +124,7 @@ public class WorkflowEngine : IWorkflowEngine
             foreach (var targetId in forkTargets)
             {
                 var targetStep = definition.Steps.FirstOrDefault(s => s.StepId == targetId);
-                if (targetStep != null && (targetStep.StepType == WorkflowStepType.HumanTask || targetStep.StepType == WorkflowStepType.Timer))
+                if (targetStep != null && (targetStep.StepType == WorkflowStepType.HumanTask || targetStep.StepType == WorkflowStepType.Timer || targetStep.StepType == WorkflowStepType.SubWorkflow))
                 {
                     anyWaiting = true;
                 }
@@ -185,7 +190,7 @@ public class WorkflowEngine : IWorkflowEngine
 
                 instance.JoinTo(continuationStepId);
 
-                if (contStep.StepType == WorkflowStepType.HumanTask || contStep.StepType == WorkflowStepType.Timer)
+                if (contStep.StepType == WorkflowStepType.HumanTask || contStep.StepType == WorkflowStepType.Timer || contStep.StepType == WorkflowStepType.SubWorkflow)
                 {
                     instance.Wait();
                     return WorkflowAdvanceResult.Waiting($"Parallel branches converged at join '{nextStepId}'. Waiting at '{continuationStepId}'.");
@@ -206,7 +211,7 @@ public class WorkflowEngine : IWorkflowEngine
         {
             instance.CompleteBranch(currentStep.StepId, nextStepId);
 
-            if (nextStep.StepType == WorkflowStepType.HumanTask || nextStep.StepType == WorkflowStepType.Timer)
+            if (nextStep.StepType == WorkflowStepType.HumanTask || nextStep.StepType == WorkflowStepType.Timer || nextStep.StepType == WorkflowStepType.SubWorkflow)
             {
                 instance.Wait();
                 return WorkflowAdvanceResult.Waiting($"Branch '{currentStep.StepId}' advanced to '{nextStepId}' (waiting).");
@@ -228,32 +233,43 @@ public class WorkflowEngine : IWorkflowEngine
             instance.Wait(); // Pause for timer
             return WorkflowAdvanceResult.Waiting("Waiting for timer trigger.");
         }
+        else if (nextStep.StepType == WorkflowStepType.SubWorkflow)
+        {
+            instance.AdvanceTo(nextStepId);
+            instance.Wait(); // Pause while child workflow executes.
+            return WorkflowAdvanceResult.Waiting("Waiting for subworkflow completion.");
+        }
         else if (nextStep.StepType == WorkflowStepType.Decision)
         {
             string? decisionTarget = null;
-
-            foreach (var condition in nextStep.Conditions)
+            var providerName = nextStep.DecisionProvider?.Trim();
+            if (!string.IsNullOrWhiteSpace(providerName) &&
+                context.DecisionProviderBindings != null &&
+                context.DecisionProviderBindings.TryGetValue(providerName, out var mappedProviderName) &&
+                !string.IsNullOrWhiteSpace(mappedProviderName))
             {
-                var expression = condition.Key;
-                var target = condition.Value;
+                providerName = mappedProviderName;
+            }
+            if (!string.IsNullOrWhiteSpace(providerName) &&
+                _decisionPluginRegistry != null &&
+                _decisionPluginRegistry.TryResolve(providerName, out var plugin))
+            {
+                var pluginResult = plugin.Evaluate(new PolicyDecisionPluginContext(
+                    TenantId: instance.TenantId,
+                    WorkflowInstanceId: instance.Id,
+                    StepId: nextStep.StepId,
+                    EventType: domainEvent.EventType,
+                    Conditions: nextStep.Conditions,
+                    Payload: context.Payload));
 
-                try
+                if (pluginResult.IsMatched)
                 {
-                    if (context.Payload != null && EvaluateCondition(expression, context.Payload))
-                    {
-                        decisionTarget = target;
-                        break;
-                    }
-                }
-                catch
-                {
-                    // Skip malformed expressions gracefully
+                    decisionTarget = pluginResult.NextStepId;
                 }
             }
-
-            if (decisionTarget == null && nextStep.Conditions.ContainsKey("Default"))
+            else
             {
-                decisionTarget = nextStep.Conditions["Default"];
+                decisionTarget = EvaluateDecisionConditions(nextStep.Conditions, context.Payload);
             }
 
             if (decisionTarget != null)
@@ -288,5 +304,35 @@ public class WorkflowEngine : IWorkflowEngine
     private bool EvaluateCondition(string expression, Dictionary<string, object> payload)
     {
         return ExpressionEvaluator.Evaluate(expression, payload);
+    }
+
+    private string? EvaluateDecisionConditions(
+        Dictionary<string, string> conditions,
+        Dictionary<string, object>? payload)
+    {
+        foreach (var condition in conditions)
+        {
+            var expression = condition.Key;
+            var target = condition.Value;
+
+            try
+            {
+                if (payload != null && EvaluateCondition(expression, payload))
+                {
+                    return target;
+                }
+            }
+            catch
+            {
+                // Skip malformed expressions gracefully.
+            }
+        }
+
+        if (conditions.TryGetValue("Default", out var defaultTarget))
+        {
+            return defaultTarget;
+        }
+
+        return null;
     }
 }

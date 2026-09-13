@@ -47,7 +47,7 @@ dotnet test FlowOS.sln
 ## 🤖 MCP AI Control Plane
 FlowOS is a **multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction**. It exposes a standalone **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) supporting both **stdio** and **Streamable HTTP** (`MCP_TRANSPORT=http`, `GET /mcp` and `POST /mcp`):
 * **Public Discovery (`GET /mcp`)**: Self-documenting endpoint returning interactive HTML or machine-readable JSON discovery metadata, tool schemas, tenant security semantics, risk ratings, and human confirmation requirements.
-* **Protected Execution (`POST /mcp`)**: Authenticated JSON-RPC 2.0 interface exposing **21 tools** across workflow design, state machine verification, execution, human tasks, notifications, and advisory agents.
+* **Protected Execution (`POST /mcp`)**: Authenticated JSON-RPC 2.0 interface exposing **35 tools** across workflow design, Copilot synthesis, time-travel replay, state machine verification, execution, human tasks, notifications, and advisory agents.
 * **Enforced Agent Governance Policy**: High-risk, irreversible actions (such as `publish_workflowclass`) mandate explicit human confirmation (`confirmHumanApproval: true`), failing deterministically with `MCP-APPROVAL-REQUIRED` if omitted.
 * **Object-Level Tenant Isolation & Anti-Enumeration**: Strict anti-BOLA/IDOR boundaries prevent foreign resource access, while normalizing foreign and non-existent IDs to `MCP-NOTFOUND-001` to eliminate enumeration oracles. Public blueprints (`Scope == Public`) remain safely executable cross-tenant with caller-isolated runtime state.
 

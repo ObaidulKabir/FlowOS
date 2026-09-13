@@ -152,4 +152,54 @@ export interface GenerateBlueprintCopilotResponse {
   validation: ValidationResult;
 }
 
+export interface TimeTravelActionLog {
+  id: string;
+  stepId: string;
+  triggerPhase: string;
+  actionType: string;
+  target?: string;
+  status: string;
+  executedAtUtc: string;
+  durationMs: number;
+  httpStatusCode?: number;
+  errorMessage?: string;
+}
+
+export interface TimeTravelSnapshot {
+  stepIndex: number;
+  timestamp: string;
+  eventId: string;
+  eventType: string;
+  fromStepId: string;
+  toStepId: string;
+  activeStepIds: string[];
+  fromState: string;
+  toState: string;
+  actorId?: string;
+  variables: Record<string, unknown>;
+  actionLogs: TimeTravelActionLog[];
+  summary: string;
+}
+
+export interface TimeTravelReplay {
+  workflowInstanceId: string;
+  workflowClassName: string;
+  workflowVersion: number;
+  status: string;
+  totalSteps: number;
+  snapshots: TimeTravelSnapshot[];
+}
+
+export interface TimeTravelForkResult {
+  forkFromStepIndex: number;
+  baseStepId: string;
+  baseState: string;
+  alternativeEvent: string;
+  projectedStepId: string;
+  projectedState: string;
+  isAllowed: boolean;
+  reason?: string;
+  projectedActions: string[];
+}
+
 

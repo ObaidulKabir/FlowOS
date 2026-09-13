@@ -10,7 +10,7 @@ public sealed class ContractAndTenantTests
     [Fact]
     public void Every_tool_has_self_describing_behavior_and_valid_example()
     {
-        Assert.Equal(33, McpToolDescriptions.All.Count);
+        Assert.Equal(47, McpToolDescriptions.All.Count);
 
         Assert.All(McpToolDescriptions.All, contract =>
         {
@@ -48,6 +48,13 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.AttachStepAction(),
             McpToolSchemas.RemoveStepAction(),
             McpToolSchemas.ListStepActions(),
+            McpToolSchemas.RegisterCapabilityBinding(),
+            McpToolSchemas.ListCapabilityBindings(),
+            McpToolSchemas.ValidateCapabilityBinding(),
+            McpToolSchemas.RegisterPluginBinding(),
+            McpToolSchemas.ListPluginBindings(),
+            McpToolSchemas.ResolvePluginBinding(),
+            McpToolSchemas.ListRegisteredPlugins(),
             McpToolSchemas.ListDeadLetters(),
             McpToolSchemas.RetryDeadLetter(),
             McpToolSchemas.PurgeDeadLetter(),
@@ -55,7 +62,14 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.TestWebhookEndpoint(),
             McpToolSchemas.RotateWebhookSecret(),
             McpToolSchemas.GetInstanceActionHistory(),
-            McpToolSchemas.GenerateBlueprintFromNaturalLanguage()
+            McpToolSchemas.GenerateBlueprintFromNaturalLanguage(),
+            McpToolSchemas.SimulateCompensationPath(),
+            McpToolSchemas.ReplayWorkflowHistory(),
+            McpToolSchemas.ForkWorkflowSimulation(),
+            McpToolSchemas.PlanWorkflowCompensationPath(),
+            McpToolSchemas.RegisterIdempotencyKey(),
+            McpToolSchemas.InspectIdempotencyStatus(),
+            McpToolSchemas.PreviewRetryPolicy()
         };
 
         Assert.All(schemas, schema =>

@@ -68,5 +68,158 @@ namespace FlowOS.UnitTests.Infrastructure
             var errors = _linter.Lint(json);
             Assert.Contains(errors, e => e.Code == "SM-003"); // Unknown ToState 'B'
         }
+
+        [Fact]
+        public void Lint_SideEffectingHooksWithoutOnFailure_ReturnsCompensationLintError()
+        {
+            var json = @"{
+                ""events"": [ { ""eventId"": ""EVT-1"" } ],
+                ""stateMachine"": {
+                    ""states"": [""Draft"", ""Done""],
+                    ""transitions"": [
+                        { ""fromState"": ""Draft"", ""toState"": ""Done"", ""eventId"": ""EVT-1"" }
+                    ]
+                },
+                ""workflow"": {
+                    ""startStepId"": ""S1"",
+                    ""steps"": [
+                        {
+                            ""stepId"": ""S1"",
+                            ""stepType"": ""Command"",
+                            ""nextSteps"": { ""EVT-1"": ""END"" },
+                            ""onEntry"": [
+                                { ""actionType"": ""Webhook"", ""url"": ""https://example.com/emit"" }
+                            ]
+                        }
+                    ]
+                }
+            }";
+
+            var errors = _linter.Lint(json);
+            Assert.Contains(errors, e => e.Code == "WF-COMP-010");
+        }
+
+        [Fact]
+        public void Lint_PluginAliasHooksWithoutOnFailure_ReturnsCompensationLintError()
+        {
+            var json = @"{
+                ""events"": [ { ""eventId"": ""EVT-1"" } ],
+                ""stateMachine"": {
+                    ""states"": [""Draft"", ""Done""],
+                    ""transitions"": [
+                        { ""fromState"": ""Draft"", ""toState"": ""Done"", ""eventId"": ""EVT-1"" }
+                    ]
+                },
+                ""workflow"": {
+                    ""startStepId"": ""S1"",
+                    ""steps"": [
+                        {
+                            ""stepId"": ""S1"",
+                            ""stepType"": ""Command"",
+                            ""nextSteps"": { ""EVT-1"": ""END"" },
+                            ""onEntry"": [
+                                { ""actionType"": ""plugin:shipment.webhook"" }
+                            ]
+                        }
+                    ]
+                }
+            }";
+
+            var errors = _linter.Lint(json);
+            Assert.Contains(errors, e => e.Code == "WF-COMP-010");
+        }
+
+        [Fact]
+        public void Lint_SideEffectingHooksWithOnFailure_DoesNotReturnCompensationLintError()
+        {
+            var json = @"{
+                ""events"": [ { ""eventId"": ""EVT-1"" }, { ""eventId"": ""EVT-COMP"" } ],
+                ""stateMachine"": {
+                    ""states"": [""Draft"", ""Done""],
+                    ""transitions"": [
+                        { ""fromState"": ""Draft"", ""toState"": ""Done"", ""eventId"": ""EVT-1"" }
+                    ]
+                },
+                ""workflow"": {
+                    ""startStepId"": ""S1"",
+                    ""steps"": [
+                        {
+                            ""stepId"": ""S1"",
+                            ""stepType"": ""Command"",
+                            ""nextSteps"": { ""EVT-1"": ""END"" },
+                            ""onEntry"": [
+                                { ""actionType"": ""Webhook"", ""url"": ""https://example.com/emit"" }
+                            ],
+                            ""onFailure"": [
+                                { ""actionType"": ""Notification"", ""target"": ""Ops"" }
+                            ]
+                        }
+                    ]
+                }
+            }";
+
+            var errors = _linter.Lint(json);
+            Assert.DoesNotContain(errors, e => e.Code == "WF-COMP-010");
+        }
+
+        [Fact]
+        public void Lint_InvokeCapabilityWithoutCapabilityName_ReturnsActionValidationError()
+        {
+            var json = @"{
+                ""events"": [ { ""eventId"": ""EVT-1"" } ],
+                ""stateMachine"": {
+                    ""states"": [""Draft"", ""Done""],
+                    ""transitions"": [
+                        { ""fromState"": ""Draft"", ""toState"": ""Done"", ""eventId"": ""EVT-1"" }
+                    ]
+                },
+                ""workflow"": {
+                    ""startStepId"": ""S1"",
+                    ""steps"": [
+                        {
+                            ""stepId"": ""S1"",
+                            ""stepType"": ""Command"",
+                            ""nextSteps"": { ""EVT-1"": ""END"" },
+                            ""onEntry"": [
+                                { ""actionType"": ""InvokeCapability"" }
+                            ],
+                            ""onFailure"": [
+                                { ""actionType"": ""Notification"", ""target"": ""Ops"" }
+                            ]
+                        }
+                    ]
+                }
+            }";
+
+            var errors = _linter.Lint(json);
+            Assert.Contains(errors, e => e.Code == "WF-ACT-005");
+        }
+
+        [Fact]
+        public void Lint_SubWorkflowWithoutReference_ReturnsSubWorkflowValidationError()
+        {
+            var json = @"{
+                ""events"": [ { ""eventId"": ""EVT-START"" } ],
+                ""stateMachine"": {
+                    ""states"": [""Draft"", ""Done""],
+                    ""transitions"": [
+                        { ""fromState"": ""Draft"", ""toState"": ""Done"", ""eventId"": ""EVT-START"" }
+                    ]
+                },
+                ""workflow"": {
+                    ""startStepId"": ""S1"",
+                    ""steps"": [
+                        {
+                            ""stepId"": ""S1"",
+                            ""stepType"": ""SubWorkflow"",
+                            ""nextSteps"": { ""SubWorkflowCompleted"": ""END"" }
+                        }
+                    ]
+                }
+            }";
+
+            var errors = _linter.Lint(json);
+            Assert.Contains(errors, e => e.Code == "WF-SUB-001");
+        }
     }
 }

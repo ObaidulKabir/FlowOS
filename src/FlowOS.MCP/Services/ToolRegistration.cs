@@ -35,6 +35,9 @@ public static class ToolRegistration
         registry.Register("simulate_workflowclass", McpToolDescriptions.For("simulate_workflowclass"), McpToolSchemas.SimulateWorkflowClass(),
             async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateWorkflowClass(args)));
 
+        registry.Register("simulate_compensation_path", McpToolDescriptions.For("simulate_compensation_path"), McpToolSchemas.SimulateCompensationPath(),
+            async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateCompensationPath(args)));
+
         registry.Register("attach_step_action", McpToolDescriptions.For("attach_step_action"), McpToolSchemas.AttachStepAction(),
             async (args) => await ExecuteScopedAsync<LifecycleActionMcpTools>(serviceProvider, t => t.AttachStepAction(args)));
 
@@ -43,6 +46,27 @@ public static class ToolRegistration
 
         registry.Register("list_step_actions", McpToolDescriptions.For("list_step_actions"), McpToolSchemas.ListStepActions(),
             async (args) => await ExecuteScopedAsync<LifecycleActionMcpTools>(serviceProvider, t => t.ListStepActions(args)));
+
+        registry.Register("register_capability_binding", McpToolDescriptions.For("register_capability_binding"), McpToolSchemas.RegisterCapabilityBinding(),
+            async (args) => await ExecuteScopedAsync<CapabilityRegistryMcpTools>(serviceProvider, t => t.RegisterCapabilityBinding(args)));
+
+        registry.Register("list_capability_bindings", McpToolDescriptions.For("list_capability_bindings"), McpToolSchemas.ListCapabilityBindings(),
+            async (args) => await ExecuteScopedAsync<CapabilityRegistryMcpTools>(serviceProvider, t => t.ListCapabilityBindings(args)));
+
+        registry.Register("validate_capability_binding", McpToolDescriptions.For("validate_capability_binding"), McpToolSchemas.ValidateCapabilityBinding(),
+            async (args) => await ExecuteScopedAsync<CapabilityRegistryMcpTools>(serviceProvider, t => t.ValidateCapabilityBinding(args)));
+
+        registry.Register("register_plugin_binding", McpToolDescriptions.For("register_plugin_binding"), McpToolSchemas.RegisterPluginBinding(),
+            async (args) => await ExecuteScopedAsync<PluginBindingMcpTools>(serviceProvider, t => t.RegisterPluginBinding(args)));
+
+        registry.Register("list_plugin_bindings", McpToolDescriptions.For("list_plugin_bindings"), McpToolSchemas.ListPluginBindings(),
+            async (args) => await ExecuteScopedAsync<PluginBindingMcpTools>(serviceProvider, t => t.ListPluginBindings(args)));
+
+        registry.Register("resolve_plugin_binding", McpToolDescriptions.For("resolve_plugin_binding"), McpToolSchemas.ResolvePluginBinding(),
+            async (args) => await ExecuteScopedAsync<PluginBindingMcpTools>(serviceProvider, t => t.ResolvePluginBinding(args)));
+
+        registry.Register("list_registered_plugins", McpToolDescriptions.For("list_registered_plugins"), McpToolSchemas.ListRegisteredPlugins(),
+            async (args) => await ExecuteScopedAsync<PluginDiscoveryMcpTools>(serviceProvider, t => t.ListRegisteredPlugins(args)));
 
         registry.Register("create_draft_workflowclass", McpToolDescriptions.For("create_draft_workflowclass"), McpToolSchemas.CreateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.CreateDraft(args)));
@@ -106,6 +130,24 @@ public static class ToolRegistration
 
         registry.Register("get_instance_action_history", McpToolDescriptions.For("get_instance_action_history"), McpToolSchemas.GetInstanceActionHistory(),
             async (args) => await ExecuteScopedAsync<ActionObservabilityMcpTools>(serviceProvider, t => t.GetInstanceActionHistory(args)));
+
+        registry.Register("replay_workflow_history", McpToolDescriptions.For("replay_workflow_history"), McpToolSchemas.ReplayWorkflowHistory(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.ReplayWorkflowHistory(args)));
+
+        registry.Register("fork_workflow_simulation", McpToolDescriptions.For("fork_workflow_simulation"), McpToolSchemas.ForkWorkflowSimulation(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.ForkWorkflowSimulation(args)));
+
+        registry.Register("plan_workflow_compensation_path", McpToolDescriptions.For("plan_workflow_compensation_path"), McpToolSchemas.PlanWorkflowCompensationPath(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.PlanWorkflowCompensationPath(args)));
+
+        registry.Register("register_idempotency_key", McpToolDescriptions.For("register_idempotency_key"), McpToolSchemas.RegisterIdempotencyKey(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.RegisterIdempotencyKey(args)));
+
+        registry.Register("inspect_idempotency_status", McpToolDescriptions.For("inspect_idempotency_status"), McpToolSchemas.InspectIdempotencyStatus(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.InspectIdempotencyStatus(args)));
+
+        registry.Register("preview_retry_policy", McpToolDescriptions.For("preview_retry_policy"), McpToolSchemas.PreviewRetryPolicy(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.PreviewRetryPolicy(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

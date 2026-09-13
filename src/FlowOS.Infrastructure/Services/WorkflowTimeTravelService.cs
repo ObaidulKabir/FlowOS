@@ -21,15 +21,21 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
     private readonly FlowOSDbContext _dbContext;
     private readonly WorkflowEngine _engine;
     private readonly StateMachineEngine _stateMachineEngine;
+    private readonly ICompensationPlannerService _compensationPlanner;
+    private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
 
     public WorkflowTimeTravelService(
         FlowOSDbContext dbContext,
         WorkflowEngine engine,
-        StateMachineEngine stateMachineEngine)
+        StateMachineEngine stateMachineEngine,
+        ICompensationPlannerService compensationPlanner,
+        IPluginBindingRegistryService? pluginBindingRegistry = null)
     {
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _stateMachineEngine = stateMachineEngine ?? throw new ArgumentNullException(nameof(stateMachineEngine));
+        _compensationPlanner = compensationPlanner ?? throw new ArgumentNullException(nameof(compensationPlanner));
+        _pluginBindingRegistry = pluginBindingRegistry;
     }
 
     public async Task<WorkflowTimeTravelReplayDto?> GetReplayTimelineAsync(
@@ -47,10 +53,17 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
 
+        var correlationIds = new List<Guid> { instance.Id };
+        if (instance.CorrelationId.HasValue && instance.CorrelationId.Value != instance.Id)
+        {
+            correlationIds.Add(instance.CorrelationId.Value);
+        }
+
         var events = await _dbContext.Events
             .AsNoTracking()
-            .Where(e => e.CorrelationId == workflowInstanceId && e.TenantId == tenantId)
+            .Where(e => e.TenantId == tenantId && e.CorrelationId.HasValue && correlationIds.Contains(e.CorrelationId.Value))
             .OrderBy(e => e.Timestamp)
+            .ThenBy(e => e.EventId)
             .ToListAsync(cancellationToken);
 
         var actionLogs = await _dbContext.ActionExecutionLogs
@@ -163,20 +176,27 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
         object? alternativePayload = null,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(alternativeEvent))
+        {
+            return DeniedFork(targetStepIndex, "Unknown", "Unknown", alternativeEvent ?? string.Empty,
+                "Alternative event is required for a what-if fork simulation.");
+        }
+
+        var instance = await _dbContext.WorkflowInstances
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == workflowInstanceId && w.TenantId == tenantId, cancellationToken);
+
+        if (instance == null)
+        {
+            return DeniedFork(targetStepIndex, "Unknown", "Unknown", alternativeEvent,
+                $"Workflow instance '{workflowInstanceId}' was not found.");
+        }
+
         var replay = await GetReplayTimelineAsync(tenantId, workflowInstanceId, cancellationToken);
         if (replay == null || replay.Snapshots.Count == 0)
         {
-            return new WorkflowForkSimulationResultDto(
-                targetStepIndex,
-                "Unknown",
-                "Unknown",
-                alternativeEvent,
-                "None",
-                "None",
-                false,
-                $"Workflow instance '{workflowInstanceId}' has no replay history.",
-                new List<string>()
-            );
+            return DeniedFork(targetStepIndex, instance.CurrentStepId, instance.CurrentState ?? "Unknown", alternativeEvent,
+                $"Workflow instance '{workflowInstanceId}' has no replay history.");
         }
 
         int clampedIndex = Math.Clamp(targetStepIndex, 0, replay.Snapshots.Count - 1);
@@ -184,109 +204,102 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
 
         var definition = await _dbContext.WorkflowDefinitions
             .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Name == replay.WorkflowClassName && d.Version == replay.WorkflowVersion, cancellationToken)
-            ?? await _dbContext.WorkflowDefinitions.AsNoTracking().FirstOrDefaultAsync(d => d.TenantId == tenantId, cancellationToken);
+            .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
 
         if (definition == null)
         {
-            return new WorkflowForkSimulationResultDto(
-                clampedIndex,
-                baseSnapshot.ToStepId,
-                baseSnapshot.ToState,
-                alternativeEvent,
-                "None",
-                "None",
-                false,
-                "Workflow runtime definition not found.",
-                new List<string>()
-            );
+            return DeniedFork(clampedIndex, baseSnapshot.ToStepId, baseSnapshot.ToState, alternativeEvent,
+                "Workflow runtime definition not found.");
         }
 
-        // Locate current step in definition
-        var baseStep = definition.Steps.FirstOrDefault(s => s.StepId == baseSnapshot.ToStepId);
+        var seedStepId = string.IsNullOrWhiteSpace(baseSnapshot.ToStepId) ? definition.StartStepId : baseSnapshot.ToStepId;
+        var baseStep = definition.Steps.FirstOrDefault(s => s.StepId == seedStepId);
         if (baseStep == null)
         {
-            return new WorkflowForkSimulationResultDto(
-                clampedIndex,
-                baseSnapshot.ToStepId,
-                baseSnapshot.ToState,
-                alternativeEvent,
-                "None",
-                "None",
-                false,
-                $"Step '{baseSnapshot.ToStepId}' does not exist in definition.",
-                new List<string>()
-            );
+            return DeniedFork(clampedIndex, seedStepId, baseSnapshot.ToState, alternativeEvent,
+                $"Step '{seedStepId}' does not exist in definition.");
         }
 
-        if (!baseStep.NextSteps.TryGetValue(alternativeEvent, out var projectedNextStepId))
-        {
-            return new WorkflowForkSimulationResultDto(
-                clampedIndex,
-                baseSnapshot.ToStepId,
-                baseSnapshot.ToState,
-                alternativeEvent,
-                "None",
-                "None",
-                false,
-                $"Step '{baseSnapshot.ToStepId}' does not define an outgoing transition for event '{alternativeEvent}'. Valid transitions: {string.Join(", ", baseStep.NextSteps.Keys)}",
-                new List<string>()
-            );
-        }
-
-        // Evaluate State Machine constraint
         var smDef = await _dbContext.StateMachineDefinitions
             .AsNoTracking()
-            .FirstOrDefaultAsync(sm => sm.TenantId == tenantId && sm.Name == definition.Name, cancellationToken)
-            ?? await _dbContext.StateMachineDefinitions.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(sm => sm.TenantId == tenantId && sm.EntityType == definition.Name, cancellationToken);
 
-        string projectedState = baseSnapshot.ToState;
-        if (smDef != null)
+        var context = new StateMachines.Models.ExecutionContext();
+        var payload = ToPayloadDictionary(alternativePayload);
+        if (payload != null)
         {
-            var simulatedDomainEvent = new StandardEvent(tenantId, alternativeEvent);
-            var context = new StateMachines.Models.ExecutionContext();
-            if (alternativePayload != null)
-            {
-                try
-                {
-                    var json = JsonSerializer.Serialize(alternativePayload);
-                    var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-                    if (dict != null) context.Payload = dict;
-                }
-                catch { }
-            }
-
-            var smResult = _stateMachineEngine.ValidateTransition(smDef, baseSnapshot.ToState, simulatedDomainEvent, context);
-            if (!smResult.IsAllowed)
-            {
-                return new WorkflowForkSimulationResultDto(
-                    clampedIndex,
-                    baseSnapshot.ToStepId,
-                    baseSnapshot.ToState,
-                    alternativeEvent,
-                    projectedNextStepId,
-                    baseSnapshot.ToState,
-                    false,
-                    $"State machine rule violation: {smResult.Reason}",
-                    new List<string>()
-                );
-            }
-            if (smResult.MatchedTransition != null)
-            {
-                projectedState = smResult.MatchedTransition.ToState;
-            }
+            context.Payload = payload;
+        }
+        if (_pluginBindingRegistry != null)
+        {
+            context.DecisionProviderBindings = await _pluginBindingRegistry.ResolveBindingsAsync(
+                tenantId,
+                PluginBindingTypes.Decision,
+                cancellationToken);
         }
 
-        // Collect projected actions for next step
-        var projectedNextStep = definition.Steps.FirstOrDefault(s => s.StepId == projectedNextStepId);
+        // Ephemeral clone — never attached to the DbContext, so production state and outbox stay untouched.
+        var sandbox = new WorkflowInstance(
+            tenantId,
+            definition.Id,
+            instance.WorkflowClassId,
+            instance.WorkflowVersion,
+            seedStepId,
+            Guid.NewGuid(),
+            baseSnapshot.ToState);
+
+        if (baseSnapshot.ActiveStepIds.Count > 1)
+        {
+            sandbox.ForkTo(baseSnapshot.ActiveStepIds);
+        }
+
+        var simulatedEvent = new StandardEvent(tenantId, alternativeEvent.Trim());
+        var advance = _engine.Advance(
+            sandbox,
+            definition,
+            simulatedEvent,
+            context,
+            smDef,
+            baseSnapshot.ToState);
+
+        if (!advance.Success)
+        {
+            var valid = string.Join(", ", baseStep.NextSteps.Keys);
+            return new WorkflowForkSimulationResultDto(
+                clampedIndex,
+                baseSnapshot.ToStepId,
+                baseSnapshot.ToState,
+                alternativeEvent,
+                "None",
+                baseSnapshot.ToState,
+                false,
+                string.IsNullOrWhiteSpace(valid)
+                    ? advance.FailureReason
+                    : $"{advance.FailureReason} Valid transitions: {valid}",
+                new List<string>()
+            );
+        }
+
+        var projectedStepId = advance.NewStepId
+            ?? (sandbox.Status == WorkflowInstanceStatus.Completed ? "END" : sandbox.CurrentStepId);
+        var projectedState = sandbox.CurrentState ?? baseSnapshot.ToState;
+        if (smDef == null && !string.IsNullOrWhiteSpace(projectedStepId) && projectedStepId != "END")
+        {
+            projectedState = projectedStepId;
+        }
+        var projectedNextStep = definition.Steps.FirstOrDefault(s => s.StepId == projectedStepId);
         var projectedActionSummaries = new List<string>();
+
         if (baseStep.OnExit != null)
         {
-            projectedActionSummaries.AddRange(baseStep.OnExit.Select(a => $"OnExit({baseStep.StepId}): {a.ActionType} -> {a.Target ?? a.Url ?? "Event"}"));
+            projectedActionSummaries.AddRange(baseStep.OnExit.Select(a =>
+                $"OnExit({baseStep.StepId}): {a.ActionType} -> {a.Target ?? a.Url ?? "Event"}"));
         }
+
         if (projectedNextStep?.OnEntry != null)
         {
-            projectedActionSummaries.AddRange(projectedNextStep.OnEntry.Select(a => $"OnEntry({projectedNextStepId}): {a.ActionType} -> {a.Target ?? a.Url ?? "Event"}"));
+            projectedActionSummaries.AddRange(projectedNextStep.OnEntry.Select(a =>
+                $"OnEntry({projectedStepId}): {a.ActionType} -> {a.Target ?? a.Url ?? "Event"}"));
         }
 
         return new WorkflowForkSimulationResultDto(
@@ -294,12 +307,126 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             BaseStepId: baseSnapshot.ToStepId,
             BaseState: baseSnapshot.ToState,
             AlternativeEvent: alternativeEvent,
-            ProjectedStepId: projectedNextStepId,
+            ProjectedStepId: projectedStepId,
             ProjectedState: projectedState,
             IsAllowed: true,
-            Reason: $"Valid alternative branch path: Transitioned from '{baseSnapshot.ToStepId}' to '{projectedNextStepId}' (State: {baseSnapshot.ToState} ➔ {projectedState}).",
+            Reason: $"Sandboxed what-if: '{baseSnapshot.ToStepId}' --[{alternativeEvent}]--> '{projectedStepId}' (State: {baseSnapshot.ToState} ➔ {projectedState}). No production writes or outbox dispatches were performed.",
             ProjectedActions: projectedActionSummaries
         );
+    }
+
+    public async Task<WorkflowCompensationPathDto?> PlanCompensationPathAsync(
+        Guid tenantId,
+        Guid workflowInstanceId,
+        string? failedStepId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var instance = await _dbContext.WorkflowInstances
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == workflowInstanceId && w.TenantId == tenantId, cancellationToken);
+        if (instance == null) return null;
+
+        var replay = await GetReplayTimelineAsync(tenantId, workflowInstanceId, cancellationToken);
+        var definition = await _dbContext.WorkflowDefinitions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
+
+        if (replay == null || definition == null)
+        {
+            return null;
+        }
+
+        var resolvedFailedStep = string.IsNullOrWhiteSpace(failedStepId)
+            ? replay.Snapshots.LastOrDefault()?.ToStepId ?? instance.CurrentStepId
+            : failedStepId.Trim();
+        if (string.IsNullOrWhiteSpace(resolvedFailedStep))
+        {
+            resolvedFailedStep = definition.StartStepId;
+        }
+
+        var executed = replay.Snapshots
+            .Select(s => s.ToStepId)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToList();
+
+        if (executed.Count == 0)
+        {
+            executed.Add(definition.StartStepId);
+        }
+
+        var lastFailedIndex = executed.FindLastIndex(s => string.Equals(s, resolvedFailedStep, StringComparison.OrdinalIgnoreCase));
+        if (lastFailedIndex >= 0)
+        {
+            executed = executed.Take(lastFailedIndex + 1).ToList();
+        }
+        else
+        {
+            executed.Add(resolvedFailedStep);
+        }
+
+        var actionMap = definition.Steps.ToDictionary(
+            step => step.StepId,
+            step => (step.OnFailure ?? new List<StepActionDefinition>())
+                .Select(a => new CompensationActionDto(
+                    StepId: step.StepId,
+                    Hook: "OnFailure",
+                    ActionType: a.ActionType,
+                    Target: a.Target,
+                    Url: a.Url,
+                    Condition: a.Condition,
+                    Capability: a.Capability ?? a.Target))
+                .ToList(),
+            StringComparer.OrdinalIgnoreCase);
+
+        var plan = _compensationPlanner.Plan(new CompensationPathRequestDto(
+            FailedStepId: resolvedFailedStep,
+            ExecutedStepIds: executed,
+            OnFailureActionsByStep: actionMap));
+
+        return new WorkflowCompensationPathDto(
+            WorkflowInstanceId: workflowInstanceId,
+            FailedStepId: plan.FailedStepId,
+            ExecutedStepIds: executed,
+            IsFullyCompensable: plan.IsFullyCompensable,
+            OrderedCompensations: plan.OrderedCompensations,
+            BlockedSteps: plan.BlockedSteps);
+    }
+
+    private static WorkflowForkSimulationResultDto DeniedFork(
+        int stepIndex,
+        string baseStepId,
+        string baseState,
+        string alternativeEvent,
+        string reason)
+    {
+        return new WorkflowForkSimulationResultDto(
+            stepIndex,
+            baseStepId,
+            baseState,
+            alternativeEvent,
+            "None",
+            "None",
+            false,
+            reason,
+            new List<string>());
+    }
+
+    private static Dictionary<string, object>? ToPayloadDictionary(object? payload)
+    {
+        if (payload == null) return null;
+        if (payload is Dictionary<string, object> dict) return dict;
+
+        try
+        {
+            var json = payload is string text && !string.IsNullOrWhiteSpace(text)
+                ? text
+                : JsonSerializer.Serialize(payload);
+            return JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string GenerateStepSummary(DomainEvent evt, string fromStep, string toStep, string fromState, string toState)

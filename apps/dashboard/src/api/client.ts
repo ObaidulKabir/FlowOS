@@ -1,6 +1,7 @@
 import { 
   WorkflowClass, CreateDraftRequest, CopyRequest, ValidationResult, 
-  WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession, DeadLetterDto 
+  WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession, DeadLetterDto,
+  TimeTravelReplay, TimeTravelForkResult
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -368,6 +369,32 @@ export const api = {
       })
     });
     return handleResponse(response, 'Failed to generate blueprint with AI Copilot');
+  },
+
+  getTimeTravelReplay: async (id: string, role?: 'Tenant' | 'Admin'): Promise<TimeTravelReplay> => {
+    const headers = getHeaders(role);
+    const response = await fetch(`/api/workflows/${id}/time-travel`, { headers });
+    return handleResponse(response, 'Failed to load time-travel replay');
+  },
+
+  simulateFork: async (
+    id: string,
+    stepIndex: number,
+    event: string,
+    payload?: unknown,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<TimeTravelForkResult> => {
+    const headers = getHeaders(role);
+    const response = await fetch(`/api/workflows/${id}/time-travel/fork`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        targetStepIndex: stepIndex,
+        alternativeEvent: event,
+        alternativePayload: payload ?? null
+      })
+    });
+    return handleResponse(response, 'Failed to simulate what-if fork');
   }
 };
 

@@ -7,6 +7,8 @@ public class WorkflowStepDefinition
 {
     public string StepId { get; set; } = string.Empty;
     public WorkflowStepType StepType { get; set; }
+    public string? DecisionProvider { get; set; }
+    public SubWorkflowReferenceDefinition? SubWorkflow { get; set; }
     // Optional: Roles allowed to execute this step (for Command/UserTask steps)
     public List<string> AllowedRoles { get; set; } = new();
     
@@ -41,10 +43,21 @@ public class WorkflowStepDefinition
     }
 }
 
+public class SubWorkflowReferenceDefinition
+{
+    public Guid? WorkflowDefinitionId { get; set; }
+    public Guid? WorkflowClassId { get; set; }
+    public string? WorkflowName { get; set; }
+    public int? Version { get; set; }
+    public Dictionary<string, string> InputMapping { get; set; } = new();
+    public Dictionary<string, string> OutputMapping { get; set; } = new();
+}
+
 public class StepActionDefinition
 {
     public string ActionType { get; set; } = "Notification";
     public string? Target { get; set; }
+    public string? Capability { get; set; }
     public string? Url { get; set; }
     public string? Method { get; set; } = "POST";
     public string? Template { get; set; }

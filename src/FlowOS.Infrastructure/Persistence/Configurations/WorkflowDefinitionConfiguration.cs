@@ -29,6 +29,20 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
         {
             step.ToJson();
             step.OwnsOne(s => s.Sla);
+            step.OwnsOne(s => s.SubWorkflow, sub =>
+            {
+                sub.Property(s => s.InputMapping)
+                    .HasConversion(
+                        d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                        s => JsonSerializer.Deserialize<Dictionary<string, string>>(s, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
+                    );
+
+                sub.Property(s => s.OutputMapping)
+                    .HasConversion(
+                        d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                        s => JsonSerializer.Deserialize<Dictionary<string, string>>(s, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
+                    );
+            });
             
             // Map the dictionary explicitly for JSON serialization
             step.Property(s => s.NextSteps)

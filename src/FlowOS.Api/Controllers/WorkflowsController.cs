@@ -108,10 +108,14 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpPost("{id}/time-travel/fork")]
-    public async Task<IActionResult> SimulateFork(Guid id, [FromBody] FlowOS.Core.Common.Interfaces.WorkflowForkSimulationRequest request)
+    public async Task<IActionResult> SimulateFork(Guid id, [FromBody] FlowOS.Core.Common.Interfaces.WorkflowForkSimulationRequest? request)
     {
         var tenantId = _currentUser.TenantId;
         if (tenantId == Guid.Empty) return Unauthorized();
+        if (request == null || string.IsNullOrWhiteSpace(request.AlternativeEvent))
+        {
+            return BadRequest(new { error = "alternativeEvent is required." });
+        }
 
         var query = new SimulateWorkflowForkQuery(
             tenantId,
@@ -121,6 +125,23 @@ public class WorkflowsController : ControllerBase
             request.AlternativePayload);
 
         var result = await _mediator.Send(query);
+        return Ok(result);
+    }
+
+    [HttpGet("{id}/compensation-path")]
+    public async Task<IActionResult> GetCompensationPath(Guid id, [FromQuery] string? failedStepId = null)
+    {
+        var tenantId = _currentUser.TenantId;
+        if (tenantId == Guid.Empty) return Unauthorized();
+
+        var query = new GetWorkflowCompensationPathQuery(tenantId, id, failedStepId);
+        var result = await _mediator.Send(query);
+        if (result == null)
+        {
+            _logger.LogWarning("Compensation path for Workflow {WorkflowId} not found for Tenant {TenantId}", id, tenantId);
+            return NotFound();
+        }
+
         return Ok(result);
     }
 }

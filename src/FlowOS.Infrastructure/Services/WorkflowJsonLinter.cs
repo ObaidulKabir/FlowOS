@@ -182,6 +182,11 @@ namespace FlowOS.Infrastructure.Services
                     var nextSteps = step["nextSteps"] as JObject;
                     var conditions = step["conditions"] as JObject;
 
+                    if (string.Equals(stepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ValidateSubWorkflowReference(errors, step, stepId);
+                    }
+
                     // Step Type Rules
                     if (string.Equals(stepType, "Decision", StringComparison.OrdinalIgnoreCase))
                     {
@@ -220,8 +225,11 @@ namespace FlowOS.Infrastructure.Services
                             {
                                 var eventName = prop.Name;
                                 var target = prop.Value.Value<string>();
+                                var isImplicitSubWorkflowCompletion =
+                                    string.Equals(stepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase) &&
+                                    string.Equals(eventName, "SubWorkflowCompleted", StringComparison.OrdinalIgnoreCase);
 
-                                if (eventName != "Default" && !declaredEvents.Contains(eventName))
+                                if (eventName != "Default" && !isImplicitSubWorkflowCompletion && !declaredEvents.Contains(eventName))
                                 {
                                     AddError(errors, prop, "WF-007", $"Step triggers unknown event '{eventName}'", $"workflow.steps[{stepId}]", "Workflow");
                                 }
@@ -259,6 +267,30 @@ namespace FlowOS.Infrastructure.Services
                         {
                             AddError(errors, slaToken["escalationStepId"] ?? slaToken, "WF-008", $"SLA escalationStepId '{escalationStepId}' does not exist in steps", $"workflow.steps[{stepId}].sla.escalationStepId", "Workflow");
                         }
+                    }
+
+                    // Compensation governance lint:
+                    // If a step has side-effecting hooks (Webhook/PublishEvent/InvokeCapability) on OnEntry/OnExit,
+                    // it should declare at least one OnFailure compensation hook.
+                    var onEntry = step["onEntry"] as JArray;
+                    var onExit = step["onExit"] as JArray;
+                    var onFailure = step["onFailure"] as JArray;
+
+                    ValidateInvokeCapabilityActions(errors, onEntry, stepId, "onEntry");
+                    ValidateInvokeCapabilityActions(errors, onExit, stepId, "onExit");
+                    ValidateInvokeCapabilityActions(errors, onFailure, stepId, "onFailure");
+
+                    bool hasSideEffects = HasSideEffectingAction(onEntry) || HasSideEffectingAction(onExit);
+                    bool hasCompensation = onFailure != null && onFailure.Any();
+                    if (hasSideEffects && !hasCompensation)
+                    {
+                        AddError(
+                            errors,
+                            step,
+                            "WF-COMP-010",
+                            $"Step '{stepId}' defines side-effecting lifecycle actions but no 'onFailure' compensation hooks",
+                            $"workflow.steps[{stepId}]",
+                            "Workflow");
                     }
                 }
             }
@@ -331,12 +363,96 @@ namespace FlowOS.Infrastructure.Services
             }
         }
 
+        private void ValidateSubWorkflowReference(List<LintError> errors, JToken stepToken, string stepId)
+        {
+            var subWorkflow = stepToken["subWorkflow"] as JObject;
+            if (subWorkflow == null)
+            {
+                AddError(
+                    errors,
+                    stepToken,
+                    "WF-SUB-001",
+                    $"SubWorkflow step '{stepId}' must define 'subWorkflow'.",
+                    $"workflow.steps[{stepId}].subWorkflow",
+                    "Workflow");
+                return;
+            }
+
+            bool hasDefinitionId = Guid.TryParse(subWorkflow["workflowDefinitionId"]?.Value<string>(), out var definitionId) && definitionId != Guid.Empty;
+            bool hasClassId = Guid.TryParse(subWorkflow["workflowClassId"]?.Value<string>(), out var classId) && classId != Guid.Empty;
+            bool hasWorkflowName = !string.IsNullOrWhiteSpace(subWorkflow["workflowName"]?.Value<string>());
+
+            if (!hasDefinitionId && !hasClassId && !hasWorkflowName)
+            {
+                AddError(
+                    errors,
+                    subWorkflow,
+                    "WF-SUB-002",
+                    $"SubWorkflow step '{stepId}' must set one target reference: workflowDefinitionId, workflowClassId, or workflowName.",
+                    $"workflow.steps[{stepId}].subWorkflow",
+                    "Workflow");
+            }
+        }
+
         private void AddError(List<LintError> errors, JToken token, string code, string message, string path, string category)
         {
             var lineInfo = token as IJsonLineInfo;
             int line = lineInfo?.LineNumber ?? 0;
             int col = lineInfo?.LinePosition ?? 0;
             errors.Add(new LintError(code, message, line, col, token.Path, category));
+        }
+
+        private static bool HasSideEffectingAction(JArray? actions)
+        {
+            if (actions == null || !actions.Any()) return false;
+
+            foreach (var action in actions)
+            {
+                var actionType = action["actionType"]?.Value<string>();
+                if (string.Equals(actionType, "Webhook", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(actionType, "PublishEvent", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(actionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase) ||
+                    IsPluginActionAlias(actionType))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsPluginActionAlias(string? actionType)
+        {
+            if (string.IsNullOrWhiteSpace(actionType)) return false;
+            return actionType.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase)
+                || actionType.StartsWith("plugin.", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ValidateInvokeCapabilityActions(List<LintError> errors, JArray? actions, string stepId, string hookName)
+        {
+            if (actions == null || !actions.Any()) return;
+
+            var index = 0;
+            foreach (var action in actions)
+            {
+                var actionType = action["actionType"]?.Value<string>();
+                if (string.Equals(actionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase))
+                {
+                    var capability = action["capability"]?.Value<string>() ?? action["target"]?.Value<string>();
+                    if (string.IsNullOrWhiteSpace(capability))
+                    {
+                        AddError(
+                            errors,
+                            action,
+                            "WF-ACT-005",
+                            $"Step '{stepId}' InvokeCapability action in '{hookName}' requires 'capability' (or legacy 'target').",
+                            $"workflow.steps[{stepId}].{hookName}[{index}]",
+                            "Workflow");
+                    }
+                }
+
+                index++;
+            }
         }
     }
 }

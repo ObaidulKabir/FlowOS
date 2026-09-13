@@ -17,6 +17,7 @@ public interface IWorkflowInstanceRepository
     Task<List<WorkflowInstance>> ListByStatusAsync(WorkflowInstanceStatus status, Guid? tenantId, CancellationToken cancellationToken = default);
     Task<List<WorkflowSummaryDto>> GetSummariesByTenantAsync(Guid tenantId, WorkflowInstanceStatus? status, CancellationToken cancellationToken = default);
     Task<WorkflowSummaryDto?> GetSummaryByIdAsync(Guid id, Guid tenantId, CancellationToken cancellationToken = default);
+    Task<WorkflowInstance?> GetLatestChildByParentStepAsync(Guid tenantId, Guid parentWorkflowInstanceId, string parentStepId, CancellationToken cancellationToken = default);
     Task<bool> AnyForWorkflowClassAsync(Guid workflowClassId, CancellationToken cancellationToken = default);
     void Add(WorkflowInstance instance);
 }

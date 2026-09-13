@@ -54,6 +54,8 @@ public record StepBlueprint
 {
     public string StepId { get; init; } = string.Empty;
     public string StepType { get; init; } = "Command"; // Enum mapped to string for blueprint
+    public string? DecisionProvider { get; init; } // Optional provider name for pluggable decision evaluation
+    public SubWorkflowReferenceBlueprint? SubWorkflow { get; init; } // Optional child workflow reference for SubWorkflow steps
     public Dictionary<string, string> NextSteps { get; init; } = new();
     public List<string> RequiredRoles { get; init; } = new();
     public List<string>? AllowedRoles { get; init; }
@@ -77,8 +79,9 @@ public record StepBlueprint
 
 public record StepActionBlueprint
 {
-    public string ActionType { get; init; } = "Notification"; // "Notification", "Webhook", "PublishEvent"
-    public string? Target { get; init; } // Role, User ID, or Event name
+    public string ActionType { get; init; } = "Notification"; // "Notification", "Webhook", "PublishEvent", "InvokeCapability"
+    public string? Target { get; init; } // Role, User ID, Event name, or capability name (legacy fallback)
+    public string? Capability { get; init; } // Named capability for InvokeCapability actions
     public string? Url { get; init; } // Webhook URL
     public string? Method { get; init; } = "POST";
     public string? Template { get; init; } // Template identifier or message text
@@ -96,6 +99,16 @@ public record StepSlaBlueprint
     public string? EscalationStepId { get; init; }
     public string? EscalationRole { get; init; }
     public bool IsInterrupting { get; init; } = true;
+}
+
+public record SubWorkflowReferenceBlueprint
+{
+    public Guid? WorkflowDefinitionId { get; init; }
+    public Guid? WorkflowClassId { get; init; }
+    public string? WorkflowName { get; init; }
+    public int? Version { get; init; }
+    public Dictionary<string, string> InputMapping { get; init; } = new();
+    public Dictionary<string, string> OutputMapping { get; init; } = new();
 }
 
 // Governance Declarations

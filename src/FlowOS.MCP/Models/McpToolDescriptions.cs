@@ -157,13 +157,21 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"simulateFailureAtStep\":\"PaymentStep\"}",
 
+            ["simulate_compensation_path"] =
+                "[Saga Compensation Planner] Produces a deterministic compensation rollback path from a failed step by evaluating configured OnFailure hooks in reverse execution order (LIFO). " +
+                "Supports either inline blueprint input or resolving a stored WorkflowClass by ID; reports blocked steps that have no compensation actions. " +
+                "This is analysis-only and does not execute side effects. " +
+                "Returns: {ok:true,data:{failedStepId,executedStepIds,isFullyCompensable,orderedCompensations,blockedSteps}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"failedStepId\":\"ReserveInventory\",\"executedStepIds\":[\"Start\",\"AuthorizePayment\",\"ReserveInventory\"],\"blueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"Command\"}]},\"roles\":[],\"capabilities\":[]}}",
+
             ["attach_step_action"] =
-                "[Lifecycle Hooks] Attaches or updates a declarative lifecycle action (Webhook, Notification, or PublishEvent) on a step's OnEntry, OnExit, or OnFailure (Saga rollback compensation) hook in a draft WorkflowClass, with immediate validation and persistence. " +
+                "[Lifecycle Hooks] Attaches or updates a declarative lifecycle action (Webhook, Notification, PublishEvent, InvokeCapability, or plugin-prefixed alias) on a step's OnEntry, OnExit, or OnFailure (Saga rollback compensation) hook in a draft WorkflowClass, with immediate validation and persistence. " +
                 "Supports Handlebars templates, dynamic LINQ payload mapping (e.g. Amount * 1.15), HMAC-SHA256 signing, and custom HTTP headers. " +
                 "HTTP uses authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{stepId,hook,totalActions,actionAttached,persisted,message}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-NOTFOUND-002, MCP-VALIDATION-FAILED, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnFailure\",\"action\":{\"actionType\":\"Webhook\",\"url\":\"https://api.example.com/rollback\",\"payloadMapping\":{\"order\":\"OrderId\"}}}",
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\",\"hook\":\"OnFailure\",\"action\":{\"actionType\":\"plugin:paymentRefunder\",\"target\":\"payment.refund.v1\"}}",
 
             ["remove_step_action"] =
                 "[Lifecycle Hooks] Removes a declarative lifecycle action from a step's OnEntry, OnExit, or OnFailure hook in a draft WorkflowClass by index, actionType, or target. " +
@@ -178,6 +186,52 @@ public static class McpToolDescriptions
                 "Returns: {ok:true,data:{workflow,stepCount,steps:[{stepId,stepType,onEntry,onExit,onFailure,totalHooks}]}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\"}",
+
+            ["register_capability_binding"] =
+                "[Capability Registry] Creates or updates a tenant-scoped capability binding that maps an InvokeCapability action name to a remote endpoint contract. " +
+                "Supports transport, endpoint URL, timeout, retry profile, schema versions, auth reference, and enable/disable state. " +
+                "Returns: {ok:true,data:{id,tenantId,capabilityName,transport,endpointUrl,authRef,requestSchemaVersion,responseSchemaVersion,retryPolicy,timeoutMs,isEnabled,createdAtUtc,updatedAtUtc}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"capabilityName\":\"payment.refund.v1\",\"endpointUrl\":\"https://worker.example.com/capabilities/refund\",\"transport\":\"http\",\"timeoutMs\":15000,\"retryPolicy\":\"aggressive\"}",
+
+            ["list_capability_bindings"] =
+                "[Capability Registry] Lists tenant-scoped capability bindings available for InvokeCapability actions, with optional name and enabled filters. " +
+                "Returns: {ok:true,data:{totalCount,bindings:[{id,capabilityName,transport,endpointUrl,timeoutMs,isEnabled,...}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"enabledOnly\":true}",
+
+            ["validate_capability_binding"] =
+                "[Capability Registry] Validates whether a capability binding exists, is enabled, uses a supported transport, and has a valid endpoint URL. " +
+                "Returns validation status and binding metadata without mutating state. " +
+                "Returns: {ok:true,data:{capabilityName,isValid,message,binding}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"capabilityName\":\"payment.refund.v1\"}",
+
+            ["register_plugin_binding"] =
+                "[Plugin Binding Registry] Creates or updates a tenant-scoped mapping from blueprint actionType/decisionProvider names to server-registered plugin providers. " +
+                "Allows controlled tenant-level behavior customization while preserving server-owned plugin code and global safety flags. " +
+                "Returns: {ok:true,data:{id,tenantId,bindingType,sourceName,providerName,isEnabled,createdAtUtc,updatedAtUtc}}. " +
+                "Errors: MCP-ARG-001, PLUGIN-BIND-001, PLUGIN-BIND-002, PLUGIN-BIND-003, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"bindingType\":\"action\",\"sourceName\":\"Webhook\",\"providerName\":\"Webhook\",\"isEnabled\":true}",
+
+            ["list_plugin_bindings"] =
+                "[Plugin Binding Registry] Lists tenant plugin bindings with optional filters for bindingType, sourceName, and enabled state. " +
+                "Returns: {ok:true,data:{totalCount,bindings:[{id,bindingType,sourceName,providerName,isEnabled}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"bindingType\":\"decision\",\"enabledOnly\":true}",
+
+            ["resolve_plugin_binding"] =
+                "[Plugin Binding Registry] Resolves the effective provider for one tenant-scoped source key and reports whether the mapped provider is currently registered on the server. " +
+                "Returns: {ok:true,data:{bindingType,sourceName,resolvedProvider,hasBinding,isServerRegistered}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"bindingType\":\"action\",\"sourceName\":\"Webhook\"}",
+
+            ["list_registered_plugins"] =
+                "[Plugin Discovery] Lists action and decision plugins currently registered on the server runtime so AI agents can design with real provider names instead of guessing. " +
+                "Includes wildcard/strict-mode runtime policy flags and plugin alias conventions. " +
+                "Returns: {ok:true,data:{totalActionPlugins,totalDecisionPlugins,actionPlugins,decisionPlugins,conventions,runtimePolicy}}. " +
+                "Errors: MCP-INTERNAL. " +
+                "Input example: {\"includeWildcard\":true}",
 
             ["list_dead_letters"] =
                 "[Resilience & DLQ] Lists dead-lettered outbox messages that exhausted all retry attempts (e.g. downstream 5xx errors or persistent network timeouts). " +
@@ -227,7 +281,7 @@ public static class McpToolDescriptions
                 "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["get_instance_action_history"] =
-                "[Observability & Forensics] Retrieves the complete immutable execution audit log of lifecycle actions (Webhooks, Notifications, PublishEvent) for a specific workflow instance. " +
+                "[Observability & Forensics] Retrieves the complete immutable execution audit log of lifecycle actions (built-ins plus plugin aliases after binding resolution) for a specific workflow instance. " +
                 "Includes microsecond duration (durationMs), HTTP status codes, request and response snippets, retry attempt counts, and error diagnostics for root-cause analysis. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{workflowInstanceId,totalActions,actions:[{id,stepId,triggerPhase,actionType,target,status,executedAtUtc,durationMs,httpStatusCode,requestPayloadSnippet,responseSnippet,errorMessage,attemptNumber}]}}. " +
@@ -239,7 +293,54 @@ public static class McpToolDescriptions
                 "Automatically configures pure State Machine lifecycles, procedural steps, parallel Fork/Join execution branches, Decision rules, SLA timers, and Outbox hooks. " +
                 "Returns: {ok:true,data:{suggestedName,suggestedVersion,summary,explanation,blueprint,validation}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
-                "Input example: {\"prompt\":\"Insurance claim with parallel vehicle appraisal and medical assessment, 24h SLA, and payment webhook.\"}"
+                "Input example: {\"prompt\":\"Insurance claim with parallel vehicle appraisal and medical assessment, 24h SLA, and payment webhook.\"}",
+
+            ["replay_workflow_history"] =
+                "[Time-Travel Debugging] Reconstructs a read-only chronological replay timeline from the immutable DomainEvent stream for a workflow instance. " +
+                "Each snapshot includes active tokens, legal state, variable mutations, and correlated lifecycle actions. Does not mutate production state. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{workflowInstanceId,workflowClassName,status,totalSteps,snapshots:[{stepIndex,eventType,fromStepId,toStepId,activeStepIds,fromState,toState,variables,actionLogs,summary}]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["fork_workflow_simulation"] =
+                "[Time-Travel Debugging] Evaluates a sandboxed what-if branch from a historical snapshot without writing to the live instance, audit log, or Outbox. " +
+                "Clones state at targetStepIndex, applies alternativeEvent/payload through the workflow engine, and returns the projected next step and state. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{forkFromStepIndex,baseStepId,baseState,alternativeEvent,projectedStepId,projectedState,isAllowed,reason,projectedActions,sideEffects}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\",\"targetStepIndex\":1,\"alternativeEvent\":\"EVT-REJECT\"}",
+
+            ["plan_workflow_compensation_path"] =
+                "[Resilience & Saga Analysis] Computes an execution-aware compensation rollback path for a workflow instance using immutable replay history and configured OnFailure hooks. " +
+                "Returns compensations in reverse execution order and flags blocked steps that lack compensation actions. Analysis-only; no side effects are executed. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{workflowInstanceId,failedStepId,executedStepIds,isFullyCompensable,orderedCompensations,blockedSteps}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\",\"failedStepId\":\"ReserveInventory\"}",
+
+            ["register_idempotency_key"] =
+                "[Reliability & Exactly-Once] Reserves a tenant-scoped idempotency key for a named operation before executing mutating calls. " +
+                "If the key already exists, returns registered=false. Useful for distributed callers that need deterministic dedup semantics. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{operationName,idempotencyKey,registered,status}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-INTERNAL. " +
+                "Input example: {\"operationName\":\"publish_event\",\"idempotencyKey\":\"ord-2026-09-13-001\"}",
+
+            ["inspect_idempotency_status"] =
+                "[Reliability & Exactly-Once] Retrieves the status of a tenant-scoped idempotency key for a named operation. " +
+                "Status transitions: Pending, Completed, Failed. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{tenantId,operationName,idempotencyKey,status,createdAtUtc,updatedAtUtc}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"operationName\":\"publish_event\",\"idempotencyKey\":\"ord-2026-09-13-001\"}",
+
+            ["preview_retry_policy"] =
+                "[Reliability & Resilience] Previews retry scheduling behavior (exponential, linear, constant) and classifies error strings as transient or permanent. " +
+                "Helps callers tune retry policy before executing mutating operations. " +
+                "Returns: {ok:true,data:{strategy,maxRetries,currentRetryCount,baseDelaySeconds,maxDelaySeconds,shouldRetryNow,classification,attempts,previewGeneratedAtUtc}}. " +
+                "Errors: MCP-INTERNAL. " +
+                "Input example: {\"currentRetryCount\":1,\"maxRetries\":5,\"baseDelaySeconds\":2,\"strategy\":\"exponential\",\"errorMessage\":\"HTTP 503 timeout\"}"
         };
 
     public static string For(string toolName) =>
@@ -251,6 +352,13 @@ public static class McpToolDescriptions
         new Dictionary<string, ToolSecurityProfile>(StringComparer.Ordinal)
         {
             ["generate_workflow_blueprint_from_nl"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
+            ["replay_workflow_history"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
+            ["fork_workflow_simulation"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["plan_workflow_compensation_path"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["register_idempotency_key"] = new("reliability", "authenticated", true, true, true, "reversible", true, "low"),
+            ["inspect_idempotency_status"] = new("reliability", "authenticated", true, true, false, "none", true, "low"),
+            ["preview_retry_policy"] = new("reliability", "authenticated", true, false, false, "none", false, "low"),
+            ["simulate_compensation_path"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["describe_workflowclass_schema"] = new("info", "public", false, false, false, "none", false, "low"),
             ["explain_validation_violation"] = new("analysis", "public", false, false, false, "none", false, "low"),
             ["list_available_agents"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
@@ -260,6 +368,13 @@ public static class McpToolDescriptions
             ["attach_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["remove_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["list_step_actions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["register_capability_binding"] = new("integration", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["list_capability_bindings"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
+            ["validate_capability_binding"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
+            ["register_plugin_binding"] = new("integration", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["list_plugin_bindings"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
+            ["resolve_plugin_binding"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
+            ["list_registered_plugins"] = new("integration", "authenticated", true, false, false, "none", false, "low"),
             ["list_dead_letters"] = new("resilience", "authenticated", true, true, false, "none", true, "low"),
             ["retry_dead_letter"] = new("resilience", "authenticated", true, true, true, "reversible", true, "low"),
             ["purge_dead_letter"] = new("resilience", "authenticated", true, true, true, "irreversible", true, "medium"),

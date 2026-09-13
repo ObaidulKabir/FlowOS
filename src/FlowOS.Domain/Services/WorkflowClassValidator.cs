@@ -175,6 +175,7 @@ public class WorkflowClassValidator : IWorkflowClassValidator
             bool isDecision = string.Equals(step.StepType, "Decision", StringComparison.OrdinalIgnoreCase);
             bool isCommand = string.Equals(step.StepType, "Command", StringComparison.OrdinalIgnoreCase);
             bool isSystem = string.Equals(step.StepType, "SystemTask", StringComparison.OrdinalIgnoreCase);
+            bool isSubWorkflow = string.Equals(step.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase);
 
             if (isEndStep)
             {
@@ -211,7 +212,7 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 // Decisions should ideally have a Default/Else path or cover all cases?
                 // Hard to check completeness of logic, but let's check structure.
             }
-            else if (isCommand || isSystem)
+            else if (isCommand || isSystem || isSubWorkflow)
             {
                 // Commands/System Tasks typically have a "Default" transition (auto-advance) or event triggers?
                 // Actually, "Command" usually means "Execute Command -> Auto Advance".
@@ -242,7 +243,11 @@ public class WorkflowClassValidator : IWorkflowClassValidator
 
                 foreach (var eventKey in step.NextSteps.Keys)
                 {
-                    if (eventKey != "Default" && !declaredEvents.Contains(eventKey))
+                    bool isImplicitSubWorkflowCompletion =
+                        string.Equals(step.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(eventKey, "SubWorkflowCompleted", StringComparison.OrdinalIgnoreCase);
+
+                    if (eventKey != "Default" && !isImplicitSubWorkflowCompletion && !declaredEvents.Contains(eventKey))
                         result.AddError("CON-005", "Consistency", $"Step '{step.StepId}' references undeclared event '{eventKey}'", "Workflow");
                 }
             }
@@ -303,18 +308,40 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 }
             }
 
+            if (string.Equals(step.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateSubWorkflowReference(step, result);
+            }
+
             // Check Step Lifecycle Actions (OnEntry / OnExit / OnFailure)
             var entryActions = step.OnEntry != null ? step.OnEntry.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
             var exitActions = step.OnExit != null ? step.OnExit.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
             var failureActions = step.OnFailure != null ? step.OnFailure.AsEnumerable() : Enumerable.Empty<StepActionBlueprint>();
             var allActions = entryActions.Concat(exitActions).Concat(failureActions);
 
+            // Compensation governance: any reachable, side-effecting step must define OnFailure actions.
+            bool isReachable = reachableSteps.Contains(step.StepId);
+            bool hasSideEffects = entryActions.Concat(exitActions).Any(a =>
+            {
+                var t = a.ActionType?.Trim().ToLowerInvariant();
+                return t == "webhook" || t == "publishevent" || t == "invokecapability" || IsPluginActionAlias(t);
+            });
+            bool hasCompensation = failureActions.Any();
+            if (isReachable && hasSideEffects && !hasCompensation)
+            {
+                result.AddError(
+                    "WF-COMP-010",
+                    "WorkflowCompleteness",
+                    $"Step '{step.StepId}' has side-effecting lifecycle actions but no OnFailure compensation hooks.",
+                    "Workflow");
+            }
+
             foreach (var action in allActions)
             {
-                var actionType = action.ActionType?.ToLowerInvariant() ?? "";
-                if (actionType != "notification" && actionType != "webhook" && actionType != "publishevent")
+                var actionType = action.ActionType?.Trim().ToLowerInvariant() ?? "";
+                if (!IsSupportedActionType(actionType))
                 {
-                    result.AddError("WF-ACT-001", "ActionValidation", $"Step '{step.StepId}' defines an action with unknown ActionType '{action.ActionType}'. Supported types: Notification, Webhook, PublishEvent", "Steps");
+                    result.AddError("WF-ACT-001", "ActionValidation", $"Step '{step.StepId}' defines an action with unknown ActionType '{action.ActionType}'. Supported types: Notification, Webhook, PublishEvent, InvokeCapability, or plugin-prefixed alias (plugin:* / plugin.*).", "Steps");
                 }
 
                 if (actionType == "webhook")
@@ -337,6 +364,14 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                     if (string.IsNullOrWhiteSpace(action.Target) || !declaredEvents.Contains(action.Target))
                     {
                         result.AddError("WF-ACT-004", "ActionValidation", $"Step '{step.StepId}' defines a PublishEvent action with undeclared event '{action.Target}'", "Steps");
+                    }
+                }
+                else if (actionType == "invokecapability")
+                {
+                    var capabilityName = !string.IsNullOrWhiteSpace(action.Capability) ? action.Capability : action.Target;
+                    if (string.IsNullOrWhiteSpace(capabilityName))
+                    {
+                        result.AddError("WF-ACT-005", "ActionValidation", $"Step '{step.StepId}' defines InvokeCapability action without a capability name (set Capability or Target).", "Steps");
                     }
                 }
             }
@@ -392,5 +427,44 @@ public class WorkflowClassValidator : IWorkflowClassValidator
         }
 
         return result;
+    }
+
+    private static void ValidateSubWorkflowReference(StepBlueprint step, ValidationResult result)
+    {
+        var reference = step.SubWorkflow;
+        if (reference == null)
+        {
+            result.AddError("WF-SUB-001", "StepValidation", $"SubWorkflow step '{step.StepId}' must define a subWorkflow reference block.", "Steps");
+            return;
+        }
+
+        var hasResolvableTarget =
+            reference.WorkflowDefinitionId.HasValue && reference.WorkflowDefinitionId.Value != Guid.Empty
+            || reference.WorkflowClassId.HasValue && reference.WorkflowClassId.Value != Guid.Empty
+            || !string.IsNullOrWhiteSpace(reference.WorkflowName);
+
+        if (!hasResolvableTarget)
+        {
+            result.AddError(
+                "WF-SUB-002",
+                "StepValidation",
+                $"SubWorkflow step '{step.StepId}' must set one target reference: workflowDefinitionId, workflowClassId, or workflowName.",
+                "Steps");
+        }
+    }
+
+    private static bool IsSupportedActionType(string actionType) =>
+        actionType == "notification" ||
+        actionType == "webhook" ||
+        actionType == "publishevent" ||
+        actionType == "invokecapability" ||
+        IsPluginActionAlias(actionType);
+
+    private static bool IsPluginActionAlias(string? actionType)
+    {
+        if (string.IsNullOrWhiteSpace(actionType)) return false;
+
+        var normalized = actionType.Trim().ToLowerInvariant();
+        return normalized.StartsWith("plugin:") || normalized.StartsWith("plugin.");
     }
 }

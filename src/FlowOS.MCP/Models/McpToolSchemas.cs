@@ -198,21 +198,34 @@ public static class McpToolSchemas
                     "required":["stepId","stepType"],
                     "properties":{
                       "stepId":{"type":"string","minLength":1},
-                      "stepType":{"type":"string","enum":["Command","SystemTask","HumanTask","Timer","Decision","End"]},
+                      "stepType":{"type":"string","enum":["Command","SystemTask","HumanTask","Timer","Decision","End","Fork","Join","SubWorkflow"]},
+                      "decisionProvider":{"type":"string","description":"Optional decision plugin provider name for Decision steps (e.g. 'default', 'risk-v2')."},
+                      "subWorkflow":{
+                        "type":"object",
+                        "properties":{
+                          "workflowDefinitionId":{"type":"string","format":"uuid"},
+                          "workflowClassId":{"type":"string","format":"uuid"},
+                          "workflowName":{"type":"string"},
+                          "version":{"type":"integer","minimum":1},
+                          "inputMapping":{"type":"object","description":"Child input key -> expression evaluated against parent payload."},
+                          "outputMapping":{"type":"object","description":"Parent output key -> expression evaluated against child completion payload."}
+                        },
+                        "additionalProperties":false
+                      },
                       "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
                       "requiredRoles":{"type":"array","items":{"type":"string"}},
                       "conditions":{"type":"object","additionalProperties":{"type":"string"}},
                       "onEntry":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"capability":{"type":"string"},"url":{"type":"string"}}}
                       },
                       "onExit":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"capability":{"type":"string"},"url":{"type":"string"}}}
                       },
                       "onFailure":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"capability":{"type":"string"},"url":{"type":"string"}}}
                       },
                       "sla":{
                         "type":"object",
@@ -274,6 +287,7 @@ public static class McpToolSchemas
             "version":{"type":"integer"},
             "initialStepId":{"type":"string"},
             "correlationId":{"type":"string","format":"uuid"},
+            "idempotencyKey":{"type":"string","minLength":8},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -290,6 +304,7 @@ public static class McpToolSchemas
             "eventType":{"type":"string","minLength":1},
             "correlationId":{"type":"string","format":"uuid"},
             "payload":{"type":"object"},
+            "idempotencyKey":{"type":"string","minLength":8},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -305,6 +320,7 @@ public static class McpToolSchemas
             "workflowInstanceId":{"type":"string","format":"uuid"},
             "taskId":{"type":"string","format":"uuid"},
             "correlationId":{"type":"string","format":"uuid"},
+            "idempotencyKey":{"type":"string","minLength":8},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -384,6 +400,22 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject SimulateCompensationPath() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["failedStepId"],
+          "properties":{
+            "id":{"type":"string","format":"uuid","description":"Optional WorkflowClass ID to load from storage."},
+            "blueprint":{"type":"object","description":"Optional inline WorkflowClass blueprint object."},
+            "failedStepId":{"type":"string","minLength":1,"description":"Step where failure occurred and compensation should start."},
+            "executedStepIds":{"type":"array","items":{"type":"string"},"description":"Optional actual executed step sequence. If omitted, uses declared step order up to failedStepId."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject AttachStepAction() => JObject.Parse(
         """
         {
@@ -399,8 +431,9 @@ public static class McpToolSchemas
               "type":"object",
               "required":["actionType"],
               "properties":{
-                "actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]},
+                "actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},
                 "target":{"type":"string","description":"Target URL, recipient role/user, or domain event name."},
+                "capability":{"type":"string","description":"Capability binding name for InvokeCapability actions (e.g. payment.refund.v1)."},
                 "url":{"type":"string","description":"Webhook destination URL (supports dynamic tokens like {{OrderId}})."},
                 "method":{"type":"string","enum":["POST","GET","PUT"],"default":"POST"},
                 "template":{"type":"string","description":"Message template string with optional {{Expression}} placeholders."},
@@ -429,7 +462,7 @@ public static class McpToolSchemas
             "stepId":{"type":"string","minLength":1},
             "hook":{"type":"string","enum":["OnEntry","OnExit","OnFailure"]},
             "actionIndex":{"type":"integer","minimum":0,"description":"0-based index of the action to remove."},
-            "actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"]},
+            "actionType":{"type":"string","description":"Optional action type selector; supports built-ins and plugin aliases."},
             "target":{"type":"string"},
             "tenantId":{"type":"string","format":"uuid"}
           },
@@ -447,6 +480,108 @@ public static class McpToolSchemas
             "stepId":{"type":"string","description":"Optional step filter."},
             "hook":{"type":"string","enum":["OnEntry","OnExit","OnFailure"],"description":"Optional hook filter."},
             "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RegisterCapabilityBinding() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["capabilityName","endpointUrl"],
+          "properties":{
+            "capabilityName":{"type":"string","minLength":1,"description":"Unique capability key (e.g. payment.refund.v1)."},
+            "transport":{"type":"string","enum":["http"],"default":"http"},
+            "endpointUrl":{"type":"string","description":"Absolute HTTP/HTTPS endpoint of the capability worker."},
+            "authRef":{"type":"string","description":"Optional auth reference name passed as x-flowos-auth-ref."},
+            "requestSchemaVersion":{"type":"string","description":"Optional request contract version label."},
+            "responseSchemaVersion":{"type":"string","description":"Optional response contract version label."},
+            "retryPolicy":{"type":"string","default":"default","description":"Logical retry policy profile name."},
+            "timeoutMs":{"type":"integer","minimum":1000,"maximum":120000,"default":10000},
+            "isEnabled":{"type":"boolean","default":true},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListCapabilityBindings() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "capabilityName":{"type":"string","description":"Optional capability key filter."},
+            "enabledOnly":{"type":"boolean","description":"Optional filter to list only enabled bindings."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ValidateCapabilityBinding() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["capabilityName"],
+          "properties":{
+            "capabilityName":{"type":"string","minLength":1,"description":"Capability key to validate."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RegisterPluginBinding() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["bindingType","sourceName","providerName"],
+          "properties":{
+            "bindingType":{"type":"string","enum":["action","decision"],"description":"Binding category."},
+            "sourceName":{"type":"string","minLength":1,"description":"Blueprint-side actionType or decisionProvider name."},
+            "providerName":{"type":"string","minLength":1,"description":"Concrete server-side plugin provider name to invoke."},
+            "isEnabled":{"type":"boolean","default":true},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListPluginBindings() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "bindingType":{"type":"string","enum":["action","decision"],"description":"Optional binding category filter."},
+            "sourceName":{"type":"string","description":"Optional source key filter."},
+            "enabledOnly":{"type":"boolean","description":"Optional filter to list only enabled bindings."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ResolvePluginBinding() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["bindingType","sourceName"],
+          "properties":{
+            "bindingType":{"type":"string","enum":["action","decision"],"description":"Binding category."},
+            "sourceName":{"type":"string","minLength":1,"description":"Blueprint-side actionType or decisionProvider name."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListRegisteredPlugins() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "includeWildcard":{"type":"boolean","default":true,"description":"Include wildcard action plugin '*' in the response when registered."}
           },
           "additionalProperties":false
         }
@@ -544,9 +679,96 @@ public static class McpToolSchemas
           "properties":{
             "workflowInstanceId":{"type":"string","format":"uuid","description":"Workflow instance UUID to retrieve action execution history for."},
             "stepId":{"type":"string","description":"Optional step ID filter (e.g. 'SubmitStep')."},
-            "actionType":{"type":"string","enum":["Webhook","Notification","PublishEvent"],"description":"Optional action type filter."},
+            "actionType":{"type":"string","description":"Optional action type filter (built-ins or plugin aliases)."},
             "status":{"type":"string","enum":["Succeeded","Failed"],"description":"Optional status filter."},
             "limit":{"type":"integer","minimum":1,"maximum":200,"default":50,"description":"Maximum number of records to return (1-200)."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RegisterIdempotencyKey() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["operationName","idempotencyKey"],
+          "properties":{
+            "operationName":{"type":"string","minLength":1,"description":"Operation name to reserve idempotency for (e.g. start_workflow)."},
+            "idempotencyKey":{"type":"string","minLength":8,"description":"Client-generated idempotency key."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject InspectIdempotencyStatus() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["operationName","idempotencyKey"],
+          "properties":{
+            "operationName":{"type":"string","minLength":1},
+            "idempotencyKey":{"type":"string","minLength":8},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject PreviewRetryPolicy() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "currentRetryCount":{"type":"integer","minimum":0,"default":0},
+            "maxRetries":{"type":"integer","minimum":1,"default":5},
+            "baseDelaySeconds":{"type":"integer","minimum":1,"default":2},
+            "strategy":{"type":"string","enum":["exponential","linear","constant"],"default":"exponential"},
+            "maxDelaySeconds":{"type":"integer","minimum":1,"default":3600},
+            "errorMessage":{"type":"string","description":"Optional error text to classify as transient or permanent."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ReplayWorkflowHistory() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Workflow instance UUID whose immutable event stream should be reconstructed into step snapshots."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ForkWorkflowSimulation() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId","alternativeEvent"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Workflow instance UUID to fork from."},
+            "targetStepIndex":{"type":"integer","minimum":0,"default":0,"description":"Historical snapshot index to clone as the what-if origin."},
+            "alternativeEvent":{"type":"string","minLength":1,"description":"Alternate event type to evaluate (e.g. EVT-REJECT)."},
+            "alternativePayload":{"type":"object","description":"Optional alternate payload used only inside the sandbox."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject PlanWorkflowCompensationPath() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Workflow instance UUID to evaluate compensation from runtime history."},
+            "failedStepId":{"type":"string","description":"Optional failed step ID. If omitted, current/latest replay step is used."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false

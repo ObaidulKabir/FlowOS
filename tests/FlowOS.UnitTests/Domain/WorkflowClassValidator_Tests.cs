@@ -116,6 +116,81 @@ public class WorkflowClassValidator_Tests
     }
 
     [Fact]
+    public void Validate_SubWorkflowStepWithoutReference_ReturnsSubWorkflowError()
+    {
+        var validator = new WorkflowClassValidator();
+        var blueprint = CreateValidBlueprint() with
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Start",
+                Steps = new List<StepBlueprint>
+                {
+                    new StepBlueprint
+                    {
+                        StepId = "Start",
+                        StepType = "Command",
+                        NextSteps = new Dictionary<string, string> { { "EVT-RUN", "ChildFlow" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "ChildFlow",
+                        StepType = "SubWorkflow",
+                        NextSteps = new Dictionary<string, string> { { "SubWorkflowCompleted", "END" } }
+                    }
+                }
+            },
+            Events = new List<EventBlueprint> { new EventBlueprint { EventId = "EVT-RUN", Name = "Run" } }
+        };
+
+        var result = validator.Validate(CreateWorkflowClass(blueprint));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == "WF-SUB-001");
+    }
+
+    [Fact]
+    public void Validate_SubWorkflowStepWithWorkflowNameReference_IsValid()
+    {
+        var validator = new WorkflowClassValidator();
+        var blueprint = CreateValidBlueprint() with
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Start",
+                Steps = new List<StepBlueprint>
+                {
+                    new StepBlueprint
+                    {
+                        StepId = "Start",
+                        StepType = "Command",
+                        NextSteps = new Dictionary<string, string> { { "EVT-RUN", "ChildFlow" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "ChildFlow",
+                        StepType = "SubWorkflow",
+                        NextSteps = new Dictionary<string, string> { { "SubWorkflowCompleted", "END" } },
+                        SubWorkflow = new SubWorkflowReferenceBlueprint
+                        {
+                            WorkflowName = "Billing.ChildFlow",
+                            Version = 1,
+                            InputMapping = new Dictionary<string, string> { { "OrderId", "OrderId" } },
+                            OutputMapping = new Dictionary<string, string> { { "ApprovalState", "ChildCurrentState" } }
+                        }
+                    }
+                }
+            },
+            Events = new List<EventBlueprint> { new EventBlueprint { EventId = "EVT-RUN", Name = "Run" } }
+        };
+
+        var result = validator.Validate(CreateWorkflowClass(blueprint));
+
+        Assert.True(result.IsValid);
+        Assert.DoesNotContain(result.Errors, e => e.Code.StartsWith("WF-SUB-", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Validate_TransitionWithUndeclaredEvent_ReturnsConsistencyError()
     {
         var validator = new WorkflowClassValidator();

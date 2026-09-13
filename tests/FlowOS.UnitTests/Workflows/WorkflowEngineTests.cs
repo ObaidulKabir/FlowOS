@@ -1,5 +1,6 @@
 using FlowOS.StateMachines.Models;
 using FlowOS.StateMachines.Engine;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Engine;
 using FlowOS.Workflows.Enums;
@@ -155,10 +156,181 @@ public class WorkflowEngineTests
         Assert.Equal("LowValue", instance.CurrentStepId);
     }
 
+    [Fact]
+    public void Advance_SubWorkflowStep_ShouldMoveToWaitingState()
+    {
+        var def = new WorkflowDefinition(_tenantId, "ParentWorkflow");
+        var start = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+        start.NextSteps.Add("EVT-RUN", "ChildFlow");
+        def.AddStep(start);
+
+        def.AddStep(new WorkflowStepDefinition("ChildFlow", WorkflowStepType.SubWorkflow)
+        {
+            NextSteps = new Dictionary<string, string> { { "SubWorkflowCompleted", "END" } },
+            SubWorkflow = new SubWorkflowReferenceDefinition
+            {
+                WorkflowName = "Child.Workflow",
+                Version = 1
+            }
+        });
+        def.Publish();
+
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Start");
+        var evt = new TestDomainEvent(_tenantId, "EVT-RUN");
+        var context = new FlowOS.StateMachines.Models.ExecutionContext();
+
+        var result = _engine.Advance(instance, def, evt, context);
+
+        Assert.True(result.Success);
+        Assert.Equal(WorkflowInstanceStatus.Waiting, instance.Status);
+        Assert.Equal("ChildFlow", instance.CurrentStepId);
+    }
+
+    [Fact]
+    public void Advance_DecisionStep_WithProvider_ShouldUsePluginResult()
+    {
+        var plugin = new FixedDecisionPlugin("risk-v2", "LowValue");
+        var registry = new InMemoryDecisionPluginRegistry(new[] { plugin });
+        var engine = new WorkflowEngine(new StateMachineEngine(), registry);
+
+        var def = new WorkflowDefinition(_tenantId, "DecisionFlowPlugin");
+        var start = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+        start.NextSteps.Add("Submit", "RiskDecision");
+        def.AddStep(start);
+
+        var decision = new WorkflowStepDefinition("RiskDecision", WorkflowStepType.Decision)
+        {
+            DecisionProvider = "risk-v2"
+        };
+        decision.Conditions.Add("Amount > 100", "HighValue");
+        decision.Conditions.Add("Default", "LowValue");
+        def.AddStep(decision);
+        def.AddStep(new WorkflowStepDefinition("HighValue", WorkflowStepType.Command));
+        def.AddStep(new WorkflowStepDefinition("LowValue", WorkflowStepType.Command));
+        def.Publish();
+
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Start");
+        var evt = new TestDomainEvent(_tenantId, "Submit");
+        var context = new FlowOS.StateMachines.Models.ExecutionContext
+        {
+            Payload = new Dictionary<string, object> { { "Amount", 999 } }
+        };
+
+        var result = engine.Advance(instance, def, evt, context);
+
+        Assert.True(result.Success);
+        Assert.Equal("LowValue", instance.CurrentStepId);
+    }
+
+    [Fact]
+    public void Advance_DecisionStep_WithBindingAlias_ShouldResolveMappedProvider()
+    {
+        var plugin = new FixedDecisionPlugin("risk-v2", "LowValue");
+        var registry = new InMemoryDecisionPluginRegistry(new[] { plugin });
+        var engine = new WorkflowEngine(new StateMachineEngine(), registry);
+
+        var def = new WorkflowDefinition(_tenantId, "DecisionFlowAlias");
+        var start = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+        start.NextSteps.Add("Submit", "RiskDecision");
+        def.AddStep(start);
+
+        var decision = new WorkflowStepDefinition("RiskDecision", WorkflowStepType.Decision)
+        {
+            DecisionProvider = "risk-default"
+        };
+        decision.Conditions.Add("Amount > 100", "HighValue");
+        decision.Conditions.Add("Default", "LowValue");
+        def.AddStep(decision);
+        def.AddStep(new WorkflowStepDefinition("HighValue", WorkflowStepType.Command));
+        def.AddStep(new WorkflowStepDefinition("LowValue", WorkflowStepType.Command));
+        def.Publish();
+
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Start");
+        var evt = new TestDomainEvent(_tenantId, "Submit");
+        var context = new FlowOS.StateMachines.Models.ExecutionContext
+        {
+            Payload = new Dictionary<string, object> { { "Amount", 999 } },
+            DecisionProviderBindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["risk-default"] = "risk-v2"
+            }
+        };
+
+        var result = engine.Advance(instance, def, evt, context);
+
+        Assert.True(result.Success);
+        Assert.Equal("LowValue", instance.CurrentStepId);
+    }
+
+    [Fact]
+    public void Advance_DecisionStep_WithUnknownProvider_ShouldFallbackToBuiltInConditions()
+    {
+        var registry = new InMemoryDecisionPluginRegistry(Array.Empty<IPolicyDecisionPlugin>());
+        var engine = new WorkflowEngine(new StateMachineEngine(), registry);
+
+        var def = new WorkflowDefinition(_tenantId, "DecisionFlowFallback");
+        var start = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+        start.NextSteps.Add("Submit", "RiskDecision");
+        def.AddStep(start);
+
+        var decision = new WorkflowStepDefinition("RiskDecision", WorkflowStepType.Decision)
+        {
+            DecisionProvider = "missing-provider"
+        };
+        decision.Conditions.Add("Amount > 100", "HighValue");
+        decision.Conditions.Add("Default", "LowValue");
+        def.AddStep(decision);
+        def.AddStep(new WorkflowStepDefinition("HighValue", WorkflowStepType.Command));
+        def.AddStep(new WorkflowStepDefinition("LowValue", WorkflowStepType.Command));
+        def.Publish();
+
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Start");
+        var evt = new TestDomainEvent(_tenantId, "Submit");
+        var context = new FlowOS.StateMachines.Models.ExecutionContext
+        {
+            Payload = new Dictionary<string, object> { { "Amount", 500 } }
+        };
+
+        var result = engine.Advance(instance, def, evt, context);
+
+        Assert.True(result.Success);
+        Assert.Equal("HighValue", instance.CurrentStepId);
+    }
+
     private class TestDomainEvent : FlowOS.Events.Models.DomainEvent
     {
         public TestDomainEvent(Guid tenantId, string eventType) : base(tenantId, eventType)
         {
         }
+    }
+
+    private sealed class InMemoryDecisionPluginRegistry : IPolicyDecisionPluginRegistry
+    {
+        private readonly Dictionary<string, IPolicyDecisionPlugin> _plugins;
+
+        public InMemoryDecisionPluginRegistry(IEnumerable<IPolicyDecisionPlugin> plugins)
+        {
+            _plugins = plugins.ToDictionary(p => p.ProviderName, p => p, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public bool TryResolve(string providerName, out IPolicyDecisionPlugin plugin)
+        {
+            return _plugins.TryGetValue(providerName, out plugin!);
+        }
+    }
+
+    private sealed class FixedDecisionPlugin : IPolicyDecisionPlugin
+    {
+        public string ProviderName { get; }
+        private readonly string _nextStepId;
+
+        public FixedDecisionPlugin(string providerName, string nextStepId)
+        {
+            ProviderName = providerName;
+            _nextStepId = nextStepId;
+        }
+
+        public PolicyDecisionPluginResult Evaluate(PolicyDecisionPluginContext context)
+            => new(true, _nextStepId);
     }
 }

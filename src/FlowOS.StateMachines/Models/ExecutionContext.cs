@@ -9,4 +9,7 @@ public class ExecutionContext
     
     // The payload data being processed (e.g., Expense Amount)
     public Dictionary<string, object> Payload { get; set; } = new();
+
+    // Optional per-tenant alias map: blueprint decision provider -> concrete plugin provider.
+    public Dictionary<string, string> DecisionProviderBindings { get; set; } = new(System.StringComparer.OrdinalIgnoreCase);
 }

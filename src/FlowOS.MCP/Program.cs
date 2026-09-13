@@ -517,6 +517,9 @@ public partial class Program
         services.AddScoped<IEventRegistry, EventRegistry>();
         services.AddSingleton<WorkflowEngine>();
         services.AddSingleton<StateMachineEngine>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.IWorkflowTimeTravelService, FlowOS.Infrastructure.Services.WorkflowTimeTravelService>();
+        services.AddScoped<FlowOS.Application.Common.Interfaces.IWorkflowCopilotService, FlowOS.Application.Services.WorkflowCopilotService>();
+        services.AddScoped<IWorkflowClassValidator, WorkflowClassValidator>();
         services.AddMemoryCache();
         services.AddScoped<ICurrentUser, McpCurrentUser>();
         services.AddScoped<ICapabilityService, CapabilityService>();
@@ -543,6 +546,9 @@ public partial class Program
         services.AddScoped<LifecycleActionMcpTools>();
         services.AddScoped<AgentTools>();
         services.AddScoped<ExecutionTools>();
+        services.AddScoped<CapabilityRegistryMcpTools>();
+        services.AddScoped<PluginBindingMcpTools>();
+        services.AddScoped<PluginDiscoveryMcpTools>();
         services.AddScoped<NotificationRepository>();
         services.AddScoped<INotificationRepository>(sp => sp.GetRequiredService<NotificationRepository>());
         services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredService<NotificationRepository>());

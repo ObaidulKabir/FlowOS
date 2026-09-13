@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
 using FlowOS.Domain.Entities;
 using FlowOS.Events.Models;
@@ -129,7 +130,12 @@ public class OutboxProcessorService : BackgroundService
         var actionType = root.TryGetProperty("actionType", out var at) ? at.GetString() ?? "" : "";
         var stepId = root.TryGetProperty("stepId", out var sid) ? sid.GetString() ?? "" : "";
         var triggerPhase = root.TryGetProperty("triggerPhase", out var tp) ? tp.GetString() ?? "" : "";
+        var capability = root.TryGetProperty("capability", out var cap) ? cap.GetString() : null;
         var target = root.TryGetProperty("url", out var u) ? u.GetString() : (root.TryGetProperty("target", out var tg) ? tg.GetString() : null);
+        if (string.IsNullOrWhiteSpace(target) && !string.IsNullOrWhiteSpace(capability))
+        {
+            target = capability;
+        }
 
         var workflowInstanceId = Guid.Empty;
         if (root.TryGetProperty("workflowInstanceId", out var widElem) && widElem.TryGetGuid(out var parsedWid))
@@ -261,6 +267,127 @@ public class OutboxProcessorService : BackgroundService
 
                 sw.Stop();
                 responseSnippet = $"Event '{eventName}' published successfully";
+            }
+            else if (string.Equals(actionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase))
+            {
+                var configuration = sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+                var remoteInvokeEnabled = bool.TryParse(
+                    configuration?["FlowOS:Capabilities:EnableRemoteInvoke"],
+                    out var enabledFlag) && enabledFlag;
+                if (!remoteInvokeEnabled)
+                {
+                    throw new InvalidOperationException("Remote capability invocation is disabled. Set FlowOS:Capabilities:EnableRemoteInvoke=true to enable InvokeCapability actions.");
+                }
+
+                var capabilityName = !string.IsNullOrWhiteSpace(capability) ? capability : target;
+                if (string.IsNullOrWhiteSpace(capabilityName))
+                {
+                    throw new InvalidOperationException("InvokeCapability action requires 'capability' (or fallback target) in payload.");
+                }
+
+                var registry = sp.GetService<ICapabilityRegistryService>();
+                if (registry == null)
+                {
+                    throw new InvalidOperationException("Capability registry service is unavailable.");
+                }
+
+                var bindingCheck = await registry.ValidateBindingAsync(message.TenantId, capabilityName, ct);
+                if (!bindingCheck.IsValid || bindingCheck.Binding == null)
+                {
+                    throw new InvalidOperationException($"Capability binding invalid for '{capabilityName}': {bindingCheck.Message}");
+                }
+
+                var binding = bindingCheck.Binding;
+                var payloadJson = requestPayloadSnippet ?? "{}";
+                object? parsedPayload = null;
+                try
+                {
+                    parsedPayload = JsonSerializer.Deserialize<object>(payloadJson);
+                }
+                catch
+                {
+                    parsedPayload = payloadJson;
+                }
+
+                var invocation = new
+                {
+                    capability = capabilityName,
+                    tenantId = message.TenantId,
+                    workflowInstanceId,
+                    stepId,
+                    triggerPhase,
+                    correlationId = message.Id,
+                    idempotencyKey = $"{message.TenantId:N}:{workflowInstanceId:N}:{stepId}:{message.Id:N}",
+                    payload = parsedPayload
+                };
+
+                var client = new System.Net.Http.HttpClient
+                {
+                    Timeout = TimeSpan.FromMilliseconds(Math.Clamp(binding.TimeoutMs, 1000, 120000))
+                };
+                using var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, binding.EndpointUrl);
+                request.Headers.Add("x-tenant-id", message.TenantId.ToString());
+                request.Headers.Add("x-flowos-capability", capabilityName);
+                request.Headers.Add("x-flowos-delivery", message.Id.ToString());
+                if (!string.IsNullOrWhiteSpace(binding.AuthRef))
+                {
+                    request.Headers.Add("x-flowos-auth-ref", binding.AuthRef);
+                }
+
+                var invocationJson = JsonSerializer.Serialize(invocation);
+                request.Content = new System.Net.Http.StringContent(invocationJson, System.Text.Encoding.UTF8, "application/json");
+
+                var response = await client.SendAsync(request, ct);
+                httpStatusCode = (int)response.StatusCode;
+                responseSnippet = await response.Content.ReadAsStringAsync(ct);
+                sw.Stop();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    status = "Failed";
+                    errorMessage = $"Capability '{capabilityName}' returned HTTP {httpStatusCode}.";
+                    throw new InvalidOperationException(errorMessage);
+                }
+
+                if (!string.IsNullOrWhiteSpace(responseSnippet))
+                {
+                    try
+                    {
+                        using var responseDoc = JsonDocument.Parse(responseSnippet);
+                        if (responseDoc.RootElement.TryGetProperty("status", out var statusElem))
+                        {
+                            var remoteStatus = statusElem.GetString();
+                            if (string.Equals(remoteStatus, "Failed", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(remoteStatus, "RetryableFailure", StringComparison.OrdinalIgnoreCase))
+                            {
+                                status = "Failed";
+                                errorMessage = $"Capability '{capabilityName}' returned status '{remoteStatus}'.";
+                                throw new InvalidOperationException(errorMessage);
+                            }
+                        }
+                    }
+                    catch (JsonException)
+                    {
+                        // Non-JSON responses are accepted as success when HTTP status is successful.
+                    }
+                }
+            }
+            else
+            {
+                var configuration = sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+                var rejectUnknownActionTypes = bool.TryParse(
+                    configuration?["FlowOS:Actions:RejectUnknownActionTypes"],
+                    out var rejectUnknown) && rejectUnknown;
+
+                if (rejectUnknownActionTypes)
+                {
+                    status = "Failed";
+                    errorMessage = $"Unknown workflow action type '{actionType}'.";
+                    throw new InvalidOperationException(errorMessage);
+                }
+
+                sw.Stop();
+                responseSnippet = $"Unknown workflow action type '{actionType}' ignored (compatibility mode).";
             }
         }
         catch (Exception ex)

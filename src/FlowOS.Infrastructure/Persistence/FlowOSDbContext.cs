@@ -25,6 +25,9 @@ public class FlowOSDbContext : DbContext
     public DbSet<FlowOS.Core.Common.Models.OutboxMessage> OutboxMessages { get; set; }
     public DbSet<FlowOS.Core.Common.Models.WorkflowTimerJob> WorkflowTimerJobs { get; set; }
     public DbSet<WorkflowActionExecutionLog> ActionExecutionLogs { get; set; }
+    public DbSet<FlowOS.Core.Common.Models.IdempotencyRecord> IdempotencyRecords { get; set; }
+    public DbSet<FlowOS.Core.Common.Models.CapabilityBindingRecord> CapabilityBindings { get; set; }
+    public DbSet<FlowOS.Core.Common.Models.PluginBindingRecord> PluginBindings { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

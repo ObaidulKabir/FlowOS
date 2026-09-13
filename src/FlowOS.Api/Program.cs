@@ -8,6 +8,7 @@ using FlowOS.Security.Policies;
 using FlowOS.Application.Behaviors;
 using FlowOS.API.Filters;
 using FlowOS.Security.Interfaces;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Infrastructure.Services;
 using FlowOS.Infrastructure;
 using FlowOS.Domain.Validation;
@@ -83,6 +84,7 @@ builder.Services.AddScoped<IWorkflowJsonLinter, WorkflowJsonLinter>();
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassManager, FlowOS.Domain.Services.WorkflowClassManager>();
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassVersionManager, FlowOS.Domain.Services.WorkflowClassVersionManager>();
 builder.Services.AddScoped<FlowOS.Application.Common.Interfaces.IWorkflowCopilotService, FlowOS.Application.Services.WorkflowCopilotService>();
+builder.Services.AddScoped<IWorkflowTimeTravelService, WorkflowTimeTravelService>();
 
 builder.Services.AddMediatR(cfg =>
 {

@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using FlowOS.Application.Queries.Governance;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
@@ -83,6 +87,10 @@ public class AnalysisTools
                 humanExplanation = "A step is unreachable from StartStepId.";
                 designHint = $"Add a path to '{context?["stepId"]}', or remove the dead step.";
                 break;
+            case "WF-COMP-010":
+                humanExplanation = "A reachable step performs side effects but has no OnFailure compensation.";
+                designHint = $"Attach at least one OnFailure hook on step '{context?["stepId"]}' to define rollback/compensation behavior.";
+                break;
 
             // Consistency
             case "CON-001":
@@ -115,6 +123,18 @@ public class AnalysisTools
                 humanExplanation = "A HumanTask step must define NextSteps.";
                 designHint = $"Add NextSteps on HumanTask '{context?["stepId"]}'.";
                 break;
+            case "WF-ACT-005":
+                humanExplanation = "An InvokeCapability action is missing its capability name.";
+                designHint = $"Set action.capability (or action.target as fallback) on step '{context?["stepId"]}'.";
+                break;
+            case "WF-SUB-001":
+                humanExplanation = "A SubWorkflow step is missing its subWorkflow reference block.";
+                designHint = $"Set step.subWorkflow on '{context?["stepId"]}' with workflowDefinitionId, workflowClassId, or workflowName.";
+                break;
+            case "WF-SUB-002":
+                humanExplanation = "A SubWorkflow step reference is incomplete and cannot resolve a child workflow.";
+                designHint = $"Provide one target resolver on step '{context?["stepId"]}': workflowDefinitionId, workflowClassId, or workflowName.";
+                break;
 
             // SLA / Boundary Timer validation
             case "WF-SLA-001":
@@ -141,6 +161,8 @@ public class AnalysisTools
                 {
                     _ when code.StartsWith("CON-", StringComparison.Ordinal) => "Consistency violation between Events, StateMachine, and Workflow.",
                     _ when code.StartsWith("WF-COMP-", StringComparison.Ordinal) => "Workflow completeness violation.",
+                    _ when code.StartsWith("WF-ACT-", StringComparison.Ordinal) => "Lifecycle action validation violation.",
+                    _ when code.StartsWith("WF-SUB-", StringComparison.Ordinal) => "SubWorkflow reference validation violation.",
                     _ when code.StartsWith("WF-STR", StringComparison.Ordinal) || code.StartsWith("WF-STRUCT", StringComparison.Ordinal)
                         => "Workflow / state-machine structure violation.",
                     _ when code.StartsWith("STR-", StringComparison.Ordinal) => "Structural / metadata violation.",
@@ -242,6 +264,35 @@ public class AnalysisTools
                         severity = "Warning",
                         message = $"Step '{step.StepId}' has a too short identifier.",
                         context = new { stepId = step.StepId }
+                    });
+                }
+
+                var entry = step.OnEntry ?? new List<FlowOS.Domain.Blueprints.StepActionBlueprint>();
+                var exit = step.OnExit ?? new List<FlowOS.Domain.Blueprints.StepActionBlueprint>();
+                var failure = step.OnFailure ?? new List<FlowOS.Domain.Blueprints.StepActionBlueprint>();
+                bool hasSideEffects = entry.Concat(exit).Any(a =>
+                {
+                    var actionType = a.ActionType?.Trim();
+                    return string.Equals(actionType, "Webhook", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(actionType, "PublishEvent", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(actionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase)
+                        || (!string.IsNullOrWhiteSpace(actionType) &&
+                            (actionType.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase)
+                             || actionType.StartsWith("plugin.", StringComparison.OrdinalIgnoreCase)));
+                });
+
+                if (hasSideEffects && failure.Count == 0)
+                {
+                    warnings.Add(new
+                    {
+                        code = "LINT-COMP-001",
+                        severity = "Warning",
+                        message = $"Step '{step.StepId}' has side-effecting hooks but no OnFailure compensation hook.",
+                        context = new
+                        {
+                            stepId = step.StepId,
+                            recommendation = "Add OnFailure hook(s), then use simulate_compensation_path (design-time) or plan_workflow_compensation_path (runtime)."
+                        }
                     });
                 }
             }

@@ -303,4 +303,44 @@ public class WorkflowSagaCompensationTests
         Assert.Contains(trace, t => t["action"]?.ToString()?.Contains("[Saga Failure Injected]") == true);
         Assert.Contains(trace, t => t["action"]?.ToString()?.Contains("[Hook OnFailure]") == true);
     }
+
+    [Fact]
+    public async Task SimulationTools_ShouldPlanCompensationPath_InReverseExecutionOrder()
+    {
+        var mediatorMock = new Mock<IMediator>();
+        var compensationPlanner = new CompensationPlannerService();
+        var tools = new SimulationTools(mediatorMock.Object, compensationPlanner);
+
+        var bp = CreateBaseBlueprint();
+        bp.Workflow.Steps[0].OnFailure.Add(new StepActionBlueprint
+        {
+            ActionType = "Webhook",
+            Target = "https://example.com/undo-step1"
+        });
+        bp.Workflow.Steps[1].OnFailure.Add(new StepActionBlueprint
+        {
+            ActionType = "Notification",
+            Target = "Ops"
+        });
+
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(bp),
+            ["failedStepId"] = "Step2",
+            ["executedStepIds"] = new JArray("Step1", "Step2")
+        };
+
+        var result = await tools.SimulateCompensationPath(args);
+        Assert.False(result.IsError);
+
+        var output = JObject.Parse(result.Content[0].Text);
+        var data = output["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.True(data["isFullyCompensable"]?.Value<bool>());
+
+        var ordered = data["orderedCompensations"] as JArray;
+        Assert.NotNull(ordered);
+        Assert.Equal("Step2", ordered[0]?["stepId"]?.ToString());
+        Assert.Equal("Step1", ordered[1]?["stepId"]?.ToString());
+    }
 }

@@ -74,7 +74,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
               AI Agent & Browser Guideline: How to Get MCP Tools
             </h2>
             <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
-              21 Production Tools
+              47 Production Tools
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
@@ -204,10 +204,22 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
               <strong>Machine-Readable Discovery:</strong> For programmatic bots, make an HTTP <code className="text-blue-300">GET /mcp</code> with header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">Accept: application/json</code>. No API keys or authentication credentials are required.
             </li>
             <li>
-              <strong>Ingest Tools & Constraints:</strong> The payload delivers all 21 tools, parameter types, <code className="text-blue-300">riskLevel</code> (<code className="text-emerald-300">low</code>, <code className="text-amber-300">medium</code>, <code className="text-rose-300">high</code>), <code className="text-blue-300">sideEffect</code>, and <code className="text-blue-300">requiresHumanConfirmation</code>.
+              <strong>Ingest Tools & Constraints:</strong> The payload delivers all 47 tools, parameter types, <code className="text-blue-300">riskLevel</code> (<code className="text-emerald-300">low</code>, <code className="text-amber-300">medium</code>, <code className="text-rose-300">high</code>), <code className="text-blue-300">sideEffect</code>, and <code className="text-blue-300">requiresHumanConfirmation</code>.
             </li>
             <li>
               <strong>Execute via POST:</strong> Switch to <code className="text-blue-300">POST /mcp</code> for JSON-RPC 2.0 tool execution with your tenant header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">x-tenant-id</code>.
+            </li>
+            <li>
+              <strong>Compensation Safety Loop:</strong> Run <code className="text-blue-300">lint_draft_workflowclass</code>, then fix <code className="text-blue-300">WF-COMP-010</code> / <code className="text-blue-300">LINT-COMP-001</code> by attaching <code className="text-blue-300">OnFailure</code> hooks. Validate with <code className="text-blue-300">simulate_compensation_path</code> (design-time) and <code className="text-blue-300">plan_workflow_compensation_path</code> (runtime instance).
+            </li>
+            <li>
+              <strong>InvokeCapability Setup Loop:</strong> Register with <code className="text-blue-300">register_capability_binding</code>, verify with <code className="text-blue-300">validate_capability_binding</code>, then wire <code className="text-blue-300">attach_step_action</code> using <code className="text-blue-300">actionType=InvokeCapability</code> and explicit <code className="text-blue-300">capability</code>.
+            </li>
+            <li>
+              <strong>Plugin Discovery Loop:</strong> Start with <code className="text-blue-300">list_registered_plugins</code> to discover server providers, then map aliases via <code className="text-blue-300">register_plugin_binding</code>.
+            </li>
+            <li>
+              <strong>Plugin Mapping Loop:</strong> Use <code className="text-blue-300">register_plugin_binding</code> to map blueprint aliases (for <code className="text-blue-300">actionType</code> or <code className="text-blue-300">decisionProvider</code>) to server plugins, inspect with <code className="text-blue-300">list_plugin_bindings</code>, and verify with <code className="text-blue-300">resolve_plugin_binding</code>.
             </li>
           </ol>
         </div>

@@ -17,10 +17,14 @@ namespace FlowOS.MCP.Tools;
 public class SimulationTools
 {
     private readonly IMediator _mediator;
+    private readonly FlowOS.Core.Common.Interfaces.ICompensationPlannerService? _compensationPlanner;
 
-    public SimulationTools(IMediator mediator)
+    public SimulationTools(
+        IMediator mediator,
+        FlowOS.Core.Common.Interfaces.ICompensationPlannerService? compensationPlanner = null)
     {
         _mediator = mediator;
+        _compensationPlanner = compensationPlanner;
     }
 
     public async Task<CallToolResult> SimulateWorkflowClass(JObject args)
@@ -494,6 +498,75 @@ public class SimulationTools
                     }
                 }
 
+                // --- SUBWORKFLOW STEP ---
+                if (stepTypeLower.Contains("subworkflow"))
+                {
+                    var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+                    if (eventsQueue.Count > 0)
+                    {
+                        var evt = eventsQueue.Dequeue();
+                        var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
+                        if (!string.IsNullOrEmpty(match.Value))
+                        {
+                            var targetStep = match.Value;
+                            var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
+                            if (guardBlocked)
+                            {
+                                status = "BlockedByGuard";
+                                executionTrace.Add(new
+                                {
+                                    stepNumber = totalStepsExecuted + 1,
+                                    stepId = step.StepId,
+                                    stepType = "SubWorkflow",
+                                    action = $"Transition guard failed: {guardReason}",
+                                    state = currentState
+                                });
+                                break;
+                            }
+
+                            if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
+                            {
+                                stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = evt });
+                                currentState = smTrans.ToState;
+                            }
+
+                            totalStepsExecuted++;
+                            executionTrace.Add(new
+                            {
+                                stepNumber = totalStepsExecuted,
+                                stepId = step.StepId,
+                                stepType = "SubWorkflow",
+                                action = $"SubWorkflow completion event '{evt}' received. Advanced to '{targetStep}'.",
+                                state = currentState
+                            });
+
+                            EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            currentStepId = targetStep;
+                            if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                                    string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                                if (targetStepObj != null)
+                                {
+                                    EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                                }
+                            }
+                            continue;
+                        }
+                    }
+
+                    status = "WaitingForSubWorkflow";
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted + 1,
+                        stepId = step.StepId,
+                        stepType = "SubWorkflow",
+                        action = $"Workflow paused at SubWorkflow step '{step.StepId}'. Waiting for child completion event [{string.Join(", ", nextSteps.Keys)}].",
+                        state = currentState
+                    });
+                    break;
+                }
+
                 // --- TIMER STEP ---
                 if (stepTypeLower.Contains("timer"))
                 {
@@ -693,6 +766,126 @@ public class SimulationTools
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Simulation execution failed: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> SimulateCompensationPath(JObject args)
+    {
+        try
+        {
+            if (_compensationPlanner == null)
+            {
+                return McpToolResults.Fail("MCP-INTERNAL", "Compensation planner service is not registered.");
+            }
+
+            WorkflowClassBlueprint? blueprint = null;
+            var inlineBlueprintToken = args["blueprint"] as JObject;
+            if (inlineBlueprintToken != null)
+            {
+                blueprint = inlineBlueprintToken.ToObject<WorkflowClassBlueprint>();
+            }
+            else
+            {
+                var idStr = args["id"]?.ToString();
+                if (string.IsNullOrWhiteSpace(idStr) || !Guid.TryParse(idStr, out var id))
+                {
+                    return McpToolResults.Fail("MCP-ARG-001", "Either 'blueprint' or UUID 'id' is required.");
+                }
+
+                Guid tenantId;
+                try
+                {
+                    tenantId = McpTenantResolver.ResolveRequired(args);
+                }
+                catch (McpToolException ex)
+                {
+                    return McpToolResults.Fail(ex.Code, ex.Message);
+                }
+
+                var workflowClass = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, id));
+                if (workflowClass?.Definition == null)
+                {
+                    return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found or has no definition.");
+                }
+                blueprint = workflowClass.Definition;
+            }
+
+            if (blueprint?.Workflow?.Steps == null || blueprint.Workflow.Steps.Count == 0)
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "Workflow blueprint contains no steps.");
+            }
+
+            var failedStepId = args["failedStepId"]?.ToString()?.Trim();
+            if (string.IsNullOrWhiteSpace(failedStepId))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "failedStepId is required.");
+            }
+
+            var executedSteps = new List<string>();
+            if (args["executedStepIds"] is JArray arr && arr.Count > 0)
+            {
+                executedSteps.AddRange(arr.Select(x => x?.ToString() ?? string.Empty));
+            }
+            else
+            {
+                // Fallback path estimation: steps declared up to and including failedStepId.
+                foreach (var step in blueprint.Workflow.Steps)
+                {
+                    executedSteps.Add(step.StepId);
+                    if (string.Equals(step.StepId, failedStepId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            var actionMap = new Dictionary<string, List<FlowOS.Core.Common.Interfaces.CompensationActionDto>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var step in blueprint.Workflow.Steps)
+            {
+                var actions = (step.OnFailure ?? new List<StepActionBlueprint>())
+                    .Select(a => new FlowOS.Core.Common.Interfaces.CompensationActionDto(
+                        StepId: step.StepId,
+                        Hook: "OnFailure",
+                        ActionType: a.ActionType,
+                        Target: a.Target,
+                        Url: a.Url,
+                        Condition: a.Condition,
+                        Capability: a.Capability ?? a.Target))
+                    .ToList();
+                actionMap[step.StepId] = actions;
+            }
+
+            var plan = _compensationPlanner.Plan(new FlowOS.Core.Common.Interfaces.CompensationPathRequestDto(
+                FailedStepId: failedStepId,
+                ExecutedStepIds: executedSteps,
+                OnFailureActionsByStep: actionMap));
+
+            return McpToolResults.Success(new
+            {
+                failedStepId = plan.FailedStepId,
+                executedStepIds = executedSteps,
+                isFullyCompensable = plan.IsFullyCompensable,
+                orderedCompensations = plan.OrderedCompensations.Select(p => new
+                {
+                    stepId = p.StepId,
+                    actionCount = p.ActionCount,
+                    actions = p.Actions.Select(a => new
+                    {
+                        stepId = a.StepId,
+                        hook = a.Hook,
+                        actionType = a.ActionType,
+                        target = a.Target,
+                        capability = a.Capability,
+                        url = a.Url,
+                        condition = a.Condition
+                    })
+                }),
+                blockedSteps = plan.BlockedSteps
+            });
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to simulate compensation path: {ex.Message}");
         }
     }
 

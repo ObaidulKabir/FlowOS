@@ -147,4 +147,59 @@ public class WorkflowCommandHandlersTests : IDisposable
         await Assert.ThrowsAsync<FlowOS.Application.Common.Exceptions.PolicyViolationException>(
             () => _handler.Handle(command, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Handle_PublishEventCommand_ShouldStartSubWorkflowAndResumeParentOnCompletion()
+    {
+        var tenantId = Guid.NewGuid();
+
+        var childDefinition = new WorkflowDefinition(tenantId, "ChildWorkflow", 1, "ChildStart");
+        childDefinition.AddStep(new WorkflowStepDefinition("ChildStart", WorkflowStepType.Command)
+        {
+            NextSteps = new Dictionary<string, string> { { "Default", "END" } }
+        });
+        childDefinition.Publish();
+
+        var parentDefinition = new WorkflowDefinition(tenantId, "ParentWorkflow", 1, "Start");
+        parentDefinition.AddStep(new WorkflowStepDefinition("Start", WorkflowStepType.Command)
+        {
+            NextSteps = new Dictionary<string, string> { { "EVT-RUN", "ChildFlow" } }
+        });
+        parentDefinition.AddStep(new WorkflowStepDefinition("ChildFlow", WorkflowStepType.SubWorkflow)
+        {
+            SubWorkflow = new SubWorkflowReferenceDefinition
+            {
+                WorkflowDefinitionId = childDefinition.Id
+            },
+            NextSteps = new Dictionary<string, string> { { "SubWorkflowCompleted", "END" } }
+        });
+        parentDefinition.Publish();
+
+        _context.WorkflowDefinitions.Add(childDefinition);
+        _context.WorkflowDefinitions.Add(parentDefinition);
+        await _context.SaveChangesAsync();
+
+        _mockEventRegistry.Setup(x => x.ExistsAsync("EVT-RUN", tenantId)).ReturnsAsync(true);
+
+        var parentInstanceId = await _handler.Handle(
+            new StartWorkflowCommand(tenantId, parentDefinition.Id, null, null, Guid.Empty, null, null),
+            CancellationToken.None);
+
+        var result = await _handler.Handle(
+            new PublishEventCommand(tenantId, parentInstanceId, "EVT-RUN", null, null),
+            CancellationToken.None);
+
+        Assert.True(result);
+
+        var parent = await _context.WorkflowInstances.FirstOrDefaultAsync(w => w.Id == parentInstanceId);
+        Assert.NotNull(parent);
+        Assert.Equal(WorkflowInstanceStatus.Completed, parent!.Status);
+
+        var child = await _context.WorkflowInstances
+            .FirstOrDefaultAsync(w =>
+                w.ParentWorkflowInstanceId == parentInstanceId &&
+                w.ParentStepId == "ChildFlow");
+        Assert.NotNull(child);
+        Assert.Equal(WorkflowInstanceStatus.Completed, child!.Status);
+    }
 }

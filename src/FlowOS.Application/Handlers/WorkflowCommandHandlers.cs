@@ -11,11 +11,13 @@ using System.Linq;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Interfaces;
 using FlowOS.Security.Interfaces;
+using FlowOS.Domain.Enums;
 using FlowOS.Domain.ValueObjects;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
 using FlowOS.Events.Models;
 using System.Collections.Generic;
+using FlowOS.Core.Common.Interfaces;
 
 namespace FlowOS.Application.Handlers;
 
@@ -24,6 +26,10 @@ public class WorkflowCommandHandlers :
     IRequestHandler<PublishEventCommand, bool>,
     IRequestHandler<CompleteTaskCommand, bool>
 {
+    private const string StartWorkflowOperation = "start_workflow";
+    private const string PublishEventOperation = "publish_event";
+    private const string CompleteTaskOperation = "complete_task";
+
     private readonly IUnitOfWork _unitOfWork;
     private readonly WorkflowEngine _engine;
     private readonly IEventRegistry _eventRegistry;
@@ -31,6 +37,8 @@ public class WorkflowCommandHandlers :
     private readonly ICapabilityService _capabilityService;
     private readonly FlowOS.Application.Common.Interfaces.IWorkflowTimerService? _timerService;
     private readonly FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? _actionDispatcher;
+    private readonly IIdempotencyService? _idempotencyService;
+    private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
 
     public WorkflowCommandHandlers(
         IUnitOfWork unitOfWork, 
@@ -39,7 +47,9 @@ public class WorkflowCommandHandlers :
         ICapabilityService capabilityService,
         WorkflowEngine engine,
         FlowOS.Application.Common.Interfaces.IWorkflowTimerService? timerService = null,
-        FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? actionDispatcher = null)
+        FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? actionDispatcher = null,
+        IIdempotencyService? idempotencyService = null,
+        IPluginBindingRegistryService? pluginBindingRegistry = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
@@ -48,10 +58,32 @@ public class WorkflowCommandHandlers :
         _capabilityService = capabilityService;
         _timerService = timerService;
         _actionDispatcher = actionDispatcher;
+        _idempotencyService = idempotencyService;
+        _pluginBindingRegistry = pluginBindingRegistry;
     }
 
     public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
     {
+        if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var cached = await _idempotencyService.TryGetCompletedResultAsync<Guid>(
+                request.TenantId, StartWorkflowOperation, request.IdempotencyKey, cancellationToken);
+            if (cached.Found && cached.Result != Guid.Empty)
+            {
+                return cached.Result;
+            }
+
+            var started = await _idempotencyService.TryBeginAsync(
+                request.TenantId, StartWorkflowOperation, request.IdempotencyKey, cancellationToken);
+            if (!started)
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate idempotent request for '{StartWorkflowOperation}' is already pending or completed.");
+            }
+        }
+
+        try
+        {
         WorkflowDefinition? fullDefinition = null;
         Guid definitionId;
 
@@ -196,6 +228,8 @@ public class WorkflowCommandHandlers :
 
         if (fullDefinition != null)
         {
+            var initialEnteredStepIds = new List<string> { instance.CurrentStepId };
+
             if (_actionDispatcher != null && !string.IsNullOrEmpty(instance.CurrentStepId))
             {
                 var initialStep = fullDefinition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
@@ -212,17 +246,71 @@ public class WorkflowCommandHandlers :
                 }
             }
 
-            RunAutoAdvance(instance, fullDefinition, request.TenantId, new FlowOS.StateMachines.Models.ExecutionContext());
+            await StartSubWorkflowChildrenForEnteredStepsAsync(
+                instance,
+                fullDefinition,
+                initialEnteredStepIds,
+                null,
+                cancellationToken);
+
+            var autoAdvanceContext = new FlowOS.StateMachines.Models.ExecutionContext();
+            await EnrichExecutionContextWithPluginBindingsAsync(autoAdvanceContext, request.TenantId, cancellationToken);
+            RunAutoAdvance(instance, fullDefinition, request.TenantId, autoAdvanceContext);
+            var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                ? instance.ActiveStepIds.ToList()
+                : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+            await StartSubWorkflowChildrenForEnteredStepsAsync(
+                instance,
+                fullDefinition,
+                autoAdvancedEnteredStepIds,
+                autoAdvanceContext.Payload,
+                cancellationToken);
             await CheckAndScheduleTimerAsync(instance, fullDefinition, request.TenantId, cancellationToken);
         }
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            await _idempotencyService.CompleteAsync(
+                request.TenantId, StartWorkflowOperation, request.IdempotencyKey, instance.Id, cancellationToken);
+        }
+
         return instance.Id;
+        }
+        catch (Exception ex)
+        {
+            if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            {
+                await _idempotencyService.FailAsync(
+                    request.TenantId, StartWorkflowOperation, request.IdempotencyKey, ex.Message, cancellationToken);
+            }
+            throw;
+        }
     }
 
     public async Task<bool> Handle(PublishEventCommand request, CancellationToken cancellationToken)
     {
+        if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var cached = await _idempotencyService.TryGetCompletedResultAsync<bool>(
+                request.TenantId, PublishEventOperation, request.IdempotencyKey, cancellationToken);
+            if (cached.Found)
+            {
+                return cached.Result == true;
+            }
+
+            var started = await _idempotencyService.TryBeginAsync(
+                request.TenantId, PublishEventOperation, request.IdempotencyKey, cancellationToken);
+            if (!started)
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate idempotent request for '{PublishEventOperation}' is already pending or completed.");
+            }
+        }
+
+        try
+        {
         var userRoles = _currentUser.Roles ?? new List<string>();
         if (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id))
         {
@@ -300,6 +388,7 @@ public class WorkflowCommandHandlers :
                 Console.WriteLine($"[Handler] Failed to parse payload for ExecutionContext: {ex.Message}");
             }
         }
+        await EnrichExecutionContextWithPluginBindingsAsync(context, request.TenantId, cancellationToken);
 
         var smDef = await ResolveStateMachineDefinitionAsync(instance.WorkflowClassId, request.TenantId, definition.Name, cancellationToken);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
@@ -333,12 +422,12 @@ public class WorkflowCommandHandlers :
             }
 
             // Trigger OnEntry actions of new step(s)
+            var enteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                ? instance.ActiveStepIds.ToList()
+                : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+
             if (_actionDispatcher != null)
             {
-                var enteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
-                    ? instance.ActiveStepIds.ToList()
-                    : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
-
                 foreach (var stepId in enteredStepIds)
                 {
                     var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
@@ -355,6 +444,13 @@ public class WorkflowCommandHandlers :
                     }
                 }
             }
+
+            await StartSubWorkflowChildrenForEnteredStepsAsync(
+                instance,
+                definition,
+                enteredStepIds,
+                context.Payload,
+                cancellationToken);
 
             domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");
             domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
@@ -374,11 +470,28 @@ public class WorkflowCommandHandlers :
                 completionEvent.AddMetadata("CompletedStep", instance.CurrentStepId);
                 completionEvent.AddMetadata("FinalState", instance.CurrentState ?? "Completed");
                 _unitOfWork.Events.Add(completionEvent);
+
+                await TryResumeParentWorkflowOnChildCompletionAsync(instance, cancellationToken);
             }
 
             RunAutoAdvance(instance, definition, request.TenantId, context, smDef);
+            var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                ? instance.ActiveStepIds.ToList()
+                : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+            await StartSubWorkflowChildrenForEnteredStepsAsync(
+                instance,
+                definition,
+                autoAdvancedEnteredStepIds,
+                context.Payload,
+                cancellationToken);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            {
+                await _idempotencyService.CompleteAsync(
+                    request.TenantId, PublishEventOperation, request.IdempotencyKey, true, cancellationToken);
+            }
             return true;
         }
         else 
@@ -411,10 +524,40 @@ public class WorkflowCommandHandlers :
 
             throw new InvalidOperationException($"Workflow transition failed: {result.FailureReason}");
         }
+        }
+        catch (Exception ex)
+        {
+            if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            {
+                await _idempotencyService.FailAsync(
+                    request.TenantId, PublishEventOperation, request.IdempotencyKey, ex.Message, cancellationToken);
+            }
+            throw;
+        }
     }
 
     public async Task<bool> Handle(CompleteTaskCommand request, CancellationToken cancellationToken)
     {
+        if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var cached = await _idempotencyService.TryGetCompletedResultAsync<bool>(
+                request.TenantId, CompleteTaskOperation, request.IdempotencyKey, cancellationToken);
+            if (cached.Found)
+            {
+                return cached.Result == true;
+            }
+
+            var started = await _idempotencyService.TryBeginAsync(
+                request.TenantId, CompleteTaskOperation, request.IdempotencyKey, cancellationToken);
+            if (!started)
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate idempotent request for '{CompleteTaskOperation}' is already pending or completed.");
+            }
+        }
+
+        try
+        {
         var instance = await _unitOfWork.WorkflowInstances
             .GetByIdAsync(request.WorkflowInstanceId, request.TenantId, cancellationToken);
 
@@ -437,6 +580,7 @@ public class WorkflowCommandHandlers :
         }
 
         var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        await EnrichExecutionContextWithPluginBindingsAsync(context, request.TenantId, cancellationToken);
         var smDef = await ResolveStateMachineDefinitionAsync(instance.WorkflowClassId, request.TenantId, definition.Name, cancellationToken);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
@@ -469,12 +613,12 @@ public class WorkflowCommandHandlers :
             }
 
             // Trigger OnEntry actions of new step(s)
+            var enteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                ? instance.ActiveStepIds.ToList()
+                : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+
             if (_actionDispatcher != null)
             {
-                var enteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
-                    ? instance.ActiveStepIds.ToList()
-                    : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
-
                 foreach (var stepId in enteredStepIds)
                 {
                     var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
@@ -491,6 +635,13 @@ public class WorkflowCommandHandlers :
                     }
                 }
             }
+
+            await StartSubWorkflowChildrenForEnteredStepsAsync(
+                instance,
+                definition,
+                enteredStepIds,
+                null,
+                cancellationToken);
 
             domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");
             domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
@@ -510,11 +661,28 @@ public class WorkflowCommandHandlers :
                 completionEvent.AddMetadata("CompletedStep", instance.CurrentStepId);
                 completionEvent.AddMetadata("FinalState", instance.CurrentState ?? "Completed");
                 _unitOfWork.Events.Add(completionEvent);
+
+                await TryResumeParentWorkflowOnChildCompletionAsync(instance, cancellationToken);
             }
 
             RunAutoAdvance(instance, definition, request.TenantId, context, smDef);
+            var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
+                ? instance.ActiveStepIds.ToList()
+                : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
+            await StartSubWorkflowChildrenForEnteredStepsAsync(
+                instance,
+                definition,
+                autoAdvancedEnteredStepIds,
+                context.Payload,
+                cancellationToken);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            {
+                await _idempotencyService.CompleteAsync(
+                    request.TenantId, CompleteTaskOperation, request.IdempotencyKey, true, cancellationToken);
+            }
             return true;
         }
         else
@@ -545,6 +713,16 @@ public class WorkflowCommandHandlers :
         }
 
         return false;
+        }
+        catch (Exception ex)
+        {
+            if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            {
+                await _idempotencyService.FailAsync(
+                    request.TenantId, CompleteTaskOperation, request.IdempotencyKey, ex.Message, cancellationToken);
+            }
+            throw;
+        }
     }
 
     private async Task<FlowOS.Domain.Entities.StateMachineDefinition?> ResolveStateMachineDefinitionAsync(
@@ -609,7 +787,8 @@ public class WorkflowCommandHandlers :
                 var step = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
                 if (step != null && step.NextSteps.ContainsKey("Default") && 
                     step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.HumanTask && 
-                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.Timer)
+                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.Timer &&
+                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.SubWorkflow)
                 {
                     var defaultEvent = new StandardEvent(tenantId, "Default");
                     var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
@@ -668,6 +847,477 @@ public class WorkflowCommandHandlers :
                 await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
             }
         }
+    }
+
+    private async Task EnrichExecutionContextWithPluginBindingsAsync(
+        FlowOS.StateMachines.Models.ExecutionContext context,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        if (_pluginBindingRegistry == null) return;
+
+        var bindings = await _pluginBindingRegistry.ResolveBindingsAsync(
+            tenantId,
+            PluginBindingTypes.Decision,
+            cancellationToken);
+
+        if (bindings.Count > 0)
+        {
+            context.DecisionProviderBindings = bindings;
+        }
+    }
+
+    private async Task StartSubWorkflowChildrenForEnteredStepsAsync(
+        WorkflowInstance parentInstance,
+        WorkflowDefinition parentDefinition,
+        IReadOnlyList<string> enteredStepIds,
+        Dictionary<string, object>? parentPayload,
+        CancellationToken cancellationToken)
+    {
+        if (parentInstance.Status == WorkflowInstanceStatus.Completed ||
+            parentInstance.Status == WorkflowInstanceStatus.Failed)
+        {
+            return;
+        }
+
+        if (enteredStepIds == null || enteredStepIds.Count == 0) return;
+
+        foreach (var stepId in enteredStepIds.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var step = parentDefinition.Steps.FirstOrDefault(s => s.StepId == stepId);
+            if (step == null || step.StepType != WorkflowStepType.SubWorkflow) continue;
+
+            await EnsureSubWorkflowChildStartedAsync(
+                parentInstance,
+                step,
+                parentPayload,
+                cancellationToken);
+        }
+    }
+
+    private async Task EnsureSubWorkflowChildStartedAsync(
+        WorkflowInstance parentInstance,
+        WorkflowStepDefinition parentStep,
+        Dictionary<string, object>? parentPayload,
+        CancellationToken cancellationToken)
+    {
+        if (parentStep.SubWorkflow == null)
+        {
+            throw new InvalidOperationException(
+                $"SubWorkflow step '{parentStep.StepId}' is missing subWorkflow reference configuration.");
+        }
+
+        var existingChild = await _unitOfWork.WorkflowInstances.GetLatestChildByParentStepAsync(
+            parentInstance.TenantId,
+            parentInstance.Id,
+            parentStep.StepId,
+            cancellationToken);
+
+        if (existingChild != null)
+        {
+            return;
+        }
+
+        var (childDefinition, childWorkflowClassId) = await ResolveSubWorkflowDefinitionAsync(
+            parentInstance.TenantId,
+            parentStep,
+            cancellationToken);
+
+        var childPayload = BuildSubWorkflowInputPayload(parentStep, parentPayload);
+        childPayload["ParentWorkflowInstanceId"] = parentInstance.Id.ToString();
+        childPayload["ParentStepId"] = parentStep.StepId;
+
+        var childInstance = new WorkflowInstance(
+            parentInstance.TenantId,
+            childDefinition.Id,
+            childWorkflowClassId,
+            childDefinition.Version,
+            childDefinition.StartStepId,
+            correlationId: null,
+            initialState: null,
+            parentWorkflowInstanceId: parentInstance.Id,
+            parentStepId: parentStep.StepId);
+
+        _unitOfWork.WorkflowInstances.Add(childInstance);
+
+        var startEvent = new StandardEvent(parentInstance.TenantId, "WorkflowStarted");
+        startEvent.SetCorrelationId(childInstance.Id);
+        startEvent.AddMetadata("WorkflowName", childDefinition.Name);
+        startEvent.AddMetadata("Version", childDefinition.Version.ToString());
+        startEvent.AddMetadata("StartStep", childDefinition.StartStepId);
+        startEvent.AddMetadata("InitialState", childInstance.CurrentState ?? childDefinition.StartStepId);
+        startEvent.AddMetadata("ParentWorkflowInstanceId", parentInstance.Id.ToString());
+        startEvent.AddMetadata("ParentStepId", parentStep.StepId);
+        if (!string.IsNullOrEmpty(_currentUser.Id))
+        {
+            startEvent.AddMetadata("ActorId", _currentUser.Id);
+        }
+        _unitOfWork.Events.Add(startEvent);
+
+        var initialChildStep = childDefinition.Steps.FirstOrDefault(s => s.StepId == childInstance.CurrentStepId);
+        if (_actionDispatcher != null && initialChildStep?.OnEntry != null && initialChildStep.OnEntry.Count > 0)
+        {
+            await _actionDispatcher.QueueActionsAsync(
+                parentInstance.TenantId,
+                childInstance.Id,
+                initialChildStep.StepId,
+                "OnEntry",
+                initialChildStep.OnEntry,
+                childPayload,
+                cancellationToken);
+        }
+
+        var childContext = new FlowOS.StateMachines.Models.ExecutionContext
+        {
+            Payload = childPayload
+        };
+        await EnrichExecutionContextWithPluginBindingsAsync(childContext, parentInstance.TenantId, cancellationToken);
+
+        var childSmDef = await ResolveStateMachineDefinitionAsync(
+            childInstance.WorkflowClassId,
+            parentInstance.TenantId,
+            childDefinition.Name,
+            cancellationToken);
+
+        RunAutoAdvance(childInstance, childDefinition, parentInstance.TenantId, childContext, childSmDef);
+        var autoAdvancedEnteredStepIds = (childInstance.ActiveStepIds != null && childInstance.ActiveStepIds.Count > 0)
+            ? childInstance.ActiveStepIds.ToList()
+            : (string.IsNullOrEmpty(childInstance.CurrentStepId) ? new List<string>() : new List<string> { childInstance.CurrentStepId });
+        await StartSubWorkflowChildrenForEnteredStepsAsync(
+            childInstance,
+            childDefinition,
+            autoAdvancedEnteredStepIds,
+            childContext.Payload,
+            cancellationToken);
+        await CheckAndScheduleTimerAsync(childInstance, childDefinition, parentInstance.TenantId, cancellationToken);
+
+        if (childInstance.Status == WorkflowInstanceStatus.Completed)
+        {
+            var completionEvent = new StandardEvent(parentInstance.TenantId, "WorkflowCompleted");
+            completionEvent.SetCorrelationId(childInstance.Id);
+            completionEvent.AddMetadata("CompletedStep", childInstance.CurrentStepId);
+            completionEvent.AddMetadata("FinalState", childInstance.CurrentState ?? "Completed");
+            completionEvent.AddMetadata("ParentWorkflowInstanceId", parentInstance.Id.ToString());
+            completionEvent.AddMetadata("ParentStepId", parentStep.StepId);
+            _unitOfWork.Events.Add(completionEvent);
+
+            await TryResumeParentWorkflowOnChildCompletionAsync(childInstance, cancellationToken);
+        }
+    }
+
+    private async Task<(WorkflowDefinition Definition, Guid WorkflowClassId)> ResolveSubWorkflowDefinitionAsync(
+        Guid tenantId,
+        WorkflowStepDefinition subWorkflowStep,
+        CancellationToken cancellationToken)
+    {
+        var reference = subWorkflowStep.SubWorkflow
+            ?? throw new InvalidOperationException($"SubWorkflow step '{subWorkflowStep.StepId}' is missing subWorkflow reference.");
+
+        if (reference.WorkflowDefinitionId.HasValue && reference.WorkflowDefinitionId.Value != Guid.Empty)
+        {
+            var definition = await _unitOfWork.WorkflowDefinitions.GetByIdAsNoTrackingAsync(
+                reference.WorkflowDefinitionId.Value,
+                cancellationToken);
+
+            if (definition == null || definition.TenantId != tenantId || definition.Status != WorkflowStatus.Published)
+            {
+                throw new ArgumentException(
+                    $"SubWorkflow step '{subWorkflowStep.StepId}' references workflowDefinitionId '{reference.WorkflowDefinitionId}' that is not accessible or not published.");
+            }
+
+            return (definition, Guid.Empty);
+        }
+
+        if (reference.WorkflowClassId.HasValue && reference.WorkflowClassId.Value != Guid.Empty)
+        {
+            var workflowClass = await _unitOfWork.WorkflowClasses.GetByIdAsNoTrackingAsync(
+                reference.WorkflowClassId.Value,
+                cancellationToken);
+
+            if (workflowClass == null || (workflowClass.TenantId != tenantId && workflowClass.Scope != WorkflowClassScope.Public))
+            {
+                throw new ArgumentException(
+                    $"SubWorkflow step '{subWorkflowStep.StepId}' references workflowClassId '{reference.WorkflowClassId}' that is not accessible.");
+            }
+
+            var runtimeVersion = WorkflowVersion.Parse(workflowClass.Version).RuntimeVersion;
+            var definitionOwnerTenant = workflowClass.TenantId;
+            var definition = await _unitOfWork.WorkflowDefinitions.GetByNameAndVersionAsync(
+                workflowClass.Name,
+                runtimeVersion,
+                definitionOwnerTenant,
+                cancellationToken);
+
+            if (definition == null || definition.Status != WorkflowStatus.Published)
+            {
+                throw new ArgumentException(
+                    $"SubWorkflow target '{workflowClass.Name}' is not published as runtime definition v{runtimeVersion}.");
+            }
+
+            return (definition, workflowClass.Id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(reference.WorkflowName))
+        {
+            WorkflowDefinition? definition;
+            if (reference.Version.HasValue)
+            {
+                definition = await _unitOfWork.WorkflowDefinitions.GetPublishedByNameAndVersionAsync(
+                    reference.WorkflowName,
+                    reference.Version.Value,
+                    tenantId,
+                    cancellationToken);
+            }
+            else
+            {
+                definition = await _unitOfWork.WorkflowDefinitions.GetLatestByNameAsync(
+                    reference.WorkflowName,
+                    tenantId,
+                    cancellationToken);
+            }
+
+            if (definition == null || definition.Status != WorkflowStatus.Published)
+            {
+                throw new ArgumentException(
+                    $"SubWorkflow step '{subWorkflowStep.StepId}' references workflow '{reference.WorkflowName}' that is not published.");
+            }
+
+            return (definition, Guid.Empty);
+        }
+
+        throw new ArgumentException(
+            $"SubWorkflow step '{subWorkflowStep.StepId}' must set workflowDefinitionId, workflowClassId, or workflowName.");
+    }
+
+    private async Task TryResumeParentWorkflowOnChildCompletionAsync(
+        WorkflowInstance childInstance,
+        CancellationToken cancellationToken)
+    {
+        if (!childInstance.ParentWorkflowInstanceId.HasValue || string.IsNullOrWhiteSpace(childInstance.ParentStepId))
+        {
+            return;
+        }
+
+        var parentInstance = await _unitOfWork.WorkflowInstances.GetByIdAsync(
+            childInstance.ParentWorkflowInstanceId.Value,
+            childInstance.TenantId,
+            cancellationToken);
+
+        if (parentInstance == null ||
+            parentInstance.Status == WorkflowInstanceStatus.Completed ||
+            parentInstance.Status == WorkflowInstanceStatus.Failed)
+        {
+            return;
+        }
+
+        var parentDefinition = await _unitOfWork.WorkflowDefinitions.GetByIdAsync(
+            parentInstance.WorkflowDefinitionId,
+            cancellationToken);
+        if (parentDefinition == null) return;
+
+        var parentStep = parentDefinition.Steps.FirstOrDefault(s =>
+            string.Equals(s.StepId, childInstance.ParentStepId, StringComparison.OrdinalIgnoreCase));
+        if (parentStep == null || parentStep.StepType != WorkflowStepType.SubWorkflow) return;
+
+        bool parentIsAtStep =
+            string.Equals(parentInstance.CurrentStepId, parentStep.StepId, StringComparison.OrdinalIgnoreCase)
+            || (parentInstance.ActiveStepIds?.Contains(parentStep.StepId) == true);
+        if (!parentIsAtStep) return;
+
+        var completionEventType = ResolveSubWorkflowCompletionEventType(parentStep);
+        if (string.IsNullOrWhiteSpace(completionEventType)) return;
+
+        var contextPayload = BuildSubWorkflowOutputPayload(parentStep, childInstance);
+        var context = new FlowOS.StateMachines.Models.ExecutionContext
+        {
+            Payload = contextPayload
+        };
+        await EnrichExecutionContextWithPluginBindingsAsync(context, parentInstance.TenantId, cancellationToken);
+
+        var stateMachineDefinition = await ResolveStateMachineDefinitionAsync(
+            parentInstance.WorkflowClassId,
+            parentInstance.TenantId,
+            parentDefinition.Name,
+            cancellationToken);
+        var currentEntityState = parentInstance.CurrentState ?? parentInstance.CurrentStepId;
+        var previousStepId = parentInstance.CurrentStepId;
+        var previousState = parentInstance.CurrentState ?? parentInstance.CurrentStepId;
+
+        var domainEvent = new StandardEvent(parentInstance.TenantId, completionEventType);
+        domainEvent.SetCorrelationId(parentInstance.Id);
+        domainEvent.AddMetadata("Source", "SubWorkflowCompletion");
+        domainEvent.AddMetadata("ParentStepId", parentStep.StepId);
+        domainEvent.AddMetadata("ChildWorkflowInstanceId", childInstance.Id.ToString());
+
+        var result = _engine.Advance(
+            parentInstance,
+            parentDefinition,
+            domainEvent,
+            context,
+            stateMachineDefinition,
+            currentEntityState);
+        if (!result.Success)
+        {
+            return;
+        }
+
+        if (_timerService != null && !string.IsNullOrEmpty(previousStepId))
+        {
+            await _timerService.CancelTimerAsync(parentInstance.Id, previousStepId, cancellationToken);
+        }
+
+        if (_actionDispatcher != null && !string.IsNullOrEmpty(previousStepId))
+        {
+            var departedStep = parentDefinition.Steps.FirstOrDefault(s => s.StepId == previousStepId);
+            if (departedStep?.OnExit != null && departedStep.OnExit.Count > 0)
+            {
+                await _actionDispatcher.QueueActionsAsync(
+                    parentInstance.TenantId,
+                    parentInstance.Id,
+                    previousStepId,
+                    "OnExit",
+                    departedStep.OnExit,
+                    contextPayload,
+                    cancellationToken);
+            }
+        }
+
+        var enteredStepIds = (parentInstance.ActiveStepIds != null && parentInstance.ActiveStepIds.Count > 0)
+            ? parentInstance.ActiveStepIds.ToList()
+            : (string.IsNullOrEmpty(parentInstance.CurrentStepId) ? new List<string>() : new List<string> { parentInstance.CurrentStepId });
+
+        if (_actionDispatcher != null)
+        {
+            foreach (var stepId in enteredStepIds)
+            {
+                var enteredStep = parentDefinition.Steps.FirstOrDefault(s => s.StepId == stepId);
+                if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                {
+                    await _actionDispatcher.QueueActionsAsync(
+                        parentInstance.TenantId,
+                        parentInstance.Id,
+                        stepId,
+                        "OnEntry",
+                        enteredStep.OnEntry,
+                        contextPayload,
+                        cancellationToken);
+                }
+            }
+        }
+
+        await StartSubWorkflowChildrenForEnteredStepsAsync(
+            parentInstance,
+            parentDefinition,
+            enteredStepIds,
+            contextPayload,
+            cancellationToken);
+
+        domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");
+        domainEvent.AddMetadata("ToStep", parentInstance.CurrentStepId);
+        domainEvent.AddMetadata("FromState", previousState ?? "Draft");
+        domainEvent.AddMetadata("ToState", parentInstance.CurrentState ?? "Draft");
+        if (!string.IsNullOrEmpty(_currentUser.Id))
+        {
+            domainEvent.AddMetadata("ActorId", _currentUser.Id);
+        }
+
+        _unitOfWork.Events.Add(domainEvent);
+
+        if (parentInstance.Status == WorkflowInstanceStatus.Completed)
+        {
+            var completionEvent = new StandardEvent(parentInstance.TenantId, "WorkflowCompleted");
+            completionEvent.SetCorrelationId(parentInstance.Id);
+            completionEvent.AddMetadata("CompletedStep", parentInstance.CurrentStepId);
+            completionEvent.AddMetadata("FinalState", parentInstance.CurrentState ?? "Completed");
+            _unitOfWork.Events.Add(completionEvent);
+
+            await TryResumeParentWorkflowOnChildCompletionAsync(parentInstance, cancellationToken);
+        }
+
+        RunAutoAdvance(parentInstance, parentDefinition, parentInstance.TenantId, context, stateMachineDefinition);
+        var autoAdvancedEnteredStepIds = (parentInstance.ActiveStepIds != null && parentInstance.ActiveStepIds.Count > 0)
+            ? parentInstance.ActiveStepIds.ToList()
+            : (string.IsNullOrEmpty(parentInstance.CurrentStepId) ? new List<string>() : new List<string> { parentInstance.CurrentStepId });
+        await StartSubWorkflowChildrenForEnteredStepsAsync(
+            parentInstance,
+            parentDefinition,
+            autoAdvancedEnteredStepIds,
+            context.Payload,
+            cancellationToken);
+        await CheckAndScheduleTimerAsync(parentInstance, parentDefinition, parentInstance.TenantId, cancellationToken);
+    }
+
+    private static Dictionary<string, object> BuildSubWorkflowInputPayload(
+        WorkflowStepDefinition parentStep,
+        Dictionary<string, object>? parentPayload)
+    {
+        var sourcePayload = parentPayload ?? new Dictionary<string, object>();
+        var mapping = parentStep.SubWorkflow?.InputMapping;
+        if (mapping == null || mapping.Count == 0)
+        {
+            return new Dictionary<string, object>(sourcePayload, StringComparer.OrdinalIgnoreCase);
+        }
+
+        var resolved = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in mapping)
+        {
+            if (string.IsNullOrWhiteSpace(kvp.Key)) continue;
+
+            var evaluated = ExpressionEvaluator.EvaluateValue(kvp.Value, sourcePayload);
+            resolved[kvp.Key] = evaluated ?? kvp.Value;
+        }
+
+        return resolved;
+    }
+
+    private static Dictionary<string, object> BuildSubWorkflowOutputPayload(
+        WorkflowStepDefinition parentStep,
+        WorkflowInstance childInstance)
+    {
+        var payload = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SubWorkflowCompleted"] = true,
+            ["ChildWorkflowInstanceId"] = childInstance.Id.ToString(),
+            ["ChildWorkflowClassId"] = childInstance.WorkflowClassId.ToString(),
+            ["ChildWorkflowDefinitionId"] = childInstance.WorkflowDefinitionId.ToString(),
+            ["ChildStatus"] = childInstance.Status.ToString(),
+            ["ChildCurrentStepId"] = childInstance.CurrentStepId,
+            ["ChildCurrentState"] = childInstance.CurrentState ?? string.Empty
+        };
+
+        var mapping = parentStep.SubWorkflow?.OutputMapping;
+        if (mapping == null || mapping.Count == 0)
+        {
+            return payload;
+        }
+
+        foreach (var kvp in mapping)
+        {
+            if (string.IsNullOrWhiteSpace(kvp.Key)) continue;
+
+            var evaluated = ExpressionEvaluator.EvaluateValue(kvp.Value, payload);
+            payload[kvp.Key] = evaluated ?? kvp.Value;
+        }
+
+        return payload;
+    }
+
+    private static string? ResolveSubWorkflowCompletionEventType(WorkflowStepDefinition parentStep)
+    {
+        if (parentStep.NextSteps == null || parentStep.NextSteps.Count == 0)
+        {
+            return null;
+        }
+
+        var preferred = parentStep.NextSteps.Keys.FirstOrDefault(k =>
+            string.Equals(k, "SubWorkflowCompleted", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(preferred)) return preferred;
+
+        var defaultKey = parentStep.NextSteps.Keys.FirstOrDefault(k =>
+            string.Equals(k, "Default", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(defaultKey)) return defaultKey;
+
+        return parentStep.NextSteps.Keys.FirstOrDefault();
     }
 
     private TimeSpan ParseDuration(string? durationStr)

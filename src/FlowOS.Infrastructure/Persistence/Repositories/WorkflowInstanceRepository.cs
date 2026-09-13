@@ -87,6 +87,37 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
     public Task<bool> AnyForWorkflowClassAsync(Guid workflowClassId, CancellationToken cancellationToken = default)
         => _context.WorkflowInstances.AnyAsync(w => w.WorkflowClassId == workflowClassId, cancellationToken);
 
+    public Task<WorkflowInstance?> GetLatestChildByParentStepAsync(
+        Guid tenantId,
+        Guid parentWorkflowInstanceId,
+        string parentStepId,
+        CancellationToken cancellationToken = default)
+    {
+        var tracked = _context.ChangeTracker
+            .Entries<WorkflowInstance>()
+            .Where(e => e.State != EntityState.Detached && e.State != EntityState.Deleted)
+            .Select(e => e.Entity)
+            .Where(w =>
+                w.TenantId == tenantId &&
+                w.ParentWorkflowInstanceId == parentWorkflowInstanceId &&
+                w.ParentStepId == parentStepId)
+            .OrderByDescending(w => w.CreatedAt)
+            .FirstOrDefault();
+
+        if (tracked != null)
+        {
+            return Task.FromResult<WorkflowInstance?>(tracked);
+        }
+
+        return _context.WorkflowInstances
+            .Where(w =>
+                w.TenantId == tenantId &&
+                w.ParentWorkflowInstanceId == parentWorkflowInstanceId &&
+                w.ParentStepId == parentStepId)
+            .OrderByDescending(w => w.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public void Add(WorkflowInstance instance) => _context.WorkflowInstances.Add(instance);
 
     private static WorkflowSummaryDto MapSummary(WorkflowInstance w, string className) => new()

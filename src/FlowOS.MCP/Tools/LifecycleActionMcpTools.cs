@@ -49,7 +49,7 @@ public class LifecycleActionMcpTools
 
             var action = actionToken.ToObject<StepActionBlueprint>();
             if (action == null || string.IsNullOrWhiteSpace(action.ActionType))
-                return McpToolResults.Fail("MCP-ARG-001", "action must specify a valid ActionType (Webhook, Notification, PublishEvent).");
+                return McpToolResults.Fail("MCP-ARG-001", "action must specify a valid ActionType (Webhook, Notification, PublishEvent, InvokeCapability).");
 
             var (blueprint, workflowName, workflowVersion, tenantId, draftId, resolveErr) = await ResolveBlueprintAsync(args);
             if (resolveErr != null) return resolveErr;

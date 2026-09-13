@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Services;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
@@ -13,6 +14,7 @@ using FlowOS.MCP.Tools;
 using FlowOS.Workflows.Domain;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -38,6 +40,27 @@ public class WorkflowLifecycleActionTests
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == "WF-ACT-001");
+    }
+
+    [Fact]
+    public void Validator_ShouldAccept_PluginPrefixedActionAlias()
+    {
+        var bp = CreateBaseBlueprint();
+        bp.Workflow.Steps[0].OnEntry.Add(new StepActionBlueprint
+        {
+            ActionType = "plugin:shipment.webhook",
+            Target = "https://example.com/shipment"
+        });
+        bp.Workflow.Steps[0].OnFailure.Add(new StepActionBlueprint
+        {
+            ActionType = "Notification",
+            Target = "OpsRollback"
+        });
+
+        var wc = new WorkflowClass(Guid.NewGuid(), "PluginAliasWorkflow", "1.0.0", bp);
+        var result = _validator.Validate(wc);
+
+        Assert.DoesNotContain(result.Errors, e => e.Code == "WF-ACT-001");
     }
 
     [Fact]
@@ -92,6 +115,49 @@ public class WorkflowLifecycleActionTests
     }
 
     [Fact]
+    public void Validator_ShouldReject_InvokeCapabilityWithoutCapabilityName()
+    {
+        var bp = CreateBaseBlueprint();
+        bp.Workflow.Steps[0].OnEntry.Add(new StepActionBlueprint
+        {
+            ActionType = "InvokeCapability"
+        });
+        bp.Workflow.Steps[0].OnFailure.Add(new StepActionBlueprint
+        {
+            ActionType = "Notification",
+            Target = "OpsRollback"
+        });
+
+        var wc = new WorkflowClass(Guid.NewGuid(), "InvokeCapabilityMissingName", "1.0.0", bp);
+        var result = _validator.Validate(wc);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == "WF-ACT-005");
+    }
+
+    [Fact]
+    public void Validator_ShouldAccept_InvokeCapabilityWithCapabilityName()
+    {
+        var bp = CreateBaseBlueprint();
+        bp.Workflow.Steps[0].OnEntry.Add(new StepActionBlueprint
+        {
+            ActionType = "InvokeCapability",
+            Capability = "payment.refund.v1"
+        });
+        bp.Workflow.Steps[0].OnFailure.Add(new StepActionBlueprint
+        {
+            ActionType = "Notification",
+            Target = "OpsRollback"
+        });
+
+        var wc = new WorkflowClass(Guid.NewGuid(), "InvokeCapabilityValid", "1.0.0", bp);
+        var result = _validator.Validate(wc);
+
+        Assert.True(result.IsValid);
+        Assert.DoesNotContain(result.Errors, e => e.Code == "WF-ACT-005");
+    }
+
+    [Fact]
     public void Validator_ShouldPass_WithValidActionHooks()
     {
         var bp = CreateBaseBlueprint();
@@ -111,12 +177,35 @@ public class WorkflowLifecycleActionTests
             ActionType = "PublishEvent",
             Target = "EVT-SUBMIT"
         });
+        bp.Workflow.Steps[0].OnFailure.Add(new StepActionBlueprint
+        {
+            ActionType = "Notification",
+            Target = "OpsRollback",
+            Template = "Compensation triggered for SubmitStep"
+        });
 
         var wc = new WorkflowClass(Guid.NewGuid(), "TestWorkflow", "1.0.0", bp);
         var result = _validator.Validate(wc);
 
         Assert.True(result.IsValid);
         Assert.DoesNotContain(result.Errors, e => e.Code.StartsWith("WF-ACT-"));
+    }
+
+    [Fact]
+    public void Validator_ShouldReject_SideEffectsWithoutOnFailureCompensation()
+    {
+        var bp = CreateBaseBlueprint();
+        bp.Workflow.Steps[0].OnEntry.Add(new StepActionBlueprint
+        {
+            ActionType = "Webhook",
+            Target = "https://api.example.com/emit"
+        });
+
+        var wc = new WorkflowClass(Guid.NewGuid(), "CompensationMissingWorkflow", "1.0.0", bp);
+        var result = _validator.Validate(wc);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == "WF-COMP-010");
     }
 
     [Fact]
@@ -338,6 +427,130 @@ public class WorkflowLifecycleActionTests
     }
 
     [Fact]
+    public async Task Dispatcher_ShouldRouteThroughPluginRegistry_WhenPluginRegistered()
+    {
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        using var db = new FlowOSDbContext(options);
+        var registry = new WorkflowActionPluginRegistry(new IWorkflowActionPlugin[]
+        {
+            new WebhookWorkflowActionPlugin()
+        });
+        var dispatcher = new WorkflowActionDispatcher(db, registry);
+
+        var actions = new List<StepActionDefinition>
+        {
+            new()
+            {
+                ActionType = "Webhook",
+                Url = "https://api.example.com/hook",
+                PayloadMapping = new Dictionary<string, string> { { "ref", "OrderId" } }
+            }
+        };
+
+        var payload = new Dictionary<string, object> { { "OrderId", "ORD-PLUG-1" } };
+
+        await dispatcher.QueueActionsAsync(Guid.NewGuid(), Guid.NewGuid(), "StepPlugin", "OnExit", actions, payload, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var message = await db.OutboxMessages.FirstOrDefaultAsync();
+        Assert.NotNull(message);
+        Assert.Equal("WorkflowAction:Webhook", message!.Type);
+    }
+
+    [Fact]
+    public async Task Dispatcher_ShouldApplyTenantActionBinding_BeforePluginResolution()
+    {
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        using var db = new FlowOSDbContext(options);
+        var registry = new WorkflowActionPluginRegistry(new IWorkflowActionPlugin[]
+        {
+            new WebhookWorkflowActionPlugin()
+        });
+        var bindingRegistry = new PluginBindingRegistryService(db);
+
+        var tenantId = Guid.NewGuid();
+        await bindingRegistry.UpsertAsync(
+            tenantId,
+            "action",
+            sourceName: "plugin:shipment.webhook",
+            providerName: "Webhook");
+
+        var dispatcher = new WorkflowActionDispatcher(
+            db,
+            registry,
+            configuration: null,
+            pluginBindingRegistry: bindingRegistry);
+
+        var actions = new List<StepActionDefinition>
+        {
+            new()
+            {
+                ActionType = "plugin:shipment.webhook",
+                Url = "https://api.example.com/shipments/hook"
+            }
+        };
+
+        await dispatcher.QueueActionsAsync(
+            tenantId,
+            Guid.NewGuid(),
+            "ShipStep",
+            "OnEntry",
+            actions,
+            new Dictionary<string, object>(),
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var message = await db.OutboxMessages.SingleAsync();
+        Assert.Equal("WorkflowAction:Webhook", message.Type);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(message.Payload);
+        Assert.Equal("Webhook", doc.RootElement.GetProperty("actionType").GetString());
+    }
+
+    [Fact]
+    public async Task Dispatcher_ShouldRejectUnknownActionType_WhenStrictModeEnabled()
+    {
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        using var db = new FlowOSDbContext(options);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FlowOS:Actions:RejectUnknownActionTypes"] = "true",
+                ["FlowOS:Actions:AllowWildcardPluginFallback"] = "false"
+            })
+            .Build();
+
+        var registry = new WorkflowActionPluginRegistry(new IWorkflowActionPlugin[]
+        {
+            new WebhookWorkflowActionPlugin()
+        }, config);
+
+        var dispatcher = new WorkflowActionDispatcher(db, registry, config);
+        var actions = new List<StepActionDefinition>
+        {
+            new()
+            {
+                ActionType = "LegacyUnknownAction",
+                Target = "something"
+            }
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.QueueActionsAsync(Guid.NewGuid(), Guid.NewGuid(), "StepUnknown", "OnEntry", actions, new Dictionary<string, object>(), CancellationToken.None));
+
+        Assert.Empty(db.OutboxMessages);
+    }
+
+    [Fact]
     public async Task SimulationTools_ShouldRenderInterpolatedTemplateAndTransformedPayload_ForAI()
     {
         var mediatorMock = new Mock<IMediator>();
@@ -407,6 +620,11 @@ public class WorkflowLifecycleActionTests
         var tools = new LifecycleActionMcpTools(mediatorMock.Object, validator);
 
         var bp = CreateBaseBlueprint();
+        bp.Workflow.Steps[0].OnFailure.Add(new StepActionBlueprint
+        {
+            ActionType = "Notification",
+            Target = "OpsRollback"
+        });
 
         var args = new JObject
         {

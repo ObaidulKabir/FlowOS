@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { WorkflowInstance, WorkflowClass } from '../types';
-import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson, Layers, ChevronDown, ChevronRight, Zap } from 'lucide-react';
+import { WorkflowInstance, WorkflowClass, TimeTravelSnapshot } from '../types';
+import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson, Layers, ChevronDown, ChevronRight, Zap, Rewind } from 'lucide-react';
 import { getActiveTenantId, api } from '../api/client';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { WorkflowActionAuditViewer } from './WorkflowActionAuditViewer';
+import { TimeTravelPlayer } from './TimeTravelPlayer';
 
 interface Props {
   items: WorkflowInstance[];
@@ -124,8 +125,9 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
   const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
-  const [inspectTab, setInspectTab] = useState<'visual' | 'timeline' | 'actions'>('visual');
+  const [inspectTab, setInspectTab] = useState<'visual' | 'timeline' | 'actions' | 'timetravel'>('visual');
   const [resolvedDefinition, setResolvedDefinition] = useState<any | null>(null);
+  const [replaySnapshot, setReplaySnapshot] = useState<TimeTravelSnapshot | null>(null);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -139,6 +141,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
     setAuditError(null);
     setAuditDetail(null);
     setInspectTab('visual');
+    setReplaySnapshot(null);
 
     // Pre-resolve blueprint definition if available in passed blueprints
     const matchedInstance = items.find(i => (i.id || i.workflowId) === instanceId);
@@ -316,7 +319,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
       {/* Live Audit Trail & Visual Execution Modal */}
       {inspectingInstance && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-5xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-6xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -354,6 +357,15 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
                   >
                     <Zap size={13} />
                     Lifecycle Actions Audit
+                  </button>
+                  <button
+                    onClick={() => setInspectTab('timetravel')}
+                    className={`px-3 py-1 rounded transition-all font-medium flex items-center gap-1.5 ${
+                      inspectTab === 'timetravel' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Rewind size={13} />
+                    Time-Travel Debugger
                   </button>
                 </div>
               </div>
@@ -396,8 +408,8 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
                   {resolvedDefinition ? (
                     <WorkflowGraphVisualizer
                       definition={resolvedDefinition}
-                      currentStepId={auditDetail?.currentStepId}
-                      currentState={auditDetail?.status}
+                      currentStepId={replaySnapshot?.toStepId || auditDetail?.currentStepId}
+                      currentState={replaySnapshot?.toState || auditDetail?.status}
                       completedSteps={Array.from(new Set((auditDetail?.timeline || []).map(e => e.keyData?.CurrentStep || e.keyData?.Step || e.keyData?.TargetStep || '').filter(Boolean)))}
                     />
                   ) : (
@@ -408,6 +420,12 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
                 </div>
               ) : inspectTab === 'actions' ? (
                 <WorkflowActionAuditViewer workflowInstanceId={inspectingInstance} />
+              ) : inspectTab === 'timetravel' ? (
+                <TimeTravelPlayer
+                  workflowInstanceId={inspectingInstance}
+                  definition={resolvedDefinition}
+                  onSnapshotChange={setReplaySnapshot}
+                />
               ) : (!auditDetail?.timeline || auditDetail.timeline.length === 0) ? (
                 <div className="py-12 text-center text-slate-500 text-xs italic">
                   No recorded events found in timeline for this instance.

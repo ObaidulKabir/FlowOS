@@ -43,7 +43,7 @@ Endpoints:
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/mcp` | **Public Discovery**: Returns interactive HTML documentation (Accept: `text/html`) or machine-readable JSON metadata (Accept: `application/json`) including all 21 tool schemas, risk levels, side effects, and confirmation requirements without requiring credentials. |
+| `GET` | `/mcp` | **Public Discovery**: Returns interactive HTML documentation (Accept: `text/html`) or machine-readable JSON metadata (Accept: `application/json`) including all 47 tool schemas, risk levels, side effects, and confirmation requirements without requiring credentials. |
 | `POST` | `/mcp` | **Protected Execution**: Authenticated JSON-RPC 2.0 body (`initialize`, `tools/list`, `tools/call`). Requires `x-tenant-id` and API key/bearer. |
 | `OPTIONS`| `/mcp` | CORS preflight handling for web/browser agent environments. |
 | `GET` | `/health` | `200` `{ "status": "ok" }` |
@@ -126,7 +126,7 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS registers **21 production tools** categorized by governance lifecycle, operational execution, and runtime advisory intelligence:
+FlowOS registers **47 production tools** categorized by governance lifecycle, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|
@@ -151,6 +151,11 @@ FlowOS registers **21 production tools** categorized by governance lifecycle, op
 | `complete_task` | `medium` | `irreversible` | No | `ExecutionTools.CompleteTask` | Completes an assigned human or service task step. |
 | `list_workflow_instances` | `low` | `none` | No | `ExecutionTools.ListWorkflowInstances` | Lists workflow instances filtered by status (`Active`, `Completed`, `Failed`) and workflow name. |
 | `get_workflow_history` | `low` | `none` | No | `ExecutionTools.GetWorkflowHistory` | Retrieves immutable audit trail and state machine transition history for a tenant's workflow instance. |
+| `generate_workflow_blueprint_from_nl` | `low` | `none` | No | `GovernanceTools.GenerateBlueprintFromNaturalLanguage` | Synthesizes or refines a valid `WorkflowClassBlueprint` from a natural-language prompt. |
+| `replay_workflow_history` | `low` | `none` | No | `ExecutionTools.ReplayWorkflowHistory` | Reconstructs a read-only time-travel timeline of snapshots, tokens, state, variables, and correlated actions. |
+| `fork_workflow_simulation` | `low` | `none` | No | `ExecutionTools.ForkWorkflowSimulation` | Sandboxed what-if branch from a historical snapshot; never writes the live instance or Outbox. |
+| `simulate_workflowclass` | `low` | `none` | No | `SimulationTools.SimulateWorkflowClass` | Dry-runs a draft or published blueprint without mutating production instances. |
+| `get_instance_action_history` | `low` | `none` | No | `ActionObservabilityMcpTools.GetInstanceActionHistory` | Returns lifecycle action execution logs (webhooks, notifications, events) for an instance. |
 
 For HTTP, the authenticated `x-tenant-id` header is authoritative. A `tenantId`
 tool argument may repeat that value but cannot override it. For stdio, every
@@ -173,6 +178,30 @@ tenant-scoped tool requires an explicit `tenantId` argument.
 
 3. **Anti-Enumeration & Uniformity (`MCP-NOTFOUND-001`)**:
    Attempts to access foreign tenant resources (drafts, instances, histories) return the exact same `MCP-NOTFOUND-001` error as non-existent random GUIDs. Zero metadata (existence, title, or status) is leaked.
+
+### Compensation governance MCP guideline (recommended authoring loop)
+
+1. Run `lint_draft_workflowclass` first and inspect warnings for `LINT-COMP-001` (side-effect hooks without compensation).
+2. Add `OnFailure` hooks using `attach_step_action` for each flagged step.
+3. Run `validate_draft_workflowclass` and treat `WF-COMP-010` as a blocking safety error.
+4. Use `simulate_compensation_path` on draft blueprints to validate design-time rollback order (LIFO).
+5. Use `plan_workflow_compensation_path` on live instances to verify execution-aware compensation paths from replay history.
+6. If violations persist, call `explain_validation_violation` with the code and step context to generate a remediation hint for the agent/human.
+
+### InvokeCapability MCP guideline (hybrid extension path)
+
+1. Register or update the remote binding with `register_capability_binding` (capability name + endpoint URL + timeout/retry profile).
+2. Run `validate_capability_binding` and ensure `isValid=true` before wiring steps.
+3. Attach an `InvokeCapability` action using `attach_step_action` and set `action.capability` explicitly.
+4. Keep `OnFailure` compensation hooks on side-effecting steps to satisfy `WF-COMP-010`.
+5. Use `list_capability_bindings` to audit enabled/disabled capability mappings during rollouts.
+
+### Plugin discovery MCP guideline (AI design loop)
+
+1. Call `list_registered_plugins` to discover server-registered action/decision providers and runtime strictness flags.
+2. Use `register_plugin_binding` to map tenant aliases (`plugin:*` / `plugin.*` action types or decision provider aliases) to concrete providers.
+3. Verify each alias with `resolve_plugin_binding` before publishing.
+4. Use `list_plugin_bindings` to audit all active mappings for the tenant.
 
 ## Usage example: design loop for "Leave Approval"
 

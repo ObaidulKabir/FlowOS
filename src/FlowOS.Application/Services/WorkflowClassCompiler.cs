@@ -34,6 +34,18 @@ public static class WorkflowClassCompiler
 
             var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType)
             {
+                DecisionProvider = stepBp.DecisionProvider,
+                SubWorkflow = stepBp.SubWorkflow == null
+                    ? null
+                    : new SubWorkflowReferenceDefinition
+                    {
+                        WorkflowDefinitionId = stepBp.SubWorkflow.WorkflowDefinitionId,
+                        WorkflowClassId = stepBp.SubWorkflow.WorkflowClassId,
+                        WorkflowName = stepBp.SubWorkflow.WorkflowName,
+                        Version = stepBp.SubWorkflow.Version,
+                        InputMapping = stepBp.SubWorkflow.InputMapping ?? new Dictionary<string, string>(),
+                        OutputMapping = stepBp.SubWorkflow.OutputMapping ?? new Dictionary<string, string>()
+                    },
                 AllowedRoles = stepBp.RequiredRoles,
                 NextSteps = stepBp.NextSteps,
                 Conditions = stepBp.Conditions,
@@ -51,6 +63,7 @@ public static class WorkflowClassCompiler
                 OnEntry = stepBp.OnEntry?.Select(a => new StepActionDefinition(a.ActionType)
                 {
                     Target = a.Target,
+                    Capability = a.Capability,
                     Url = a.Url,
                     Method = a.Method,
                     Template = a.Template,
@@ -63,6 +76,7 @@ public static class WorkflowClassCompiler
                 OnExit = stepBp.OnExit?.Select(a => new StepActionDefinition(a.ActionType)
                 {
                     Target = a.Target,
+                    Capability = a.Capability,
                     Url = a.Url,
                     Method = a.Method,
                     Template = a.Template,
@@ -75,6 +89,7 @@ public static class WorkflowClassCompiler
                 OnFailure = stepBp.OnFailure?.Select(a => new StepActionDefinition(a.ActionType)
                 {
                     Target = a.Target,
+                    Capability = a.Capability,
                     Url = a.Url,
                     Method = a.Method,
                     Template = a.Template,

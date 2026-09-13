@@ -15,6 +15,13 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
         builder.Property(w => w.WorkflowDefinitionId)
             .IsRequired();
 
+        builder.Property(w => w.ParentWorkflowInstanceId)
+            .IsRequired(false);
+
+        builder.Property(w => w.ParentStepId)
+            .IsRequired(false)
+            .HasMaxLength(200);
+
         builder.Property(w => w.CurrentStepId)
             .IsRequired()
             .HasMaxLength(200);
@@ -47,5 +54,6 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
         builder.HasIndex(w => w.TenantId);
         builder.HasIndex(w => w.CorrelationId);
         builder.HasIndex(w => w.WorkflowDefinitionId);
+        builder.HasIndex(w => new { w.TenantId, w.ParentWorkflowInstanceId, w.ParentStepId });
     }
 }

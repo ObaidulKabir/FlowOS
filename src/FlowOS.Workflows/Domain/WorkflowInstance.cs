@@ -13,6 +13,8 @@ public class WorkflowInstance : IWorkflowInstance
     public Guid WorkflowDefinitionId { get; private set; }
     public Guid WorkflowClassId { get; private set; } // Link to Governance Entity
     public int WorkflowVersion { get; private set; }
+    public Guid? ParentWorkflowInstanceId { get; private set; }
+    public string? ParentStepId { get; private set; }
     public string CurrentStepId { get; private set; }
     public string? CurrentState { get; private set; }
     public WorkflowInstanceStatus Status { get; private set; }
@@ -30,7 +32,16 @@ public class WorkflowInstance : IWorkflowInstance
         CompletedParallelStepIds = new List<string>();
     }
 
-    public WorkflowInstance(Guid tenantId, Guid definitionId, Guid workflowClassId, int version, string initialStepId, Guid? correlationId = null, string? initialState = null)
+    public WorkflowInstance(
+        Guid tenantId,
+        Guid definitionId,
+        Guid workflowClassId,
+        int version,
+        string initialStepId,
+        Guid? correlationId = null,
+        string? initialState = null,
+        Guid? parentWorkflowInstanceId = null,
+        string? parentStepId = null)
     {
         if (string.IsNullOrWhiteSpace(initialStepId))
             throw new ArgumentNullException(nameof(initialStepId));
@@ -40,6 +51,8 @@ public class WorkflowInstance : IWorkflowInstance
         WorkflowDefinitionId = definitionId;
         WorkflowClassId = workflowClassId;
         WorkflowVersion = version;
+        ParentWorkflowInstanceId = parentWorkflowInstanceId;
+        ParentStepId = parentStepId;
         CurrentStepId = initialStepId;
         CurrentState = initialState ?? initialStepId;
         Status = WorkflowInstanceStatus.Running;

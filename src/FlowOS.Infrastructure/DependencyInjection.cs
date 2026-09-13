@@ -16,9 +16,23 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IConfigurationPublisher, ConfigurationPublisher>();
         services.AddScoped<IWorkflowTimerService, WorkflowTimerService>();
+        services.AddScoped<IWorkflowActionPlugin, WebhookWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, NotificationWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, PublishEventWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, InvokeCapabilityWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, GenericWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPluginRegistry, WorkflowActionPluginRegistry>();
+        services.AddSingleton<FlowOS.Core.Common.Interfaces.IPolicyDecisionPlugin, DefaultPolicyDecisionPlugin>();
+        services.AddSingleton<FlowOS.Core.Common.Interfaces.IPolicyDecisionPluginRegistry, PolicyDecisionPluginRegistry>();
         services.AddScoped<IWorkflowActionDispatcher, WorkflowActionDispatcher>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.IDeadLetterService, DeadLetterService>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.IWorkflowActionHistoryService, WorkflowActionHistoryService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.IWorkflowTimeTravelService, WorkflowTimeTravelService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.IIdempotencyService, IdempotencyService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.IRetryPolicyService, RetryPolicyService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.ICompensationPlannerService, CompensationPlannerService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.ICapabilityRegistryService, CapabilityRegistryService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService, PluginBindingRegistryService>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IWebhookSignatureService, FlowOS.Core.Common.Services.WebhookSignatureService>();
         return services;
     }

@@ -16,13 +16,22 @@ public class ExecutionTools
 {
     private readonly IMediator _mediator;
     private readonly FlowOS.Core.Common.Interfaces.IWorkflowActionHistoryService? _actionHistoryService;
+    private readonly FlowOS.Core.Common.Interfaces.IWorkflowTimeTravelService? _timeTravelService;
+    private readonly FlowOS.Core.Common.Interfaces.IIdempotencyService? _idempotencyService;
+    private readonly FlowOS.Core.Common.Interfaces.IRetryPolicyService? _retryPolicyService;
 
     public ExecutionTools(
         IMediator mediator,
-        FlowOS.Core.Common.Interfaces.IWorkflowActionHistoryService? actionHistoryService = null)
+        FlowOS.Core.Common.Interfaces.IWorkflowActionHistoryService? actionHistoryService = null,
+        FlowOS.Core.Common.Interfaces.IWorkflowTimeTravelService? timeTravelService = null,
+        FlowOS.Core.Common.Interfaces.IIdempotencyService? idempotencyService = null,
+        FlowOS.Core.Common.Interfaces.IRetryPolicyService? retryPolicyService = null)
     {
         _mediator = mediator;
         _actionHistoryService = actionHistoryService;
+        _timeTravelService = timeTravelService;
+        _idempotencyService = idempotencyService;
+        _retryPolicyService = retryPolicyService;
     }
 
     public async Task<CallToolResult> StartWorkflow(JObject args)
@@ -70,7 +79,8 @@ public class ExecutionTools
                 Version: version,
                 WorkflowClassId: workflowClassId,
                 InitialStepId: initialStepId,
-                CorrelationId: correlationId ?? Guid.NewGuid()
+                CorrelationId: correlationId ?? Guid.NewGuid(),
+                IdempotencyKey: args["idempotencyKey"]?.ToString()
             );
 
             var instanceId = await _mediator.Send(command);
@@ -133,7 +143,8 @@ public class ExecutionTools
                 WorkflowInstanceId: instanceId,
                 EventType: eventType,
                 CorrelationId: correlationId,
-                Payload: payload
+                Payload: payload,
+                IdempotencyKey: args["idempotencyKey"]?.ToString()
             );
 
             var result = await _mediator.Send(command);
@@ -189,7 +200,8 @@ public class ExecutionTools
                 TenantId: tenantId,
                 WorkflowInstanceId: instanceId,
                 TaskId: taskId,
-                CorrelationId: correlationId
+                CorrelationId: correlationId,
+                IdempotencyKey: args["idempotencyKey"]?.ToString()
             );
 
             var result = await _mediator.Send(command);
@@ -316,6 +328,309 @@ public class ExecutionTools
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to retrieve workflow history: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> ReplayWorkflowHistory(JObject args)
+    {
+        try
+        {
+            if (_timeTravelService == null)
+            {
+                return McpToolResults.Fail("MCP-INTERNAL", "Time-travel replay service is not registered.");
+            }
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            if (args["workflowInstanceId"] == null || !Guid.TryParse(args["workflowInstanceId"]?.ToString(), out var instanceId))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "workflowInstanceId is required and must be a valid UUID.");
+            }
+
+            var replay = await _timeTravelService.GetReplayTimelineAsync(tenantId, instanceId);
+            if (replay == null)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{instanceId}' was not found.");
+            }
+
+            return McpToolResults.Success(new
+            {
+                workflowInstanceId = replay.WorkflowInstanceId,
+                workflowClassName = replay.WorkflowClassName,
+                workflowVersion = replay.WorkflowVersion,
+                status = replay.Status,
+                totalSteps = replay.TotalSteps,
+                snapshots = replay.Snapshots.Select(s => new
+                {
+                    stepIndex = s.StepIndex,
+                    timestamp = s.Timestamp,
+                    eventId = s.EventId,
+                    eventType = s.EventType,
+                    fromStepId = s.FromStepId,
+                    toStepId = s.ToStepId,
+                    activeStepIds = s.ActiveStepIds,
+                    fromState = s.FromState,
+                    toState = s.ToState,
+                    actorId = s.ActorId,
+                    variables = s.Variables,
+                    actionLogs = s.ActionLogs.Select(a => new
+                    {
+                        id = a.Id,
+                        stepId = a.StepId,
+                        triggerPhase = a.TriggerPhase,
+                        actionType = a.ActionType,
+                        target = a.Target,
+                        status = a.Status,
+                        executedAtUtc = a.ExecutedAtUtc,
+                        durationMs = a.DurationMs
+                    }),
+                    summary = s.Summary
+                })
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to replay workflow history: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> ForkWorkflowSimulation(JObject args)
+    {
+        try
+        {
+            if (_timeTravelService == null)
+            {
+                return McpToolResults.Fail("MCP-INTERNAL", "Time-travel replay service is not registered.");
+            }
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            if (args["workflowInstanceId"] == null || !Guid.TryParse(args["workflowInstanceId"]?.ToString(), out var instanceId))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "workflowInstanceId is required and must be a valid UUID.");
+            }
+
+            var alternativeEvent = args["alternativeEvent"]?.ToString() ?? args["eventType"]?.ToString();
+            if (string.IsNullOrWhiteSpace(alternativeEvent))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "alternativeEvent is required.");
+            }
+
+            var targetStepIndex = args["targetStepIndex"]?.Value<int>() ?? 0;
+            object? payload = args["alternativePayload"] ?? args["payload"];
+
+            var result = await _timeTravelService.SimulateForkAsync(
+                tenantId,
+                instanceId,
+                targetStepIndex,
+                alternativeEvent,
+                payload);
+
+            return McpToolResults.Success(new
+            {
+                forkFromStepIndex = result.ForkFromStepIndex,
+                baseStepId = result.BaseStepId,
+                baseState = result.BaseState,
+                alternativeEvent = result.AlternativeEvent,
+                projectedStepId = result.ProjectedStepId,
+                projectedState = result.ProjectedState,
+                isAllowed = result.IsAllowed,
+                reason = result.Reason,
+                projectedActions = result.ProjectedActions,
+                sideEffects = "none"
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to simulate workflow fork: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> PlanWorkflowCompensationPath(JObject args)
+    {
+        try
+        {
+            if (_timeTravelService == null)
+            {
+                return McpToolResults.Fail("MCP-INTERNAL", "Time-travel replay service is not registered.");
+            }
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            if (args["workflowInstanceId"] == null || !Guid.TryParse(args["workflowInstanceId"]?.ToString(), out var instanceId))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "workflowInstanceId is required and must be a valid UUID.");
+            }
+
+            var failedStepId = args["failedStepId"]?.ToString();
+            var result = await _timeTravelService.PlanCompensationPathAsync(tenantId, instanceId, failedStepId);
+            if (result == null)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{instanceId}' was not found.");
+            }
+
+            return McpToolResults.Success(new
+            {
+                workflowInstanceId = result.WorkflowInstanceId,
+                failedStepId = result.FailedStepId,
+                executedStepIds = result.ExecutedStepIds,
+                isFullyCompensable = result.IsFullyCompensable,
+                orderedCompensations = result.OrderedCompensations.Select(p => new
+                {
+                    stepId = p.StepId,
+                    actionCount = p.ActionCount,
+                    actions = p.Actions.Select(a => new
+                    {
+                        stepId = a.StepId,
+                        hook = a.Hook,
+                        actionType = a.ActionType,
+                        target = a.Target,
+                        capability = a.Capability,
+                        url = a.Url,
+                        condition = a.Condition
+                    })
+                }),
+                blockedSteps = result.BlockedSteps
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to plan workflow compensation path: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> RegisterIdempotencyKey(JObject args)
+    {
+        try
+        {
+            if (_idempotencyService == null)
+            {
+                return McpToolResults.Fail("MCP-INTERNAL", "Idempotency service is not registered.");
+            }
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var operation = args["operationName"]?.ToString();
+            var key = args["idempotencyKey"]?.ToString();
+            if (string.IsNullOrWhiteSpace(operation) || string.IsNullOrWhiteSpace(key))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "operationName and idempotencyKey are required.");
+            }
+
+            var started = await _idempotencyService.TryBeginAsync(tenantId, operation, key);
+            return McpToolResults.Success(new
+            {
+                operationName = operation,
+                idempotencyKey = key,
+                registered = started,
+                status = started ? "Pending" : "Exists"
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to register idempotency key: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> InspectIdempotencyStatus(JObject args)
+    {
+        try
+        {
+            if (_idempotencyService == null)
+            {
+                return McpToolResults.Fail("MCP-INTERNAL", "Idempotency service is not registered.");
+            }
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var operation = args["operationName"]?.ToString();
+            var key = args["idempotencyKey"]?.ToString();
+            if (string.IsNullOrWhiteSpace(operation) || string.IsNullOrWhiteSpace(key))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "operationName and idempotencyKey are required.");
+            }
+
+            var status = await _idempotencyService.GetStatusAsync(tenantId, operation, key);
+            if (status == null)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", "Idempotency key not found.");
+            }
+
+            return McpToolResults.Success(new
+            {
+                status.TenantId,
+                status.OperationName,
+                status.IdempotencyKey,
+                status.Status,
+                status.CreatedAtUtc,
+                status.UpdatedAtUtc
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to inspect idempotency status: {ex.Message}");
+        }
+    }
+
+    public Task<CallToolResult> PreviewRetryPolicy(JObject args)
+    {
+        try
+        {
+            if (_retryPolicyService == null)
+            {
+                return Task.FromResult(McpToolResults.Fail("MCP-INTERNAL", "Retry policy service is not registered."));
+            }
+
+            var currentRetryCount = args["currentRetryCount"]?.Value<int>() ?? 0;
+            var maxRetries = args["maxRetries"]?.Value<int>() ?? 5;
+            var baseDelaySeconds = args["baseDelaySeconds"]?.Value<int>() ?? 2;
+            var strategy = args["strategy"]?.ToString() ?? "exponential";
+            var maxDelaySeconds = args["maxDelaySeconds"]?.Value<int>() ?? 3600;
+            var errorMessage = args["errorMessage"]?.ToString();
+
+            var preview = _retryPolicyService.Preview(
+                currentRetryCount: currentRetryCount,
+                maxRetries: maxRetries,
+                baseDelaySeconds: baseDelaySeconds,
+                strategy: strategy,
+                maxDelaySeconds: maxDelaySeconds,
+                errorMessage: errorMessage);
+
+            return Task.FromResult(McpToolResults.Success(new
+            {
+                preview.Strategy,
+                preview.MaxRetries,
+                preview.CurrentRetryCount,
+                preview.BaseDelaySeconds,
+                preview.MaxDelaySeconds,
+                preview.ShouldRetryNow,
+                preview.Classification,
+                attempts = preview.PlannedAttempts.Select(a => new
+                {
+                    a.AttemptNumber,
+                    a.DelaySeconds
+                }),
+                preview.PreviewGeneratedAtUtc
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(McpToolResults.Fail("MCP-INTERNAL", $"Failed to preview retry policy: {ex.Message}"));
         }
     }
 }

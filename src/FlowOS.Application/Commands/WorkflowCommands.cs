@@ -14,7 +14,8 @@ public record StartWorkflowCommand(
     int? Version = null,
     Guid WorkflowClassId = default, // Added for Completeness
     string? InitialStepId = null,
-    Guid? CorrelationId = null
+    Guid? CorrelationId = null,
+    string? IdempotencyKey = null
 ) : IRequest<Guid>, IPolicySecuredCommand;
 
 // [RequiresCapability("event.publish")] // Moved to Handler for dynamic check
@@ -23,12 +24,14 @@ public record PublishEventCommand(
     Guid WorkflowInstanceId,
     string EventType, // Can be legacy string or Event ID
     Guid? CorrelationId = null,
-    object? Payload = null // Added Payload support
+    object? Payload = null, // Added Payload support
+    string? IdempotencyKey = null
 ) : IRequest<bool>, IPolicySecuredCommand;
 
 public record CompleteTaskCommand(
     Guid TenantId,
     Guid WorkflowInstanceId,
     Guid TaskId, // Placeholder for future Task Aggregate
-    Guid? CorrelationId = null
+    Guid? CorrelationId = null,
+    string? IdempotencyKey = null
 ) : IRequest<bool>, IPolicySecuredCommand;

@@ -9,7 +9,8 @@ namespace FlowOS.Application.Handlers;
 
 public class WorkflowTimeTravelQueryHandlers :
     IRequestHandler<GetWorkflowTimeTravelReplayQuery, WorkflowTimeTravelReplayDto?>,
-    IRequestHandler<SimulateWorkflowForkQuery, WorkflowForkSimulationResultDto>
+    IRequestHandler<SimulateWorkflowForkQuery, WorkflowForkSimulationResultDto>,
+    IRequestHandler<GetWorkflowCompensationPathQuery, WorkflowCompensationPathDto?>
 {
     private readonly IWorkflowTimeTravelService _timeTravelService;
 
@@ -31,6 +32,15 @@ public class WorkflowTimeTravelQueryHandlers :
             request.TargetStepIndex,
             request.AlternativeEvent,
             request.AlternativePayload,
+            cancellationToken);
+    }
+
+    public async Task<WorkflowCompensationPathDto?> Handle(GetWorkflowCompensationPathQuery request, CancellationToken cancellationToken)
+    {
+        return await _timeTravelService.PlanCompensationPathAsync(
+            request.TenantId,
+            request.WorkflowInstanceId,
+            request.FailedStepId,
             cancellationToken);
     }
 }

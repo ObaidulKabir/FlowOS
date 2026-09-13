@@ -16,5 +16,6 @@ public enum WorkflowStepType
     Decision,
     End,
     Fork,
-    Join
+    Join,
+    SubWorkflow
 }

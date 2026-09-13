@@ -48,6 +48,14 @@ public record WorkflowForkSimulationResultDto(
     List<string> ProjectedActions
 );
 
+public record WorkflowCompensationPathDto(
+    Guid WorkflowInstanceId,
+    string FailedStepId,
+    List<string> ExecutedStepIds,
+    bool IsFullyCompensable,
+    List<CompensationStepPlanDto> OrderedCompensations,
+    List<string> BlockedSteps);
+
 public interface IWorkflowTimeTravelService
 {
     Task<WorkflowTimeTravelReplayDto?> GetReplayTimelineAsync(
@@ -61,5 +69,11 @@ public interface IWorkflowTimeTravelService
         int targetStepIndex,
         string alternativeEvent,
         object? alternativePayload = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WorkflowCompensationPathDto?> PlanCompensationPathAsync(
+        Guid tenantId,
+        Guid workflowInstanceId,
+        string? failedStepId = null,
         CancellationToken cancellationToken = default);
 }
