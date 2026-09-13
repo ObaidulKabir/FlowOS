@@ -137,21 +137,81 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return [];
   };
 
+  // Interpolates {{Expression}} placeholders with payload variables or expressions
+  const interpolateTemplate = (template: string, currentPayload: Record<string, any>): string => {
+    if (!template || !template.includes('{{')) return template || '';
+    return template.replace(/\{\{\s*(.+?)\s*\}\}/g, (_, expr) => {
+      const trimmed = expr.trim();
+      const sanitized = trimmed.replace(/\b[pP]ayload\./g, '');
+      if (currentPayload[sanitized] !== undefined) {
+        return String(currentPayload[sanitized]);
+      }
+      try {
+        const keys = Object.keys(currentPayload);
+        const values = Object.values(currentPayload);
+        const fn = new Function(...keys, `try { return ${sanitized}; } catch(e) { return ""; }`);
+        const res = fn(...values);
+        return res !== undefined && res !== null ? String(res) : '';
+      } catch {
+        return '';
+      }
+    });
+  };
+
+  // Transforms payload mapping expressions into evaluated key-values
+  const transformPayload = (mapping: Record<string, string>, currentPayload: Record<string, any>): Record<string, any> => {
+    if (!mapping || Object.keys(mapping).length === 0) return {};
+    const result: Record<string, any> = {};
+    for (const [key, expr] of Object.entries(mapping)) {
+      const trimmed = (expr || '').trim();
+      const sanitized = trimmed.replace(/\b[pP]ayload\./g, '');
+      if (currentPayload[sanitized] !== undefined) {
+        result[key] = currentPayload[sanitized];
+        continue;
+      }
+      try {
+        const keys = Object.keys(currentPayload);
+        const values = Object.values(currentPayload);
+        const fn = new Function(...keys, `try { return ${sanitized}; } catch(e) { return ${JSON.stringify(trimmed)}; }`);
+        const res = fn(...values);
+        result[key] = res !== undefined ? res : trimmed;
+      } catch {
+        result[key] = trimmed;
+      }
+    }
+    return result;
+  };
+
   const evaluateStepHooks = (actions: any[], hookType: 'OnEntry' | 'OnExit', stepId: string, currentPayload: Record<string, any>): string[] => {
     const logs: string[] = [];
     actions.forEach((act: any) => {
       const type = getProp(act, 'actionType', 'ActionType') || 'Action';
-      const target = getProp(act, 'target', 'Target') || '';
+      const rawTarget = getProp(act, 'target', 'Target') || '';
+      const target = interpolateTemplate(rawTarget, currentPayload);
       const cond = getProp(act, 'condition', 'Condition');
+      const template = getProp(act, 'template', 'Template');
+      const mapping = getProp(act, 'payloadMapping', 'PayloadMapping');
+
+      let actionDetails = '';
+      if (template) {
+        const interpolated = interpolateTemplate(template, currentPayload);
+        if (interpolated) actionDetails += ` | Msg: "${interpolated}"`;
+      }
+      if (mapping && Object.keys(mapping).length > 0) {
+        const transformed = transformPayload(mapping, currentPayload);
+        const preview = Object.entries(transformed).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(', ');
+        actionDetails += ` | Payload: {${preview}}`;
+      }
+
       if (cond && cond.trim() !== '') {
         const evalRes = evaluateExpression(cond, currentPayload);
         if (evalRes.result) {
-          logs.push(`[${stepId} | Hook: ${hookType}] ${type} -> "${target}" (Condition "${cond}" matched)`);
+          logs.push(`[${stepId} | Hook: ${hookType}] ${type} -> "${target}" (Condition "${cond}" matched)${actionDetails}`);
         } else {
           logs.push(`[${stepId} | Hook: ${hookType} SKIPPED] ${type} -> "${target}" (Condition "${cond}" evaluated to FALSE)`);
         }
       } else {
-        logs.push(`[${stepId} | Hook: ${hookType}] ${type} -> "${target}"`);
+        logs.push(`[${stepId} | Hook: ${hookType}] ${type} -> "${target}"${actionDetails}`);
       }
     });
     return logs;
@@ -672,19 +732,36 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                           const type = getProp(act, 'actionType', 'ActionType') || 'Action';
                           const target = getProp(act, 'target', 'Target') || '';
                           const cond = getProp(act, 'condition', 'Condition');
+                          const template = getProp(act, 'template', 'Template');
+                          const mapping = getProp(act, 'payloadMapping', 'PayloadMapping');
+                          const resolvedTarget = interpolateTemplate(target, payload);
+                          const interpolatedMsg = template ? interpolateTemplate(template, payload) : null;
+                          const transformedPayload = mapping && Object.keys(mapping).length > 0 ? transformPayload(mapping, payload) : null;
                           const evalRes = cond ? evaluateExpression(cond, payload) : null;
                           return (
-                            <div key={`entry-${idx}`} className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[10px] flex items-center justify-between">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">OnEntry</span>
-                                {type === 'Webhook' ? <Send size={10} className="text-cyan-400 shrink-0" /> : type === 'Notification' ? <Bell size={10} className="text-amber-400 shrink-0" /> : <Radio size={10} className="text-indigo-400 shrink-0" />}
-                                <span className="text-slate-200 font-medium">{type}</span>
-                                <span className="text-slate-400 truncate max-w-[110px] font-mono">{target}</span>
+                            <div key={`entry-${idx}`} className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[10px] space-y-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">OnEntry</span>
+                                  {type === 'Webhook' ? <Send size={10} className="text-cyan-400 shrink-0" /> : type === 'Notification' ? <Bell size={10} className="text-amber-400 shrink-0" /> : <Radio size={10} className="text-indigo-400 shrink-0" />}
+                                  <span className="text-slate-200 font-medium">{type}</span>
+                                  <span className="text-slate-400 truncate max-w-[110px] font-mono">{resolvedTarget || target}</span>
+                                </div>
+                                {cond && (
+                                  <span className={`text-[8px] px-1 py-0.2 rounded font-bold uppercase ${evalRes?.result ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                                    {evalRes?.result ? 'True' : 'False'}
+                                  </span>
+                                )}
                               </div>
-                              {cond && (
-                                <span className={`text-[8px] px-1 py-0.2 rounded font-bold uppercase ${evalRes?.result ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                                  {evalRes?.result ? 'True' : 'False'}
-                                </span>
+                              {interpolatedMsg && (
+                                <div className="text-[9px] text-slate-300 pl-1 font-mono truncate bg-slate-900/60 rounded px-1 py-0.5">
+                                  <span className="text-slate-500">Msg:</span> "{interpolatedMsg}"
+                                </div>
+                              )}
+                              {transformedPayload && Object.keys(transformedPayload).length > 0 && (
+                                <div className="text-[9px] text-cyan-300/80 pl-1 font-mono truncate bg-slate-900/60 rounded px-1 py-0.5">
+                                  <span className="text-slate-500">Payload:</span> {JSON.stringify(transformedPayload)}
+                                </div>
                               )}
                             </div>
                           );
@@ -693,19 +770,36 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                           const type = getProp(act, 'actionType', 'ActionType') || 'Action';
                           const target = getProp(act, 'target', 'Target') || '';
                           const cond = getProp(act, 'condition', 'Condition');
+                          const template = getProp(act, 'template', 'Template');
+                          const mapping = getProp(act, 'payloadMapping', 'PayloadMapping');
+                          const resolvedTarget = interpolateTemplate(target, payload);
+                          const interpolatedMsg = template ? interpolateTemplate(template, payload) : null;
+                          const transformedPayload = mapping && Object.keys(mapping).length > 0 ? transformPayload(mapping, payload) : null;
                           const evalRes = cond ? evaluateExpression(cond, payload) : null;
                           return (
-                            <div key={`exit-${idx}`} className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[10px] flex items-center justify-between">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[9px] font-bold">OnExit</span>
-                                {type === 'Webhook' ? <Send size={10} className="text-cyan-400 shrink-0" /> : type === 'Notification' ? <Bell size={10} className="text-amber-400 shrink-0" /> : <Radio size={10} className="text-indigo-400 shrink-0" />}
-                                <span className="text-slate-200 font-medium">{type}</span>
-                                <span className="text-slate-400 truncate max-w-[110px] font-mono">{target}</span>
+                            <div key={`exit-${idx}`} className="p-1.5 rounded bg-slate-950 border border-slate-800 text-[10px] space-y-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[9px] font-bold">OnExit</span>
+                                  {type === 'Webhook' ? <Send size={10} className="text-cyan-400 shrink-0" /> : type === 'Notification' ? <Bell size={10} className="text-amber-400 shrink-0" /> : <Radio size={10} className="text-indigo-400 shrink-0" />}
+                                  <span className="text-slate-200 font-medium">{type}</span>
+                                  <span className="text-slate-400 truncate max-w-[110px] font-mono">{resolvedTarget || target}</span>
+                                </div>
+                                {cond && (
+                                  <span className={`text-[8px] px-1 py-0.2 rounded font-bold uppercase ${evalRes?.result ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                                    {evalRes?.result ? 'True' : 'False'}
+                                  </span>
+                                )}
                               </div>
-                              {cond && (
-                                <span className={`text-[8px] px-1 py-0.2 rounded font-bold uppercase ${evalRes?.result ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                                  {evalRes?.result ? 'True' : 'False'}
-                                </span>
+                              {interpolatedMsg && (
+                                <div className="text-[9px] text-slate-300 pl-1 font-mono truncate bg-slate-900/60 rounded px-1 py-0.5">
+                                  <span className="text-slate-500">Msg:</span> "{interpolatedMsg}"
+                                </div>
+                              )}
+                              {transformedPayload && Object.keys(transformedPayload).length > 0 && (
+                                <div className="text-[9px] text-cyan-300/80 pl-1 font-mono truncate bg-slate-900/60 rounded px-1 py-0.5">
+                                  <span className="text-slate-500">Payload:</span> {JSON.stringify(transformedPayload)}
+                                </div>
                               )}
                             </div>
                           );

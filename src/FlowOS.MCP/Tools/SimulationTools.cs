@@ -624,22 +624,55 @@ public class SimulationTools
 
             if (conditionMatched)
             {
+                var resolvedTarget = ExpressionEvaluator.InterpolateTemplate(action.Target, payload);
+                var resolvedUrl = ExpressionEvaluator.InterpolateTemplate(action.Url, payload);
+                var interpolatedMessage = ExpressionEvaluator.InterpolateTemplate(action.Template, payload);
+
+                Dictionary<string, object>? transformedPayload = null;
+                if (action.PayloadMapping != null && action.PayloadMapping.Count > 0)
+                {
+                    transformedPayload = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var kvp in action.PayloadMapping)
+                    {
+                        var val = ExpressionEvaluator.EvaluateValue(kvp.Value, payload);
+                        transformedPayload[kvp.Key] = val ?? kvp.Value;
+                    }
+                }
+
                 actionsTriggered.Add(new
                 {
                     stepId,
                     hook = hookType,
                     actionType = action.ActionType,
-                    target = action.Target,
+                    target = resolvedTarget,
+                    url = resolvedUrl,
                     condition = action.Condition,
+                    template = action.Template,
+                    interpolatedMessage = !string.IsNullOrEmpty(interpolatedMessage) ? interpolatedMessage : null,
+                    transformedPayload,
                     status = "Executed"
                 });
+
+                var actionDesc = $"[Hook {hookType}] Executed {action.ActionType} action targeting '{resolvedTarget}'" +
+                                 (!string.IsNullOrWhiteSpace(action.Condition) ? $" (Condition '{action.Condition}' matched)" : "");
+
+                if (!string.IsNullOrEmpty(interpolatedMessage))
+                {
+                    actionDesc += $" | Rendered: \"{interpolatedMessage}\"";
+                }
+                if (transformedPayload != null && transformedPayload.Count > 0)
+                {
+                    var payloadSummary = string.Join(", ", transformedPayload.Select(kvp => $"{kvp.Key}={kvp.Value}"));
+                    actionDesc += $" | Transformed Payload: {{{payloadSummary}}}";
+                }
+                actionDesc += ".";
+
                 executionTrace.Add(new
                 {
                     stepNumber,
                     stepId,
                     stepType = "LifecycleAction",
-                    action = $"[Hook {hookType}] Executed {action.ActionType} action targeting '{action.Target}'" +
-                             (!string.IsNullOrWhiteSpace(action.Condition) ? $" (Condition '{action.Condition}' matched)." : "."),
+                    action = actionDesc,
                     state = ""
                 });
             }

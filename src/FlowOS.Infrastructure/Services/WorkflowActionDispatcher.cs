@@ -51,6 +51,11 @@ public class WorkflowActionDispatcher : IWorkflowActionDispatcher
                 if (!allowed) continue;
             }
 
+            // Interpolate dynamic template, target, and url
+            var resolvedTemplate = ExpressionEvaluator.InterpolateTemplate(action.Template, contextPayload);
+            var resolvedTarget = ExpressionEvaluator.InterpolateTemplate(action.Target, contextPayload);
+            var resolvedUrl = ExpressionEvaluator.InterpolateTemplate(action.Url, contextPayload);
+
             // Resolve action payload
             var actionData = new Dictionary<string, object>
             {
@@ -59,26 +64,20 @@ public class WorkflowActionDispatcher : IWorkflowActionDispatcher
                 ["stepId"] = stepId,
                 ["triggerPhase"] = triggerPhase,
                 ["actionType"] = action.ActionType,
-                ["target"] = action.Target ?? string.Empty,
-                ["url"] = action.Url ?? string.Empty,
+                ["target"] = resolvedTarget,
+                ["url"] = resolvedUrl,
                 ["method"] = action.Method ?? "POST",
-                ["template"] = action.Template ?? string.Empty
+                ["template"] = resolvedTemplate
             };
 
-            // Apply payload mappings or include context payload
+            // Apply payload mappings with dynamic expression evaluation or include context payload
             if (action.PayloadMapping != null && action.PayloadMapping.Count > 0)
             {
                 var mapped = new Dictionary<string, object>();
                 foreach (var kvp in action.PayloadMapping)
                 {
-                    if (contextPayload.TryGetValue(kvp.Value, out var val))
-                    {
-                        mapped[kvp.Key] = val;
-                    }
-                    else
-                    {
-                        mapped[kvp.Key] = kvp.Value;
-                    }
+                    var val = ExpressionEvaluator.EvaluateValue(kvp.Value, contextPayload);
+                    mapped[kvp.Key] = val ?? kvp.Value;
                 }
                 actionData["payload"] = mapped;
             }
