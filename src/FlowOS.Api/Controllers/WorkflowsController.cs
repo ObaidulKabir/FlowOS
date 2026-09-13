@@ -90,4 +90,38 @@ public class WorkflowsController : ControllerBase
         }
         return Ok(result);
     }
+
+    [HttpGet("{id}/time-travel")]
+    public async Task<IActionResult> GetTimeTravelReplay(Guid id)
+    {
+        var tenantId = _currentUser.TenantId;
+        if (tenantId == Guid.Empty) return Unauthorized();
+
+        var query = new GetWorkflowTimeTravelReplayQuery(tenantId, id);
+        var replay = await _mediator.Send(query);
+        if (replay == null)
+        {
+            _logger.LogWarning("TimeTravel replay for Workflow {WorkflowId} not found for Tenant {TenantId}", id, tenantId);
+            return NotFound();
+        }
+        return Ok(replay);
+    }
+
+    [HttpPost("{id}/time-travel/fork")]
+    public async Task<IActionResult> SimulateFork(Guid id, [FromBody] FlowOS.Core.Common.Interfaces.WorkflowForkSimulationRequest request)
+    {
+        var tenantId = _currentUser.TenantId;
+        if (tenantId == Guid.Empty) return Unauthorized();
+
+        var query = new SimulateWorkflowForkQuery(
+            tenantId,
+            id,
+            request.TargetStepIndex,
+            request.AlternativeEvent,
+            request.AlternativePayload);
+
+        var result = await _mediator.Send(query);
+        return Ok(result);
+    }
 }
+
