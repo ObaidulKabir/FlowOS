@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -95,6 +95,30 @@ public class AuthController : ControllerBase
                 "<p style='color: #94a3b8; font-size: 18px;'>Your FlowOS tenant account is now active. You may now log in to the FlowOS portal.</p>" +
                 "</body></html>",
                 "text/html");
+        }
+
+        return Ok(new
+        {
+            ok = true,
+            message = result.Message,
+            tenantId = result.TenantId,
+            email = result.Email,
+            isEmailVerified = result.IsEmailVerified
+        });
+    }
+
+    /// <summary>
+    /// Explicitly verifies tenant administrator email address using their account credentials.
+    /// Helpful for accounts created before email dispatch was enabled or when email inbox is inaccessible.
+    /// </summary>
+    [HttpPost("verify-with-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyWithPassword([FromBody] VerifyEmailWithPasswordRequest request, CancellationToken ct)
+    {
+        var result = await _authService.VerifyEmailWithPasswordAsync(request.Email, request.Password, ct);
+        if (!result.Success)
+        {
+            return BadRequest(new { ok = false, message = result.Message });
         }
 
         return Ok(new

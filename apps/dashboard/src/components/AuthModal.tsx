@@ -46,8 +46,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
 
   // Verification state
+  const [verifyMethod, setVerifyMethod] = useState<'code' | 'password'>('code');
   const [verifyEmail, setVerifyEmail] = useState('');
   const [verifyToken, setVerifyToken] = useState('');
+  const [verifyPassword, setVerifyPassword] = useState('');
+  const [showVerifyPassword, setShowVerifyPassword] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [devToken, setDevToken] = useState<string | null>(null);
 
   // Admin form state
@@ -64,6 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const resetMessages = () => {
     setError(null);
     setSuccessMessage(null);
+    setUnverifiedEmail(null);
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -104,9 +109,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (!res.ok) {
         if (res.errorCode === 'EMAIL_NOT_VERIFIED') {
+          setUnverifiedEmail(loginEmail.trim());
           setVerifyEmail(loginEmail.trim());
-          setError('Email is not verified yet. Please enter the verification code sent from admin@flowosbd.com.');
-          setMode('verify');
+          setVerifyPassword(loginPassword);
+          setError(`Email address '${loginEmail.trim()}' is not verified yet. You can request a verification code from official sender admin@flowosbd.com, or verify your account directly with your password.`);
           return;
         }
         setError(res.message || 'Login failed. Please verify your credentials.');
@@ -208,7 +214,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       setSuccessMessage('Email verified successfully! You can now sign in.');
       setLoginEmail(verifyEmail.trim());
-      setLoginPassword(regPassword || '');
+      setLoginPassword(regPassword || verifyPassword || '');
       setTimeout(() => {
         setMode('login');
       }, 1200);
@@ -219,22 +225,85 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleResendCode = async () => {
-    if (!verifyEmail.trim()) {
-      setError('Please enter your email to resend code.');
+  const handleResendCode = async (overrideEmail?: string) => {
+    const targetEmail = (overrideEmail || verifyEmail || loginEmail).trim();
+    if (!targetEmail) {
+      setError('Please enter your email to send verification code.');
       return;
     }
     resetMessages();
     setLoading(true);
     try {
-      const res = await api.resendVerification(verifyEmail.trim());
+      const res = await api.resendVerification(targetEmail);
+      setVerifyEmail(targetEmail);
       if (res.verificationToken) {
         setDevToken(res.verificationToken);
         setVerifyToken(res.verificationToken);
       }
-      setSuccessMessage('A fresh verification code was sent from admin@flowosbd.com.');
+      setSuccessMessage(`A fresh 6-digit verification code has been dispatched from official sender admin@flowosbd.com to ${targetEmail}. Please check your inbox.`);
+      setMode('verify');
+      setVerifyMethod('code');
     } catch (err: any) {
-      setError(err.message || 'Could not resend code.');
+      setError(err.message || 'Could not send verification code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyWithPasswordSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const emailToVerify = (verifyEmail || unverifiedEmail || loginEmail).trim();
+    const passwordToUse = verifyPassword || loginPassword;
+
+    if (!emailToVerify || !passwordToUse) {
+      setError('Both email and password are required to verify.');
+      return;
+    }
+
+    resetMessages();
+    setLoading(true);
+    try {
+      const res = await api.verifyEmailWithPassword({
+        email: emailToVerify,
+        password: passwordToUse
+      });
+
+      if (!res.ok) {
+        setError(res.message || 'Verification with password failed.');
+        return;
+      }
+
+      setSuccessMessage('Account verified successfully! Logging you in...');
+
+      // Attempt automatic login
+      const loginRes = await api.loginTenantUser({
+        email: emailToVerify,
+        password: passwordToUse
+      });
+
+      if (loginRes.ok && loginRes.user && loginRes.token) {
+        const session: AuthSession = {
+          role: 'Tenant',
+          tenantId: loginRes.user.tenantId,
+          tenantName: loginRes.user.tenantName,
+          token: loginRes.token,
+          username: loginRes.user.fullName || loginRes.user.email,
+          email: loginRes.user.email,
+          isSandbox: false,
+          isEmailVerified: true
+        };
+        setAuthSession(session);
+        setTimeout(() => {
+          onSuccess(session);
+          onClose();
+        }, 800);
+      } else {
+        setLoginEmail(emailToVerify);
+        setLoginPassword(passwordToUse);
+        setMode('login');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Verification failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -298,40 +367,86 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Top Mode Tabs */}
-        {mode !== 'verify' && (
-          <div className="grid grid-cols-3 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-semibold">
-            <button
-              onClick={() => { setMode('login'); resetMessages(); }}
-              className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                mode === 'login' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Building2 size={14} />
-              <span>Sign In</span>
-            </button>
-            <button
-              onClick={() => { setMode('register'); resetMessages(); }}
-              className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                mode === 'register' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sparkles size={14} />
-              <span>Register</span>
-            </button>
-            <button
-              onClick={() => { setMode('admin'); resetMessages(); }}
-              className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                mode === 'admin' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Shield size={14} />
-              <span>Admin</span>
-            </button>
+        <div className="grid grid-cols-4 p-1 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-semibold gap-1">
+          <button
+            onClick={() => { setMode('login'); resetMessages(); }}
+            className={`py-2 px-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
+              mode === 'login' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Building2 size={13} />
+            <span>Sign In</span>
+          </button>
+          <button
+            onClick={() => { setMode('register'); resetMessages(); }}
+            className={`py-2 px-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
+              mode === 'register' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sparkles size={13} />
+            <span>Register</span>
+          </button>
+          <button
+            onClick={() => { 
+              if (loginEmail.trim() && !verifyEmail) setVerifyEmail(loginEmail.trim());
+              setMode('verify'); 
+              resetMessages(); 
+            }}
+            className={`py-2 px-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
+              mode === 'verify' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Mail size={13} />
+            <span>Verify</span>
+          </button>
+          <button
+            onClick={() => { setMode('admin'); resetMessages(); }}
+            className={`py-2 px-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
+              mode === 'admin' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Shield size={13} />
+            <span>Admin</span>
+          </button>
+        </div>
+
+        {/* Unverified Email Warning Banner with Direct Actions */}
+        {unverifiedEmail && (
+          <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-2xl text-xs text-amber-200 space-y-2 animate-fadeIn">
+            <div className="flex items-center gap-2 font-bold text-amber-300">
+              <AlertCircle size={16} className="text-amber-400 shrink-0" />
+              <span>Email Not Verified: {unverifiedEmail}</span>
+            </div>
+            <p className="text-[11px] text-amber-300/80 leading-relaxed">
+              This account was created before email verification was configured or hasn't confirmed its code yet.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleResendCode(unverifiedEmail)}
+                disabled={loading}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow transition-all"
+              >
+                <Mail size={13} />
+                <span>Send Code from admin@flowosbd.com</span>
+              </button>
+              {loginPassword && (
+                <button
+                  type="button"
+                  onClick={() => handleVerifyWithPasswordSubmit()}
+                  disabled={loading}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow transition-all"
+                >
+                  <Key size={13} />
+                  <span>Verify with Password Directly</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
         {/* Status Alerts */}
-        {error && (
+        {error && !unverifiedEmail && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex items-start gap-2 animate-fadeIn">
             <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-400" />
             <div className="flex-1">{error}</div>
@@ -417,6 +532,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onChange={(e) => setLoginPassword(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
+                </div>
+
+                <div className="flex justify-between items-center text-[11px] text-slate-400 pt-0.5">
+                  <span>Created account before or unverified?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (loginEmail.trim()) setVerifyEmail(loginEmail.trim());
+                      setMode('verify');
+                      resetMessages();
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <span>Verify email explicitly</span>
+                    <ArrowRight size={11} />
+                  </button>
                 </div>
               </>
             ) : (
@@ -595,87 +726,208 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* MODE 3: VERIFY EMAIL */}
         {mode === 'verify' && (
-          <form onSubmit={handleVerifySubmit} className="space-y-4">
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-1.5">
-              <div className="text-xs text-slate-400">Verifying address:</div>
-              <div className="text-sm font-semibold text-white flex items-center gap-2">
-                <Mail size={14} className="text-blue-400" />
-                <span>{verifyEmail}</span>
-              </div>
-              <div className="text-[11px] text-slate-500">
-                Official sender: <strong className="text-slate-300">admin@flowosbd.com</strong>
-              </div>
+          <div className="space-y-4">
+            {/* Method switcher: Code vs Password */}
+            <div className="flex justify-between items-center p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => { setVerifyMethod('code'); resetMessages(); }}
+                className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  verifyMethod === 'code' ? 'bg-cyan-600 text-white shadow font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Mail size={13} />
+                <span>6-Digit Verification Code</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setVerifyMethod('password'); resetMessages(); }}
+                className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  verifyMethod === 'password' ? 'bg-purple-600 text-white shadow font-semibold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Key size={13} />
+                <span>Verify with Password</span>
+              </button>
             </div>
 
-            {devToken && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300">
-                <div className="font-bold flex items-center justify-between">
-                  <span>⚡ Development / Sandbox Fast-Verify:</span>
-                  <button
-                    type="button"
-                    onClick={() => setVerifyToken(devToken)}
-                    className="text-[10px] px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 rounded border border-emerald-500/40"
-                  >
-                    Auto-Fill Code
-                  </button>
+            {verifyMethod === 'code' ? (
+              <form onSubmit={handleVerifySubmit} className="space-y-3.5">
+                {/* Official Sender banner */}
+                <div className="p-2.5 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-[11px] text-cyan-300 flex items-start gap-2">
+                  <Mail size={14} className="text-cyan-400 mt-0.5 shrink-0" />
+                  <div>
+                    Verification codes are sent from official address: <strong className="text-white">admin@flowosbd.com</strong>.
+                  </div>
                 </div>
-                <div className="font-mono text-sm tracking-widest text-white mt-1">
-                  {devToken}
+
+                {/* Email address field with Send/Resend Code button */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <label className="font-medium text-slate-300 flex items-center gap-1.5">
+                      <Mail size={13} className="text-cyan-400" />
+                      <span>Account Email</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleResendCode()}
+                      disabled={loading || !verifyEmail.trim()}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 disabled:opacity-40 flex items-center gap-1 font-semibold transition-colors"
+                    >
+                      <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+                      <span>Send / Resend Code</span>
+                    </button>
+                  </div>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin@yourcompany.com"
+                    value={verifyEmail}
+                    onChange={(e) => setVerifyEmail(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
                 </div>
-              </div>
+
+                {devToken && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300">
+                    <div className="font-bold flex items-center justify-between">
+                      <span>⚡ Fast-Verify Code:</span>
+                      <button
+                        type="button"
+                        onClick={() => setVerifyToken(devToken)}
+                        className="text-[10px] px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 rounded border border-emerald-500/40"
+                      >
+                        Auto-Fill Code
+                      </button>
+                    </div>
+                    <div className="font-mono text-sm tracking-widest text-white mt-1">
+                      {devToken}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6-digit code input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                    <span>Enter 6-Digit Verification Code</span>
+                    <span className="text-[10px] text-slate-500">Sent to your inbox</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={128}
+                    placeholder="123456"
+                    value={verifyToken}
+                    onChange={(e) => setVerifyToken(e.target.value.trim().toUpperCase())}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-widest text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      <span>Verifying Code...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={16} />
+                      <span>Confirm Email & Activate Tenant</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              /* Password Verification Form */
+              <form onSubmit={handleVerifyWithPasswordSubmit} className="space-y-3.5">
+                <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-[11px] text-purple-300 flex items-start gap-2">
+                  <Key size={15} className="text-purple-400 mt-0.5 shrink-0" />
+                  <div>
+                    <strong>Explicit Account Activation:</strong> Perfect for accounts created before email functionality was configured or when inbox access is unavailable. Verifies instantly using your password.
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                    <Mail size={13} className="text-purple-400" />
+                    <span>Registered Account Email</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin@yourcompany.com"
+                    value={verifyEmail}
+                    onChange={(e) => setVerifyEmail(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Lock size={13} className="text-purple-400" />
+                      <span>Account Password</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowVerifyPassword(!showVerifyPassword)}
+                      className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1"
+                    >
+                      {showVerifyPassword ? <EyeOff size={12} /> : <Eye size={12} />}
+                      <span>{showVerifyPassword ? 'Hide' : 'Show'}</span>
+                    </button>
+                  </label>
+                  <input
+                    type={showVerifyPassword ? 'text' : 'password'}
+                    required
+                    placeholder="••••••••"
+                    value={verifyPassword}
+                    onChange={(e) => setVerifyPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold rounded-xl shadow-lg shadow-purple-500/25 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      <span>Verifying Credentials...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={16} />
+                      <span>Verify Email & Activate Tenant</span>
+                    </>
+                  )}
+                </button>
+              </form>
             )}
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Enter 6-Digit Verification Code</label>
-              <input
-                type="text"
-                required
-                maxLength={8}
-                placeholder="123456"
-                value={verifyToken}
-                onChange={(e) => setVerifyToken(e.target.value.toUpperCase())}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-widest text-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-sm"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  <span>Verifying Code...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={16} />
-                  <span>Confirm Email & Activate Tenant</span>
-                </>
-              )}
-            </button>
 
             <div className="flex justify-between items-center text-xs text-slate-400 pt-2 border-t border-slate-800">
               <button
                 type="button"
-                onClick={handleResendCode}
-                disabled={loading}
-                className="text-blue-400 hover:underline flex items-center gap-1"
+                onClick={() => { setMode('login'); resetMessages(); }}
+                className="text-cyan-400 hover:underline flex items-center gap-1"
               >
-                <RefreshCw size={12} />
-                <span>Resend Code</span>
+                <span>Back to Sign In</span>
               </button>
-
               <button
                 type="button"
-                onClick={() => { setMode('login'); resetMessages(); }}
+                onClick={() => { setMode('register'); resetMessages(); }}
                 className="text-slate-400 hover:text-white"
               >
-                Back to Sign In
+                Register New Organization
               </button>
             </div>
-          </form>
+          </div>
         )}
 
         {/* MODE 4: PLATFORM ADMIN */}

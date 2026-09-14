@@ -145,6 +145,11 @@ export interface VerifyEmailRequest {
   token: string;
 }
 
+export interface VerifyEmailWithPasswordRequest {
+  email: string;
+  password: string;
+}
+
 export interface VerifyEmailResponse {
   ok: boolean;
   message: string;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -148,6 +148,40 @@ public class TenantAuthService : ITenantAuthService
         return new VerifyEmailResult(true, "Email verified successfully. Your tenant account is now active.", user.TenantId, user.Email, true);
     }
 
+    public async Task<VerifyEmailResult> VerifyEmailWithPasswordAsync(string email, string password, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+            return new VerifyEmailResult(false, "Email and password are required.");
+
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var user = await _context.TenantUsers
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+
+        if (user == null || !_passwordHasher.VerifyPassword(password, user.PasswordHash))
+        {
+            return new VerifyEmailResult(false, "Invalid email or password.");
+        }
+
+        if (user.IsEmailVerified)
+        {
+            return new VerifyEmailResult(true, "Email address is already verified.", user.TenantId, user.Email, true);
+        }
+
+        user.MarkEmailAsVerified();
+
+        var tenant = await _context.Tenants.FindAsync(new object[] { user.TenantId }, ct);
+        if (tenant != null && tenant.Status == TenantStatus.PendingVerification)
+        {
+            tenant.Activate();
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Tenant {TenantId} user {Email} verified email via password credentials.", user.TenantId, user.Email);
+
+        return new VerifyEmailResult(true, "Email verified successfully with your account credentials. Your tenant account is now active.", user.TenantId, user.Email, true);
+    }
+
     public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
@@ -283,13 +317,13 @@ public class TenantAuthService : ITenantAuthService
                       ?? "https://flowosbd.com/verify-email";
         var verificationLink = $"{baseUrl}?token={token}&email={Uri.EscapeDataString(user.Email)}";
 
-        var subject = $"Verify your FlowOS Tenant Account - {tenant.Name}";
+        var subject = $"Verify your FlowOS Tenant Account - {tenant.Name} (Code: {token})";
 
         var body = $"Welcome to FlowOS!\n\n" +
                    $"Thank you for registering your organisation '{tenant.Name}'.\n\n" +
-                   $"Please verify your email address by opening the following link:\n{verificationLink}\n\n" +
-                   $"Verification Token: {token}\n\n" +
-                   $"This link and token will expire in 24 hours.\n\n" +
+                   $"Your 6-Digit Email Verification Code: {token}\n\n" +
+                   $"Enter this code on the FlowOS verification page, or open the direct link below:\n{verificationLink}\n\n" +
+                   $"This code will expire in 24 hours.\n\n" +
                    $"Best regards,\n" +
                    $"FlowOS Team ({officialEmail})";
 
@@ -304,17 +338,16 @@ public class TenantAuthService : ITenantAuthService
     <div style=""border: 1px solid #e2e8f0; border-top: none; padding: 28px; border-radius: 0 0 8px 8px; background: #ffffff;"">
         <h2 style=""color: #0f172a; margin-top: 0;"">Welcome to FlowOS, {user.FullName}!</h2>
         <p>Thank you for registering your organisation <strong>{tenant.Name}</strong> on FlowOS.</p>
-        <p>To start creating workflows, managing state machines, and collaborating, please verify your email address:</p>
-        <div style=""text-align: center; margin: 28px 0;"">
-            <a href=""{verificationLink}"" style=""background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 15px;"">Verify Email Address</a>
-        </div>
-        <p style=""font-size: 14px; color: #475569;"">Or manually copy and paste your verification token:</p>
-        <div style=""background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 15px; text-align: center; color: #0f172a; letter-spacing: 1px;"">
+        <p>Your 6-digit verification code is:</p>
+        <div style=""background: #f0f9ff; border: 2px dashed #0284c7; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 32px; font-weight: bold; text-align: center; color: #0284c7; letter-spacing: 6px; margin: 20px 0;"">
             {token}
         </div>
+        <p style=""text-align: center; margin: 24px 0;"">
+            <a href=""{verificationLink}"" style=""background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 15px;"">Or Click Here to Verify Instantly</a>
+        </p>
         <hr style=""border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;"" />
         <p style=""color: #64748b; font-size: 12px; margin: 0;"">
-            This verification link will expire in 24 hours.<br/>
+            This verification code and link will expire in 24 hours.<br/>
             If you did not create this account, please ignore this email or reach us at <a href=""mailto:{officialEmail}"" style=""color: #2563eb;"">{officialEmail}</a>.
         </p>
     </div>

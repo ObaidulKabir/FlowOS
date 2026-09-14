@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Security.Cryptography;
 
 namespace FlowOS.Domain.Entities;
@@ -63,16 +63,14 @@ public class TenantUser
 
     public string GenerateVerificationToken(TimeSpan? lifetime = null)
     {
-        var tokenBytes = new byte[32];
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(tokenBytes);
-        var token = Convert.ToHexString(tokenBytes).ToLowerInvariant();
+        // Cryptographically secure 6-digit numeric OTP code for ease of entry
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString("D6");
 
-        EmailVerificationToken = token;
+        EmailVerificationToken = code;
         EmailVerificationTokenExpiresAt = DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromHours(24));
         UpdatedAt = DateTime.UtcNow;
 
-        return token;
+        return code;
     }
 
     public bool VerifyEmail(string token)
@@ -101,6 +99,15 @@ public class TenantUser
         UpdatedAt = DateTime.UtcNow;
 
         return true;
+    }
+
+    public void MarkEmailAsVerified()
+    {
+        IsEmailVerified = true;
+        EmailVerifiedAt = DateTime.UtcNow;
+        EmailVerificationToken = null;
+        EmailVerificationTokenExpiresAt = null;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void UpdatePassword(string newPasswordHash)

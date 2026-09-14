@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,6 +54,10 @@ public record LoginResult(
     TenantUserDto? User = null,
     string? ErrorCode = null);
 
+public record VerifyEmailWithPasswordRequest(
+    string Email,
+    string Password);
+
 public record ResendVerificationResult(
     bool Success,
     string Message,
@@ -63,6 +67,7 @@ public interface ITenantAuthService
 {
     Task<RegisterTenantUserResult> RegisterTenantAsync(RegisterTenantUserRequest request, CancellationToken ct = default);
     Task<VerifyEmailResult> VerifyEmailAsync(string email, string token, CancellationToken ct = default);
+    Task<VerifyEmailResult> VerifyEmailWithPasswordAsync(string email, string password, CancellationToken ct = default);
     Task<LoginResult> LoginAsync(string email, string password, CancellationToken ct = default);
     Task<ResendVerificationResult> ResendVerificationEmailAsync(string email, CancellationToken ct = default);
     Task<TenantUserDto?> GetCurrentUserAsync(Guid userId, CancellationToken ct = default);

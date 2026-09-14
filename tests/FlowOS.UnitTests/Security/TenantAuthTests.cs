@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -294,6 +294,55 @@ public class TenantAuthTests : IDisposable
         Assert.Equal("Theta Developer", profile.FullName);
         Assert.Equal("ThetaDev", profile.TenantName);
         Assert.True(profile.IsEmailVerified);
+    }
+
+    [Fact]
+    public async Task VerifyEmailWithPassword_ValidCredentials_ActivatesTenantAndVerifiesUser()
+    {
+        var request = new RegisterTenantUserRequest("LegacyCorp", "legacy@legacycorp.com", "OldPassword123!");
+        var regResult = await _authService.RegisterTenantAsync(request);
+
+        // Simulate an account created before email functionality
+        var unverifiedUser = await _context.TenantUsers.FirstOrDefaultAsync(u => u.Email == "legacy@legacycorp.com");
+        Assert.NotNull(unverifiedUser);
+        Assert.False(unverifiedUser.IsEmailVerified);
+
+        var verifyResult = await _authService.VerifyEmailWithPasswordAsync("legacy@legacycorp.com", "OldPassword123!");
+
+        Assert.True(verifyResult.Success);
+        Assert.True(verifyResult.IsEmailVerified);
+        Assert.Equal(regResult.TenantId, verifyResult.TenantId);
+
+        // Verify DB State
+        var user = await _context.TenantUsers.FirstOrDefaultAsync(u => u.Email == "legacy@legacycorp.com");
+        Assert.NotNull(user);
+        Assert.True(user.IsEmailVerified);
+        Assert.NotNull(user.EmailVerifiedAt);
+
+        var tenant = await _context.Tenants.FindAsync(regResult.TenantId);
+        Assert.NotNull(tenant);
+        Assert.Equal(TenantStatus.Active, tenant.Status);
+
+        // Now user can log in
+        var loginResult = await _authService.LoginAsync("legacy@legacycorp.com", "OldPassword123!");
+        Assert.True(loginResult.Success);
+        Assert.NotNull(loginResult.Token);
+    }
+
+    [Fact]
+    public async Task VerifyEmailWithPassword_InvalidPassword_ReturnsFailure()
+    {
+        var request = new RegisterTenantUserRequest("SecureLegacy", "secure@legacy.com", "CorrectPass123!");
+        await _authService.RegisterTenantAsync(request);
+
+        var verifyResult = await _authService.VerifyEmailWithPasswordAsync("secure@legacy.com", "WrongPassword!");
+
+        Assert.False(verifyResult.Success);
+        Assert.Contains("Invalid email or password", verifyResult.Message);
+
+        var user = await _context.TenantUsers.FirstOrDefaultAsync(u => u.Email == "secure@legacy.com");
+        Assert.NotNull(user);
+        Assert.False(user.IsEmailVerified);
     }
 
     private class TestEmailSender : IEmailSender

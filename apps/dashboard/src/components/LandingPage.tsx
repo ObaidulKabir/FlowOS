@@ -71,6 +71,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span className="hidden sm:inline">Try Demo /</span> Sandbox
             </button>
 
+            {/* Explicit Verify Email */}
+            <button
+              onClick={() => onOpenAuth('verify')}
+              className="px-3.5 py-2 text-xs font-semibold text-cyan-300 hover:text-white bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-700/60 rounded-xl transition-all flex items-center gap-1.5"
+              title="Verify unverified account or enter code"
+            >
+              <Mail size={13} className="text-cyan-400" />
+              <span>Verify Email</span>
+            </button>
+
             {/* Tenant Sign In */}
             <button
               onClick={() => onOpenAuth('login')}
@@ -492,6 +502,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-6">
+            <button onClick={() => onOpenAuth('verify')} className="hover:text-cyan-400 text-slate-400 transition-colors">Verify Account Email</button>
             <a href="/mcp" target="_blank" className="hover:text-white transition-colors">MCP Portal</a>
             <a href="/.well-known/mcp" target="_blank" className="hover:text-white transition-colors">MCP Manifest</a>
             <a href="/swagger" target="_blank" className="hover:text-white transition-colors">Swagger API</a>

@@ -432,6 +432,15 @@ export const api = {
     return handleResponse(response, 'Email verification failed');
   },
 
+  verifyEmailWithPassword: async (req: { email: string; password: string }): Promise<VerifyEmailResponse> => {
+    const response = await fetch('/api/auth/verify-with-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Verification with password failed');
+  },
+
   loginTenantUser: async (req: LoginRequest): Promise<LoginResponse> => {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
