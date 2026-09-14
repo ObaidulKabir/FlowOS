@@ -4,5 +4,6 @@ public enum TenantStatus
 {
     Active,
     Suspended,
-    Archived
+    Archived,
+    PendingVerification
 }

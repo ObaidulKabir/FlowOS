@@ -40,6 +40,9 @@ public static class DependencyInjection
         services.AddScoped<FlowOS.Core.Common.Interfaces.ICapabilityRegistryService, CapabilityRegistryService>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService, PluginBindingRegistryService>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IWebhookSignatureService, FlowOS.Core.Common.Services.WebhookSignatureService>();
+        services.AddSingleton<FlowOS.Security.Interfaces.IPasswordHasher, FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher>();
+        services.AddSingleton<FlowOS.Security.Interfaces.IJwtTokenService, FlowOS.Infrastructure.Services.Security.JwtTokenService>();
+        services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantAuthService, FlowOS.Infrastructure.Services.Security.TenantAuthService>();
         return services;
     }
 }

@@ -22,13 +22,18 @@ public class Tenant
     }
 
     public Tenant(string name, string configurationJson = "{}")
+        : this(name, TenantStatus.Active, configurationJson)
+    {
+    }
+
+    public Tenant(string name, TenantStatus initialStatus, string configurationJson = "{}")
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentNullException(nameof(name));
 
         TenantId = Guid.NewGuid();
         Name = name;
-        Status = TenantStatus.Active;
+        Status = initialStatus;
         ConfigurationJson = configurationJson;
         CreatedAt = DateTime.UtcNow;
 
@@ -72,6 +77,12 @@ public class Tenant
     public void Activate()
     {
         Status = TenantStatus.Active;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkPendingVerification()
+    {
+        Status = TenantStatus.PendingVerification;
         UpdatedAt = DateTime.UtcNow;
     }
 }

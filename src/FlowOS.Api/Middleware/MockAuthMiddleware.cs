@@ -46,7 +46,19 @@ public class MockAuthMiddleware
         {
             var authStr = authHeader.ToString();
             if (authStr.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                suppliedApiKey = authStr.Substring(7).Trim();
+            {
+                var bearerToken = authStr.Substring(7).Trim();
+                var jwtService = context.RequestServices.GetService<FlowOS.Security.Interfaces.IJwtTokenService>();
+                var principal = jwtService?.ValidateToken(bearerToken);
+                if (principal != null)
+                {
+                    context.User = principal;
+                    await _next(context);
+                    return;
+                }
+
+                suppliedApiKey = bearerToken;
+            }
         }
         else if (context.Request.Query.TryGetValue("apiKey", out var qKey) && !string.IsNullOrWhiteSpace(qKey))
             suppliedApiKey = qKey.ToString();
