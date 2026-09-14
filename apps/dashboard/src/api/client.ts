@@ -1,21 +1,29 @@
 import { 
   WorkflowClass, CreateDraftRequest, CopyRequest, ValidationResult, 
   WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession, DeadLetterDto,
-  TimeTravelReplay, TimeTravelForkResult
+  TimeTravelReplay, TimeTravelForkResult,
+  RegisterTenantUserRequest, RegisterTenantUserResponse,
+  VerifyEmailRequest, VerifyEmailResponse,
+  LoginRequest, LoginResponse,
+  ResendVerificationResponse, TenantUserDto
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
 const AUTH_STORAGE_KEY = 'flowos_auth_session';
 
-export const getDefaultSession = (): AuthSession => ({
+export const getDefaultSandboxSession = (): AuthSession => ({
   role: 'Tenant',
   tenantId: '22222222-2222-2222-2222-222222222222',
-  tenantName: 'Demo Client Tenant',
+  tenantName: 'Demo Client Tenant (Sandbox)',
   apiKey: 'flowos_prod_secret_key_32_chars_min',
-  username: 'demo-tenant-user'
+  username: 'demo-tenant-user',
+  isSandbox: true,
+  isEmailVerified: true
 });
 
-export const getAuthSession = (): AuthSession => {
+export const getDefaultSession = (): AuthSession => getDefaultSandboxSession();
+
+export const getStoredSession = (): AuthSession | null => {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (raw) {
@@ -24,7 +32,11 @@ export const getAuthSession = (): AuthSession => {
   } catch (e) {
     console.error('Failed to parse auth session from localStorage', e);
   }
-  return getDefaultSession();
+  return null;
+};
+
+export const getAuthSession = (): AuthSession => {
+  return getStoredSession() || getDefaultSandboxSession();
 };
 
 export const setAuthSession = (session: AuthSession) => {
@@ -58,6 +70,10 @@ export const getHeaders = (roleOverride?: 'Tenant' | 'Admin') => {
     'X-Mock-Role': role,
     'X-Mock-UserId': session.username || (role === 'Admin' ? 'superadmin' : 'tenant-user')
   };
+
+  if (session.token) {
+    headers['Authorization'] = `Bearer ${session.token}`;
+  }
 
   if (session.apiKey) {
     headers['X-API-Key'] = session.apiKey;
@@ -395,6 +411,50 @@ export const api = {
       })
     });
     return handleResponse(response, 'Failed to simulate what-if fork');
+  },
+
+  // Auth & Tenant Management
+  registerTenantUser: async (req: RegisterTenantUserRequest): Promise<RegisterTenantUserResponse> => {
+    const response = await fetch('/api/auth/register-tenant', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Registration failed');
+  },
+
+  verifyEmail: async (req: VerifyEmailRequest): Promise<VerifyEmailResponse> => {
+    const response = await fetch('/api/auth/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Email verification failed');
+  },
+
+  loginTenantUser: async (req: LoginRequest): Promise<LoginResponse> => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Login failed');
+  },
+
+  resendVerification: async (email: string): Promise<ResendVerificationResponse> => {
+    const response = await fetch('/api/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(response, 'Failed to resend verification');
+  },
+
+  getCurrentUser: async (): Promise<{ ok: boolean; user: TenantUserDto }> => {
+    const headers = getHeaders();
+    const response = await fetch('/api/auth/me', { headers });
+    return handleResponse(response, 'Failed to get current user profile');
   }
 };
+
 
