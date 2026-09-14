@@ -12,13 +12,34 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
+      - name: Verify deploy secrets
+        env:
+          HAS_HOST: ${{ secrets.SSH_HOST != '' }}
+          HAS_USER: ${{ secrets.SSH_USER != '' }}
+          HAS_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
+          HAS_PATH: ${{ secrets.APP_PATH != '' }}
+          HAS_PORT: ${{ secrets.SSH_PORT != '' }}
+        run: |
+          set -euo pipefail
+          echo "SSH_HOST set: ${HAS_HOST}"
+          echo "SSH_USER set: ${HAS_USER}"
+          echo "SSH_PRIVATE_KEY set: ${HAS_KEY}"
+          echo "APP_PATH set: ${HAS_PATH}"
+          echo "SSH_PORT set: ${HAS_PORT} (optional; defaults to 22)"
+          if [ "${HAS_HOST}" != "true" ] || [ "${HAS_USER}" != "true" ] || [ "${HAS_KEY}" != "true" ] || [ "${HAS_PATH}" != "true" ]; then
+            echo "Required production secrets are missing. Set SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, and APP_PATH."
+            exit 1
+          fi
+
       - name: Update Code on Server
         uses: appleboy/ssh-action@b0a8f324e192469585a608d1f586061cf28a6571
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          protocol: tcp4
+          debug: true
           timeout: 180s
           command_timeout: 15m
           script: |
@@ -75,7 +96,9 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          protocol: tcp4
+          debug: true
           timeout: 180s
           command_timeout: 45m
           script: |
