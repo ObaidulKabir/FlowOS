@@ -19,10 +19,16 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          timeout: 180s
+          command_timeout: 15m
           script: |
             set -euo pipefail
             APP_PATH="${{ secrets.APP_PATH }}"
             BRANCH="${{ github.ref_name }}"
+            echo "[deploy] host: $(hostname)"
+            echo "[deploy] user: $(whoami)"
+            echo "[deploy] branch: ${BRANCH}"
+            echo "[deploy] app path: ${APP_PATH}"
 
             if [ -z "${APP_PATH}" ] || [ ! -d "${APP_PATH}" ]; then
               echo "Invalid APP_PATH: '${APP_PATH}'"
@@ -30,6 +36,7 @@ jobs:
             fi
 
             cd "${APP_PATH}"
+            echo "[deploy] working dir: $(pwd)"
 
             if [ ! -d .git ]; then
               echo "APP_PATH is not a git repository: ${APP_PATH}"
@@ -39,6 +46,11 @@ jobs:
             # Prevent "dubious ownership" failures on hardened hosts.
             git config --global --add safe.directory "${APP_PATH}" || true
 
+            echo "[deploy] git version: $(git --version)"
+            git remote -v || true
+            git status --short --branch || true
+
+            echo "[deploy] fetching branch metadata from origin..."
             git fetch --prune origin
 
             if ! git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
@@ -53,7 +65,9 @@ jobs:
               git checkout -b "${BRANCH}" "origin/${BRANCH}"
             fi
 
+            echo "[deploy] resetting local branch to origin/${BRANCH}..."
             git reset --hard "origin/${BRANCH}"
+            git rev-parse --short HEAD
 
       - name: Build and Deploy Containers
         uses: appleboy/ssh-action@b0a8f324e192469585a608d1f586061cf28a6571
@@ -62,8 +76,15 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          timeout: 180s
+          command_timeout: 45m
           script: |
             set -euo pipefail
-            cd "${{ secrets.APP_PATH }}"
+            APP_PATH="${{ secrets.APP_PATH }}"
+            echo "[deploy] host: $(hostname)"
+            echo "[deploy] user: $(whoami)"
+            echo "[deploy] app path: ${APP_PATH}"
+            cd "${APP_PATH}"
             docker compose -f docker-compose.test.yaml down
             docker compose -f docker-compose.test.yaml up -d --build
+            docker compose -f docker-compose.test.yaml ps
