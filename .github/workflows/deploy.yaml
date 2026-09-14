@@ -4,12 +4,20 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ENVIRONMENT:
+        required: true
+        type: string
+
+env: 
+  COMPOSE_FILES: "${{ inputs.ENVIRONMENT == 'production' && 'docker-compose.prod.yaml' || 'docker-compose.test.yaml' }}"
 
 jobs:
   deploy:
-    name: Deploy to production
+    name: Deploy to ${{ inputs.ENVIRONMENT }}
     runs-on: ubuntu-latest
-    environment: production 
+    environment: ${{ inputs.ENVIRONMENT }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -31,7 +39,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
+          username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           envs: COMPOSE_FILES
