@@ -52,6 +52,23 @@ public static class DataSeeder
             await context.SaveChangesAsync();
         }
 
+        // 1.3 Ensure Demo Tenant User
+        if (!await context.TenantUsers.AnyAsync(u => u.TenantId == demoClientTenantId))
+        {
+            var passwordHasher = serviceProvider.GetService<FlowOS.Security.Interfaces.IPasswordHasher>()
+                ?? new FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher();
+            var demoUser = new TenantUser(
+                demoClientTenantId,
+                "demo@flowos.internal",
+                passwordHasher.HashPassword("demo-password-123"),
+                "Demo Administrator",
+                "TenantAdmin",
+                isEmailVerified: true);
+            context.TenantUsers.Add(demoUser);
+            await context.SaveChangesAsync();
+        }
+
+
         // 1.5 Ensure Admin Role
         if (!await context.Roles.AnyAsync(r => r.Name == "Admin" && r.TenantId == DefaultTenantId))
         {
