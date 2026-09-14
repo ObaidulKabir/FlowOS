@@ -95,13 +95,16 @@ public class DefaultEmailSender : IEmailSender
 
         // 2. SMTP Delivery check
         var smtpHost = _configuration["FlowOS:Communications:Email:Smtp:Host"]
-                       ?? Environment.GetEnvironmentVariable("SMTP_HOST");
+                       ?? Environment.GetEnvironmentVariable("SMTP_HOST")
+                       ?? "smtp.zoho.com";
         var smtpUser = _configuration["FlowOS:Communications:Email:Smtp:Username"]
                        ?? Environment.GetEnvironmentVariable("SMTP_USER")
-                       ?? Environment.GetEnvironmentVariable("SMTP_USERNAME");
+                       ?? Environment.GetEnvironmentVariable("SMTP_USERNAME")
+                       ?? "admin@flowosbd.com";
         var smtpPass = _configuration["FlowOS:Communications:Email:Smtp:Password"]
                        ?? Environment.GetEnvironmentVariable("SMTP_PASSWORD")
-                       ?? Environment.GetEnvironmentVariable("SMTP_PASS");
+                       ?? Environment.GetEnvironmentVariable("SMTP_PASS")
+                       ?? "c#6uSkcs";
 
         if (!string.IsNullOrWhiteSpace(smtpHost) && !string.IsNullOrWhiteSpace(smtpPass))
         {
