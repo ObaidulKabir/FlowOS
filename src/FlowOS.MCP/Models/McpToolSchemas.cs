@@ -685,6 +685,23 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject TestActionPlugin() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "actionType":{"type":"string","minLength":1,"description":"Name of the action plugin to test (e.g. Email, Slack, WhatsApp, Webhook, Notification, PublishEvent, InvokeCapability)."},
+            "target":{"type":"string","description":"Optional target (e.g. email address, phone number, channel name #alerts, or webhook URL)."},
+            "template":{"type":"string","description":"Optional template string, message subject, or text template."},
+            "url":{"type":"string","description":"Optional webhook or media endpoint URL."},
+            "payload":{"type":"object","description":"Optional action payload dictionary containing channel-specific properties."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID context."}
+          },
+          "required":["actionType"],
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject ListDeadLetters() => JObject.Parse(
         """
         {

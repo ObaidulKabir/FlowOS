@@ -126,7 +126,7 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS registers **51 production tools** categorized by governance lifecycle, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
+FlowOS registers **52 production tools** categorized by governance lifecycle, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|
@@ -160,6 +160,7 @@ FlowOS registers **51 production tools** categorized by governance lifecycle, Co
 | `simulate_parallel_execution` | `low` | `none` | No | `SimulationTools.SimulateParallelExecution` | Dry-runs parallel Fork/Join gateway branches concurrently to evaluate branch actions and barrier synchronization policies. |
 | `get_subworkflow_tree` | `low` | `none` | No | `ExecutionTools.GetSubWorkflowTree` | Reconstructs the complete parent-child subworkflow execution hierarchy tree for an instance. |
 | `get_instance_action_history` | `low` | `none` | No | `ActionObservabilityMcpTools.GetInstanceActionHistory` | Returns lifecycle action execution logs (webhooks, notifications, events) for an instance. |
+| `test_action_plugin` | `low` | `none` | No | `PluginDiscoveryMcpTools.TestActionPlugin` | Dry-runs and validates an action plugin (Email, Slack, WhatsApp, Webhook, etc.) with structured payloads and diagnostics. |
 
 For HTTP, the authenticated `x-tenant-id` header is authoritative. A `tenantId`
 tool argument may repeat that value but cannot override it. For stdio, every
@@ -200,12 +201,13 @@ tenant-scoped tool requires an explicit `tenantId` argument.
 4. Keep `OnFailure` compensation hooks on side-effecting steps to satisfy `WF-COMP-010`.
 5. Use `list_capability_bindings` to audit enabled/disabled capability mappings during rollouts.
 
-### Plugin discovery MCP guideline (AI design loop)
+### Plugin discovery & action plugin capabilities (AI design loop)
 
-1. Call `list_registered_plugins` to discover server-registered action/decision providers and runtime strictness flags.
-2. Use `register_plugin_binding` to map tenant aliases (`plugin:*` / `plugin.*` action types or decision provider aliases) to concrete providers.
-3. Verify each alias with `resolve_plugin_binding` before publishing.
-4. Use `list_plugin_bindings` to audit all active mappings for the tenant.
+1. Call `list_registered_plugins` to discover server-registered action and decision providers, runtime strictness flags, and rich capability metadata (category, description, supported parameters with types/required flags, and blueprint-ready example payload mappings) for communication (`Email`, `Slack`, `WhatsApp`), integration (`Webhook`), and internal action plugins.
+2. Use `test_action_plugin` to test/dry-run action configurations and verify channel deliverability parameters (such as email recipient syntax, WhatsApp E.164 phone numbers, Slack blocks, and webhook URLs) without mutating state or enqueuing outbox records.
+3. Use `register_plugin_binding` to map tenant aliases (`plugin:*` / `plugin.*` action types or decision provider aliases) to concrete providers.
+4. Verify each alias with `resolve_plugin_binding` before publishing.
+5. Use `list_plugin_bindings` to audit all active mappings for the tenant.
 
 ## Usage example: design loop for "Leave Approval"
 

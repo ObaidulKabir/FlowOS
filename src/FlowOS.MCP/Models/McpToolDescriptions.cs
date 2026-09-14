@@ -240,6 +240,12 @@ public static class McpToolDescriptions
                 "Errors: MCP-INTERNAL. " +
                 "Input example: {\"includeWildcard\":true}",
 
+            ["test_action_plugin"] =
+                "[Plugin Testing & Validation] Tests or dry-runs an action plugin (e.g. Email, Slack, WhatsApp, Webhook, Notification, PublishEvent, InvokeCapability) by building its structured outbox message and validating required channel parameters without executing side effects or persisting records. " +
+                "Returns: {ok:true,data:{actionType,messageType,isRegistered,status,builtPayload,diagnostics:[...]}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"actionType\":\"Email\",\"target\":\"ops@company.com\",\"template\":\"Alert: High Latency\",\"payload\":{\"to\":\"ops@company.com\",\"subject\":\"Alert: High Latency\",\"body\":\"Service latency exceeded threshold.\"}}",
+
             ["list_dead_letters"] =
                 "[Resilience & DLQ] Lists dead-lettered outbox messages that exhausted all retry attempts (e.g. downstream 5xx errors or persistent network timeouts). " +
                 "Returns failure error strings, target endpoints, attempt counts, and serialized payload details so autonomous AI agents can diagnose outages. " +
@@ -409,6 +415,7 @@ public static class McpToolDescriptions
             ["list_plugin_bindings"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
             ["resolve_plugin_binding"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
             ["list_registered_plugins"] = new("integration", "authenticated", true, false, false, "none", false, "low"),
+            ["test_action_plugin"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["list_dead_letters"] = new("resilience", "authenticated", true, true, false, "none", true, "low"),
             ["retry_dead_letter"] = new("resilience", "authenticated", true, true, true, "reversible", true, "low"),
             ["purge_dead_letter"] = new("resilience", "authenticated", true, true, true, "irreversible", true, "medium"),

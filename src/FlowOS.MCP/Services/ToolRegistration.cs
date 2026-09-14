@@ -71,6 +71,9 @@ public static class ToolRegistration
         registry.Register("list_registered_plugins", McpToolDescriptions.For("list_registered_plugins"), McpToolSchemas.ListRegisteredPlugins(),
             async (args) => await ExecuteScopedAsync<PluginDiscoveryMcpTools>(serviceProvider, t => t.ListRegisteredPlugins(args)));
 
+        registry.Register("test_action_plugin", McpToolDescriptions.For("test_action_plugin"), McpToolSchemas.TestActionPlugin(),
+            async (args) => await ExecuteScopedAsync<PluginDiscoveryMcpTools>(serviceProvider, t => t.TestActionPlugin(args)));
+
         registry.Register("create_draft_workflowclass", McpToolDescriptions.For("create_draft_workflowclass"), McpToolSchemas.CreateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.CreateDraft(args)));
 
