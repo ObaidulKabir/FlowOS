@@ -332,7 +332,8 @@ public static class McpToolSchemas
         {
           "type":"object",
           "properties":{
-            "status":{"type":"string"},
+            "status":{"type":"string","description":"Optional status filter (e.g. Running, Completed, Failed)."},
+            "parentWorkflowInstanceId":{"type":"string","format":"uuid","description":"Optional parent workflow instance UUID to filter child subworkflows."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -390,10 +391,107 @@ public static class McpToolSchemas
               "type":"string",
               "description":"Optional step ID where a step failure should be simulated to verify OnFailure compensating actions and Saga rollback."
             },
+            "subWorkflows":{
+              "type":"object",
+              "description":"Optional dictionary of child WorkflowClass blueprint objects keyed by workflow name, class ID, or step ID to simulate child subworkflows inline."
+            },
+            "autoCompleteSubWorkflows":{
+              "type":"boolean",
+              "default":false,
+              "description":"When true, automatically resolves subworkflow steps with completion events without requiring child blueprints or events queue."
+            },
+            "childEvents":{
+              "type":"array",
+              "items":{"type":"string"},
+              "description":"Optional sequence of event IDs specifically for child subworkflow execution."
+            },
             "tenantId":{
               "type":"string",
               "format":"uuid",
               "description":"Tenant ID scope (optional for inline blueprints, required when querying by id in stdio)."
+            }
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject SimulateSubWorkflow() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "parentBlueprint":{
+              "type":"object",
+              "description":"Optional inline parent WorkflowClass blueprint containing the SubWorkflow step."
+            },
+            "blueprint":{
+              "type":"object",
+              "description":"Alternative alias for parentBlueprint."
+            },
+            "parentWorkflowClassId":{
+              "type":"string",
+              "format":"uuid",
+              "description":"Optional ID of an existing draft or published parent WorkflowClass in storage."
+            },
+            "id":{
+              "type":"string",
+              "format":"uuid",
+              "description":"Alternative alias for parentWorkflowClassId."
+            },
+            "stepId":{
+              "type":"string",
+              "description":"Optional SubWorkflow step ID to simulate. Defaults to the first SubWorkflow step in the parent blueprint."
+            },
+            "childBlueprint":{
+              "type":"object",
+              "description":"Optional inline child WorkflowClass blueprint to execute as the subworkflow."
+            },
+            "childWorkflowClassId":{
+              "type":"string",
+              "format":"uuid",
+              "description":"Optional UUID of the child WorkflowClass in storage."
+            },
+            "childWorkflowName":{
+              "type":"string",
+              "description":"Optional name of the child WorkflowClass."
+            },
+            "subWorkflows":{
+              "type":"object",
+              "description":"Optional dictionary of child blueprints keyed by name or ID."
+            },
+            "payload":{
+              "type":"object",
+              "description":"Initial parent business context payload to be passed and mapped into the child workflow."
+            },
+            "parentPayload":{
+              "type":"object",
+              "description":"Alternative alias for payload."
+            },
+            "role":{
+              "type":"string",
+              "description":"Simulated user role invoking tasks. Defaults to 'User'."
+            },
+            "events":{
+              "type":"array",
+              "items":{"type":"string"},
+              "description":"Optional sequence of event IDs for parent workflow simulation."
+            },
+            "childEvents":{
+              "type":"array",
+              "items":{"type":"string"},
+              "description":"Optional sequence of event IDs specifically for child subworkflow simulation."
+            },
+            "maxSteps":{
+              "type":"integer",
+              "minimum":1,
+              "maximum":100,
+              "default":25,
+              "description":"Maximum step evaluation cap."
+            },
+            "tenantId":{
+              "type":"string",
+              "format":"uuid",
+              "description":"Tenant ID scope."
             }
           },
           "additionalProperties":false
@@ -784,6 +882,47 @@ public static class McpToolSchemas
             "prompt":{"type":"string","minLength":1,"description":"Natural language description of the desired workflow (e.g. 'Insurance Claim with parallel damage inspection and medical assessment')."},
             "currentBlueprint":{"type":"object","description":"Optional existing WorkflowClassBlueprint to refine or augment."},
             "mode":{"type":"string","enum":["create","refine"],"default":"create","description":"Whether to create a new blueprint from scratch or refine the existing one."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RefineBlueprintFromNaturalLanguage() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["prompt","currentBlueprint"],
+          "properties":{
+            "prompt":{"type":"string","minLength":1,"description":"Natural language refinement prompt (e.g. 'Add 24h SLA timeout and manager escalation')."},
+            "currentBlueprint":{"type":"object","description":"Existing WorkflowClassBlueprint to refine."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetSubWorkflowTree() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Workflow instance UUID to retrieve subworkflow execution tree for."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject SimulateParallelExecution() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "id":{"type":"string","format":"uuid","description":"Optional stored workflow class UUID."},
+            "blueprint":{"type":"object","description":"Optional inline WorkflowClassBlueprint with Fork/Join steps."},
+            "payload":{"type":"object","description":"Optional simulation context variables."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false

@@ -20,7 +20,7 @@ public class WorkflowQueryHandlers :
     }
 
     public Task<List<WorkflowSummaryDto>> Handle(GetWorkflowsQuery request, CancellationToken cancellationToken)
-        => _unitOfWork.WorkflowInstances.GetSummariesByTenantAsync(request.TenantId, request.Status, cancellationToken);
+        => _unitOfWork.WorkflowInstances.GetSummariesByTenantAsync(request.TenantId, request.Status, request.ParentWorkflowInstanceId, cancellationToken);
 
     public Task<WorkflowSummaryDto?> Handle(GetWorkflowByIdQuery request, CancellationToken cancellationToken)
         => _unitOfWork.WorkflowInstances.GetSummaryByIdAsync(request.Id, request.TenantId, cancellationToken);

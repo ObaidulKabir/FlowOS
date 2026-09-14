@@ -100,6 +100,9 @@ public class PluginDiscoveryMcpTools
             || string.Equals(actionType, "Notification", StringComparison.OrdinalIgnoreCase)
             || string.Equals(actionType, "PublishEvent", StringComparison.OrdinalIgnoreCase)
             || string.Equals(actionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "Slack", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "Email", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "WhatsApp", StringComparison.OrdinalIgnoreCase)
             || string.Equals(actionType, "*", StringComparison.Ordinal);
     }
 }

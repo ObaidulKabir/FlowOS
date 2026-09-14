@@ -157,6 +157,13 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"simulateFailureAtStep\":\"PaymentStep\"}",
 
+            ["simulate_subworkflow"] =
+                "[Simulator] Simulates end-to-end execution of a parent-child subworkflow relationship, including parent-to-child input parameter mapping, nested child workflow step execution, child-to-parent output mapping, and parent workflow resumption. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{parentWorkflow,subWorkflowStepId,childWorkflow,status,initialParentState,finalParentState,inputMapping,childInitialPayload,childFinalPayload,outputMapping,updatedParentPayload,childExecutionTrace,parentExecutionTrace,subworkflowsExecuted,pendingSubWorkflow,totalParentStepsExecuted}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"parentBlueprint\":{\"Workflow\":{\"Steps\":[{\"StepId\":\"ChildStep\",\"StepType\":\"SubWorkflow\",\"SubWorkflow\":{\"WorkflowName\":\"ChildWF\",\"InputMapping\":{\"Amount\":\"OrderTotal\"},\"OutputMapping\":{\"Approved\":\"ChildApproved\"}},\"NextSteps\":{\"SubWorkflowCompleted\":\"END\"}}]}},\"childBlueprint\":{\"Workflow\":{\"StartStepId\":\"DoWork\",\"Steps\":[{\"StepId\":\"DoWork\",\"StepType\":\"Command\",\"NextSteps\":{\"Default\":\"END\"}}]}},\"payload\":{\"OrderTotal\":250}}",
+
             ["simulate_compensation_path"] =
                 "[Saga Compensation Planner] Produces a deterministic compensation rollback path from a failed step by evaluating configured OnFailure hooks in reverse execution order (LIFO). " +
                 "Supports either inline blueprint input or resolving a stored WorkflowClass by ID; reports blocked steps that have no compensation actions. " +
@@ -340,7 +347,30 @@ public static class McpToolDescriptions
                 "Helps callers tune retry policy before executing mutating operations. " +
                 "Returns: {ok:true,data:{strategy,maxRetries,currentRetryCount,baseDelaySeconds,maxDelaySeconds,shouldRetryNow,classification,attempts,previewGeneratedAtUtc}}. " +
                 "Errors: MCP-INTERNAL. " +
-                "Input example: {\"currentRetryCount\":1,\"maxRetries\":5,\"baseDelaySeconds\":2,\"strategy\":\"exponential\",\"errorMessage\":\"HTTP 503 timeout\"}"
+                "Input example: {\"currentRetryCount\":1,\"maxRetries\":5,\"baseDelaySeconds\":2,\"strategy\":\"exponential\",\"errorMessage\":\"HTTP 503 timeout\"}",
+
+            ["get_subworkflow_tree"] =
+                "[Hierarchical Workflows] Reconstructs the parent-child subworkflow execution hierarchy tree for a root or parent workflow instance. " +
+                "Returns the root node along with nested child workflow instances, current step, state machine status, and triggering parent step ID. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{workflowInstanceId,workflowClassName,status,currentStepId,currentState,hasChildren,childCount,children:[{workflowInstanceId,workflowClassName,parentStepId,status,currentStepId,currentState}]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["simulate_parallel_execution"] =
+                "[Parallel Execution Simulation] Dry-runs parallel execution branches spawned by a Fork step to a Join barrier synchronization gateway. " +
+                "Simulates concurrent branch progression, evaluates step actions, and validates Join barrier policies without mutating production state. " +
+                "HTTP uses authenticated tenant; stdio accepts tenantId. " +
+                "Returns: {ok:true,data:{workflow,forkStepId,totalBranches,branches:[...],joinStepId,joinPolicy,isSynchronized,resumedStepId,actionsTriggeredCount,executionTrace:[...]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"loanAmount\":50000}}",
+
+            ["refine_workflow_blueprint_from_nl"] =
+                "[AI Copilot & Blueprint Refinement] Incrementally refines and enriches an existing WorkflowClassBlueprint using natural language instructions. " +
+                "Allows modifying steps, adding parallel branches, inserting SLA timers, or attaching webhook and compensation actions while maintaining schema compliance. " +
+                "Returns: {ok:true,data:{suggestedName,suggestedVersion,summary,explanation,blueprint,validation}}. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"prompt\":\"Add 24h SLA timeout and manager escalation webhook.\",\"currentBlueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}"
         };
 
     public static string For(string toolName) =>
@@ -351,6 +381,9 @@ public static class McpToolDescriptions
     public static readonly IReadOnlyDictionary<string, ToolSecurityProfile> SecurityProfiles =
         new Dictionary<string, ToolSecurityProfile>(StringComparer.Ordinal)
         {
+            ["get_subworkflow_tree"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["simulate_parallel_execution"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
+            ["refine_workflow_blueprint_from_nl"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["generate_workflow_blueprint_from_nl"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["replay_workflow_history"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
             ["fork_workflow_simulation"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
@@ -365,6 +398,7 @@ public static class McpToolDescriptions
             ["suggest_agent_action"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["lint_draft_workflowclass"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_workflowclass"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
+            ["simulate_subworkflow"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["attach_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["remove_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["list_step_actions"] = new("query", "authenticated", true, true, false, "none", true, "low"),

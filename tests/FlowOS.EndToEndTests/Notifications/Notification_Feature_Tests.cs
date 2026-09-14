@@ -22,9 +22,9 @@ public class Notification_Feature_Tests : IClassFixture<WebApplicationFactory<Pr
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
-    private readonly Guid _tenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-    private readonly Guid _user1 = Guid.Parse("33333333-3333-3333-3333-333333333333");
-    private readonly Guid _user2 = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly Guid _user1 = Guid.NewGuid();
+    private readonly Guid _user2 = Guid.NewGuid();
 
     public Notification_Feature_Tests(WebApplicationFactory<Program> factory)
     {
@@ -65,7 +65,7 @@ public class Notification_Feature_Tests : IClassFixture<WebApplicationFactory<Pr
             var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
             
             // Seed Admin Role
-            if (!await db.Roles.AnyAsync(r => r.Name == "Admin"))
+            if (!await db.Roles.AnyAsync(r => r.TenantId == _tenantId && r.Name == "Admin"))
             {
                 var adminRole = new Role(_tenantId, "Admin");
                 adminRole.AddPermission("workflow.start");
@@ -74,7 +74,7 @@ public class Notification_Feature_Tests : IClassFixture<WebApplicationFactory<Pr
             }
             
             // Seed Event Definition
-            if (!await db.EventDefinitions.AnyAsync(e => e.EventId == "EVT-RICH-TASK"))
+            if (!await db.EventDefinitions.AnyAsync(e => e.TenantId == _tenantId && e.EventId == "EVT-RICH-TASK"))
             {
                 var evt = new FlowOS.Domain.Entities.EventDefinition("EVT-RICH-TASK", _tenantId, "Rich Task Event", "Desc", "System", FlowOS.Domain.Enums.EventCategory.System);
                 evt.Publish();
@@ -82,10 +82,13 @@ public class Notification_Feature_Tests : IClassFixture<WebApplicationFactory<Pr
             }
 
             // Seed Workflow Definition
-            var def = new WorkflowDefinition(_tenantId, "RichNotifFlow");
-            def.AddStep(new WorkflowStepDefinition("Start", WorkflowStepType.Command) { NextSteps = new() { { "EVT-RICH-TASK", "END" } } });
-            def.Publish();
-            db.WorkflowDefinitions.Add(def);
+            if (!await db.WorkflowDefinitions.AnyAsync(w => w.TenantId == _tenantId && w.Name == "RichNotifFlow"))
+            {
+                var def = new WorkflowDefinition(_tenantId, "RichNotifFlow");
+                def.AddStep(new WorkflowStepDefinition("Start", WorkflowStepType.Command) { NextSteps = new() { { "EVT-RICH-TASK", "END" } } });
+                def.Publish();
+                db.WorkflowDefinitions.Add(def);
+            }
             
             await db.SaveChangesAsync();
         }
@@ -155,7 +158,7 @@ public class Notification_Feature_Tests : IClassFixture<WebApplicationFactory<Pr
         var refreshedNotifsResponse = await _client.GetAsync("/api/notifications");
         var refreshedNotifs = await refreshedNotifsResponse.Content.ReadFromJsonAsync<List<NotificationDto>>();
         Assert.NotNull(refreshedNotifs);
-        var refreshedNotif = Assert.Single(refreshedNotifs);
+        var refreshedNotif = refreshedNotifs.First(n => n.Id == user1Notif.Id);
         Assert.True(refreshedNotif.IsRead);
     }
 

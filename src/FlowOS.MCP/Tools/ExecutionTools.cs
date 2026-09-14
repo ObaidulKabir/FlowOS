@@ -241,10 +241,17 @@ public class ExecutionTools
                 status = parsedStatus;
             }
 
+            Guid? parentWorkflowInstanceId = null;
+            if (args["parentWorkflowInstanceId"] != null && Guid.TryParse(args["parentWorkflowInstanceId"]?.ToString(), out var parsedParentId))
+            {
+                parentWorkflowInstanceId = parsedParentId;
+            }
+
             var query = new GetWorkflowsQuery
             {
                 TenantId = tenantId,
-                Status = status
+                Status = status,
+                ParentWorkflowInstanceId = parentWorkflowInstanceId
             };
 
             var instances = await _mediator.Send(query);
@@ -261,6 +268,68 @@ public class ExecutionTools
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to list workflow instances: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> GetSubWorkflowTree(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            if (args["workflowInstanceId"] == null || !Guid.TryParse(args["workflowInstanceId"]?.ToString(), out var rootInstanceId))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "workflowInstanceId is required and must be a valid UUID.");
+            }
+
+            var rootSummary = await _mediator.Send(new FlowOS.Application.Queries.GetWorkflowByIdQuery
+            {
+                Id = rootInstanceId,
+                TenantId = tenantId
+            });
+            if (rootSummary == null)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{rootInstanceId}' not found.");
+            }
+
+            var childSummaries = await _mediator.Send(new GetWorkflowsQuery
+            {
+                TenantId = tenantId,
+                ParentWorkflowInstanceId = rootInstanceId
+            });
+
+            return McpToolResults.Success(new
+            {
+                workflowInstanceId = rootSummary.Id,
+                workflowClassName = rootSummary.WorkflowClassName,
+                status = rootSummary.Status,
+                currentStepId = rootSummary.CurrentStepId,
+                currentState = rootSummary.CurrentState,
+                createdAt = rootSummary.CreatedAt,
+                completedAt = rootSummary.CompletedAt,
+                parentWorkflowInstanceId = rootSummary.ParentWorkflowInstanceId,
+                parentStepId = rootSummary.ParentStepId,
+                hasChildren = childSummaries.Count > 0,
+                childCount = childSummaries.Count,
+                children = childSummaries.Select(c => new
+                {
+                    workflowInstanceId = c.Id,
+                    workflowClassName = c.WorkflowClassName,
+                    parentStepId = c.ParentStepId,
+                    status = c.Status,
+                    currentStepId = c.CurrentStepId,
+                    currentState = c.CurrentState,
+                    createdAt = c.CreatedAt,
+                    completedAt = c.CompletedAt
+                }).ToList()
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to retrieve subworkflow tree: {ex.Message}");
         }
     }
 

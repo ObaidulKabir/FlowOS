@@ -24,6 +24,7 @@ public static class ExpressionEvaluator
             return true;
 
         var cleanExpr = Regex.Replace(expression.Trim(), @"\b[pP]ayload\.", "");
+        cleanExpr = Regex.Replace(cleanExpr, @"'([^']*)'", "\"$1\"");
 
         if (payload == null || payload.Count == 0)
         {
@@ -80,6 +81,17 @@ public static class ExpressionEvaluator
 
         var trimmed = expression.Trim();
         var cleanExpr = Regex.Replace(trimmed, @"\b[pP]ayload\.", "");
+
+        // If explicitly quoted as a literal string (single or double quoted), return the unquoted string
+        if (cleanExpr.Length >= 2 && 
+            ((cleanExpr.StartsWith('\'') && cleanExpr.EndsWith('\'')) || 
+             (cleanExpr.StartsWith('"') && cleanExpr.EndsWith('"'))) && 
+            !cleanExpr[1..^1].Contains(cleanExpr[0]))
+        {
+            return cleanExpr[1..^1];
+        }
+
+        cleanExpr = Regex.Replace(cleanExpr, @"'([^']*)'", "\"$1\"");
 
         if (payload == null || payload.Count == 0)
         {

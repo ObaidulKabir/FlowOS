@@ -35,6 +35,9 @@ public static class ToolRegistration
         registry.Register("simulate_workflowclass", McpToolDescriptions.For("simulate_workflowclass"), McpToolSchemas.SimulateWorkflowClass(),
             async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateWorkflowClass(args)));
 
+        registry.Register("simulate_subworkflow", McpToolDescriptions.For("simulate_subworkflow"), McpToolSchemas.SimulateSubWorkflow(),
+            async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateSubWorkflow(args)));
+
         registry.Register("simulate_compensation_path", McpToolDescriptions.For("simulate_compensation_path"), McpToolSchemas.SimulateCompensationPath(),
             async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateCompensationPath(args)));
 
@@ -148,6 +151,15 @@ public static class ToolRegistration
 
         registry.Register("preview_retry_policy", McpToolDescriptions.For("preview_retry_policy"), McpToolSchemas.PreviewRetryPolicy(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.PreviewRetryPolicy(args)));
+
+        registry.Register("get_subworkflow_tree", McpToolDescriptions.For("get_subworkflow_tree"), McpToolSchemas.GetSubWorkflowTree(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.GetSubWorkflowTree(args)));
+
+        registry.Register("simulate_parallel_execution", McpToolDescriptions.For("simulate_parallel_execution"), McpToolSchemas.SimulateParallelExecution(),
+            async (args) => await ExecuteScopedAsync<SimulationTools>(serviceProvider, t => t.SimulateParallelExecution(args)));
+
+        registry.Register("refine_workflow_blueprint_from_nl", McpToolDescriptions.For("refine_workflow_blueprint_from_nl"), McpToolSchemas.RefineBlueprintFromNaturalLanguage(),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.RefineBlueprintFromNaturalLanguage(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(
