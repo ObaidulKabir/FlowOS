@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
+using System.Net.Mail;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -46,8 +48,10 @@ public class DefaultEmailSender : IEmailSender
 
     public async Task<EmailSendResult> SendEmailAsync(EmailSendRequest request, CancellationToken ct = default)
     {
-        var webhookUrl = _configuration[$"FlowOS:Communications:Email:WebhookUrl"] 
-                         ?? _configuration[$"FlowOS:Communications:Email:Endpoint"];
+        // 1. Webhook endpoint check (e.g. external email gateway / webhook)
+        var webhookUrl = _configuration["FlowOS:Communications:Email:WebhookUrl"] 
+                         ?? _configuration["FlowOS:Communications:Email:Endpoint"]
+                         ?? Environment.GetEnvironmentVariable("EMAIL_WEBHOOK_URL");
 
         if (!string.IsNullOrWhiteSpace(webhookUrl) && Uri.TryCreate(webhookUrl, UriKind.Absolute, out var uri))
         {
@@ -61,7 +65,8 @@ public class DefaultEmailSender : IEmailSender
                     body = request.Body,
                     htmlBody = request.HtmlBody,
                     cc = request.Cc,
-                    bcc = request.Bcc
+                    bcc = request.Bcc,
+                    headers = request.Headers
                 });
 
                 using var req = new HttpRequestMessage(HttpMethod.Post, uri)
@@ -72,22 +77,120 @@ public class DefaultEmailSender : IEmailSender
                 var res = await _httpClient.SendAsync(req, ct);
                 if (res.IsSuccessStatusCode)
                 {
-                    return new EmailSendResult(true, $"msg_{Guid.NewGuid():N}", (int)res.StatusCode);
+                    var msgId = $"webhook_{Guid.NewGuid():N}";
+                    _logger.LogInformation("[EmailSender] Email dispatched via Webhook to '{To}' (ID: {Id})", request.To, msgId);
+                    return new EmailSendResult(true, msgId, (int)res.StatusCode);
                 }
 
                 var errText = await res.Content.ReadAsStringAsync(ct);
+                _logger.LogWarning("[EmailSender] Email webhook returned HTTP {Status}: {Error}", (int)res.StatusCode, errText);
                 return new EmailSendResult(false, null, (int)res.StatusCode, $"Email endpoint error: {errText}");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send email via endpoint {Url}", webhookUrl);
+                _logger.LogError(ex, "Failed to send email via webhook endpoint {Url}", webhookUrl);
                 return new EmailSendResult(false, null, null, ex.Message);
             }
         }
 
-        // Default local / test mode: log message dispatch and return success
+        // 2. SMTP Delivery check
+        var smtpHost = _configuration["FlowOS:Communications:Email:Smtp:Host"]
+                       ?? Environment.GetEnvironmentVariable("SMTP_HOST");
+        var smtpUser = _configuration["FlowOS:Communications:Email:Smtp:Username"]
+                       ?? Environment.GetEnvironmentVariable("SMTP_USER")
+                       ?? Environment.GetEnvironmentVariable("SMTP_USERNAME");
+        var smtpPass = _configuration["FlowOS:Communications:Email:Smtp:Password"]
+                       ?? Environment.GetEnvironmentVariable("SMTP_PASSWORD")
+                       ?? Environment.GetEnvironmentVariable("SMTP_PASS");
+
+        if (!string.IsNullOrWhiteSpace(smtpHost) && !string.IsNullOrWhiteSpace(smtpPass))
+        {
+            var smtpPortStr = _configuration["FlowOS:Communications:Email:Smtp:Port"]
+                              ?? Environment.GetEnvironmentVariable("SMTP_PORT")
+                              ?? "587";
+            if (!int.TryParse(smtpPortStr, out var smtpPort) || smtpPort <= 0)
+                smtpPort = 587;
+
+            var enableSslStr = _configuration["FlowOS:Communications:Email:Smtp:EnableSsl"]
+                               ?? Environment.GetEnvironmentVariable("SMTP_ENABLE_SSL")
+                               ?? "true";
+            var enableSsl = !string.Equals(enableSslStr, "false", StringComparison.OrdinalIgnoreCase);
+
+            var fromEmail = _configuration["FlowOS:Communications:Email:OfficialEmail"]
+                            ?? Environment.GetEnvironmentVariable("SMTP_FROM")
+                            ?? "admin@flowosbd.com";
+            var fromName = _configuration["FlowOS:Communications:Email:SenderName"]
+                           ?? "FlowOS Admin";
+
+            try
+            {
+                using var mailMsg = new MailMessage();
+                mailMsg.From = new MailAddress(fromEmail, fromName);
+                mailMsg.To.Add(request.To);
+                mailMsg.Subject = request.Subject;
+                mailMsg.Body = request.HtmlBody ?? request.Body;
+                mailMsg.IsBodyHtml = !string.IsNullOrWhiteSpace(request.HtmlBody);
+
+                if (!string.IsNullOrWhiteSpace(request.HtmlBody) && !string.IsNullOrWhiteSpace(request.Body))
+                {
+                    var plainTextView = AlternateView.CreateAlternateViewFromString(request.Body, Encoding.UTF8, "text/plain");
+                    var htmlView = AlternateView.CreateAlternateViewFromString(request.HtmlBody, Encoding.UTF8, "text/html");
+                    mailMsg.AlternateViews.Add(plainTextView);
+                    mailMsg.AlternateViews.Add(htmlView);
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.Cc))
+                    mailMsg.CC.Add(request.Cc);
+                if (!string.IsNullOrWhiteSpace(request.Bcc))
+                    mailMsg.Bcc.Add(request.Bcc);
+
+                if (request.Headers != null)
+                {
+                    foreach (var (k, v) in request.Headers)
+                    {
+                        if (string.Equals(k, "Reply-To", StringComparison.OrdinalIgnoreCase))
+                        {
+                            mailMsg.ReplyToList.Add(v);
+                        }
+                        else if (!string.Equals(k, "From", StringComparison.OrdinalIgnoreCase) &&
+                                 !string.Equals(k, "Sender", StringComparison.OrdinalIgnoreCase))
+                        {
+                            mailMsg.Headers[k] = v;
+                        }
+                    }
+                }
+
+                using var smtpClient = new SmtpClient(smtpHost, smtpPort)
+                {
+                    EnableSsl = enableSsl,
+                    DeliveryMethod = SmtpDeliveryMethod.Network,
+                    Timeout = 15000
+                };
+
+                if (!string.IsNullOrWhiteSpace(smtpUser) && !string.IsNullOrWhiteSpace(smtpPass))
+                {
+                    smtpClient.Credentials = new NetworkCredential(smtpUser, smtpPass);
+                }
+
+                await smtpClient.SendMailAsync(mailMsg, ct);
+
+                var msgId = $"smtp_{Guid.NewGuid():N}";
+                _logger.LogInformation("[EmailSender] Email sent via SMTP ({Host}:{Port}) to '{To}' (ID: {Id})",
+                    smtpHost, smtpPort, request.To, msgId);
+
+                return new EmailSendResult(true, msgId, 200);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[EmailSender] Failed to send email via SMTP host {Host}:{Port} to {To}",
+                    smtpHost, smtpPort, request.To);
+                return new EmailSendResult(false, null, 500, $"SMTP send error: {ex.Message}");
+            }
+        }
+
+        // 3. Fallback: Log simulation and return success
         var generatedId = $"email_sim_{Guid.NewGuid():N}";
-        _logger.LogInformation("[EmailSender] Simulated email dispatched to '{To}' with subject '{Subject}' (ID: {Id})",
+        _logger.LogWarning("[EmailSender] No SMTP credentials configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD in environment or appsettings). Simulated email to '{To}' with subject '{Subject}' (ID: {Id})",
             request.To, request.Subject, generatedId);
 
         return await Task.FromResult(new EmailSendResult(true, generatedId, 200));
