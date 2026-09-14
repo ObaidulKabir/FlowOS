@@ -210,7 +210,10 @@ public class WorkflowActionDispatcher : IWorkflowActionDispatcher
         return actionType.Equals("Webhook", StringComparison.OrdinalIgnoreCase)
             || actionType.Equals("Notification", StringComparison.OrdinalIgnoreCase)
             || actionType.Equals("PublishEvent", StringComparison.OrdinalIgnoreCase)
-            || actionType.Equals("InvokeCapability", StringComparison.OrdinalIgnoreCase);
+            || actionType.Equals("InvokeCapability", StringComparison.OrdinalIgnoreCase)
+            || actionType.Equals("Slack", StringComparison.OrdinalIgnoreCase)
+            || actionType.Equals("Email", StringComparison.OrdinalIgnoreCase)
+            || actionType.Equals("WhatsApp", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<Dictionary<string, string>> ResolveActionBindingsAsync(

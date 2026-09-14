@@ -15,7 +15,7 @@ public interface IWorkflowInstanceRepository
     Task<WorkflowInstance?> GetByIdAsNoTrackingAsync(Guid id, CancellationToken cancellationToken = default);
     Task<List<WorkflowInstance>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<List<WorkflowInstance>> ListByStatusAsync(WorkflowInstanceStatus status, Guid? tenantId, CancellationToken cancellationToken = default);
-    Task<List<WorkflowSummaryDto>> GetSummariesByTenantAsync(Guid tenantId, WorkflowInstanceStatus? status, CancellationToken cancellationToken = default);
+    Task<List<WorkflowSummaryDto>> GetSummariesByTenantAsync(Guid tenantId, WorkflowInstanceStatus? status, Guid? parentWorkflowInstanceId = null, CancellationToken cancellationToken = default);
     Task<WorkflowSummaryDto?> GetSummaryByIdAsync(Guid id, Guid tenantId, CancellationToken cancellationToken = default);
     Task<WorkflowInstance?> GetLatestChildByParentStepAsync(Guid tenantId, Guid parentWorkflowInstanceId, string parentStepId, CancellationToken cancellationToken = default);
     Task<bool> AnyForWorkflowClassAsync(Guid workflowClassId, CancellationToken cancellationToken = default);

@@ -121,7 +121,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(47, httpNames.Length);
+        Assert.Equal(52, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);
@@ -184,7 +184,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var json = JObject.Parse(await response.Content.ReadAsStringAsync());
         var tools = Assert.IsType<JArray>(json["tools"]);
-        Assert.Equal(47, tools.Count);
+        Assert.Equal(52, tools.Count);
 
         foreach (var tool in tools)
         {
@@ -704,6 +704,314 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         Assert.Equal(nonExistentHistBody["result"]?["isError"]?.Value<bool>(), foreignHistBody["result"]?["isError"]?.Value<bool>());
         Assert.Contains("MCP-NOTFOUND-001", nonExistentHistBody.ToString());
         Assert.Contains("MCP-NOTFOUND-001", foreignHistBody.ToString());
+    }
+
+    [Fact]
+    public async Task New_features_tools_execute_over_http_successfully()
+    {
+        // 1. simulate_parallel_execution with inline Fork/Join blueprint
+        var forkJoinBlueprint = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+        {
+            Events = new() { new() { EventId = "EVT-SUBMIT", Name = "Submit" } },
+            StateMachine = new()
+            {
+                InitialState = "Submitted",
+                States = new() { "Submitted", "Approved" }
+            },
+            Workflow = new()
+            {
+                StartStepId = "StartFork",
+                Steps = new()
+                {
+                    new()
+                    {
+                        StepId = "StartFork",
+                        StepType = "Fork",
+                        Branches = new() { "BranchA", "BranchB" }
+                    },
+                    new()
+                    {
+                        StepId = "BranchA",
+                        StepType = "Command",
+                        NextSteps = new() { { "Default", "SyncJoin" } }
+                    },
+                    new()
+                    {
+                        StepId = "BranchB",
+                        StepType = "Command",
+                        NextSteps = new() { { "Default", "SyncJoin" } }
+                    },
+                    new()
+                    {
+                        StepId = "SyncJoin",
+                        StepType = "Join",
+                        JoinPolicy = "WaitAll",
+                        NextSteps = new() { { "Default", "Finish" } }
+                    },
+                    new()
+                    {
+                        StepId = "Finish",
+                        StepType = "End"
+                    }
+                }
+            }
+        };
+
+        var simCall = await SendAsync($$"""
+        {
+          "jsonrpc": "2.0",
+          "id": 101,
+          "method": "tools/call",
+          "params": {
+            "name": "simulate_parallel_execution",
+            "arguments": {
+              "blueprint": {{JsonConvert.SerializeObject(forkJoinBlueprint)}},
+              "payload": { "amount": 1000 }
+            }
+          }
+        }
+        """);
+
+        Assert.Equal(HttpStatusCode.OK, simCall.StatusCode);
+        var simJson = JObject.Parse(await simCall.Content.ReadAsStringAsync());
+        Assert.False(simJson["result"]?["isError"]?.Value<bool>());
+        var simPayload = JObject.Parse(simJson["result"]?["content"]?[0]?["text"]?.ToString() ?? "{}");
+        Assert.True(simPayload["ok"]?.Value<bool>());
+        var simData = simPayload["data"];
+        Assert.NotNull(simData);
+        Assert.Equal("StartFork", simData["forkStepId"]?.ToString());
+        Assert.Equal(2, simData["totalBranches"]?.Value<int>());
+        Assert.True(simData["isSynchronized"]?.Value<bool>());
+
+        // 2. refine_workflow_blueprint_from_nl
+        var refineCall = await SendAsync($$"""
+        {
+          "jsonrpc": "2.0",
+          "id": 102,
+          "method": "tools/call",
+          "params": {
+            "name": "refine_workflow_blueprint_from_nl",
+            "arguments": {
+              "prompt": "Add 24h SLA timeout and manager escalation webhook",
+              "currentBlueprint": {{JsonConvert.SerializeObject(forkJoinBlueprint)}}
+            }
+          }
+        }
+        """);
+
+        Assert.Equal(HttpStatusCode.OK, refineCall.StatusCode);
+        var refineJson = JObject.Parse(await refineCall.Content.ReadAsStringAsync());
+        Assert.False(refineJson["result"]?["isError"]?.Value<bool>());
+        var refinePayload = JObject.Parse(refineJson["result"]?["content"]?[0]?["text"]?.ToString() ?? "{}");
+        Assert.True(refinePayload["ok"]?.Value<bool>());
+        Assert.NotNull(refinePayload["data"]?["Blueprint"] ?? refinePayload["data"]?["blueprint"]);
+
+        // 3. get_subworkflow_tree for non-existent instance -> MCP-NOTFOUND-001
+        var treeCall = await SendAsync($$"""
+        {
+          "jsonrpc": "2.0",
+          "id": 103,
+          "method": "tools/call",
+          "params": {
+            "name": "get_subworkflow_tree",
+            "arguments": {
+              "workflowInstanceId": "{{Guid.NewGuid()}}"
+            }
+          }
+        }
+        """);
+
+        Assert.Equal(HttpStatusCode.OK, treeCall.StatusCode);
+        var treeJson = JObject.Parse(await treeCall.Content.ReadAsStringAsync());
+        Assert.True(treeJson["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", treeJson.ToString());
+    }
+
+    [Fact]
+    public async Task Subworkflow_simulation_via_simulate_workflowclass_executes_child_and_maps_payload()
+    {
+        var call = await SendAsync(
+            $$"""
+            {
+              "jsonrpc": "2.0",
+              "id": 101,
+              "method": "tools/call",
+              "params": {
+                "name": "simulate_workflowclass",
+                "arguments": {
+                  "blueprint": {
+                    "workflow": {
+                      "startStepId": "ParentStart",
+                      "steps": [
+                        {
+                          "stepId": "ParentStart",
+                          "stepType": "Command",
+                          "nextSteps": { "Default": "ExecuteChild" }
+                        },
+                        {
+                          "stepId": "ExecuteChild",
+                          "stepType": "SubWorkflow",
+                          "subWorkflow": {
+                            "workflowName": "ChildApprovalWorkflow",
+                            "inputMapping": {
+                              "RequestedAmount": "OrderAmount"
+                            },
+                            "outputMapping": {
+                              "OrderApproved": "ChildApproved",
+                              "ApprovalRisk": "RiskScore"
+                            }
+                          },
+                          "nextSteps": {
+                            "SubWorkflowCompleted": "FinalCheck"
+                          }
+                        },
+                        {
+                          "stepId": "FinalCheck",
+                          "stepType": "Decision",
+                          "conditions": {
+                            "OrderApproved == true": "END",
+                            "Default": "ManualReview"
+                          }
+                        },
+                        {
+                          "stepId": "ManualReview",
+                          "stepType": "Command",
+                          "nextSteps": { "Default": "END" }
+                        }
+                      ]
+                    }
+                  },
+                  "subWorkflows": {
+                    "ChildApprovalWorkflow": {
+                      "workflow": {
+                        "startStepId": "EvaluateRisk",
+                        "steps": [
+                          {
+                            "stepId": "EvaluateRisk",
+                            "stepType": "Command",
+                            "onExit": [
+                              {
+                                "actionType": "Notification",
+                                "target": "Auditor",
+                                "payloadMapping": {
+                                  "ChildApproved": "true",
+                                  "RiskScore": "15"
+                                }
+                              }
+                            ],
+                            "nextSteps": { "Default": "END" }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "payload": {
+                    "OrderAmount": 500
+                  }
+                }
+              }
+            }
+            """);
+
+        Assert.Equal(HttpStatusCode.OK, call.StatusCode);
+        var json = JObject.Parse(await call.Content.ReadAsStringAsync());
+        Assert.False(json["result"]?["isError"]?.Value<bool>());
+        var contentText = json["result"]?["content"]?[0]?["text"]?.ToString();
+        Assert.NotNull(contentText);
+        var payloadObj = JObject.Parse(contentText);
+        var data = payloadObj["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("END", data["currentStepId"]?.ToString());
+        Assert.True(data["payload"]?["SubWorkflowCompleted"]?.Value<bool>());
+        Assert.True(data["payload"]?["OrderApproved"]?.Value<bool>());
+
+        var subworkflows = data["subworkflowsExecuted"] as JArray;
+        Assert.NotNull(subworkflows);
+        Assert.Single(subworkflows);
+        var childInfo = subworkflows[0] as JObject;
+        Assert.NotNull(childInfo);
+        Assert.Equal("ChildApprovalWorkflow", childInfo["childWorkflow"]?.ToString());
+        Assert.Equal("Completed", childInfo["childStatus"]?.ToString());
+    }
+
+    [Fact]
+    public async Task Subworkflow_simulation_via_simulate_subworkflow_tool_call()
+    {
+        var call = await SendAsync(
+            $$"""
+            {
+              "jsonrpc": "2.0",
+              "id": 102,
+              "method": "tools/call",
+              "params": {
+                "name": "simulate_subworkflow",
+                "arguments": {
+                  "parentBlueprint": {
+                    "workflow": {
+                      "startStepId": "SubWorkflowStep",
+                      "steps": [
+                        {
+                          "stepId": "SubWorkflowStep",
+                          "stepType": "SubWorkflow",
+                          "subWorkflow": {
+                            "workflowName": "CreditCheckChild",
+                            "inputMapping": {
+                              "Total": "ParentTotal"
+                            },
+                            "outputMapping": {
+                              "ParentDecision": "ChildDecision"
+                            }
+                          },
+                          "nextSteps": {
+                            "SubWorkflowCompleted": "END"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "childBlueprint": {
+                    "name": "CreditCheckChild",
+                    "workflow": {
+                      "startStepId": "RunCheck",
+                      "steps": [
+                        {
+                          "stepId": "RunCheck",
+                          "stepType": "Command",
+                          "onExit": [
+                            {
+                              "actionType": "Notification",
+                              "target": "Compliance",
+                              "payloadMapping": {
+                                "ChildDecision": "'APPROVED'"
+                              }
+                            }
+                          ],
+                          "nextSteps": { "Default": "END" }
+                        }
+                      ]
+                    }
+                  },
+                  "payload": {
+                    "ParentTotal": 1250
+                  }
+                }
+              }
+            }
+            """);
+
+        Assert.Equal(HttpStatusCode.OK, call.StatusCode);
+        var json = JObject.Parse(await call.Content.ReadAsStringAsync());
+        Assert.False(json["result"]?["isError"]?.Value<bool>());
+        var contentText = json["result"]?["content"]?[0]?["text"]?.ToString();
+        Assert.NotNull(contentText);
+        var payloadObj = JObject.Parse(contentText);
+        var data = payloadObj["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("SubWorkflowStep", data["subWorkflowStepId"]?.ToString());
+        Assert.Equal("CreditCheckChild", data["childWorkflow"]?.ToString());
+        Assert.Equal("APPROVED", data["updatedParentPayload"]?["ParentDecision"]?.ToString());
     }
 
     private async Task<HttpResponseMessage> SendAsync(string body, bool includeProtocol = true)

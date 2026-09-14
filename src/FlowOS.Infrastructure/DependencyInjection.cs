@@ -20,8 +20,14 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowActionPlugin, NotificationWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, PublishEventWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, InvokeCapabilityWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, SlackWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, EmailWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, WhatsAppWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, GenericWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPluginRegistry, WorkflowActionPluginRegistry>();
+        services.AddScoped<FlowOS.Infrastructure.Services.Communication.ISlackSender, FlowOS.Infrastructure.Services.Communication.DefaultSlackSender>();
+        services.AddScoped<FlowOS.Infrastructure.Services.Communication.IEmailSender, FlowOS.Infrastructure.Services.Communication.DefaultEmailSender>();
+        services.AddScoped<FlowOS.Infrastructure.Services.Communication.IWhatsAppSender, FlowOS.Infrastructure.Services.Communication.DefaultWhatsAppSender>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IPolicyDecisionPlugin, DefaultPolicyDecisionPlugin>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IPolicyDecisionPluginRegistry, PolicyDecisionPluginRegistry>();
         services.AddScoped<IWorkflowActionDispatcher, WorkflowActionDispatcher>();
@@ -34,6 +40,9 @@ public static class DependencyInjection
         services.AddScoped<FlowOS.Core.Common.Interfaces.ICapabilityRegistryService, CapabilityRegistryService>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService, PluginBindingRegistryService>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IWebhookSignatureService, FlowOS.Core.Common.Services.WebhookSignatureService>();
+        services.AddSingleton<FlowOS.Security.Interfaces.IPasswordHasher, FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher>();
+        services.AddSingleton<FlowOS.Security.Interfaces.IJwtTokenService, FlowOS.Infrastructure.Services.Security.JwtTokenService>();
+        services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantAuthService, FlowOS.Infrastructure.Services.Security.TenantAuthService>();
         return services;
     }
 }

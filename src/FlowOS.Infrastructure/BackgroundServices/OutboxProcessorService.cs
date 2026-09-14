@@ -255,6 +255,140 @@ public class OutboxProcessorService : BackgroundService
                 sw.Stop();
                 responseSnippet = "Notification dispatched successfully";
             }
+            else if (string.Equals(actionType, "Slack", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(message.Type, "WorkflowAction:Slack", StringComparison.OrdinalIgnoreCase))
+            {
+                var slackSender = sp.GetService<FlowOS.Infrastructure.Services.Communication.ISlackSender>()
+                                  ?? new FlowOS.Infrastructure.Services.Communication.DefaultSlackSender(
+                                      sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(),
+                                      sp.GetRequiredService<ILogger<FlowOS.Infrastructure.Services.Communication.DefaultSlackSender>>());
+
+                var channel = root.TryGetProperty("channel", out var ch) ? ch.GetString() ?? target ?? "#general" : (target ?? "#general");
+                var text = root.TryGetProperty("text", out var tx) ? tx.GetString() ?? "Workflow Notification" : (root.TryGetProperty("template", out var tm) ? tm.GetString() ?? "Workflow Notification" : "Workflow Notification");
+                var webhookUrl = root.TryGetProperty("webhookUrl", out var wh) ? wh.GetString() : (root.TryGetProperty("url", out var uElem) ? uElem.GetString() : null);
+
+                object? blocks = null;
+                if (root.TryGetProperty("blocks", out var blElem))
+                {
+                    try { blocks = JsonSerializer.Deserialize<object>(blElem.GetRawText()); } catch { }
+                }
+
+                object? attachments = null;
+                if (root.TryGetProperty("attachments", out var attElem))
+                {
+                    try { attachments = JsonSerializer.Deserialize<object>(attElem.GetRawText()); } catch { }
+                }
+
+                var sendResult = await slackSender.SendSlackMessageAsync(new FlowOS.Infrastructure.Services.Communication.SlackSendRequest(
+                    message.TenantId,
+                    channel,
+                    text,
+                    webhookUrl,
+                    blocks,
+                    attachments), ct);
+
+                sw.Stop();
+                httpStatusCode = sendResult.StatusCode;
+                if (sendResult.Success)
+                {
+                    responseSnippet = $"Slack message sent successfully (ts: {sendResult.MessageTs})";
+                }
+                else
+                {
+                    status = "Failed";
+                    errorMessage = sendResult.Error ?? "Failed to send Slack message";
+                    throw new InvalidOperationException(errorMessage);
+                }
+            }
+            else if (string.Equals(actionType, "Email", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(message.Type, "WorkflowAction:Email", StringComparison.OrdinalIgnoreCase))
+            {
+                var emailSender = sp.GetService<FlowOS.Infrastructure.Services.Communication.IEmailSender>()
+                                  ?? new FlowOS.Infrastructure.Services.Communication.DefaultEmailSender(
+                                      sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(),
+                                      sp.GetRequiredService<ILogger<FlowOS.Infrastructure.Services.Communication.DefaultEmailSender>>());
+
+                var to = root.TryGetProperty("to", out var toProp) ? toProp.GetString() : target;
+                if (string.IsNullOrWhiteSpace(to))
+                {
+                    throw new InvalidOperationException("Email action requires 'to' recipient address.");
+                }
+
+                var subject = root.TryGetProperty("subject", out var subProp) ? subProp.GetString() ?? $"Notification from Step: {stepId}" : $"Notification from Step: {stepId}";
+                var body = root.TryGetProperty("body", out var bProp) ? bProp.GetString() ?? "" : (root.TryGetProperty("template", out var tm) ? tm.GetString() ?? "" : "");
+                var htmlBody = root.TryGetProperty("htmlBody", out var hbProp) ? hbProp.GetString() : null;
+                var cc = root.TryGetProperty("cc", out var ccProp) ? ccProp.GetString() : null;
+                var bcc = root.TryGetProperty("bcc", out var bccProp) ? bccProp.GetString() : null;
+
+                var sendResult = await emailSender.SendEmailAsync(new FlowOS.Infrastructure.Services.Communication.EmailSendRequest(
+                    message.TenantId,
+                    to,
+                    subject,
+                    body,
+                    htmlBody,
+                    cc,
+                    bcc), ct);
+
+                sw.Stop();
+                httpStatusCode = sendResult.StatusCode;
+                if (sendResult.Success)
+                {
+                    responseSnippet = $"Email sent successfully (id: {sendResult.MessageId})";
+                }
+                else
+                {
+                    status = "Failed";
+                    errorMessage = sendResult.Error ?? "Failed to send Email";
+                    throw new InvalidOperationException(errorMessage);
+                }
+            }
+            else if (string.Equals(actionType, "WhatsApp", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(message.Type, "WorkflowAction:WhatsApp", StringComparison.OrdinalIgnoreCase))
+            {
+                var waSender = sp.GetService<FlowOS.Infrastructure.Services.Communication.IWhatsAppSender>()
+                               ?? new FlowOS.Infrastructure.Services.Communication.DefaultWhatsAppSender(
+                                   sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(),
+                                   sp.GetRequiredService<ILogger<FlowOS.Infrastructure.Services.Communication.DefaultWhatsAppSender>>());
+
+                var recipient = root.TryGetProperty("recipient", out var recProp) ? recProp.GetString() : target;
+                if (string.IsNullOrWhiteSpace(recipient))
+                {
+                    throw new InvalidOperationException("WhatsApp action requires 'recipient' phone number.");
+                }
+
+                var templateName = root.TryGetProperty("templateName", out var tmplProp) ? tmplProp.GetString() : null;
+                var msgText = root.TryGetProperty("message", out var msgProp) ? msgProp.GetString() : (root.TryGetProperty("template", out var tm) ? tm.GetString() : null);
+                var language = root.TryGetProperty("language", out var langProp) ? langProp.GetString() ?? "en_US" : "en_US";
+                var mediaUrl = root.TryGetProperty("mediaUrl", out var medProp) ? medProp.GetString() : null;
+
+                object? parameters = null;
+                if (root.TryGetProperty("parameters", out var pElem))
+                {
+                    try { parameters = JsonSerializer.Deserialize<object>(pElem.GetRawText()); } catch { }
+                }
+
+                var sendResult = await waSender.SendWhatsAppMessageAsync(new FlowOS.Infrastructure.Services.Communication.WhatsAppSendRequest(
+                    message.TenantId,
+                    recipient,
+                    templateName,
+                    msgText,
+                    language,
+                    parameters,
+                    mediaUrl), ct);
+
+                sw.Stop();
+                httpStatusCode = sendResult.StatusCode;
+                if (sendResult.Success)
+                {
+                    responseSnippet = $"WhatsApp message sent successfully (sid: {sendResult.MessageSid})";
+                }
+                else
+                {
+                    status = "Failed";
+                    errorMessage = sendResult.Error ?? "Failed to send WhatsApp message";
+                    throw new InvalidOperationException(errorMessage);
+                }
+            }
             else if (string.Equals(actionType, "PublishEvent", StringComparison.OrdinalIgnoreCase))
             {
                 var eventName = target;

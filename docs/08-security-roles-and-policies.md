@@ -115,6 +115,99 @@ Once created, a policy is active immediately for its tenant. Example — a `"Den
 
 *Derived from: `tests/FlowOS.EndToEndTests/DesignConsultancy/DesignConsultancy_PolicyBlock.cs`* — even an admin is subject to policies once one is configured; no state changes occur and the API returns a clear reason.
 
+## Tenant Registration, Login & Email Verification
+
+FlowOS provides multi-tenant onboarding with mandatory email verification and JWT token issuance.
+
+### 1. Register a Tenant Organization
+
+**Endpoint:** `POST /api/auth/register-tenant`
+
+```bash
+curl -X POST "http://localhost:5183/api/auth/register-tenant" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantName": "Acme Corp",
+    "email": "owner@acmecorp.com",
+    "password": "SecurePassword123!",
+    "fullName": "Jane Acme"
+  }'
+```
+
+Returns `201 Created`. The tenant is placed in `PendingVerification` status, and an official verification email is automatically dispatched from **`admin@flowosbd.com`** (FlowOS Admin) containing a 24-hour verification token.
+
+### 2. Verify Email Address
+
+**Endpoint:** `POST /api/auth/verify-email` (or `GET /api/auth/verify-email?token=...&email=...` via browser)
+
+```bash
+curl -X POST "http://localhost:5183/api/auth/verify-email" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "owner@acmecorp.com",
+    "token": "<verification_token>"
+  }'
+```
+
+Upon successful verification, the tenant status is activated (`Active`), enabling tenant members to log in and access protected workflows.
+
+### 3. Login & Obtain JWT Token
+
+**Endpoint:** `POST /api/auth/login`
+
+```bash
+curl -X POST "http://localhost:5183/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "owner@acmecorp.com",
+    "password": "SecurePassword123!"
+  }'
+```
+
+Response:
+```json
+{
+  "ok": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 86400,
+  "user": {
+    "id": "c1f7a07c-9b8d-4e2b-9e4a-1a2b3c4d5e6f",
+    "email": "owner@acmecorp.com",
+    "fullName": "Jane Acme",
+    "role": "Admin",
+    "tenantId": "e2f8b18d-0c9e-4f3c-8a5b-2b3c4d5e6f7a",
+    "tenantName": "Acme Corp",
+    "isEmailVerified": true
+  }
+}
+```
+
+Use the returned token in subsequent API requests via the header `Authorization: Bearer <token>`. FlowOS's middleware automatically validates the signature, extracts the user's role and tenant ID, and authorizes requests.
+
+### 4. Resend Verification Email
+
+If the verification token expires or is lost:
+
+**Endpoint:** `POST /api/auth/resend-verification`
+
+```bash
+curl -X POST "http://localhost:5183/api/auth/resend-verification" \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "owner@acmecorp.com" }'
+```
+
+### 5. Inspect Authenticated User Profile
+
+**Endpoint:** `GET /api/auth/me`
+
+```bash
+curl -X GET "http://localhost:5183/api/auth/me" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
 ## Authority ordering
 
 When an actor attempts an action (e.g. `StartWorkflowCommand`), FlowOS evaluates authority strictly top-down. A denial at any layer stops the request; authority never flows upward:

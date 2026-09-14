@@ -305,5 +305,33 @@ public class GovernanceTools
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to generate blueprint: {ex.Message}");
         }
     }
+
+    public async Task<CallToolResult> RefineBlueprintFromNaturalLanguage(JObject args)
+    {
+        try
+        {
+            var prompt = args["prompt"]?.ToString();
+            if (string.IsNullOrWhiteSpace(prompt))
+                return McpToolResults.Fail("MCP-ARG-001", "prompt is required.");
+
+            var currentBpObj = args["currentBlueprint"] as JObject;
+            if (currentBpObj == null)
+                return McpToolResults.Fail("MCP-ARG-001", "currentBlueprint is required for refinement.");
+
+            WorkflowClassBlueprint currentBp = currentBpObj.ToObject<WorkflowClassBlueprint>()
+                ?? throw new ArgumentException("currentBlueprint cannot be deserialized.");
+
+            var result = await _mediator.Send(new GenerateWorkflowClassCopilotCommand(prompt, currentBp, "refine"));
+            return McpToolResults.Success(result);
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to refine blueprint: {ex.Message}");
+        }
+    }
 }
 

@@ -117,7 +117,75 @@ export interface AuthSession {
   tenantName: string;
   apiKey?: string;
   username?: string;
+  token?: string;
+  isSandbox?: boolean;
+  email?: string;
+  isEmailVerified?: boolean;
 }
+
+export interface RegisterTenantUserRequest {
+  tenantName: string;
+  email: string;
+  password: string;
+  fullName?: string;
+}
+
+export interface RegisterTenantUserResponse {
+  ok: boolean;
+  message: string;
+  tenantId?: string;
+  tenantName?: string;
+  email?: string;
+  isEmailVerified?: boolean;
+  verificationToken?: string;
+}
+
+export interface VerifyEmailRequest {
+  email: string;
+  token: string;
+}
+
+export interface VerifyEmailResponse {
+  ok: boolean;
+  message: string;
+  tenantId?: string;
+  email?: string;
+  isEmailVerified?: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface TenantUserDto {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  tenantId: string;
+  tenantName: string;
+  isEmailVerified: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface LoginResponse {
+  ok: boolean;
+  token?: string;
+  tokenType?: string;
+  expiresIn?: number;
+  user?: TenantUserDto;
+  errorCode?: string;
+  message?: string;
+}
+
+export interface ResendVerificationResponse {
+  ok: boolean;
+  message: string;
+  verificationToken?: string;
+}
+
 
 export interface DeadLetterDto {
   id: string;

@@ -276,4 +276,310 @@ public class SimulationToolsTests
         Assert.Equal("Completed", data["status"]?.ToString());
         Assert.Equal("ExpenseApproval v1.0.0", data["workflow"]?.ToString());
     }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_WithInlineSubWorkflow_ExecutesChildAndMapsOutput()
+    {
+        // Arrange
+        var parentBp = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "InvokeSub",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "InvokeSub",
+                        StepType = "SubWorkflow",
+                        SubWorkflow = new SubWorkflowReferenceBlueprint
+                        {
+                            WorkflowName = "TaxCalculationChild",
+                            InputMapping = new Dictionary<string, string>
+                            {
+                                { "Income", "AnnualIncome" }
+                            },
+                            OutputMapping = new Dictionary<string, string>
+                            {
+                                { "CalculatedTax", "ChildTax" }
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "SubWorkflowCompleted", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var childBp = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Calculate",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "Calculate",
+                        StepType = "Command",
+                        OnExit = new List<StepActionBlueprint>
+                        {
+                            new()
+                            {
+                                ActionType = "Notification",
+                                Target = "TaxService",
+                                PayloadMapping = new Dictionary<string, string>
+                                {
+                                    { "ChildTax", "Income * 0.25" }
+                                }
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "Default", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(parentBp),
+            ["subWorkflows"] = new JObject
+            {
+                ["TaxCalculationChild"] = JObject.FromObject(childBp)
+            },
+            ["payload"] = new JObject
+            {
+                ["AnnualIncome"] = 100000
+            }
+        };
+
+        // Act
+        var result = await _tools.SimulateWorkflowClass(args);
+
+        // Assert
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("END", data["currentStepId"]?.ToString());
+        Assert.True(data["payload"]?["SubWorkflowCompleted"]?.Value<bool>());
+        Assert.Equal(25000.0, data["payload"]?["CalculatedTax"]?.Value<double>());
+
+        var executed = data["subworkflowsExecuted"] as JArray;
+        Assert.NotNull(executed);
+        Assert.Single(executed);
+        var childTrace = executed[0] as JObject;
+        Assert.NotNull(childTrace);
+        Assert.Equal("TaxCalculationChild", childTrace["childWorkflow"]?.ToString());
+        Assert.Equal("Completed", childTrace["childStatus"]?.ToString());
+    }
+
+    [Fact]
+    public async Task SimulateSubWorkflow_DedicatedTool_ExecutesChildAndReturnsSubworkflowTelemetry()
+    {
+        // Arrange
+        var parentBp = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "VerificationStep",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "VerificationStep",
+                        StepType = "SubWorkflow",
+                        SubWorkflow = new SubWorkflowReferenceBlueprint
+                        {
+                            WorkflowName = "KycWorkflow",
+                            InputMapping = new Dictionary<string, string>
+                            {
+                                { "DocId", "ApplicantDocId" }
+                            },
+                            OutputMapping = new Dictionary<string, string>
+                            {
+                                { "KycStatus", "VerifiedStatus" }
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "SubWorkflowCompleted", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var childBp = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "CheckDoc",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "CheckDoc",
+                        StepType = "Command",
+                        OnExit = new List<StepActionBlueprint>
+                        {
+                            new()
+                            {
+                                ActionType = "Notification",
+                                Target = "Compliance",
+                                PayloadMapping = new Dictionary<string, string>
+                                {
+                                    { "VerifiedStatus", "'PASS'" }
+                                }
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "Default", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = new JObject
+        {
+            ["parentBlueprint"] = JObject.FromObject(parentBp),
+            ["childBlueprint"] = JObject.FromObject(childBp),
+            ["payload"] = new JObject
+            {
+                ["ApplicantDocId"] = "DOC-9988"
+            }
+        };
+
+        // Act
+        var result = await _tools.SimulateSubWorkflow(args);
+
+        // Assert
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("VerificationStep", data["subWorkflowStepId"]?.ToString());
+        Assert.Equal("KycWorkflow", data["childWorkflow"]?.ToString());
+        Assert.Equal("PASS", data["updatedParentPayload"]?["KycStatus"]?.ToString());
+    }
+
+    [Fact]
+    public async Task SimulateSubWorkflow_ChildWaitingForHumanTask_PausesParentWithStructuredObject()
+    {
+        // Arrange
+        var parentBp = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "RunSub",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "RunSub",
+                        StepType = "SubWorkflow",
+                        SubWorkflow = new SubWorkflowReferenceBlueprint
+                        {
+                            WorkflowName = "HumanChildWF"
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "SubWorkflowCompleted", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var childBp = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "NeedReview",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "NeedReview",
+                        StepType = "HumanTask",
+                        RequiredRoles = new List<string> { "Manager" },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "EVT-APPROVE", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = new JObject
+        {
+            ["parentBlueprint"] = JObject.FromObject(parentBp),
+            ["childBlueprint"] = JObject.FromObject(childBp),
+            ["role"] = "Manager" // No event passed for child HumanTask
+        };
+
+        // Act
+        var result = await _tools.SimulateSubWorkflow(args);
+
+        // Assert
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("WaitingForSubWorkflow", data["status"]?.ToString());
+
+        var pending = data["pendingSubWorkflow"] as JObject;
+        Assert.NotNull(pending);
+        Assert.Equal("RunSub", pending["stepId"]?.ToString());
+        Assert.Equal("WaitingForHumanTask", pending["childStatus"]?.ToString());
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_SubWorkflowWithoutChild_PausesWaitingForEvent()
+    {
+        // Arrange
+        var parentBp = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "ExternalSub",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "ExternalSub",
+                        StepType = "SubWorkflow",
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "EVT-EXTERNAL-DONE", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(parentBp)
+        };
+
+        // Act
+        var result = await _tools.SimulateWorkflowClass(args);
+
+        // Assert
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("WaitingForSubWorkflow", data["status"]?.ToString());
+        var pending = data["pendingSubWorkflow"] as JObject;
+        Assert.NotNull(pending);
+        Assert.Equal("ExternalSub", pending["stepId"]?.ToString());
+    }
 }

@@ -54,7 +54,7 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         return query.ToListAsync(cancellationToken);
     }
 
-    public async Task<List<WorkflowSummaryDto>> GetSummariesByTenantAsync(Guid tenantId, WorkflowInstanceStatus? status, CancellationToken cancellationToken = default)
+    public async Task<List<WorkflowSummaryDto>> GetSummariesByTenantAsync(Guid tenantId, WorkflowInstanceStatus? status, Guid? parentWorkflowInstanceId = null, CancellationToken cancellationToken = default)
     {
         var query = from w in _context.WorkflowInstances.AsNoTracking()
                     join wc in _context.WorkflowClasses.AsNoTracking() on w.WorkflowClassId equals wc.Id into wcGroup
@@ -64,6 +64,9 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
 
         if (status.HasValue)
             query = query.Where(x => x.w.Status == status.Value);
+
+        if (parentWorkflowInstanceId.HasValue)
+            query = query.Where(x => x.w.ParentWorkflowInstanceId == parentWorkflowInstanceId.Value);
 
         var instances = await query
             .OrderByDescending(x => x.w.CreatedAt)
@@ -134,6 +137,8 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         Status = w.Status.ToString(),
         CorrelationId = w.CorrelationId,
         CreatedAt = w.CreatedAt,
-        CompletedAt = w.CompletedAt
+        CompletedAt = w.CompletedAt,
+        ParentWorkflowInstanceId = w.ParentWorkflowInstanceId,
+        ParentStepId = w.ParentStepId
     };
 }

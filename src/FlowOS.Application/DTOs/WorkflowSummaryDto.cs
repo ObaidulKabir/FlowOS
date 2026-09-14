@@ -20,4 +20,6 @@ public class WorkflowSummaryDto
     public Guid? CorrelationId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    public Guid? ParentWorkflowInstanceId { get; set; }
+    public string? ParentStepId { get; set; }
 }

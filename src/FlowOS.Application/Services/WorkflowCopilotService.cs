@@ -171,6 +171,15 @@ public class WorkflowCopilotService : IWorkflowCopilotService
                         SignPayload = true
                     }
                 };
+                stepA.OnFailure = new List<StepActionBlueprint>
+                {
+                    new()
+                    {
+                        ActionType = "Notification",
+                        Target = "AlertsChannel",
+                        Template = $"Automated check for {branchA} failed."
+                    }
+                };
             }
             steps.Add(stepA);
 
@@ -389,23 +398,34 @@ public class WorkflowCopilotService : IWorkflowCopilotService
         }
 
         // Refine 2: Add Webhook or Notification Hook
-        if (Regex.IsMatch(lowerPrompt, @"\b(webhook|notify|notification|email|slack|audit)\b"))
+        bool isCompensationOnlyWebhook = Regex.IsMatch(lowerPrompt, @"\b(compensat\w*|rollback)\b.*\bwebhook\b|\bwebhook\b.*\b(compensat\w*|rollback)\b");
+        if (!isCompensationOnlyWebhook && Regex.IsMatch(lowerPrompt, @"\b(webhook|notify|notification|email|slack|audit)\b"))
         {
             var targetStep = refined.Workflow.Steps.LastOrDefault(s => s.NextSteps.Values.Contains("END")) 
                              ?? refined.Workflow.Steps.LastOrDefault();
 
             if (targetStep != null)
             {
+                var isWebhook = lowerPrompt.Contains("webhook");
                 targetStep.OnEntry.Add(new StepActionBlueprint
                 {
-                    ActionType = lowerPrompt.Contains("webhook") ? "Webhook" : "Notification",
-                    Url = lowerPrompt.Contains("webhook") ? "https://api.internal/v1/event-hook" : null,
-                    Target = lowerPrompt.Contains("webhook") ? null : "AlertsChannel",
+                    ActionType = isWebhook ? "Webhook" : "Notification",
+                    Url = isWebhook ? "https://api.internal/v1/event-hook" : null,
+                    Target = isWebhook ? null : "AlertsChannel",
                     Template = "Copilot-refined lifecycle action executed.",
                     SignPayload = true
                 });
+                if (isWebhook && targetStep.OnFailure.Count == 0)
+                {
+                    targetStep.OnFailure.Add(new StepActionBlueprint
+                    {
+                        ActionType = "Notification",
+                        Target = "AlertsChannel",
+                        Template = $"Execution of '{targetStep.StepId}' failed. Alerting on-call."
+                    });
+                }
                 addedFeature = true;
-                explanationParts.Add($"• Added OnEntry {(lowerPrompt.Contains("webhook") ? "Webhook" : "Notification")} hook to step '{targetStep.StepId}'.");
+                explanationParts.Add($"• Added OnEntry {(isWebhook ? "Webhook" : "Notification")} hook to step '{targetStep.StepId}'.");
             }
         }
 

@@ -974,6 +974,22 @@ public static class DataSeeder
                                     Target = "Applicant",
                                     Template = "Congratulations {{ApplicantName}}! Your loan of ${{Amount}} has been approved and funds are being wired."
                                 }
+                            },
+                            OnFailure = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://core-banking.partner.com/api/v2/disbursements/void",
+                                    Url = "https://core-banking.partner.com/api/v2/disbursements/void",
+                                    Template = "Voiding disbursement for loan application {{ApplicantName}} due to downstream transmission failure.",
+                                    PayloadMapping = new()
+                                    {
+                                        { "applicant", "ApplicantName" },
+                                        { "principal", "Amount" },
+                                        { "status", "\"Voided\"" }
+                                    }
+                                }
                             }
                         },
                         new()
@@ -1128,6 +1144,17 @@ public static class DataSeeder
                                     Target = "User",
                                     Template = "Temporary access to {{Environment}} granted for 8 hours."
                                 }
+                            },
+                            OnFailure = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Webhook",
+                                    Target = "https://iam.internal/api/v1/revoke-creds",
+                                    Url = "https://iam.internal/api/v1/revoke-creds",
+                                    Template = "Revoking credentials due to provisioning error for {{UserEmail}}",
+                                    PayloadMapping = new() { { "user", "UserEmail" } }
+                                }
                             }
                         },
                         new()
@@ -1152,6 +1179,7 @@ public static class DataSeeder
                                 {
                                     ActionType = "Webhook",
                                     Target = "https://iam.internal/api/v1/revoke-creds",
+                                    Url = "https://iam.internal/api/v1/revoke-creds",
                                     Template = "Revoking credentials for {{UserEmail}} upon 8h timer expiration",
                                     PayloadMapping = new() { { "user", "UserEmail" } }
                                 },
@@ -1160,6 +1188,15 @@ public static class DataSeeder
                                     ActionType = "Notification",
                                     Target = "User",
                                     Template = "Your temporary access session for {{Environment}} has expired and credentials have been revoked."
+                                }
+                            },
+                            OnFailure = new()
+                            {
+                                new()
+                                {
+                                    ActionType = "Notification",
+                                    Target = "SecOpsOnCall",
+                                    Template = "CRITICAL: Automated revocation failed for {{UserEmail}}. Immediate manual intervention required."
                                 }
                             }
                         }

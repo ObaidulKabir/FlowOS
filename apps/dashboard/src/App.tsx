@@ -1,26 +1,64 @@
 import { useState } from 'react';
 import { AuthSession } from './types';
-import { getAuthSession, setAuthSession } from './api/client';
-import { LoginView } from './components/LoginView';
+import { getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession } from './api/client';
+import { LandingPage } from './components/LandingPage';
+import { AuthModal, AuthModalMode } from './components/AuthModal';
 import { TenantDashboard } from './components/TenantDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { McpAgentGuideline } from './components/McpAgentGuideline';
-import { PlatformComparison } from './components/PlatformComparison';
-import { Shield, Building2, LogOut, CheckCircle, Bot, Layers } from 'lucide-react';
+import { 
+  Shield, Building2, LogOut, Bot, Home, 
+  Sparkles, CheckCircle2
+} from 'lucide-react';
 
 function App() {
-  const [session, setSession] = useState<AuthSession>(getAuthSession());
-  const [isLoggedOut, setIsLoggedOut] = useState<boolean>(false);
+  const [session, setSession] = useState<AuthSession>(() => {
+    return getStoredSession() || getDefaultSandboxSession();
+  });
+
+  const [currentView, setCurrentView] = useState<'landing' | 'dashboard'>(() => {
+    const stored = getStoredSession();
+    return stored && !stored.isSandbox ? 'dashboard' : 'landing';
+  });
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
+
+  const openAuth = (mode: AuthModalMode) => {
+    setAuthModalMode(mode);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleLaunchSandbox = () => {
+    const sandboxSession = getDefaultSandboxSession();
+    setSession(sandboxSession);
+    setCurrentView('dashboard');
+  };
+
+  const handleAuthSuccess = (newSession: AuthSession) => {
+    setAuthSession(newSession);
+    setSession(newSession);
+    setCurrentView('dashboard');
+  };
+
+  const handleSignOut = () => {
+    clearAuthSession();
+    setSession(getDefaultSandboxSession());
+    setCurrentView('landing');
+  };
 
   const handleSwitchToAdmin = () => {
     const adminSession: AuthSession = {
       role: 'Admin',
       tenantId: '11111111-1111-1111-1111-111111111111',
       tenantName: 'Platform Administrator',
-      username: 'superadmin@flowos.internal'
+      username: 'superadmin@flowos.internal',
+      isSandbox: false,
+      isEmailVerified: true
     };
     setAuthSession(adminSession);
     setSession(adminSession);
+    setCurrentView('dashboard');
   };
 
   const handleSwitchToTenant = () => {
@@ -29,228 +67,211 @@ function App() {
       tenantId: '22222222-2222-2222-2222-222222222222',
       tenantName: 'Demo Client Tenant',
       apiKey: 'flowos_prod_secret_key_32_chars_min',
-      username: 'demo-tenant-user'
+      username: 'demo-tenant-user',
+      isSandbox: true,
+      isEmailVerified: true
     };
     setAuthSession(tenantSession);
     setSession(tenantSession);
+    setCurrentView('dashboard');
   };
-
-  const handleSignOut = () => {
-    setIsLoggedOut(true);
-  };
-
-  if (isLoggedOut) {
-    return (
-      <LoginView 
-        onLoginSuccess={(newSession) => {
-          setSession(newSession);
-          setIsLoggedOut(false);
-        }} 
-      />
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-blue-500 selection:text-white">
       
-      {/* Top Navigation */}
-      <nav className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-lg ${
-              session.role === 'Admin' ? 'bg-purple-600 shadow-purple-500/30' : 'bg-blue-600 shadow-blue-500/30'
-            }`}>
-              {session.role === 'Admin' ? '👑' : 'F'}
-            </div>
-            <div>
+      {/* LANDING PAGE VIEW */}
+      {currentView === 'landing' ? (
+        <LandingPage 
+          onOpenAuth={openAuth}
+          onLaunchSandbox={handleLaunchSandbox}
+        />
+      ) : (
+        /* DASHBOARD VIEW */
+        <div className="min-h-screen flex flex-col">
+          
+          {/* Guest / Sandbox Banner */}
+          {session.isSandbox && (
+            <div className="bg-gradient-to-r from-emerald-900/90 via-slate-900 to-blue-900/90 border-b border-emerald-500/40 px-6 py-2.5 text-xs text-emerald-200 flex flex-wrap items-center justify-between gap-3 shadow-md z-50">
               <div className="flex items-center gap-2">
-                <span className="text-lg font-bold tracking-tight text-white">Flow<span className="text-blue-500">OS</span></span>
-                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
-                  session.role === 'Admin'
-                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                    : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                }`}>
-                  {session.role === 'Admin' ? 'Platform Governance Plane' : 'Tenant Workspace'}
+                <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-bold">🎮 Interactive Sandbox Playground:</span>
+                <span className="text-slate-300 hidden sm:inline">
+                  You are exploring FlowOS as an unregistered guest user. State transitions, workflows, and simulations are active.
                 </span>
               </div>
-              <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                <span>{session.tenantName}</span>
-                <span className="font-mono text-slate-500">({session.tenantId.substring(0, 8)}...)</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => openAuth('register')}
+                  className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition-all flex items-center gap-1.5 shadow"
+                >
+                  <Sparkles size={12} />
+                  <span>Register Real Tenant</span>
+                </button>
+                <button
+                  onClick={() => setCurrentView('landing')}
+                  className="text-slate-400 hover:text-white underline text-[11px]"
+                >
+                  Exit Sandbox
+                </button>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center space-x-3">
-            {session.role === 'Tenant' ? (
-              <button
-                onClick={handleSwitchToAdmin}
-                className="px-3.5 py-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl transition-all flex items-center gap-1.5"
-                title="Switch to Platform Administrator control plane"
-              >
-                <Shield size={13} />
-                <span className="hidden sm:inline">Switch to</span> Admin View
-              </button>
+          {/* Top Navigation */}
+          <nav className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+              
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => setCurrentView('landing')}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-lg bg-blue-600 shadow-blue-500/30 hover:scale-105 transition-all"
+                  title="Return to FlowOS Landing Page"
+                >
+                  {session.role === 'Admin' ? '👑' : 'F'}
+                </button>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold tracking-tight text-white">Flow<span className="text-blue-500">OS</span></span>
+                    
+                    {session.isSandbox ? (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                        <Sparkles size={10} />
+                        <span>Sandbox Guest</span>
+                      </span>
+                    ) : (
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border flex items-center gap-1 ${
+                        session.role === 'Admin'
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                          : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                      }`}>
+                        <CheckCircle2 size={10} className="text-blue-400" />
+                        <span>{session.role === 'Admin' ? 'Platform Governance' : 'Live Verified Tenant'}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <span className="font-semibold text-slate-300">{session.tenantName}</span>
+                    <span className="font-mono text-slate-500">({session.tenantId.substring(0, 8)}...)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                
+                {/* Back to Homepage */}
+                <button
+                  onClick={() => setCurrentView('landing')}
+                  className="hidden md:inline-flex px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-750 border border-slate-700 rounded-xl transition-all items-center gap-1.5"
+                  title="Back to Landing Page"
+                >
+                  <Home size={13} />
+                  <span>Homepage</span>
+                </button>
+
+                {session.role === 'Tenant' ? (
+                  <button
+                    onClick={handleSwitchToAdmin}
+                    className="px-3.5 py-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl transition-all flex items-center gap-1.5"
+                    title="Switch to Platform Administrator control plane"
+                  >
+                    <Shield size={13} />
+                    <span className="hidden sm:inline">Switch to</span> Admin View
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSwitchToTenant}
+                    className="px-3.5 py-1.5 text-xs font-semibold text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl transition-all flex items-center gap-1.5"
+                    title="Switch to Tenant Workspace view"
+                  >
+                    <Building2 size={13} />
+                    <span className="hidden sm:inline">Switch to</span> Tenant View
+                  </button>
+                )}
+
+                {/* Sign Out / Switch Tenant */}
+                <button
+                  onClick={handleSignOut}
+                  className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl transition-colors flex items-center gap-1.5"
+                  title="Sign out and return to landing page"
+                >
+                  <LogOut size={13} />
+                  <span>{session.isSandbox ? 'Exit Sandbox' : 'Sign Out'}</span>
+                </button>
+
+                <a 
+                  href="/mcp" 
+                  target="_blank" 
+                  className="inline-flex px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all items-center gap-1.5 shadow-sm"
+                  title="Access Model Context Protocol (MCP) tool discovery & catalog"
+                >
+                  <Bot size={13} />
+                  <span>MCP Tools ↗</span>
+                </a>
+
+                <a 
+                  href="/swagger" 
+                  target="_blank" 
+                  className="hidden sm:inline-flex px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition-all"
+                >
+                  Swagger ↗
+                </a>
+              </div>
+            </div>
+          </nav>
+
+          {/* Main Dashboard Scope */}
+          <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full">
+            {session.role === 'Admin' ? (
+              <AdminDashboard 
+                session={session} 
+                onSwitchWorkspace={() => openAuth('login')} 
+              />
             ) : (
-              <button
-                onClick={handleSwitchToTenant}
-                className="px-3.5 py-1.5 text-xs font-semibold text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl transition-all flex items-center gap-1.5"
-                title="Switch to Tenant Workspace view"
-              >
-                <Building2 size={13} />
-                <span className="hidden sm:inline">Switch to</span> Tenant View
-              </button>
+              <TenantDashboard 
+                session={session} 
+                onSwitchWorkspace={() => openAuth('login')} 
+                onTenantChange={(newTenantId, newTenantName) => {
+                  const updated: AuthSession = {
+                    ...session,
+                    tenantId: newTenantId,
+                    tenantName: newTenantName
+                  };
+                  setAuthSession(updated);
+                  setSession(updated);
+                }}
+              />
             )}
+          </main>
 
-            <button
-              onClick={handleSignOut}
-              className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl transition-colors flex items-center gap-1.5"
-              title="Sign out or switch tenant"
-            >
-              <LogOut size={13} />
-              <span>Switch User</span>
-            </button>
+          {/* AI Agent & Browser Guideline Section */}
+          <section className="max-w-7xl mx-auto px-6 mb-8 w-full">
+            <McpAgentGuideline />
+          </section>
 
-            <a 
-              href="#comparison" 
-              className="hidden sm:inline-flex px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl transition-all items-center gap-1.5 shadow-sm"
-              title="Compare FlowOS with Temporal, Camunda, and AWS Step Functions"
-            >
-              <Layers size={13} className="text-blue-400" />
-              <span>Compare Platforms</span>
-            </a>
-
-            <a 
-              href="/mcp" 
-              target="_blank" 
-              className="inline-flex px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all items-center gap-1.5 shadow-sm"
-              title="Access Model Context Protocol (MCP) tool discovery & catalog"
-            >
-              <Bot size={13} />
-              <span>MCP Tools ↗</span>
-            </a>
-
-            <a href="/swagger" target="_blank" className="hidden sm:inline-flex px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition-all">
-              Swagger ↗
-            </a>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Dashboard Scope */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {session.role === 'Admin' ? (
-          <AdminDashboard 
-            session={session} 
-            onSwitchWorkspace={() => setIsLoggedOut(true)} 
-          />
-        ) : (
-          <TenantDashboard 
-            session={session} 
-            onSwitchWorkspace={() => setIsLoggedOut(true)} 
-            onTenantChange={(newTenantId, newTenantName) => {
-              const updated: AuthSession = {
-                ...session,
-                tenantId: newTenantId,
-                tenantName: newTenantName
-              };
-              setAuthSession(updated);
-              setSession(updated);
-            }}
-          />
-        )}
-      </main>
-
-      {/* AI Agent & Browser Guideline Section */}
-      <section className="max-w-7xl mx-auto px-6">
-        <McpAgentGuideline />
-      </section>
-
-      {/* Competitor Comparison Section */}
-      <section id="comparison" className="py-16 px-6 max-w-7xl mx-auto border-t border-slate-800">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold mb-3">
-            <Layers size={13} />
-            <span>Platform Benchmark & Architecture</span>
-          </div>
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">FlowOS vs. Industry Orchestration Engines</h2>
-          <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-            How FlowOS's Dual-Kernel FSM, Transactional Outbox, and Native MCP stack compares against Temporal.io, Camunda 8, and AWS Step Functions.
-          </p>
-        </div>
-
-        <PlatformComparison />
-      </section>
-
-      {/* Pricing Section */}
-      <section id="pricing" className="py-16 px-6 max-w-7xl mx-auto border-t border-slate-800">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Transparent Pricing</h2>
-          <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-            From zero-setup sandbox testing to high-availability production clusters.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-xs">
-          <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl flex flex-col justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white mb-1">Developer Sandbox</h3>
-              <div className="text-2xl font-extrabold text-white mb-4">$0 <span className="text-xs font-normal text-slate-400">/ forever</span></div>
-              <ul className="space-y-2 text-slate-400 mb-6">
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> In-Memory Ephemeral Engine</li>
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> Key-Free MCP Server Mode</li>
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> Up to 4h Auto-Purge TTL</li>
-              </ul>
+          {/* Footer */}
+          <footer className="py-8 border-t border-slate-800 text-center text-xs text-slate-500 bg-slate-950/50">
+            <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div>© 2026 FlowOS — Prospect BD Ltd. Official system email: <a href="mailto:admin@flowosbd.com" className="text-blue-400 hover:underline">admin@flowosbd.com</a></div>
+              <div className="flex space-x-6">
+                <a href="/swagger" target="_blank" className="hover:underline">Swagger Docs</a>
+                <a href="/mcp" target="_blank" className="hover:underline">MCP Endpoint</a>
+                <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" className="hover:underline">GitHub</a>
+              </div>
             </div>
-            <button onClick={() => setIsLoggedOut(true)} className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-center transition-all">
-              Try Sandbox
-            </button>
-          </div>
+          </footer>
 
-          <div className="bg-slate-800 border-2 border-blue-500 p-6 rounded-2xl flex flex-col justify-between relative shadow-xl">
-            <div className="absolute -top-3 right-6 bg-blue-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
-              Popular
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white mb-1">Managed Cloud</h3>
-              <div className="text-2xl font-extrabold text-white mb-4">$299 <span className="text-xs font-normal text-slate-400">/ month</span></div>
-              <ul className="space-y-2 text-slate-400 mb-6">
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> Managed PostgreSQL Cluster</li>
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> Multi-Tenant API Keys</li>
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> 99.9% Uptime SLA Guarantee</li>
-              </ul>
-            </div>
-            <a href="/swagger" target="_blank" className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-center transition-all shadow-md shadow-blue-500/20">
-              Get Started Cloud
-            </a>
-          </div>
-
-          <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl flex flex-col justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white mb-1">Enterprise Dedicated</h3>
-              <div className="text-2xl font-extrabold text-white mb-4">Custom</div>
-              <ul className="space-y-2 text-slate-400 mb-6">
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> Air-Gapped On-Premises</li>
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> Unlimited Tenants & Blueprints</li>
-                <li className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400" /> Dedicated 24/7 Support SLA</li>
-              </ul>
-            </div>
-            <a href="mailto:contact@prospectbdltd.com" className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-center transition-all">
-              Contact Sales
-            </a>
-          </div>
         </div>
-      </section>
+      )}
 
-      {/* Footer */}
-      <footer className="py-8 border-t border-slate-800 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div>© 2026 FlowOS — Prospect BD Ltd. All rights reserved.</div>
-          <div className="flex space-x-6">
-            <a href="/swagger" target="_blank" className="hover:underline">Swagger Docs</a>
-            <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" className="hover:underline">GitHub</a>
-          </div>
-        </div>
-      </footer>
+      {/* Global Unified Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        initialMode={authModalMode}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+        onLaunchSandbox={handleLaunchSandbox}
+      />
+
     </div>
   );
 }

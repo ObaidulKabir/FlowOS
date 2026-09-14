@@ -27,12 +27,32 @@ public class SimulationTools
         _compensationPlanner = compensationPlanner;
     }
 
+    public record SimulationRunResult(
+        string Workflow,
+        string Status,
+        string InitialState,
+        string FinalState,
+        string InitialStepId,
+        string CurrentStepId,
+        int TotalStepsExecuted,
+        string SimulatedRole,
+        object? PendingHumanTask,
+        object? PendingSubWorkflow,
+        List<object> DecisionsEvaluated,
+        List<object> StateTransitions,
+        List<object> ActionsTriggered,
+        List<object> ExecutionTrace,
+        Dictionary<string, object> Payload,
+        List<object> SubWorkflowsExecuted
+    );
+
     public async Task<CallToolResult> SimulateWorkflowClass(JObject args)
     {
         try
         {
             WorkflowClassBlueprint? blueprint = null;
             string sourceWorkflowName = "InlineBlueprint";
+            Guid tenantId = Guid.Empty;
 
             // 1. Resolve blueprint either from inline object or via draft/published ID
             var inlineBlueprintToken = args["blueprint"] as JObject;
@@ -43,6 +63,11 @@ public class SimulationTools
                 {
                     return McpToolResults.Fail("MCP-ARG-001", "Provided inline blueprint is invalid or contains no workflow steps.");
                 }
+                var bpName = args["name"]?.ToString() ?? inlineBlueprintToken["name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(bpName))
+                {
+                    sourceWorkflowName = bpName;
+                }
             }
             else
             {
@@ -52,7 +77,6 @@ public class SimulationTools
                     return McpToolResults.Fail("MCP-ARG-001", "Either 'blueprint' object or a valid UUID 'id' must be provided.");
                 }
 
-                Guid tenantId;
                 try
                 {
                     tenantId = McpTenantResolver.ResolveRequired(args);
@@ -90,426 +114,728 @@ public class SimulationTools
                 return McpToolResults.Fail("MCP-VALIDATION", "Workflow must contain at least one step to simulate.");
             }
 
-            // 2. Parse Context, Roles, Events, and MaxSteps
             var payload = ToPayloadDictionary(args["payload"] as JObject);
             var simulatedRole = args["role"]?.ToString()?.Trim();
             if (string.IsNullOrEmpty(simulatedRole))
                 simulatedRole = "User";
 
-            var eventsQueue = new Queue<string>();
-            if (args["events"] is JArray eventsArray)
-            {
-                foreach (var evt in eventsArray)
-                {
-                    var val = evt?.ToString()?.Trim();
-                    if (!string.IsNullOrEmpty(val))
-                        eventsQueue.Enqueue(val);
-                }
-            }
+            var eventsQueue = ParseEventsQueue(args["events"]);
+            var childEventsQueue = ParseEventsQueue(args["childEvents"]);
 
             int maxSteps = args["maxSteps"]?.Value<int>() ?? 25;
             if (maxSteps < 1) maxSteps = 1;
             if (maxSteps > 100) maxSteps = 100;
 
             var simulateFailureAtStep = args["simulateFailureAtStep"]?.ToString()?.Trim();
+            var inlineSubWorkflows = ParseInlineSubWorkflows(args);
+            bool autoCompleteSubWorkflows = args["autoCompleteSubWorkflows"]?.Value<bool>() ?? false;
 
-            // 3. Initialize State Machine and Workflow Positions
-            var startStepId = !string.IsNullOrWhiteSpace(blueprint.Workflow.StartStepId)
-                ? blueprint.Workflow.StartStepId
-                : (blueprint.Workflow.Steps.FirstOrDefault()?.StepId ?? "Start");
+            var runResult = await ExecuteSimulationRunAsync(
+                blueprint,
+                sourceWorkflowName,
+                payload,
+                simulatedRole,
+                eventsQueue,
+                maxSteps,
+                simulateFailureAtStep,
+                tenantId,
+                inlineSubWorkflows,
+                autoCompleteSubWorkflows,
+                recursionDepth: 0,
+                childEventsQueue: childEventsQueue
+            );
 
-            var currentStepId = startStepId;
-            var currentState = !string.IsNullOrWhiteSpace(blueprint.StateMachine?.InitialState)
-                ? blueprint.StateMachine.InitialState
-                : "Initial";
-
-            var initialState = currentState;
-            int totalStepsExecuted = 0;
-            string status = "Running";
-
-            var executionTrace = new List<object>();
-            var decisionsEvaluated = new List<object>();
-            var stateTransitions = new List<object>();
-            var actionsTriggered = new List<object>();
-            object? pendingHumanTask = null;
-
-            // Trigger OnEntry for initial step if present
-            var initialStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
-                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
-            if (initialStepObj != null)
+            return McpToolResults.Success(new
             {
-                EvaluateAndRecordActions(initialStepObj.OnEntry, "OnEntry", initialStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                workflow = runResult.Workflow,
+                status = runResult.Status,
+                initialState = runResult.InitialState,
+                finalState = runResult.FinalState,
+                initialStepId = runResult.InitialStepId,
+                currentStepId = runResult.CurrentStepId,
+                totalStepsExecuted = runResult.TotalStepsExecuted,
+                simulatedRole = runResult.SimulatedRole,
+                pendingHumanTask = runResult.PendingHumanTask,
+                pendingSubWorkflow = runResult.PendingSubWorkflow,
+                decisionsEvaluated = runResult.DecisionsEvaluated,
+                stateTransitions = runResult.StateTransitions,
+                actionsTriggered = runResult.ActionsTriggered,
+                executionTrace = runResult.ExecutionTrace,
+                payload = runResult.Payload,
+                subworkflowsExecuted = runResult.SubWorkflowsExecuted
+            });
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Simulation execution failed: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> SimulateSubWorkflow(JObject args)
+    {
+        try
+        {
+            WorkflowClassBlueprint? parentBlueprint = null;
+            string parentWorkflowName = "ParentWorkflow";
+            Guid tenantId = Guid.Empty;
+
+            var parentBpToken = (args["parentBlueprint"] as JObject) ?? (args["blueprint"] as JObject);
+            if (parentBpToken != null)
+            {
+                parentBlueprint = parentBpToken.ToObject<WorkflowClassBlueprint>();
+                if (parentBlueprint == null || parentBlueprint.Workflow?.Steps == null || parentBlueprint.Workflow.Steps.Count == 0)
+                {
+                    return McpToolResults.Fail("MCP-ARG-001", "Provided parent blueprint is invalid or contains no workflow steps.");
+                }
+                var parentName = args["name"]?.ToString() ?? parentBpToken["name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(parentName))
+                {
+                    parentWorkflowName = parentName;
+                }
+            }
+            else
+            {
+                var idStr = (args["parentWorkflowClassId"] ?? args["id"])?.ToString();
+                if (string.IsNullOrWhiteSpace(idStr) || !Guid.TryParse(idStr, out var id))
+                {
+                    return McpToolResults.Fail("MCP-ARG-001", "Either 'parentBlueprint' object or a valid UUID 'parentWorkflowClassId' must be provided.");
+                }
+
+                try
+                {
+                    tenantId = McpTenantResolver.ResolveRequired(args);
+                }
+                catch (McpToolException ex)
+                {
+                    return McpToolResults.Fail(ex.Code, ex.Message);
+                }
+
+                WorkflowClassResponseDto? workflowClass;
+                try
+                {
+                    workflowClass = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, id));
+                }
+                catch (Exception)
+                {
+                    return McpToolResults.Fail("MCP-NOTFOUND-001", "Parent WorkflowClass not found.");
+                }
+
+                if (workflowClass == null || workflowClass.Definition == null)
+                {
+                    return McpToolResults.Fail("MCP-NOTFOUND-001", "Parent WorkflowClass not found or has empty definition.");
+                }
+
+                parentBlueprint = workflowClass.Definition;
+                parentWorkflowName = $"{workflowClass.Name} v{workflowClass.Version}";
             }
 
-            // 4. Execution Loop
-            while (totalStepsExecuted < maxSteps)
+            // Identify target SubWorkflow step
+            var explicitStepId = args["stepId"]?.ToString()?.Trim();
+            StepBlueprint? subWorkflowStep = null;
+            if (!string.IsNullOrEmpty(explicitStepId))
             {
-                if (string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                subWorkflowStep = parentBlueprint.Workflow.Steps.FirstOrDefault(s =>
+                    string.Equals(s.StepId, explicitStepId, StringComparison.OrdinalIgnoreCase));
+                if (subWorkflowStep == null)
                 {
-                    status = "Completed";
-                    executionTrace.Add(new
-                    {
-                        stepNumber = totalStepsExecuted + 1,
-                        stepId = "END",
-                        stepType = "End",
-                        action = "Workflow reached terminal END step. Simulation completed successfully.",
-                        state = currentState
-                    });
-                    break;
+                    return McpToolResults.Fail("MCP-ARG-001", $"Step '{explicitStepId}' not found in parent workflow blueprint.");
                 }
-
-                var step = blueprint.Workflow.Steps.FirstOrDefault(s =>
-                    string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
-
-                if (step == null)
+                if (!string.Equals(subWorkflowStep.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase))
                 {
-                    status = "Faulted";
-                    executionTrace.Add(new
-                    {
-                        stepNumber = totalStepsExecuted + 1,
-                        stepId = currentStepId,
-                        stepType = "Unknown",
-                        action = $"Target step '{currentStepId}' not found in workflow blueprint.",
-                        state = currentState
-                    });
-                    break;
+                    return McpToolResults.Fail("MCP-ARG-001", $"Step '{explicitStepId}' has StepType '{subWorkflowStep.StepType}', expected 'SubWorkflow'.");
                 }
-
-                var stepType = !string.IsNullOrWhiteSpace(step.StepType) ? step.StepType : "Command";
-                var stepTypeLower = stepType.ToLowerInvariant();
-
-                // --- SIMULATE FAILURE / SAGA ROLLBACK CHECK ---
-                if (!string.IsNullOrEmpty(simulateFailureAtStep) &&
-                    string.Equals(step.StepId, simulateFailureAtStep, StringComparison.OrdinalIgnoreCase))
+            }
+            else
+            {
+                subWorkflowStep = parentBlueprint.Workflow.Steps.FirstOrDefault(s =>
+                    string.Equals(s.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase));
+                if (subWorkflowStep == null)
                 {
-                    status = "Faulted";
-                    totalStepsExecuted++;
-                    executionTrace.Add(new
-                    {
-                        stepNumber = totalStepsExecuted,
-                        stepId = step.StepId,
-                        stepType = stepType,
-                        action = $"[Saga Failure Injected] Step '{step.StepId}' encountered a simulated failure. Executing OnFailure compensating actions...",
-                        state = currentState
-                    });
-
-                    EvaluateAndRecordActions(step.OnFailure, "OnFailure", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                    break;
+                    return McpToolResults.Fail("MCP-ARG-001", "No step with StepType 'SubWorkflow' found in parent workflow blueprint.");
                 }
+            }
 
-                if (stepTypeLower.Contains("end"))
+            var inlineSubWorkflows = ParseInlineSubWorkflows(args);
+
+            var childBpToken = args["childBlueprint"] as JObject;
+            WorkflowClassBlueprint? childBlueprint = null;
+            string childWorkflowName = subWorkflowStep.SubWorkflow?.WorkflowName ?? "ChildWorkflow";
+            if (childBpToken != null)
+            {
+                childBlueprint = childBpToken.ToObject<WorkflowClassBlueprint>();
+                if (childBlueprint != null)
                 {
-                    status = "Completed";
-                    executionTrace.Add(new
+                    var childName = childBpToken["name"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(childName))
                     {
-                        stepNumber = totalStepsExecuted + 1,
-                        stepId = step.StepId,
-                        stepType = "End",
-                        action = $"Workflow reached end step '{step.StepId}'. Simulation completed successfully.",
-                        state = currentState
-                    });
-                    break;
-                }
-
-                // --- DECISION STEP ---
-                if (stepTypeLower.Contains("decision") || stepTypeLower.Contains("choice"))
-                {
-                    string? winningTarget = null;
-                    string? winningExpr = null;
-
-                    var conditions = step.Conditions ?? new Dictionary<string, string>();
-                    string? defaultTarget = null;
-
-                    foreach (var kvp in conditions)
-                    {
-                        var expr = kvp.Key;
-                        var target = kvp.Value;
-
-                        if (string.Equals(expr.Trim(), "default", StringComparison.OrdinalIgnoreCase))
-                        {
-                            defaultTarget = target;
-                            continue;
-                        }
-
-                        bool matched = EvaluateExpressionSafely(expr, payload);
-                        decisionsEvaluated.Add(new
-                        {
-                            stepId = step.StepId,
-                            expression = expr,
-                            matched,
-                            target
-                        });
-
-                        if (matched && winningTarget == null)
-                        {
-                            winningTarget = target;
-                            winningExpr = expr;
-                        }
+                        childWorkflowName = childName;
                     }
-
-                    if (winningTarget == null && defaultTarget != null)
+                    inlineSubWorkflows[childWorkflowName] = childBlueprint;
+                    inlineSubWorkflows[subWorkflowStep.StepId] = childBlueprint;
+                    if (!string.IsNullOrWhiteSpace(subWorkflowStep.SubWorkflow?.WorkflowName))
                     {
-                        winningTarget = defaultTarget;
-                        winningExpr = "Default";
-                        decisionsEvaluated.Add(new
-                        {
-                            stepId = step.StepId,
-                            expression = "Default",
-                            matched = true,
-                            target = defaultTarget
-                        });
+                        inlineSubWorkflows[subWorkflowStep.SubWorkflow.WorkflowName] = childBlueprint;
                     }
+                }
+            }
 
-                    if (winningTarget != null)
+            var payload = ToPayloadDictionary((args["payload"] as JObject) ?? (args["parentPayload"] as JObject));
+            var simulatedRole = args["role"]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(simulatedRole))
+                simulatedRole = "User";
+
+            var eventsQueue = ParseEventsQueue(args["events"]);
+            var childEventsQueue = ParseEventsQueue(args["childEvents"]);
+
+            int maxSteps = args["maxSteps"]?.Value<int>() ?? 25;
+            if (maxSteps < 1) maxSteps = 1;
+            if (maxSteps > 100) maxSteps = 100;
+
+            var runResult = await ExecuteSimulationRunAsync(
+                parentBlueprint,
+                parentWorkflowName,
+                payload,
+                simulatedRole,
+                eventsQueue,
+                maxSteps,
+                simulateFailureAtStep: null,
+                tenantId,
+                inlineSubWorkflows,
+                autoCompleteSubWorkflows: false,
+                recursionDepth: 0,
+                childEventsQueue: childEventsQueue
+            );
+
+            return McpToolResults.Success(new
+            {
+                parentWorkflow = parentWorkflowName,
+                subWorkflowStepId = subWorkflowStep.StepId,
+                childWorkflow = childWorkflowName,
+                status = runResult.Status,
+                initialParentState = runResult.InitialState,
+                finalParentState = runResult.FinalState,
+                inputMapping = subWorkflowStep.SubWorkflow?.InputMapping ?? new Dictionary<string, string>(),
+                outputMapping = subWorkflowStep.SubWorkflow?.OutputMapping ?? new Dictionary<string, string>(),
+                updatedParentPayload = runResult.Payload,
+                subworkflowsExecuted = runResult.SubWorkflowsExecuted,
+                pendingSubWorkflow = runResult.PendingSubWorkflow,
+                totalParentStepsExecuted = runResult.TotalStepsExecuted,
+                parentExecutionTrace = runResult.ExecutionTrace,
+                parentStateTransitions = runResult.StateTransitions
+            });
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Subworkflow simulation failed: {ex.Message}");
+        }
+    }
+
+    private async Task<SimulationRunResult> ExecuteSimulationRunAsync(
+        WorkflowClassBlueprint blueprint,
+        string sourceWorkflowName,
+        Dictionary<string, object> payload,
+        string simulatedRole,
+        Queue<string> eventsQueue,
+        int maxSteps,
+        string? simulateFailureAtStep,
+        Guid tenantId,
+        Dictionary<string, WorkflowClassBlueprint>? inlineSubWorkflows,
+        bool autoCompleteSubWorkflows,
+        int recursionDepth,
+        Queue<string>? childEventsQueue = null)
+    {
+        var startStepId = !string.IsNullOrWhiteSpace(blueprint.Workflow?.StartStepId)
+            ? blueprint.Workflow.StartStepId
+            : (blueprint.Workflow?.Steps.FirstOrDefault()?.StepId ?? "Start");
+
+        var currentStepId = startStepId;
+        var currentState = !string.IsNullOrWhiteSpace(blueprint.StateMachine?.InitialState)
+            ? blueprint.StateMachine.InitialState
+            : "Initial";
+
+        var initialState = currentState;
+        int totalStepsExecuted = 0;
+        string status = "Running";
+
+        var executionTrace = new List<object>();
+        var decisionsEvaluated = new List<object>();
+        var stateTransitions = new List<object>();
+        var actionsTriggered = new List<object>();
+        var subworkflowsExecuted = new List<object>();
+        object? pendingHumanTask = null;
+        object? pendingSubWorkflow = null;
+
+        var initialStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+            string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+        if (initialStepObj != null)
+        {
+            EvaluateAndRecordActions(initialStepObj.OnEntry, "OnEntry", initialStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+        }
+
+        while (totalStepsExecuted < maxSteps)
+        {
+            if (string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+            {
+                status = "Completed";
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted + 1,
+                    stepId = "END",
+                    stepType = "End",
+                    action = "Workflow reached terminal END step. Simulation completed successfully.",
+                    state = currentState
+                });
+                break;
+            }
+
+            var step = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+
+            if (step == null)
+            {
+                status = "Faulted";
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted + 1,
+                    stepId = currentStepId,
+                    stepType = "Unknown",
+                    action = $"Target step '{currentStepId}' not found in workflow blueprint.",
+                    state = currentState
+                });
+                break;
+            }
+
+            var stepType = !string.IsNullOrWhiteSpace(step.StepType) ? step.StepType : "Command";
+            var stepTypeLower = stepType.ToLowerInvariant();
+
+            // --- SIMULATE FAILURE / SAGA ROLLBACK CHECK ---
+            if (!string.IsNullOrEmpty(simulateFailureAtStep) &&
+                string.Equals(step.StepId, simulateFailureAtStep, StringComparison.OrdinalIgnoreCase))
+            {
+                status = "Faulted";
+                totalStepsExecuted++;
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted,
+                    stepId = step.StepId,
+                    stepType = stepType,
+                    action = $"[Saga Failure Injected] Step '{step.StepId}' encountered a simulated failure. Executing OnFailure compensating actions...",
+                    state = currentState
+                });
+
+                EvaluateAndRecordActions(step.OnFailure, "OnFailure", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                break;
+            }
+
+            if (stepTypeLower.Contains("end"))
+            {
+                status = "Completed";
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted + 1,
+                    stepId = step.StepId,
+                    stepType = "End",
+                    action = $"Workflow reached end step '{step.StepId}'. Simulation completed successfully.",
+                    state = currentState
+                });
+                break;
+            }
+
+            // --- DECISION STEP ---
+            if (stepTypeLower.Contains("decision") || stepTypeLower.Contains("choice"))
+            {
+                string? winningTarget = null;
+                string? winningExpr = null;
+
+                var conditions = step.Conditions ?? new Dictionary<string, string>();
+                string? defaultTarget = null;
+
+                foreach (var kvp in conditions)
+                {
+                    var expr = kvp.Key;
+                    var target = kvp.Value;
+
+                    if (string.Equals(expr.Trim(), "default", StringComparison.OrdinalIgnoreCase))
                     {
-                        totalStepsExecuted++;
-                        executionTrace.Add(new
-                        {
-                            stepNumber = totalStepsExecuted,
-                            stepId = step.StepId,
-                            stepType = "Decision",
-                            action = $"Condition '{winningExpr}' evaluated to TRUE => Advanced to '{winningTarget}'.",
-                            state = currentState
-                        });
-
-                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                        currentStepId = winningTarget;
-                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
-                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
-                            if (targetStepObj != null)
-                            {
-                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                            }
-                        }
+                        defaultTarget = target;
                         continue;
                     }
-                    else
+
+                    bool matched = EvaluateExpressionSafely(expr, payload);
+                    decisionsEvaluated.Add(new
                     {
-                        status = "StuckAtDecision";
-                        executionTrace.Add(new
-                        {
-                            stepNumber = totalStepsExecuted + 1,
-                            stepId = step.StepId,
-                            stepType = "Decision",
-                            action = $"Decision step '{step.StepId}' evaluated all conditions to FALSE and no 'Default' path was specified.",
-                            state = currentState
-                        });
-                        break;
+                        stepId = step.StepId,
+                        expression = expr,
+                        matched,
+                        target
+                    });
+
+                    if (matched && winningTarget == null)
+                    {
+                        winningTarget = target;
+                        winningExpr = expr;
                     }
                 }
 
-                // --- FORK STEP ---
-                if (stepTypeLower.Contains("fork"))
+                if (winningTarget == null && defaultTarget != null)
                 {
-                    var forkBranches = (step.Branches != null && step.Branches.Any())
-                        ? step.Branches
-                        : (step.NextSteps != null ? step.NextSteps.Values.Distinct().ToList() : new List<string>());
+                    winningTarget = defaultTarget;
+                    winningExpr = "Default";
+                    decisionsEvaluated.Add(new
+                    {
+                        stepId = step.StepId,
+                        expression = "Default",
+                        matched = true,
+                        target = defaultTarget
+                    });
+                }
 
+                if (winningTarget != null)
+                {
                     totalStepsExecuted++;
                     executionTrace.Add(new
                     {
                         stepNumber = totalStepsExecuted,
                         stepId = step.StepId,
-                        stepType = "Fork",
-                        action = $"Fork gateway activated. Concurrently spawned {forkBranches.Count} branches: [{string.Join(", ", forkBranches)}].",
+                        stepType = "Decision",
+                        action = $"Condition '{winningExpr}' evaluated to TRUE => Advanced to '{winningTarget}'.",
                         state = currentState
                     });
 
                     EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-
-                    if (forkBranches.Any())
+                    currentStepId = winningTarget;
+                    if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
                     {
-                        currentStepId = forkBranches.First();
-                        var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                        var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
                             string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
                         if (targetStepObj != null)
                         {
                             EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
                         }
-                        continue;
                     }
+                    continue;
+                }
+                else
+                {
+                    status = "StuckAtDecision";
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted + 1,
+                        stepId = step.StepId,
+                        stepType = "Decision",
+                        action = $"Decision step '{step.StepId}' evaluated all conditions to FALSE and no 'Default' path was specified.",
+                        state = currentState
+                    });
+                    break;
+                }
+            }
+
+            // --- FORK STEP ---
+            if (stepTypeLower.Contains("fork"))
+            {
+                var forkBranches = (step.Branches != null && step.Branches.Any())
+                    ? step.Branches
+                    : (step.NextSteps != null ? step.NextSteps.Values.Distinct().ToList() : new List<string>());
+
+                totalStepsExecuted++;
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted,
+                    stepId = step.StepId,
+                    stepType = "Fork",
+                    action = $"Fork gateway activated. Concurrently spawned {forkBranches.Count} branches: [{string.Join(", ", forkBranches)}].",
+                    state = currentState
+                });
+
+                EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+
+                if (forkBranches.Any())
+                {
+                    currentStepId = forkBranches.First();
+                    var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                        string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                    if (targetStepObj != null)
+                    {
+                        EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                    }
+                    continue;
+                }
+                break;
+            }
+
+            // --- JOIN STEP ---
+            if (stepTypeLower.Contains("join"))
+            {
+                var policy = !string.IsNullOrWhiteSpace(step.JoinPolicy) ? step.JoinPolicy : "WaitAll";
+                var inbounds = step.InboundSteps ?? new List<string>();
+
+                totalStepsExecuted++;
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted,
+                    stepId = step.StepId,
+                    stepType = "Join",
+                    action = $"Join gateway reached. Synchronized parallel inbound branches [{string.Join(", ", inbounds)}] with policy '{policy}'.",
+                    state = currentState
+                });
+
+                EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+
+                string? nextTarget = null;
+                if (step.NextSteps != null && step.NextSteps.TryGetValue("Default", out var dt)) nextTarget = dt;
+                else if (step.NextSteps != null && step.NextSteps.Any()) nextTarget = step.NextSteps.First().Value;
+
+                if (!string.IsNullOrEmpty(nextTarget))
+                {
+                    currentStepId = nextTarget;
+                    if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                            string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                        if (targetStepObj != null)
+                        {
+                            EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                        }
+                    }
+                    continue;
+                }
+                break;
+            }
+
+            // --- HUMAN TASK STEP ---
+            if (stepTypeLower.Contains("human"))
+            {
+                var roles = GetStepRoles(step);
+                bool authorized = IsRoleAuthorized(roles, simulatedRole);
+
+                if (!authorized)
+                {
+                    status = "WaitingForHumanTask";
+                    pendingHumanTask = new
+                    {
+                        stepId = step.StepId,
+                        requiredRoles = roles,
+                        allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
+                        sla = step.Sla,
+                        unauthorizedAttempt = true,
+                        simulatedRole
+                    };
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted + 1,
+                        stepId = step.StepId,
+                        stepType = "HumanTask",
+                        action = $"Role mismatch: Step requires [{string.Join(", ", roles)}], but simulated role is '{simulatedRole}'. Task cannot be completed by this role.",
+                        state = currentState
+                    });
                     break;
                 }
 
-                // --- JOIN STEP ---
-                if (stepTypeLower.Contains("join"))
+                if (eventsQueue.Count > 0)
                 {
-                    var policy = !string.IsNullOrWhiteSpace(step.JoinPolicy) ? step.JoinPolicy : "WaitAll";
-                    var inbounds = step.InboundSteps ?? new List<string>();
+                    var evt = eventsQueue.Dequeue();
+                    var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+
+                    var nextStepPair = nextSteps.FirstOrDefault(kvp =>
+                        string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
+
+                    if (string.IsNullOrEmpty(nextStepPair.Value))
+                    {
+                        status = "InvalidEvent";
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = "HumanTask",
+                            action = $"Event '{evt}' is not valid for HumanTask step '{step.StepId}'. Expected one of: [{string.Join(", ", nextSteps.Keys)}].",
+                            state = currentState
+                        });
+                        break;
+                    }
+
+                    var targetStep = nextStepPair.Value;
+
+                    var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
+                    if (guardBlocked)
+                    {
+                        status = "BlockedByGuard";
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = "HumanTask",
+                            action = $"Transition guard failed: {guardReason}",
+                            state = currentState
+                        });
+                        break;
+                    }
+
+                    if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
+                    {
+                        stateTransitions.Add(new
+                        {
+                            from = currentState,
+                            to = smTrans.ToState,
+                            eventId = evt
+                        });
+                        currentState = smTrans.ToState;
+                    }
 
                     totalStepsExecuted++;
                     executionTrace.Add(new
                     {
                         stepNumber = totalStepsExecuted,
                         stepId = step.StepId,
-                        stepType = "Join",
-                        action = $"Join gateway reached. Synchronized parallel inbound branches [{string.Join(", ", inbounds)}] with policy '{policy}'.",
+                        stepType = "HumanTask",
+                        action = $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.",
                         state = currentState
                     });
 
                     EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-
-                    string? nextTarget = null;
-                    if (step.NextSteps != null && step.NextSteps.TryGetValue("Default", out var dt)) nextTarget = dt;
-                    else if (step.NextSteps != null && step.NextSteps.Any()) nextTarget = step.NextSteps.First().Value;
-
-                    if (!string.IsNullOrEmpty(nextTarget))
+                    currentStepId = targetStep;
+                    if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
                     {
-                        currentStepId = nextTarget;
-                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                            string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                        if (targetStepObj != null)
                         {
-                            var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
-                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
-                            if (targetStepObj != null)
-                            {
-                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                            }
+                            EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
                         }
-                        continue;
                     }
+                    continue;
+                }
+                else
+                {
+                    status = "WaitingForHumanTask";
+                    pendingHumanTask = new
+                    {
+                        stepId = step.StepId,
+                        requiredRoles = roles,
+                        allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
+                        sla = step.Sla
+                    };
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted + 1,
+                        stepId = step.StepId,
+                        stepType = "HumanTask",
+                        action = $"Workflow paused at HumanTask '{step.StepId}'. Waiting for event dispatch from authorized role [{string.Join(", ", roles)}].",
+                        state = currentState
+                    });
                     break;
                 }
+            }
 
-                // --- HUMAN TASK STEP ---
-                if (stepTypeLower.Contains("human"))
+            // --- SUBWORKFLOW STEP ---
+            if (stepTypeLower.Contains("subworkflow"))
+            {
+                var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+                var subRef = step.SubWorkflow;
+
+                // 1. Attempt to resolve child workflow blueprint
+                WorkflowClassBlueprint? childBlueprint = null;
+                string childWorkflowName = subRef?.WorkflowName ?? step.StepId;
+
+                // A. Check inline dictionary
+                if (inlineSubWorkflows != null)
                 {
-                    var roles = GetStepRoles(step);
-                    bool authorized = IsRoleAuthorized(roles, simulatedRole);
-
-                    if (!authorized)
+                    if (!string.IsNullOrWhiteSpace(subRef?.WorkflowName) && inlineSubWorkflows.TryGetValue(subRef.WorkflowName, out var cb1))
                     {
-                        status = "WaitingForHumanTask";
-                        pendingHumanTask = new
-                        {
-                            stepId = step.StepId,
-                            requiredRoles = roles,
-                            allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
-                            sla = step.Sla,
-                            unauthorizedAttempt = true,
-                            simulatedRole
-                        };
-                        executionTrace.Add(new
-                        {
-                            stepNumber = totalStepsExecuted + 1,
-                            stepId = step.StepId,
-                            stepType = "HumanTask",
-                            action = $"Role mismatch: Step requires [{string.Join(", ", roles)}], but simulated role is '{simulatedRole}'. Task cannot be completed by this role.",
-                            state = currentState
-                        });
-                        break;
+                        childBlueprint = cb1;
+                        childWorkflowName = subRef.WorkflowName;
                     }
-
-                    if (eventsQueue.Count > 0)
+                    else if (subRef?.WorkflowClassId.HasValue == true && inlineSubWorkflows.TryGetValue(subRef.WorkflowClassId.Value.ToString(), out var cb2))
                     {
-                        var evt = eventsQueue.Dequeue();
-                        var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
-
-                        var nextStepPair = nextSteps.FirstOrDefault(kvp =>
-                            string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
-
-                        if (string.IsNullOrEmpty(nextStepPair.Value))
-                        {
-                            status = "InvalidEvent";
-                            executionTrace.Add(new
-                            {
-                                stepNumber = totalStepsExecuted + 1,
-                                stepId = step.StepId,
-                                stepType = "HumanTask",
-                                action = $"Event '{evt}' is not valid for HumanTask step '{step.StepId}'. Expected one of: [{string.Join(", ", nextSteps.Keys)}].",
-                                state = currentState
-                            });
-                            break;
-                        }
-
-                        var targetStep = nextStepPair.Value;
-
-                        // Check State Machine transition
-                        var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
-                        if (guardBlocked)
-                        {
-                            status = "BlockedByGuard";
-                            executionTrace.Add(new
-                            {
-                                stepNumber = totalStepsExecuted + 1,
-                                stepId = step.StepId,
-                                stepType = "HumanTask",
-                                action = $"Transition guard failed: {guardReason}",
-                                state = currentState
-                            });
-                            break;
-                        }
-
-                        if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
-                        {
-                            stateTransitions.Add(new
-                            {
-                                from = currentState,
-                                to = smTrans.ToState,
-                                eventId = evt
-                            });
-                            currentState = smTrans.ToState;
-                        }
-
-                        totalStepsExecuted++;
-                        executionTrace.Add(new
-                        {
-                            stepNumber = totalStepsExecuted,
-                            stepId = step.StepId,
-                            stepType = "HumanTask",
-                            action = $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.",
-                            state = currentState
-                        });
-
-                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                        currentStepId = targetStep;
-                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
-                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
-                            if (targetStepObj != null)
-                            {
-                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                            }
-                        }
-                        continue;
+                        childBlueprint = cb2;
                     }
-                    else
+                    else if (inlineSubWorkflows.TryGetValue(step.StepId, out var cb3))
                     {
-                        // Pauses at Human Task
-                        status = "WaitingForHumanTask";
-                        pendingHumanTask = new
-                        {
-                            stepId = step.StepId,
-                            requiredRoles = roles,
-                            allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
-                            sla = step.Sla
-                        };
-                        executionTrace.Add(new
-                        {
-                            stepNumber = totalStepsExecuted + 1,
-                            stepId = step.StepId,
-                            stepType = "HumanTask",
-                            action = $"Workflow paused at HumanTask '{step.StepId}'. Waiting for event dispatch from authorized role [{string.Join(", ", roles)}].",
-                            state = currentState
-                        });
-                        break;
+                        childBlueprint = cb3;
+                    }
+                    else if (inlineSubWorkflows.Count == 1)
+                    {
+                        childBlueprint = inlineSubWorkflows.Values.First();
+                        childWorkflowName = inlineSubWorkflows.Keys.First();
                     }
                 }
 
-                // --- SUBWORKFLOW STEP ---
-                if (stepTypeLower.Contains("subworkflow"))
+                // B. Check mediator if not found inline
+                if (childBlueprint == null && _mediator != null && tenantId != Guid.Empty)
                 {
-                    var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
-                    if (eventsQueue.Count > 0)
+                    try
                     {
-                        var evt = eventsQueue.Dequeue();
-                        var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
-                        if (!string.IsNullOrEmpty(match.Value))
+                        if (subRef?.WorkflowClassId.HasValue == true && subRef.WorkflowClassId.Value != Guid.Empty)
                         {
-                            var targetStep = match.Value;
-                            var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
+                            var wc = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, subRef.WorkflowClassId.Value));
+                            if (wc?.Definition != null)
+                            {
+                                childBlueprint = wc.Definition;
+                                childWorkflowName = $"{wc.Name} v{wc.Version}";
+                            }
+                        }
+                        else if (!string.IsNullOrWhiteSpace(subRef?.WorkflowName))
+                        {
+                            var list = await _mediator.Send(new ListWorkflowClassesQuery(tenantId, null, null));
+                            var match = list.FirstOrDefault(w => string.Equals(w.Name, subRef.WorkflowName, StringComparison.OrdinalIgnoreCase));
+                            if (match?.Definition != null)
+                            {
+                                childBlueprint = match.Definition;
+                                childWorkflowName = $"{match.Name} v{match.Version}";
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Fallback safely if mediator query fails
+                    }
+                }
+
+                // 2. If child blueprint was resolved and recursion limit not reached:
+                if (childBlueprint != null && recursionDepth < 5)
+                {
+                    var childInputPayload = BuildSubWorkflowInputPayload(step, payload);
+                    childInputPayload["ParentStepId"] = step.StepId;
+
+                    var childResult = await ExecuteSimulationRunAsync(
+                        childBlueprint,
+                        childWorkflowName,
+                        childInputPayload,
+                        simulatedRole,
+                        childEventsQueue != null && childEventsQueue.Count > 0 ? childEventsQueue : new Queue<string>(),
+                        maxSteps,
+                        simulateFailureAtStep: null,
+                        tenantId,
+                        inlineSubWorkflows,
+                        autoCompleteSubWorkflows,
+                        recursionDepth + 1
+                    );
+
+                    subworkflowsExecuted.Add(new
+                    {
+                        parentStepId = step.StepId,
+                        childWorkflow = childWorkflowName,
+                        childStatus = childResult.Status,
+                        childInitialState = childResult.InitialState,
+                        childFinalState = childResult.FinalState,
+                        childStepsExecuted = childResult.TotalStepsExecuted,
+                        childExecutionTrace = childResult.ExecutionTrace,
+                        childStateTransitions = childResult.StateTransitions,
+                        childPayload = childResult.Payload
+                    });
+
+                    if (string.Equals(childResult.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ApplySubWorkflowOutputMapping(step, payload, childResult.Payload, childResult.FinalState, childResult.Status);
+                        var completionEvent = ResolveSubWorkflowCompletionEventType(step, childResult.FinalState) ?? "SubWorkflowCompleted";
+
+                        string? targetStep = null;
+                        if (nextSteps.TryGetValue(completionEvent, out var ts)) targetStep = ts;
+                        else if (nextSteps.TryGetValue("Default", out var ds)) targetStep = ds;
+                        else if (nextSteps.Count > 0) targetStep = nextSteps.First().Value;
+
+                        if (!string.IsNullOrEmpty(targetStep))
+                        {
+                            var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, completionEvent, payload);
                             if (guardBlocked)
                             {
                                 status = "BlockedByGuard";
@@ -518,7 +844,7 @@ public class SimulationTools
                                     stepNumber = totalStepsExecuted + 1,
                                     stepId = step.StepId,
                                     stepType = "SubWorkflow",
-                                    action = $"Transition guard failed: {guardReason}",
+                                    action = $"Child workflow '{childWorkflowName}' completed, but parent transition guard failed: {guardReason}",
                                     state = currentState
                                 });
                                 break;
@@ -526,7 +852,7 @@ public class SimulationTools
 
                             if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
                             {
-                                stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = evt });
+                                stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = completionEvent });
                                 currentState = smTrans.ToState;
                             }
 
@@ -536,7 +862,7 @@ public class SimulationTools
                                 stepNumber = totalStepsExecuted,
                                 stepId = step.StepId,
                                 stepType = "SubWorkflow",
-                                action = $"SubWorkflow completion event '{evt}' received. Advanced to '{targetStep}'.",
+                                action = $"SubWorkflow step '{step.StepId}' executed child '{childWorkflowName}' to completion (Final state: '{childResult.FinalState}'). Output mapping applied. Fired '{completionEvent}' => Advanced to '{targetStep}'.",
                                 state = currentState
                             });
 
@@ -544,7 +870,7 @@ public class SimulationTools
                             currentStepId = targetStep;
                             if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
                             {
-                                var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                                var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
                                     string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
                                 if (targetStepObj != null)
                                 {
@@ -553,135 +879,54 @@ public class SimulationTools
                             }
                             continue;
                         }
-                    }
-
-                    status = "WaitingForSubWorkflow";
-                    executionTrace.Add(new
-                    {
-                        stepNumber = totalStepsExecuted + 1,
-                        stepId = step.StepId,
-                        stepType = "SubWorkflow",
-                        action = $"Workflow paused at SubWorkflow step '{step.StepId}'. Waiting for child completion event [{string.Join(", ", nextSteps.Keys)}].",
-                        state = currentState
-                    });
-                    break;
-                }
-
-                // --- TIMER STEP ---
-                if (stepTypeLower.Contains("timer"))
-                {
-                    if (eventsQueue.Count > 0)
-                    {
-                        var evt = eventsQueue.Dequeue();
-                        var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
-                        var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
-                        if (!string.IsNullOrEmpty(match.Value))
+                        else
                         {
-                            var targetStep = match.Value;
-                            var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
-                            if (guardBlocked)
-                            {
-                                status = "BlockedByGuard";
-                                break;
-                            }
-                            if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
-                            {
-                                stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = evt });
-                                currentState = smTrans.ToState;
-                            }
-                            totalStepsExecuted++;
+                            status = "Completed";
                             executionTrace.Add(new
                             {
-                                stepNumber = totalStepsExecuted,
+                                stepNumber = totalStepsExecuted + 1,
                                 stepId = step.StepId,
-                                stepType = "Timer",
-                                action = $"Timer step triggered by event '{evt}'. Advanced to '{targetStep}'.",
+                                stepType = "SubWorkflow",
+                                action = $"SubWorkflow step '{step.StepId}' child completed with no outgoing transitions. Workflow finished.",
                                 state = currentState
                             });
-
-                            EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                            currentStepId = targetStep;
-                            if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
-                            {
-                                var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
-                                    string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
-                                if (targetStepObj != null)
-                                {
-                                    EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                                }
-                            }
-                            continue;
+                            break;
                         }
                     }
-
-                    status = "WaitingForTimer";
-                    executionTrace.Add(new
+                    else
                     {
-                        stepNumber = totalStepsExecuted + 1,
-                        stepId = step.StepId,
-                        stepType = "Timer",
-                        action = $"Workflow paused at Timer step '{step.StepId}' (Duration: {step.Sla?.Duration ?? "configured"}).",
-                        state = currentState
-                    });
-                    break;
-                }
-
-                // --- AUTOMATED STEP (Command, Event, etc.) ---
-                {
-                    var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
-                    string? targetStep = null;
-                    string? triggeredEvent = null;
-
-                    if (eventsQueue.Count > 0)
-                    {
-                        var peekEvt = eventsQueue.Peek();
-                        var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, peekEvt, StringComparison.OrdinalIgnoreCase));
-                        if (!string.IsNullOrEmpty(match.Value))
+                        status = "WaitingForSubWorkflow";
+                        pendingSubWorkflow = new
                         {
-                            triggeredEvent = eventsQueue.Dequeue();
-                            targetStep = match.Value;
-                        }
-                    }
-
-                    if (targetStep == null)
-                    {
-                        if (nextSteps.TryGetValue("Default", out var def))
-                        {
-                            targetStep = def;
-                            triggeredEvent = "Default";
-                        }
-                        else if (nextSteps.Count == 1)
-                        {
-                            var single = nextSteps.First();
-                            triggeredEvent = single.Key;
-                            targetStep = single.Value;
-                        }
-                        else if (nextSteps.Count > 1)
-                        {
-                            var first = nextSteps.First();
-                            triggeredEvent = first.Key;
-                            targetStep = first.Value;
-                        }
-                    }
-
-                    if (targetStep == null)
-                    {
-                        status = "Completed";
+                            stepId = step.StepId,
+                            childWorkflow = childWorkflowName,
+                            childStatus = childResult.Status,
+                            childCurrentStepId = childResult.CurrentStepId,
+                            childPendingHumanTask = childResult.PendingHumanTask,
+                            childPendingSubWorkflow = childResult.PendingSubWorkflow,
+                            allowedEvents = nextSteps.Keys.ToList()
+                        };
                         executionTrace.Add(new
                         {
                             stepNumber = totalStepsExecuted + 1,
                             stepId = step.StepId,
-                            stepType = stepType,
-                            action = $"Automated step '{step.StepId}' completed with no outgoing transitions. Workflow finished.",
+                            stepType = "SubWorkflow",
+                            action = $"Parent workflow paused at SubWorkflow step '{step.StepId}'. Child workflow '{childWorkflowName}' status is '{childResult.Status}'.",
                             state = currentState
                         });
                         break;
                     }
+                }
 
-                    // Check State Machine transition if an event was triggered
-                    if (!string.IsNullOrEmpty(triggeredEvent) && !string.Equals(triggeredEvent, "Default", StringComparison.OrdinalIgnoreCase))
+                // 3. Child blueprint not resolved - check events queue
+                if (eventsQueue.Count > 0)
+                {
+                    var evt = eventsQueue.Dequeue();
+                    var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(match.Value))
                     {
-                        var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, triggeredEvent, payload);
+                        var targetStep = match.Value;
+                        var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
                         if (guardBlocked)
                         {
                             status = "BlockedByGuard";
@@ -689,8 +934,8 @@ public class SimulationTools
                             {
                                 stepNumber = totalStepsExecuted + 1,
                                 stepId = step.StepId,
-                                stepType = stepType,
-                                action = $"Transition guard failed for automated event '{triggeredEvent}': {guardReason}",
+                                stepType = "SubWorkflow",
+                                action = $"Transition guard failed: {guardReason}",
                                 state = currentState
                             });
                             break;
@@ -698,76 +943,317 @@ public class SimulationTools
 
                         if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
                         {
-                            stateTransitions.Add(new
-                            {
-                                from = currentState,
-                                to = smTrans.ToState,
-                                eventId = triggeredEvent
-                            });
+                            stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = evt });
                             currentState = smTrans.ToState;
                         }
-                    }
 
-                    totalStepsExecuted++;
-                    executionTrace.Add(new
-                    {
-                        stepNumber = totalStepsExecuted,
-                        stepId = step.StepId,
-                        stepType = stepType,
-                        action = $"Automated step '{step.StepId}' executed" + (!string.IsNullOrEmpty(triggeredEvent) && triggeredEvent != "Default" ? $" (event: '{triggeredEvent}')" : "") + $". Advanced to '{targetStep}'. State is '{currentState}'.",
-                        state = currentState
-                    });
-
-                    EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
-                    currentStepId = targetStep;
-                    if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var targetStepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
-                            string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
-                        if (targetStepObj != null)
+                        payload["SubWorkflowCompleted"] = true;
+                        totalStepsExecuted++;
+                        executionTrace.Add(new
                         {
-                            EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            stepNumber = totalStepsExecuted,
+                            stepId = step.StepId,
+                            stepType = "SubWorkflow",
+                            action = $"SubWorkflow completion event '{evt}' received from events queue. Advanced to '{targetStep}'.",
+                            state = currentState
+                        });
+
+                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                        currentStepId = targetStep;
+                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                            if (targetStepObj != null)
+                            {
+                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            }
                         }
+                        continue;
                     }
                 }
+
+                // 4. If autoCompleteSubWorkflows is true, auto-complete
+                if (autoCompleteSubWorkflows)
+                {
+                    var completionEvent = ResolveSubWorkflowCompletionEventType(step) ?? "SubWorkflowCompleted";
+                    string? targetStep = null;
+                    if (nextSteps.TryGetValue(completionEvent, out var ts)) targetStep = ts;
+                    else if (nextSteps.TryGetValue("Default", out var ds)) targetStep = ds;
+                    else if (nextSteps.Count > 0) targetStep = nextSteps.First().Value;
+
+                    if (!string.IsNullOrEmpty(targetStep))
+                    {
+                        var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, completionEvent, payload);
+                        if (guardBlocked)
+                        {
+                            status = "BlockedByGuard";
+                            executionTrace.Add(new
+                            {
+                                stepNumber = totalStepsExecuted + 1,
+                                stepId = step.StepId,
+                                stepType = "SubWorkflow",
+                                action = $"Transition guard failed: {guardReason}",
+                                state = currentState
+                            });
+                            break;
+                        }
+
+                        if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
+                        {
+                            stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = completionEvent });
+                            currentState = smTrans.ToState;
+                        }
+
+                        payload["SubWorkflowCompleted"] = true;
+                        totalStepsExecuted++;
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted,
+                            stepId = step.StepId,
+                            stepType = "SubWorkflow",
+                            action = $"Auto-completed SubWorkflow step '{step.StepId}' (event: '{completionEvent}'). Advanced to '{targetStep}'.",
+                            state = currentState
+                        });
+
+                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                        currentStepId = targetStep;
+                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                            if (targetStepObj != null)
+                            {
+                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            }
+                        }
+                        continue;
+                    }
+                }
+
+                // 5. Otherwise, pause waiting for completion
+                status = "WaitingForSubWorkflow";
+                pendingSubWorkflow = new
+                {
+                    stepId = step.StepId,
+                    subWorkflow = step.SubWorkflow != null ? new
+                    {
+                        workflowName = step.SubWorkflow.WorkflowName,
+                        workflowClassId = step.SubWorkflow.WorkflowClassId,
+                        inputMapping = step.SubWorkflow.InputMapping,
+                        outputMapping = step.SubWorkflow.OutputMapping
+                    } : null,
+                    allowedEvents = nextSteps.Keys.ToList(),
+                    reason = "Child workflow blueprint not provided or not resolved; waiting for child completion event."
+                };
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted + 1,
+                    stepId = step.StepId,
+                    stepType = "SubWorkflow",
+                    action = $"Workflow paused at SubWorkflow step '{step.StepId}'. Waiting for child completion event [{string.Join(", ", nextSteps.Keys)}].",
+                    state = currentState
+                });
+                break;
             }
 
-            if (totalStepsExecuted >= maxSteps && status == "Running")
+            // --- TIMER STEP ---
+            if (stepTypeLower.Contains("timer"))
             {
-                status = "MaxStepsExceeded";
+                if (eventsQueue.Count > 0)
+                {
+                    var evt = eventsQueue.Dequeue();
+                    var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+                    var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(match.Value))
+                    {
+                        var targetStep = match.Value;
+                        var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
+                        if (guardBlocked)
+                        {
+                            status = "BlockedByGuard";
+                            break;
+                        }
+                        if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
+                        {
+                            stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = evt });
+                            currentState = smTrans.ToState;
+                        }
+                        totalStepsExecuted++;
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted,
+                            stepId = step.StepId,
+                            stepType = "Timer",
+                            action = $"Timer step triggered by event '{evt}'. Advanced to '{targetStep}'.",
+                            state = currentState
+                        });
+
+                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                        currentStepId = targetStep;
+                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                            if (targetStepObj != null)
+                            {
+                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            }
+                        }
+                        continue;
+                    }
+                }
+
+                status = "WaitingForTimer";
+                executionTrace.Add(new
+                {
+                    stepNumber = totalStepsExecuted + 1,
+                    stepId = step.StepId,
+                    stepType = "Timer",
+                    action = $"Workflow paused at Timer step '{step.StepId}' (Duration: {step.Sla?.Duration ?? "configured"}).",
+                    state = currentState
+                });
+                break;
+            }
+
+            // --- AUTOMATED STEP (Command, Event, etc.) ---
+            {
+                var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+                string? targetStep = null;
+                string? triggeredEvent = null;
+
+                if (eventsQueue.Count > 0)
+                {
+                    var peekEvt = eventsQueue.Peek();
+                    var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, peekEvt, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(match.Value))
+                    {
+                        triggeredEvent = eventsQueue.Dequeue();
+                        targetStep = match.Value;
+                    }
+                }
+
+                if (targetStep == null)
+                {
+                    if (nextSteps.TryGetValue("Default", out var def))
+                    {
+                        targetStep = def;
+                        triggeredEvent = "Default";
+                    }
+                    else if (nextSteps.Count == 1)
+                    {
+                        var single = nextSteps.First();
+                        triggeredEvent = single.Key;
+                        targetStep = single.Value;
+                    }
+                    else if (nextSteps.Count > 1)
+                    {
+                        var first = nextSteps.First();
+                        triggeredEvent = first.Key;
+                        targetStep = first.Value;
+                    }
+                }
+
+                if (targetStep == null)
+                {
+                    status = "Completed";
+                    executionTrace.Add(new
+                    {
+                        stepNumber = totalStepsExecuted + 1,
+                        stepId = step.StepId,
+                        stepType = stepType,
+                        action = $"Automated step '{step.StepId}' completed with no outgoing transitions. Workflow finished.",
+                        state = currentState
+                    });
+                    break;
+                }
+
+                if (!string.IsNullOrEmpty(triggeredEvent) && !string.Equals(triggeredEvent, "Default", StringComparison.OrdinalIgnoreCase))
+                {
+                    var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, triggeredEvent, payload);
+                    if (guardBlocked)
+                    {
+                        status = "BlockedByGuard";
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = stepType,
+                            action = $"Transition guard failed for automated event '{triggeredEvent}': {guardReason}",
+                            state = currentState
+                        });
+                        break;
+                    }
+
+                    if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
+                    {
+                        stateTransitions.Add(new
+                        {
+                            from = currentState,
+                            to = smTrans.ToState,
+                            eventId = triggeredEvent
+                        });
+                        currentState = smTrans.ToState;
+                    }
+                }
+
+                totalStepsExecuted++;
                 executionTrace.Add(new
                 {
                     stepNumber = totalStepsExecuted,
-                    stepId = currentStepId,
-                    stepType = "Limit",
-                    action = $"Simulation reached maximum step limit of {maxSteps}. Possible loop detected.",
+                    stepId = step.StepId,
+                    stepType = stepType,
+                    action = $"Automated step '{step.StepId}' executed" + (!string.IsNullOrEmpty(triggeredEvent) && triggeredEvent != "Default" ? $" (event: '{triggeredEvent}')" : "") + $". Advanced to '{targetStep}'. State is '{currentState}'.",
                     state = currentState
                 });
-            }
 
-            return McpToolResults.Success(new
+                EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                currentStepId = targetStep;
+                if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                {
+                    var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                        string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                    if (targetStepObj != null)
+                    {
+                        EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                    }
+                }
+            }
+        }
+
+        if (totalStepsExecuted >= maxSteps && status == "Running")
+        {
+            status = "MaxStepsExceeded";
+            executionTrace.Add(new
             {
-                workflow = sourceWorkflowName,
-                status,
-                initialState,
-                finalState = currentState,
-                initialStepId = startStepId,
-                currentStepId,
-                totalStepsExecuted,
-                simulatedRole,
-                pendingHumanTask,
-                decisionsEvaluated,
-                stateTransitions,
-                actionsTriggered,
-                executionTrace,
-                payload
+                stepNumber = totalStepsExecuted,
+                stepId = currentStepId,
+                stepType = "Limit",
+                action = $"Simulation reached maximum step limit of {maxSteps}. Possible loop detected.",
+                state = currentState
             });
         }
-        catch (Exception ex)
-        {
-            return McpToolResults.Fail("MCP-INTERNAL", $"Simulation execution failed: {ex.Message}");
-        }
+
+        return new SimulationRunResult(
+            sourceWorkflowName,
+            status,
+            initialState,
+            currentState,
+            startStepId,
+            currentStepId,
+            totalStepsExecuted,
+            simulatedRole,
+            pendingHumanTask,
+            pendingSubWorkflow,
+            decisionsEvaluated,
+            stateTransitions,
+            actionsTriggered,
+            executionTrace,
+            payload,
+            subworkflowsExecuted
+        );
     }
+
 
     public async Task<CallToolResult> SimulateCompensationPath(JObject args)
     {
@@ -889,6 +1375,181 @@ public class SimulationTools
         }
     }
 
+    public async Task<CallToolResult> SimulateParallelExecution(JObject args)
+    {
+        try
+        {
+            WorkflowClassBlueprint? blueprint = null;
+            string sourceWorkflowName = "InlineBlueprint";
+
+            var inlineBlueprintToken = args["blueprint"] as JObject;
+            if (inlineBlueprintToken != null)
+            {
+                blueprint = inlineBlueprintToken.ToObject<WorkflowClassBlueprint>();
+            }
+            else
+            {
+                var idStr = args["id"]?.ToString();
+                if (string.IsNullOrWhiteSpace(idStr) || !Guid.TryParse(idStr, out var id))
+                {
+                    return McpToolResults.Fail("MCP-ARG-001", "Either 'blueprint' or UUID 'id' must be provided.");
+                }
+
+                Guid tenantId;
+                try
+                {
+                    tenantId = McpTenantResolver.ResolveRequired(args);
+                }
+                catch (McpToolException ex)
+                {
+                    return McpToolResults.Fail(ex.Code, ex.Message);
+                }
+
+                var workflowClass = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, id));
+                if (workflowClass?.Definition == null)
+                {
+                    return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found or has no definition.");
+                }
+
+                blueprint = workflowClass.Definition;
+                sourceWorkflowName = workflowClass.Name;
+            }
+
+            if (blueprint?.Workflow?.Steps == null || blueprint.Workflow.Steps.Count == 0)
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "Workflow blueprint contains no steps.");
+            }
+
+            var payload = ToPayloadDictionary(args["payload"] as JObject);
+            var forkStep = blueprint.Workflow.Steps.FirstOrDefault(s => string.Equals(s.StepType, "Fork", StringComparison.OrdinalIgnoreCase));
+            if (forkStep == null)
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "Workflow blueprint does not contain a 'Fork' step.");
+            }
+
+            var forkBranches = (forkStep.Branches != null && forkStep.Branches.Count > 0)
+                ? forkStep.Branches
+                : (forkStep.NextSteps != null ? forkStep.NextSteps.Values.Distinct().ToList() : new List<string>());
+
+            var joinStep = blueprint.Workflow.Steps.FirstOrDefault(s => string.Equals(s.StepType, "Join", StringComparison.OrdinalIgnoreCase));
+            var joinPolicy = joinStep?.JoinPolicy ?? "WaitAll";
+
+            var executionTrace = new List<object>();
+            var actionsTriggered = new List<object>();
+            var branchResults = new List<object>();
+            int stepCounter = 1;
+
+            executionTrace.Add(new
+            {
+                stepNumber = stepCounter++,
+                stepId = forkStep.StepId,
+                stepType = "Fork",
+                action = $"Fork gateway activated. Concurrently spawning {forkBranches.Count} branches: [{string.Join(", ", forkBranches)}].",
+                state = blueprint.StateMachine?.InitialState ?? "Running"
+            });
+
+            EvaluateAndRecordActions(forkStep.OnExit, "OnExit", forkStep.StepId, payload, actionsTriggered, executionTrace, stepCounter);
+
+            // Simulate each parallel branch
+            foreach (var branchStartId in forkBranches)
+            {
+                var branchTrace = new List<string>();
+                var branchActions = new List<object>();
+                var currentBranchStepId = branchStartId;
+                int branchStepCount = 0;
+                bool reachedJoinOrEnd = false;
+
+                while (!string.IsNullOrEmpty(currentBranchStepId) &&
+                       !string.Equals(currentBranchStepId, "END", StringComparison.OrdinalIgnoreCase) &&
+                       branchStepCount < 20)
+                {
+                    var stepObj = blueprint.Workflow.Steps.FirstOrDefault(s =>
+                        string.Equals(s.StepId, currentBranchStepId, StringComparison.OrdinalIgnoreCase));
+
+                    if (stepObj == null) break;
+
+                    if (joinStep != null && string.Equals(stepObj.StepId, joinStep.StepId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        reachedJoinOrEnd = true;
+                        branchTrace.Add($"Branch '{branchStartId}' reached Join gateway '{joinStep.StepId}'.");
+                        break;
+                    }
+
+                    branchStepCount++;
+                    branchTrace.Add($"Executed branch step '{stepObj.StepId}' ({stepObj.StepType}).");
+
+                    EvaluateAndRecordActions(stepObj.OnEntry, "OnEntry", stepObj.StepId, payload, branchActions, executionTrace, stepCounter++);
+                    EvaluateAndRecordActions(stepObj.OnExit, "OnExit", stepObj.StepId, payload, branchActions, executionTrace, stepCounter++);
+
+                    string? nextTarget = null;
+                    if (string.Equals(stepObj.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var compKey = ResolveSubWorkflowCompletionEventType(stepObj);
+                        if (!string.IsNullOrEmpty(compKey) && stepObj.NextSteps != null && stepObj.NextSteps.TryGetValue(compKey, out var cTarget))
+                        {
+                            nextTarget = cTarget;
+                        }
+                    }
+
+                    if (nextTarget == null)
+                    {
+                        if (stepObj.NextSteps != null && stepObj.NextSteps.TryGetValue("Default", out var def)) nextTarget = def;
+                        else if (stepObj.NextSteps != null && stepObj.NextSteps.Count > 0) nextTarget = stepObj.NextSteps.First().Value;
+                    }
+
+                    currentBranchStepId = nextTarget;
+                }
+
+                actionsTriggered.AddRange(branchActions);
+                branchResults.Add(new
+                {
+                    branchId = branchStartId,
+                    stepCount = branchStepCount,
+                    reachedJoin = reachedJoinOrEnd,
+                    actionsCount = branchActions.Count,
+                    trace = branchTrace
+                });
+            }
+
+            string? resumedStepId = null;
+            if (joinStep != null)
+            {
+                executionTrace.Add(new
+                {
+                    stepNumber = stepCounter++,
+                    stepId = joinStep.StepId,
+                    stepType = "Join",
+                    action = $"Join barrier reached. Synchronized all {forkBranches.Count} parallel branches under policy '{joinPolicy}'.",
+                    state = blueprint.StateMachine?.States?.LastOrDefault() ?? "Synchronized"
+                });
+
+                EvaluateAndRecordActions(joinStep.OnExit, "OnExit", joinStep.StepId, payload, actionsTriggered, executionTrace, stepCounter);
+
+                if (joinStep.NextSteps != null && joinStep.NextSteps.TryGetValue("Default", out var jDef)) resumedStepId = jDef;
+                else if (joinStep.NextSteps != null && joinStep.NextSteps.Count > 0) resumedStepId = joinStep.NextSteps.First().Value;
+            }
+
+            return McpToolResults.Success(new
+            {
+                workflow = sourceWorkflowName,
+                forkStepId = forkStep.StepId,
+                totalBranches = forkBranches.Count,
+                branches = branchResults,
+                joinStepId = joinStep?.StepId,
+                joinPolicy,
+                isSynchronized = true,
+                resumedStepId = resumedStepId ?? "END",
+                actionsTriggeredCount = actionsTriggered.Count,
+                actionsTriggered,
+                executionTrace
+            });
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to simulate parallel execution: {ex.Message}");
+        }
+    }
+
     private static void EvaluateAndRecordActions(
         List<StepActionBlueprint>? actions,
         string hookType,
@@ -922,6 +1583,11 @@ public class SimulationTools
                     {
                         var val = ExpressionEvaluator.EvaluateValue(kvp.Value, payload);
                         transformedPayload[kvp.Key] = val ?? kvp.Value;
+                    }
+
+                    foreach (var kvp in transformedPayload)
+                    {
+                        payload[kvp.Key] = kvp.Value;
                     }
                 }
 
@@ -1102,5 +1768,161 @@ public class SimulationTools
             JTokenType.Object => ToPayloadDictionary((JObject)token),
             _ => token.ToString()
         };
+    }
+
+    private static Dictionary<string, object> BuildSubWorkflowInputPayload(
+        StepBlueprint parentStep,
+        Dictionary<string, object>? parentPayload)
+    {
+        var sourcePayload = parentPayload ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var mapping = parentStep.SubWorkflow?.InputMapping;
+        if (mapping == null || mapping.Count == 0)
+        {
+            return new Dictionary<string, object>(sourcePayload, StringComparer.OrdinalIgnoreCase);
+        }
+
+        var resolved = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in mapping)
+        {
+            if (string.IsNullOrWhiteSpace(kvp.Key)) continue;
+
+            var evaluated = ExpressionEvaluator.EvaluateValue(kvp.Value, sourcePayload);
+            resolved[kvp.Key] = evaluated ?? kvp.Value;
+        }
+
+        return resolved;
+    }
+
+    private static void ApplySubWorkflowOutputMapping(
+        StepBlueprint parentStep,
+        Dictionary<string, object> parentPayload,
+        Dictionary<string, object> childPayload,
+        string childFinalState,
+        string childStatus)
+    {
+        parentPayload["SubWorkflowCompleted"] = true;
+        parentPayload["ChildStatus"] = childStatus;
+        parentPayload["ChildCurrentState"] = childFinalState ?? string.Empty;
+
+        var mapping = parentStep.SubWorkflow?.OutputMapping;
+        if (mapping != null && mapping.Count > 0)
+        {
+            var childContext = new Dictionary<string, object>(childPayload, StringComparer.OrdinalIgnoreCase)
+            {
+                ["SubWorkflowCompleted"] = true,
+                ["ChildStatus"] = childStatus,
+                ["ChildCurrentState"] = childFinalState ?? string.Empty,
+                ["Payload"] = childPayload
+            };
+
+            foreach (var kvp in mapping)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Key)) continue;
+
+                var evaluated = ExpressionEvaluator.EvaluateValue(kvp.Value, childContext);
+                parentPayload[kvp.Key] = evaluated ?? kvp.Value;
+            }
+        }
+        else
+        {
+            foreach (var kvp in childPayload)
+            {
+                if (!parentPayload.ContainsKey(kvp.Key))
+                {
+                    parentPayload[kvp.Key] = kvp.Value;
+                }
+            }
+        }
+    }
+
+    private static string? ResolveSubWorkflowCompletionEventType(StepBlueprint parentStep, string? childFinalState = null)
+    {
+        if (parentStep.NextSteps == null || parentStep.NextSteps.Count == 0)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(childFinalState))
+        {
+            var stateMatch = parentStep.NextSteps.Keys.FirstOrDefault(k =>
+                string.Equals(k, childFinalState, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(stateMatch)) return stateMatch;
+        }
+
+        var preferred = parentStep.NextSteps.Keys.FirstOrDefault(k =>
+            string.Equals(k, "SubWorkflowCompleted", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(preferred)) return preferred;
+
+        var defaultKey = parentStep.NextSteps.Keys.FirstOrDefault(k =>
+            string.Equals(k, "Default", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(defaultKey)) return defaultKey;
+
+        return parentStep.NextSteps.Keys.FirstOrDefault();
+    }
+
+    private static Dictionary<string, WorkflowClassBlueprint> ParseInlineSubWorkflows(JObject args)
+    {
+        var inlineSubWorkflows = new Dictionary<string, WorkflowClassBlueprint>(StringComparer.OrdinalIgnoreCase);
+        if (args["subWorkflows"] is JObject subWorkflowsObj)
+        {
+            foreach (var prop in subWorkflowsObj.Properties())
+            {
+                if (prop.Value is JObject childObj)
+                {
+                    var bp = childObj.ToObject<WorkflowClassBlueprint>();
+                    if (bp != null)
+                    {
+                        inlineSubWorkflows[prop.Name] = bp;
+                        var cName = childObj["name"]?.ToString();
+                        if (!string.IsNullOrWhiteSpace(cName))
+                        {
+                            inlineSubWorkflows[cName] = bp;
+                        }
+                    }
+                }
+            }
+        }
+        else if (args["subWorkflows"] is JArray subWorkflowsArr)
+        {
+            foreach (var item in subWorkflowsArr)
+            {
+                if (item is JObject childObj)
+                {
+                    var bp = childObj.ToObject<WorkflowClassBlueprint>();
+                    if (bp != null)
+                    {
+                        var key = childObj["name"]?.ToString() ?? $"SubWorkflow_{inlineSubWorkflows.Count + 1}";
+                        inlineSubWorkflows[key] = bp;
+                    }
+                }
+            }
+        }
+
+        if (args["childBlueprint"] is JObject directChildObj)
+        {
+            var directBp = directChildObj.ToObject<WorkflowClassBlueprint>();
+            if (directBp != null)
+            {
+                var key = directChildObj["name"]?.ToString() ?? "ChildWorkflow";
+                inlineSubWorkflows[key] = directBp;
+            }
+        }
+
+        return inlineSubWorkflows;
+    }
+
+    private static Queue<string> ParseEventsQueue(JToken? token)
+    {
+        var queue = new Queue<string>();
+        if (token is JArray arr)
+        {
+            foreach (var evt in arr)
+            {
+                var val = evt?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(val))
+                    queue.Enqueue(val);
+            }
+        }
+        return queue;
     }
 }
