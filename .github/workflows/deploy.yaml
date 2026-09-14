@@ -265,6 +265,6 @@ jobs:
           echo "[deploy] app path: ${APP_PATH}"
           cd "${APP_PATH}"
           docker network create traefik-network || true
-          docker compose -f docker-compose.test.yaml up -d --build
-          docker compose -f docker-compose.test.yaml ps
+          docker compose -f docker-compose.prod.yaml up -d --build
+          docker compose -f docker-compose.prod.yaml ps
           REMOTE
