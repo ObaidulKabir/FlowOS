@@ -21,10 +21,39 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             set -euo pipefail
-            cd  ${{ secrets.APP_PATH }}
-            git fetch -p
-            git checkout ${{ github.ref_name }}
-            git reset --hard origin/${{ github.ref_name }}
+            APP_PATH="${{ secrets.APP_PATH }}"
+            BRANCH="${{ github.ref_name }}"
+
+            if [ -z "${APP_PATH}" ] || [ ! -d "${APP_PATH}" ]; then
+              echo "Invalid APP_PATH: '${APP_PATH}'"
+              exit 1
+            fi
+
+            cd "${APP_PATH}"
+
+            if [ ! -d .git ]; then
+              echo "APP_PATH is not a git repository: ${APP_PATH}"
+              exit 1
+            fi
+
+            # Prevent "dubious ownership" failures on hardened hosts.
+            git config --global --add safe.directory "${APP_PATH}" || true
+
+            git fetch --prune origin
+
+            if ! git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+              echo "Remote branch not found: origin/${BRANCH}"
+              git branch -a || true
+              exit 1
+            fi
+
+            if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+              git checkout "${BRANCH}"
+            else
+              git checkout -b "${BRANCH}" "origin/${BRANCH}"
+            fi
+
+            git reset --hard "origin/${BRANCH}"
 
       - name: Build and Deploy Containers
         uses: appleboy/ssh-action@b0a8f324e192469585a608d1f586061cf28a6571
@@ -35,6 +64,6 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             set -euo pipefail
-            cd  ${{ secrets.APP_PATH }}
-            docker compose -f docker-compose.test.yaml  down
+            cd "${{ secrets.APP_PATH }}"
+            docker compose -f docker-compose.test.yaml down
             docker compose -f docker-compose.test.yaml up -d --build
