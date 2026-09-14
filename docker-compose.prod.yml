@@ -104,10 +104,26 @@
       - "traefik.http.services.expense-frontend.loadbalancer.server.port=3002"
     ports:
         - "3100:3002"  # Expose the API on port 3100 for external access
-
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=toor
+      - POSTGRES_DB=flowos 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flowos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - traefik-network
 networks:
   traefik-network:
     external: false
 
 volumes:
   expense-db-data:
+  db-data:
