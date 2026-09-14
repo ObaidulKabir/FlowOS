@@ -1,15 +1,22 @@
-name: CI
+name: CD
+
 on:
   push:
-    branches: [ main]
-  pull_request:
-    branches: [ main]
-jobs:     
+    branches: [ main ]
+
+jobs:
   deploy:
     name: Deploy to production
     runs-on: ubuntu-latest
-    environment: production 
+    environment: production
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+      APP_PATH: ${{ secrets.APP_PATH }}
+      BRANCH: ${{ github.ref_name }}
 
     steps:
       - name: Verify deploy secrets
@@ -31,83 +38,110 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare SSH client
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName ${SSH_HOST}
+            User ${SSH_USER}
+            Port ${SSH_PORT}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            AddressFamily inet
+            ConnectTimeout 20
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 6
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Probe SSH TCP port
+        run: |
+          python3 - <<'PY'
+          import os, socket, sys
+          host = os.environ["SSH_HOST"]
+          port = int(os.environ.get("SSH_PORT") or "22")
+          sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          sock.settimeout(15)
+          try:
+              sock.connect((host, port))
+              print("TCP IPv4 connect to SSH port succeeded.")
+          except Exception as exc:
+              print(f"TCP IPv4 connect to SSH port failed: {type(exc).__name__}: {exc}")
+              print("The GitHub-hosted runner cannot reach the server SSH port.")
+              print("Allow inbound IPv4 SSH from GitHub Actions, or install a self-hosted runner on the server.")
+              sys.exit(1)
+          finally:
+              sock.close()
+          PY
+
       - name: Update Code on Server
-        uses: appleboy/ssh-action@b0a8f324e192469585a608d1f586061cf28a6571
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          protocol: tcp4
-          debug: true
-          timeout: 180s
-          command_timeout: 15m
-          script: |
-            set -euo pipefail
-            APP_PATH="${{ secrets.APP_PATH }}"
-            BRANCH="${{ github.ref_name }}"
-            echo "[deploy] host: $(hostname)"
-            echo "[deploy] user: $(whoami)"
-            echo "[deploy] branch: ${BRANCH}"
-            echo "[deploy] app path: ${APP_PATH}"
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes deploy-target "APP_PATH='${APP_PATH}' BRANCH='${BRANCH}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          echo "[deploy] host: $(hostname)"
+          echo "[deploy] user: $(whoami)"
+          echo "[deploy] branch: ${BRANCH}"
+          echo "[deploy] app path: ${APP_PATH}"
 
-            if [ -z "${APP_PATH}" ] || [ ! -d "${APP_PATH}" ]; then
-              echo "Invalid APP_PATH: '${APP_PATH}'"
-              exit 1
-            fi
+          if [ -z "${APP_PATH}" ] || [ ! -d "${APP_PATH}" ]; then
+            echo "Invalid APP_PATH: '${APP_PATH}'"
+            exit 1
+          fi
 
-            cd "${APP_PATH}"
-            echo "[deploy] working dir: $(pwd)"
+          cd "${APP_PATH}"
+          echo "[deploy] working dir: $(pwd)"
 
-            if [ ! -d .git ]; then
-              echo "APP_PATH is not a git repository: ${APP_PATH}"
-              exit 1
-            fi
+          if [ ! -d .git ]; then
+            echo "APP_PATH is not a git repository: ${APP_PATH}"
+            exit 1
+          fi
 
-            # Prevent "dubious ownership" failures on hardened hosts.
-            git config --global --add safe.directory "${APP_PATH}" || true
+          git config --global --add safe.directory "${APP_PATH}" || true
 
-            echo "[deploy] git version: $(git --version)"
-            git remote -v || true
-            git status --short --branch || true
+          echo "[deploy] git version: $(git --version)"
+          git remote -v || true
+          git status --short --branch || true
 
-            echo "[deploy] fetching branch metadata from origin..."
-            git fetch --prune origin
+          echo "[deploy] fetching branch metadata from origin..."
+          git fetch --prune origin
 
-            if ! git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
-              echo "Remote branch not found: origin/${BRANCH}"
-              git branch -a || true
-              exit 1
-            fi
+          if ! git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+            echo "Remote branch not found: origin/${BRANCH}"
+            git branch -a || true
+            exit 1
+          fi
 
-            if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
-              git checkout "${BRANCH}"
-            else
-              git checkout -b "${BRANCH}" "origin/${BRANCH}"
-            fi
+          if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+            git checkout "${BRANCH}"
+          else
+            git checkout -b "${BRANCH}" "origin/${BRANCH}"
+          fi
 
-            echo "[deploy] resetting local branch to origin/${BRANCH}..."
-            git reset --hard "origin/${BRANCH}"
-            git rev-parse --short HEAD
+          echo "[deploy] resetting local branch to origin/${BRANCH}..."
+          git reset --hard "origin/${BRANCH}"
+          git rev-parse --short HEAD
+          REMOTE
 
       - name: Build and Deploy Containers
-        uses: appleboy/ssh-action@b0a8f324e192469585a608d1f586061cf28a6571
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          protocol: tcp4
-          debug: true
-          timeout: 180s
-          command_timeout: 45m
-          script: |
-            set -euo pipefail
-            APP_PATH="${{ secrets.APP_PATH }}"
-            echo "[deploy] host: $(hostname)"
-            echo "[deploy] user: $(whoami)"
-            echo "[deploy] app path: ${APP_PATH}"
-            cd "${APP_PATH}"
-            docker compose -f docker-compose.test.yaml down
-            docker compose -f docker-compose.test.yaml up -d --build
-            docker compose -f docker-compose.test.yaml ps
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes deploy-target "APP_PATH='${APP_PATH}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          echo "[deploy] host: $(hostname)"
+          echo "[deploy] user: $(whoami)"
+          echo "[deploy] app path: ${APP_PATH}"
+          cd "${APP_PATH}"
+          docker compose -f docker-compose.test.yaml down
+          docker compose -f docker-compose.test.yaml up -d --build
+          docker compose -f docker-compose.test.yaml ps
+          REMOTE
