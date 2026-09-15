@@ -383,7 +383,7 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
                   <div className="space-y-2 text-xs text-slate-300">
                     <div className="flex justify-between">
                       <span className="text-slate-400">Exposed Tools:</span>
-                      <span className="text-purple-300 font-bold font-mono">21 Tools Registered</span>
+                      <span className="text-purple-300 font-bold font-mono">52 Tools Registered</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400">Protocol:</span>

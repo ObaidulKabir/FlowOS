@@ -64,7 +64,7 @@ export const PlatformComparison: React.FC = () => {
       feature: 'AI Agent & LLM Native (MCP)',
       category: 'agent',
       flowos: { 
-        title: 'Native 21-Tool MCP Server', 
+        title: 'Native 52-Tool MCP Server', 
         highlight: true,
         sub: 'Agents dry-run simulations with mock payloads before publishing' 
       },
@@ -276,7 +276,7 @@ export const PlatformComparison: React.FC = () => {
           </div>
           <h4 className="text-sm font-bold text-white">Native AI Agent (MCP)</h4>
           <p className="text-xs text-slate-400 leading-relaxed">
-            First-class 21-tool MCP server. Agents can <strong>dry-run simulated workflows</strong> with mock payloads before publishing to production.
+            First-class 52-tool MCP server. Agents can <strong>dry-run simulated workflows</strong> with mock payloads before publishing to production.
           </p>
         </div>
 
