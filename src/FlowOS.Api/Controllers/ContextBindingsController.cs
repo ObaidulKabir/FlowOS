@@ -1,5 +1,7 @@
 using FlowOS.Application.Commands;
 using FlowOS.Application.Common.Exceptions;
+using FlowOS.Application.DTOs;
+using FlowOS.Application.Queries;
 using FlowOS.Core.Interfaces;
 using FlowOS.Domain.ValueObjects;
 using MediatR;
@@ -101,6 +103,50 @@ public class ContextBindingsController : ControllerBase
                 cancellationToken));
         }
         catch (KeyNotFoundException) { return NotFound(); }
+    }
+
+    [HttpPost("simulate")]
+    public async Task<IActionResult> Simulate(
+        [FromBody] WorkflowContextSimulationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized("TenantId is missing.");
+        try
+        {
+            return Ok(await _mediator.Send(
+                new SimulateWorkflowContextBindingQuery(_currentUser.TenantId, request),
+                cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { Code = "CTX-SIM-NOTFOUND", Message = "Workflow context binding or revision was not found." });
+        }
+        catch (WorkflowContextBindingValidationException ex)
+        {
+            return UnprocessableEntity(new
+            {
+                Code = "CTX-SIM-BINDING-INVALID",
+                Message = "The selected draft binding is not valid.",
+                Errors = ex.ValidationResult.Errors
+            });
+        }
+        catch (WorkflowContextPayloadException ex)
+        {
+            return UnprocessableEntity(new
+            {
+                Code = "CTX-SIM-PAYLOAD-INVALID",
+                Message = ex.Message,
+                Errors = ex.Errors
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Code = "CTX-SIM-ARGUMENT", Message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { Code = "CTX-SIM-STATE", Message = ex.Message });
+        }
     }
 
     [HttpGet]

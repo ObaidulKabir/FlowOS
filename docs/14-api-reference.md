@@ -163,8 +163,11 @@ See the full endpoint table, lifecycle diagram, and blueprint schema in [Chapter
 * `POST /api/context-bindings/{id}/activate` — materialize and activate an immutable runtime package.
 * `POST /api/context-bindings/{id}/archive` — block new starts.
 * `GET /api/context-bindings` and `GET /api/context-bindings/{id}` — tenant-scoped reads.
+* `POST /api/context-bindings/simulate` — side-effect-free simulation of a saved `draft` or pinned `active` revision. The body accepts exactly one of `contextBindingId`/`contextType`, an initial source payload, simulated roles, ordered contextual events, and `maxSteps` (1–100).
 
 `POST /api/workflows/start` accepts optional `contextBindingId`, `contextType`, and `businessReference`. A context selector cannot be combined with workflow definition, class, or name selectors. See [Chapter 17](17-workflow-context-bindings.md).
+
+Simulation errors use stable `Code` values: `CTX-SIM-ARGUMENT` (`400`), `CTX-SIM-NOTFOUND` (`404`), `CTX-SIM-STATE` (`409`), `CTX-SIM-BINDING-INVALID` (`422`), and `CTX-SIM-PAYLOAD-INVALID` (`422`). A successful result always reports `sideEffectsSuppressed: true`.
 
 ---
 

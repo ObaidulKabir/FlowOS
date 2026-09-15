@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.DTOs;
 using FlowOS.Application.Services;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Domain.Blueprints;
@@ -391,6 +392,185 @@ public class WorkflowContextBindingTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => materializer.ActivateAsync(binding, revision));
     }
+
+    [Fact]
+    public async Task ContextSimulation_DraftAppliesEventMapping_AndDeniedDeltaIsTransactional()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.Roles.Add(new FlowOS.Security.Models.Role(source.TenantId, "FinanceManager"));
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var pluginRegistry = new Mock<IPolicyDecisionPluginRegistry>().Object;
+        var service = new WorkflowContextSimulationService(
+            unitOfWork,
+            new WorkflowContextBindingValidator(unitOfWork, pluginRegistry),
+            new WorkflowExecutionContextService(unitOfWork),
+            new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()));
+        var trackedEntriesBefore = context.ChangeTracker.Entries().Count();
+
+        var result = await service.SimulateAsync(source.TenantId, new WorkflowContextSimulationRequest(
+            ContextBindingId: binding.Id,
+            Revision: "draft",
+            InitialPayload: new { expense = new { amount = 500 } },
+            Roles: ["FinanceManager"],
+            Events:
+            [
+                new WorkflowContextSimulationEventRequest(
+                    "EVT-EXP-APPROVE",
+                    new { decision = new { amount = 1200 } })
+            ]));
+
+        var denied = Assert.Single(result.Trace, item => !item.IsAllowed);
+        Assert.Equal("Denied", result.Status);
+        Assert.Equal("EVT-APPROVE", denied.CanonicalEventType);
+        Assert.Equal(1200L, denied.CanonicalDelta["Amount"]);
+        Assert.Equal(500L, denied.ContextBefore["Amount"]);
+        Assert.Equal(500L, denied.ContextAfter["Amount"]);
+        Assert.Equal(500L, result.FinalCanonicalContext["Amount"]);
+        Assert.True(result.SideEffectsSuppressed);
+        Assert.False(result.IsPersistedRuntime);
+        Assert.Equal(trackedEntriesBefore, context.ChangeTracker.Entries().Count());
+        Assert.Empty(context.WorkflowInstances);
+        Assert.Empty(context.WorkflowContextSnapshots);
+    }
+
+    [Fact]
+    public async Task ContextSimulation_ActiveUsesPinnedRuntime_AndCompletesWithMappedRole()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.Roles.Add(new FlowOS.Security.Models.Role(source.TenantId, "FinanceManager"));
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var pluginRegistry = new Mock<IPolicyDecisionPluginRegistry>().Object;
+        var validator = new WorkflowContextBindingValidator(unitOfWork, pluginRegistry);
+        var package = await new WorkflowContextMaterializer(unitOfWork, validator)
+            .ActivateAsync(binding, revision);
+        context.ChangeTracker.Clear();
+
+        var result = await new WorkflowContextSimulationService(
+                unitOfWork,
+                validator,
+                new WorkflowExecutionContextService(unitOfWork),
+                new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()))
+            .SimulateAsync(source.TenantId, new WorkflowContextSimulationRequest(
+                ContextBindingId: binding.Id,
+                Revision: "active",
+                InitialPayload: new { expense = new { amount = 500 } },
+                Roles: ["FinanceManager"],
+                Events:
+                [
+                    new WorkflowContextSimulationEventRequest(
+                        "EVT-EXP-APPROVE",
+                        new { decision = new { amount = 500 } })
+                ]));
+
+        Assert.Equal("Completed", result.Status);
+        Assert.True(result.IsPersistedRuntime);
+        Assert.Equal(package.WorkflowDefinition.Id, revision.WorkflowDefinitionId);
+        Assert.Equal(revision.Id, result.ContextBindingRevisionId);
+        Assert.Contains(result.Trace, item =>
+            item.EventType == "EVT-EXP-APPROVE" &&
+            item.CanonicalEventType == "EVT-APPROVE" &&
+            item.IsAllowed);
+        Assert.Empty(context.WorkflowInstances);
+        Assert.Empty(context.WorkflowContextSnapshots);
+    }
+
+    [Fact]
+    public async Task ContextSimulation_RejectsUnboundedScenarioBeforeRepositoryAccess()
+    {
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        var unitOfWork = new UnitOfWork(context);
+        var service = new WorkflowContextSimulationService(
+            unitOfWork,
+            new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object),
+            new WorkflowExecutionContextService(unitOfWork),
+            new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.SimulateAsync(
+            Guid.NewGuid(),
+            new WorkflowContextSimulationRequest(
+                ContextBindingId: Guid.NewGuid(),
+                MaxSteps: 101)));
+    }
+
+    private static WorkflowContextBindingRevision CreateSimulationRevision(
+        WorkflowContextBinding binding,
+        WorkflowClass source)
+        => new(
+            binding.Id,
+            1,
+            source.Id,
+            source.Version,
+            new WorkflowContextBindingDefinition
+            {
+                EntityType = "ExpenseEntity",
+                EventAliases = new Dictionary<string, string>
+                {
+                    ["EVT-APPROVE"] = "EVT-EXP-APPROVE"
+                },
+                RoleOverrides = new Dictionary<string, string>
+                {
+                    ["Approver"] = "FinanceManager"
+                },
+                InputMapping = new Dictionary<string, string>
+                {
+                    ["Amount"] = "expense.amount"
+                },
+                EventInputMappings = new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["EVT-APPROVE"] = new()
+                    {
+                        ["Amount"] = "decision.amount"
+                    }
+                },
+                ConditionParameters = new Dictionary<string, JsonElement>
+                {
+                    ["ApprovalLimit"] = JsonSerializer.SerializeToElement(1000)
+                },
+                SourcePayloadSchema = """
+                    {"type":"object","required":["expense"],"properties":{"expense":{"type":"object","required":["amount"],"properties":{"amount":{"type":"number"}}}}}
+                    """,
+                EventSourcePayloadSchemas = new Dictionary<string, string>
+                {
+                    ["EVT-APPROVE"] = """
+                        {"type":"object","required":["decision"],"properties":{"decision":{"type":"object","required":["amount"],"properties":{"amount":{"type":"number"}}}}}
+                        """
+                }
+            });
 
     private static WorkflowContextBindingRevision CreateRevision(
         WorkflowContextBinding binding,

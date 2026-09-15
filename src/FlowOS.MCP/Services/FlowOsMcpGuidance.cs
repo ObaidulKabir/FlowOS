@@ -40,6 +40,8 @@ public static class FlowOsMcpGuidance
           • This freezes the blueprint into a versioned runtime WorkflowDefinition and registers all state transitions.
           • To reuse one published template in multiple business domains, call `create_context_binding`,
             `validate_context_binding`, and `activate_context_binding` for each tenant context.
+          • Call `simulate_context_binding` with revision `draft` before activation, then with `active`
+            to verify the exact pinned runtime. Simulation never dispatches or persists side effects.
           • Activation and archival require explicit human confirmation. Bindings never create roles or permissions.
 
         [Step 4: Instantiate Runtime Workflow]

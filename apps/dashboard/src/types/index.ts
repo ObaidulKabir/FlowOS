@@ -267,6 +267,108 @@ export interface CreateContextBindingRequest {
   definition: WorkflowContextBindingDefinition;
 }
 
+export interface WorkflowContextSimulationEventRequest {
+  eventType: string;
+  payload?: Record<string, unknown>;
+  roles?: string[];
+}
+
+export interface WorkflowContextSimulationRequest {
+  contextBindingId?: string;
+  contextType?: string;
+  revision: 'draft' | 'active';
+  initialPayload?: Record<string, unknown>;
+  roles?: string[];
+  events?: WorkflowContextSimulationEventRequest[];
+  maxSteps?: number;
+}
+
+export interface WorkflowContextSimulationProjectionItem {
+  canonicalField: string;
+  sourcePath?: string;
+  value?: unknown;
+  origin: string;
+  wasResolved: boolean;
+}
+
+export interface WorkflowContextSimulationAction {
+  stepId: string;
+  phase: string;
+  actionType: string;
+  target?: string;
+  capability?: string;
+  condition?: string;
+}
+
+export interface WorkflowContextSimulationPendingWork {
+  kind: string;
+  stepId: string;
+  triggerEvent?: string;
+  description: string;
+}
+
+export interface WorkflowContextSimulationTrace {
+  index: number;
+  eventType: string;
+  canonicalEventType?: string;
+  roles: string[];
+  fromStepId: string;
+  toStepId: string;
+  activeStepIds: string[];
+  fromState: string;
+  toState: string;
+  isAllowed: boolean;
+  outcome: string;
+  reason?: string;
+  sourcePayload: Record<string, unknown>;
+  canonicalDelta: Record<string, unknown>;
+  contextBefore: Record<string, unknown>;
+  contextAfter: Record<string, unknown>;
+  plannedActions: WorkflowContextSimulationAction[];
+  pendingWork: WorkflowContextSimulationPendingWork[];
+}
+
+export interface WorkflowContextSimulationResult {
+  contextBindingId: string;
+  contextType: string;
+  bindingName: string;
+  revisionKind: 'draft' | 'active';
+  contextBindingRevisionId: string;
+  revision: number;
+  sourceWorkflowClassId: string;
+  sourceWorkflowClassVersion: string;
+  isPersistedRuntime: boolean;
+  sideEffectsSuppressed: boolean;
+  status: string;
+  initialStepId: string;
+  currentStepId: string;
+  activeStepIds: string[];
+  initialState: string;
+  currentState: string;
+  availableRoles: string[];
+  eventAliases: Record<string, string>;
+  initialProjection: WorkflowContextSimulationProjectionItem[];
+  initialCanonicalContext: Record<string, unknown>;
+  finalCanonicalContext: Record<string, unknown>;
+  trace: WorkflowContextSimulationTrace[];
+  pendingWork: WorkflowContextSimulationPendingWork[];
+  graph: {
+    workflow: {
+      name: string;
+      version: number;
+      startStepId: string;
+      steps: any[];
+    };
+    stateMachine: {
+      entityType: string;
+      version: number;
+      initialState: string;
+      states: string[];
+      transitions: any[];
+    };
+  };
+}
+
 export interface GenerateBlueprintCopilotResponse {
   suggestedName: string;
   suggestedVersion: string;
@@ -303,6 +405,9 @@ export interface TimeTravelSnapshot {
   variables: Record<string, unknown>;
   actionLogs: TimeTravelActionLog[];
   summary: string;
+  contextualEventType?: string;
+  canonicalEventType?: string;
+  contextBindingRevisionId?: string;
 }
 
 export interface TimeTravelReplay {
@@ -312,6 +417,11 @@ export interface TimeTravelReplay {
   status: string;
   totalSteps: number;
   snapshots: TimeTravelSnapshot[];
+  contextBindingId?: string;
+  contextBindingRevisionId?: string;
+  contextType?: string;
+  sourceSystem?: string;
+  externalEntityId?: string;
 }
 
 export interface TimeTravelForkResult {
@@ -324,6 +434,13 @@ export interface TimeTravelForkResult {
   isAllowed: boolean;
   reason?: string;
   projectedActions: string[];
+  simulatedRoles?: string[];
+  contextualEventType?: string;
+  canonicalEventType?: string;
+  contextBindingId?: string;
+  contextBindingRevisionId?: string;
+  contextType?: string;
+  projectedCanonicalContext?: Record<string, unknown>;
 }
 
 

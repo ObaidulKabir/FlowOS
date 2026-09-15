@@ -10,6 +10,7 @@ import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
 import { ContextBindingsView } from './ContextBindingsView';
+import { ContextSimulationStudio } from './ContextSimulationStudio';
 import { 
   Building2, Plus, Play, RefreshCw, Key, Activity, FileText, 
   Cpu, Copy, Check, Filter, Sparkles, Scale, Link2
@@ -66,14 +67,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
   const [startWorkflowName, setStartWorkflowName] = useState('ExpenseApprovalV2');
   const [startingInstance, setStartingInstance] = useState(false);
 
-  // Simulator State
-  const [simStep, setSimStep] = useState<string>('Draft');
-  const [simState, setSimState] = useState<string>('Draft');
-  const [simLogs, setSimLogs] = useState<string[]>([
-    `> FlowOS Dual-Kernel Engine Initialized for Tenant: ${session.tenantName}`,
-    `> Workspace Isolated UUID: ${session.tenantId}`,
-    '> Ready to simulate state machine transitions.'
-  ]);
+  const [simulationTarget, setSimulationTarget] = useState<{
+    bindingId?: string;
+    revision?: 'draft' | 'active';
+  }>({});
 
   const loadData = async () => {
     setLoading(true);
@@ -155,29 +152,6 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
     } catch (err: any) {
       alert(`Failed to save draft: ${err.message}`);
     }
-  };
-
-  // Simulator Triggers
-  const handleSimulateEvent = (eventId: string, targetState: string, targetStep: string) => {
-    if (simState === 'Completed' || simStep === 'END') {
-      alert('Instance is already Completed. Click Reset.');
-      return;
-    }
-    setSimState(targetState);
-    setSimStep(targetStep);
-    setSimLogs(prev => [
-      ...prev,
-      `> [${new Date().toLocaleTimeString()}] Published Event '${eventId}' -> State Transitioned to '${targetState}' | Step: '${targetStep}'`
-    ]);
-  };
-
-  const handleResetSimulator = () => {
-    setSimStep('Draft');
-    setSimState('Draft');
-    setSimLogs([
-      `> FlowOS Engine reset for Tenant: ${session.tenantName}`,
-      '> Instance restarted: Initial State = Draft'
-    ]);
   };
 
   return (
@@ -363,7 +337,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               }`}
             >
               <Cpu size={15} />
-              <span>🧪 State Machine Simulator</span>
+              <span>🧪 Context Simulator</span>
             </button>
             <button
               onClick={() => setActiveTab('Capabilities')}
@@ -483,6 +457,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             <ContextBindingsView
               workflowClasses={blueprints.filter(item => item.status === 1 || item.status === 3)}
               role="Tenant"
+              onSimulate={(bindingId, revision) => {
+                setSimulationTarget({ bindingId, revision });
+                setActiveTab('Simulator');
+              }}
             />
           )}
 
@@ -495,102 +473,11 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           )}
 
           {activeTab === 'Simulator' && (
-            <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 shadow-xl grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Controls */}
-              <div className="space-y-4">
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Workflow Step:</span>
-                    <span className="font-mono font-bold text-blue-400">{simStep}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Legal State:</span>
-                    <span className="font-mono font-bold text-emerald-400">{simState}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Status:</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
-                      {simState === 'Completed' ? 'Completed' : 'Running'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Available Events:
-                </div>
-
-                <div className="space-y-2">
-                  <button
-                    onClick={() => handleSimulateEvent('EVT-SUBMIT', 'Submitted', 'ManagerApproval')}
-                    disabled={simStep !== 'Draft'}
-                    className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold flex items-center justify-between"
-                  >
-                    <span>Publish EVT-SUBMIT</span>
-                    <span className="font-mono text-[10px]">Draft → Submitted</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSimulateEvent('EVT-APPROVE-MGR', 'Approved', 'DirectorApproval')}
-                    disabled={simStep !== 'ManagerApproval'}
-                    className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold flex items-center justify-between"
-                  >
-                    <span>Publish EVT-APPROVE-MGR</span>
-                    <span className="font-mono text-[10px]">Submitted → Approved</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSimulateEvent('EVT-APPROVE-DIR', 'Completed', 'END')}
-                    disabled={simStep !== 'DirectorApproval'}
-                    className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold flex items-center justify-between"
-                  >
-                    <span>Publish EVT-APPROVE-DIR</span>
-                    <span className="font-mono text-[10px]">Director → END</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSimulateEvent('EVT-TIMEOUT', 'Escalated', 'ManualReview')}
-                    disabled={simState === 'Completed'}
-                    className="w-full py-2.5 px-3 bg-rose-600/80 hover:bg-rose-600 disabled:opacity-40 text-white rounded-xl text-xs font-semibold flex items-center justify-between"
-                  >
-                    <span>Simulate SLA Timeout</span>
-                    <span className="font-mono text-[10px]">Trigger Escalation</span>
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleResetSimulator}
-                  className="w-full py-2 border border-slate-700 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold"
-                >
-                  Reset Simulator
-                </button>
-              </div>
-
-              {/* Console Logs */}
-              <div className="lg:col-span-2 flex flex-col h-80 bg-slate-950 rounded-xl border border-slate-800 p-4 font-mono text-xs overflow-hidden">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-slate-400">
-                  <span className="flex items-center gap-1.5 text-[11px]">
-                    <Activity size={12} className="text-emerald-400" />
-                    Dual-Kernel Telemetry Console
-                  </span>
-                  <span className="text-[10px] text-slate-600">State Machine Law</span>
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-1.5 pt-2 text-slate-300 text-[11px]">
-                  {simLogs.map((log, i) => (
-                    <div key={i} className="leading-relaxed font-mono">
-                      {log.includes('Denied') ? (
-                        <span className="text-rose-400 font-bold">{log}</span>
-                      ) : log.includes('Transitioned') ? (
-                        <span className="text-emerald-400 font-bold">{log}</span>
-                      ) : log.includes('SLA') ? (
-                        <span className="text-amber-400 font-bold">{log}</span>
-                      ) : (
-                        log
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <ContextSimulationStudio
+              role="Tenant"
+              initialBindingId={simulationTarget.bindingId}
+              initialRevision={simulationTarget.revision}
+            />
           )}
         </div>
       </div>

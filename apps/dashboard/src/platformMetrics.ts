@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 
 export const VERIFIED_PLATFORM_METRICS = {
-  mcpTools: 59,
+  mcpTools: 60,
   tests: {
-    total: 366,
-    unit: 300,
+    total: 369,
+    unit: 303,
     endToEnd: 28,
     mcp: 38
   },

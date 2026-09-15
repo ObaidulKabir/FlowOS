@@ -6,7 +6,8 @@ import {
   VerifyEmailRequest, VerifyEmailResponse,
   LoginRequest, LoginResponse,
   ResendVerificationResponse, TenantUserDto,
-  WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest
+  WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
+  WorkflowContextSimulationRequest, WorkflowContextSimulationResult
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -435,6 +436,18 @@ export const api = {
     return handleResponse(response, 'Failed to archive context binding');
   },
 
+  simulateContextBinding: async (
+    request: WorkflowContextSimulationRequest,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<WorkflowContextSimulationResult> => {
+    const response = await fetch('/api/context-bindings/simulate', {
+      method: 'POST',
+      headers: getHeaders(role),
+      body: JSON.stringify(request)
+    });
+    return handleResponse(response, 'Failed to simulate context binding');
+  },
+
   startWorkflowByContext: async (
     selector: { contextBindingId?: string; contextType?: string },
     payload?: Record<string, unknown>,
@@ -485,6 +498,7 @@ export const api = {
     stepIndex: number,
     event: string,
     payload?: unknown,
+    simulatedRoles?: string[],
     role?: 'Tenant' | 'Admin'
   ): Promise<TimeTravelForkResult> => {
     const headers = getHeaders(role);
@@ -494,7 +508,8 @@ export const api = {
       body: JSON.stringify({
         targetStepIndex: stepIndex,
         alternativeEvent: event,
-        alternativePayload: payload ?? null
+        alternativePayload: payload ?? null,
+        simulatedRoles: simulatedRoles ?? []
       })
     });
     return handleResponse(response, 'Failed to simulate what-if fork');

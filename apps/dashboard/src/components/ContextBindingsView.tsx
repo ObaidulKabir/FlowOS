@@ -6,7 +6,7 @@ import {
   WorkflowContextBinding,
   WorkflowContextBindingDefinition
 } from '../types';
-import { Archive, CheckCircle2, Link2, Play, Plus, RefreshCw, Save } from 'lucide-react';
+import { Archive, CheckCircle2, FlaskConical, Link2, Play, Plus, RefreshCw, Save } from 'lucide-react';
 
 const emptyDefinition: WorkflowContextBindingDefinition = {
   entityType: 'ApprovalSubject',
@@ -24,9 +24,10 @@ const emptyDefinition: WorkflowContextBindingDefinition = {
 interface Props {
   workflowClasses: WorkflowClass[];
   role?: 'Tenant' | 'Admin';
+  onSimulate?: (bindingId: string, revision: 'draft' | 'active') => void;
 }
 
-export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = 'Tenant' }) => {
+export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = 'Tenant', onSimulate }) => {
   const [bindings, setBindings] = useState<WorkflowContextBinding[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [definitionJson, setDefinitionJson] = useState(JSON.stringify(emptyDefinition, null, 2));
@@ -203,6 +204,13 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
               <div className="flex flex-wrap gap-2">
                 <button onClick={save} disabled={busy || selected.status === 'Archived'} className="px-3 py-2 rounded-lg bg-slate-700 text-xs text-white flex gap-1.5 items-center"><Save size={13} /> Save draft</button>
                 <button onClick={validate} disabled={busy} className="px-3 py-2 rounded-lg bg-indigo-600 text-xs text-white flex gap-1.5 items-center"><CheckCircle2 size={13} /> Validate</button>
+                <button
+                  onClick={() => onSimulate?.(selected.id, selected.draftRevision ? 'draft' : 'active')}
+                  disabled={!onSimulate || (!selected.draftRevision && !selected.activeRevision)}
+                  className="px-3 py-2 rounded-lg bg-cyan-700 text-xs text-white flex gap-1.5 items-center disabled:opacity-40"
+                >
+                  <FlaskConical size={13} /> Simulate
+                </button>
                 <button onClick={activate} disabled={busy || !selected.draftRevisionId} className="px-3 py-2 rounded-lg bg-emerald-600 text-xs text-white">Activate</button>
                 <button onClick={start} disabled={selected.status !== 'Active'} className="px-3 py-2 rounded-lg bg-blue-600 text-xs text-white flex gap-1.5 items-center"><Play size={13} /> Start</button>
                 <button onClick={archive} disabled={selected.status === 'Archived'} className="px-3 py-2 rounded-lg bg-rose-700 text-xs text-white flex gap-1.5 items-center"><Archive size={13} /> Archive</button>

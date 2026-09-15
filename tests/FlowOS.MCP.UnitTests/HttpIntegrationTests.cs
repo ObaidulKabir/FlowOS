@@ -122,7 +122,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(59, httpNames.Length);
+        Assert.Equal(60, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);
@@ -185,7 +185,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var json = JObject.Parse(await response.Content.ReadAsStringAsync());
         var tools = Assert.IsType<JArray>(json["tools"]);
-        Assert.Equal(59, tools.Count);
+        Assert.Equal(60, tools.Count);
 
         foreach (var tool in tools)
         {
@@ -945,6 +945,27 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         }));
         var bindingId = Guid.Parse((created["Id"] ?? created["id"])!.ToString());
 
+        var invalidSimulationSelector = await CallTool("simulate_context_binding", new
+        {
+            contextBindingId = bindingId,
+            contextType,
+            revision = "draft"
+        });
+        Assert.True(invalidSimulationSelector["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-ARG-001", invalidSimulationSelector.ToString());
+
+        var draftSimulation = Data(await CallTool("simulate_context_binding", new
+        {
+            contextBindingId = bindingId,
+            revision = "draft",
+            initialPayload = new { expense = new { amount = 125 } },
+            roles = new[] { $"FinanceManager{suffix}" },
+            events = new[] { new { eventType = $"EVT-MCP-APPROVE-{suffix}" } }
+        }));
+        Assert.Equal("Completed", (draftSimulation["Status"] ?? draftSimulation["status"])!.ToString());
+        Assert.True((draftSimulation["SideEffectsSuppressed"] ?? draftSimulation["sideEffectsSuppressed"])!.Value<bool>());
+        Assert.False((draftSimulation["IsPersistedRuntime"] ?? draftSimulation["isPersistedRuntime"])!.Value<bool>());
+
         var validation = Data(await CallTool("validate_context_binding", new { id = bindingId }));
         Assert.True((validation["IsValid"] ?? validation["isValid"])!.Value<bool>());
 
@@ -965,6 +986,17 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             id = bindingId,
             confirmHumanApproval = true
         }));
+
+        var activeSimulation = Data(await CallTool("simulate_context_binding", new
+        {
+            contextType,
+            revision = "active",
+            initialPayload = new { expense = new { amount = 125 } },
+            roles = new[] { $"FinanceManager{suffix}" },
+            events = new[] { new { eventType = $"EVT-MCP-APPROVE-{suffix}" } }
+        }));
+        Assert.True((activeSimulation["IsPersistedRuntime"] ?? activeSimulation["isPersistedRuntime"])!.Value<bool>());
+        Assert.Equal("active", (activeSimulation["RevisionKind"] ?? activeSimulation["revisionKind"])!.ToString());
 
         var invalidVersionSelector = await CallTool("start_workflow", new
         {

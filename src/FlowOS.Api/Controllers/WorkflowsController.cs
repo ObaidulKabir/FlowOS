@@ -122,7 +122,8 @@ public class WorkflowsController : ControllerBase
             id,
             request.TargetStepIndex,
             request.AlternativeEvent,
-            request.AlternativePayload);
+            request.AlternativePayload,
+            request.SimulatedRoles);
 
         var result = await _mediator.Send(query);
         return Ok(result);

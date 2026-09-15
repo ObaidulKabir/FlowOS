@@ -397,6 +397,67 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject SimulateContextBinding() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "oneOf":[
+            {"required":["contextBindingId"]},
+            {"required":["contextType"]}
+          ],
+          "properties":{
+            "contextBindingId":{
+              "type":"string",
+              "format":"uuid",
+              "description":"Tenant-scoped workflow context binding UUID."
+            },
+            "contextType":{
+              "type":"string",
+              "minLength":1,
+              "description":"Tenant-unique business context type. Use instead of contextBindingId."
+            },
+            "revision":{
+              "type":"string",
+              "enum":["draft","active"],
+              "default":"draft",
+              "description":"Simulate the saved draft or the exact pinned active runtime revision."
+            },
+            "initialPayload":{
+              "type":"object",
+              "description":"Business source payload projected through the binding inputMapping."
+            },
+            "roles":{
+              "type":"array",
+              "items":{"type":"string","minLength":1},
+              "description":"Default simulated business roles used by task and state-machine role checks."
+            },
+            "events":{
+              "type":"array",
+              "maxItems":100,
+              "items":{
+                "type":"object",
+                "required":["eventType"],
+                "properties":{
+                  "eventType":{"type":"string","minLength":1},
+                  "payload":{"type":"object"},
+                  "roles":{"type":"array","items":{"type":"string","minLength":1}}
+                },
+                "additionalProperties":false
+              },
+              "description":"Ordered contextual business events with optional source payload and role overrides."
+            },
+            "maxSteps":{
+              "type":"integer",
+              "minimum":1,
+              "maximum":100,
+              "default":25
+            },
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     private static string ContextBindingDefinitionSchema() =>
         """
         {
@@ -1008,6 +1069,7 @@ public static class McpToolSchemas
             "targetStepIndex":{"type":"integer","minimum":0,"default":0,"description":"Historical snapshot index to clone as the what-if origin."},
             "alternativeEvent":{"type":"string","minLength":1,"description":"Alternate event type to evaluate (e.g. EVT-REJECT)."},
             "alternativePayload":{"type":"object","description":"Optional alternate payload used only inside the sandbox."},
+            "simulatedRoles":{"type":"array","items":{"type":"string","minLength":1},"description":"Business roles used by contextual role and state-machine guard checks."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false

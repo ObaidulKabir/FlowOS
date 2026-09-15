@@ -92,7 +92,7 @@ curl -X POST "http://localhost:5183/api/workflows/start" \
 dotnet test FlowOS.sln
 ```
 
-This runs three test projects: `FlowOS.UnitTests` (300 tests), `FlowOS.EndToEndTests` (28 tests), and `FlowOS.MCP.UnitTests` (38 tests) — 366 tests total, all using an in-memory database, so no Docker/PostgreSQL is required.
+This runs three test projects: `FlowOS.UnitTests` (303 tests), `FlowOS.EndToEndTests` (28 tests), and `FlowOS.MCP.UnitTests` (38 tests) — 369 tests total, all using an in-memory database, so no Docker/PostgreSQL is required.
 
 ## What's next
 

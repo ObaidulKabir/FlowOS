@@ -10,7 +10,7 @@ public sealed class ContractAndTenantTests
     [Fact]
     public void Every_tool_has_self_describing_behavior_and_valid_example()
     {
-        Assert.Equal(59, McpToolDescriptions.All.Count);
+        Assert.Equal(60, McpToolDescriptions.All.Count);
 
         Assert.All(McpToolDescriptions.All, contract =>
         {
@@ -133,14 +133,20 @@ public sealed class ContractAndTenantTests
             "activate_context_binding",
             "archive_context_binding",
             "list_context_bindings",
-            "get_context_binding"
+            "get_context_binding",
+            "simulate_context_binding"
         };
 
         Assert.All(toolNames, name =>
         {
             Assert.True(McpToolDescriptions.All.ContainsKey(name));
-            Assert.Equal("governance", McpToolDescriptions.ProfileFor(name).Category);
+            Assert.Equal(
+                name == "simulate_context_binding" ? "analysis" : "governance",
+                McpToolDescriptions.ProfileFor(name).Category);
         });
+        Assert.False(McpToolDescriptions.ProfileFor("simulate_context_binding").Mutating);
+        Assert.Equal("none", McpToolDescriptions.ProfileFor("simulate_context_binding").SideEffect);
+        Assert.NotNull(McpToolSchemas.SimulateContextBinding()["oneOf"]);
         Assert.True(McpToolDescriptions.ProfileFor("activate_context_binding").RequiresHumanConfirmation);
         Assert.True(McpToolDescriptions.ProfileFor("archive_context_binding").RequiresHumanConfirmation);
 

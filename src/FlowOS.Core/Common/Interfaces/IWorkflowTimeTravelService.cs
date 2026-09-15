@@ -18,7 +18,10 @@ public record WorkflowTimeTravelSnapshotDto(
     string? ActorId,
     Dictionary<string, object?> Variables,
     List<WorkflowActionExecutionLogDto> ActionLogs,
-    string Summary
+    string Summary,
+    string? ContextualEventType = null,
+    string? CanonicalEventType = null,
+    Guid? ContextBindingRevisionId = null
 );
 
 public record WorkflowTimeTravelReplayDto(
@@ -27,13 +30,19 @@ public record WorkflowTimeTravelReplayDto(
     int WorkflowVersion,
     string Status,
     int TotalSteps,
-    List<WorkflowTimeTravelSnapshotDto> Snapshots
+    List<WorkflowTimeTravelSnapshotDto> Snapshots,
+    Guid? ContextBindingId = null,
+    Guid? ContextBindingRevisionId = null,
+    string? ContextType = null,
+    string? SourceSystem = null,
+    string? ExternalEntityId = null
 );
 
 public record WorkflowForkSimulationRequest(
     int TargetStepIndex,
     string AlternativeEvent,
-    object? AlternativePayload = null
+    object? AlternativePayload = null,
+    IReadOnlyList<string>? SimulatedRoles = null
 );
 
 public record WorkflowForkSimulationResultDto(
@@ -45,7 +54,14 @@ public record WorkflowForkSimulationResultDto(
     string ProjectedState,
     bool IsAllowed,
     string? Reason,
-    List<string> ProjectedActions
+    List<string> ProjectedActions,
+    IReadOnlyList<string>? SimulatedRoles = null,
+    string? ContextualEventType = null,
+    string? CanonicalEventType = null,
+    Guid? ContextBindingId = null,
+    Guid? ContextBindingRevisionId = null,
+    string? ContextType = null,
+    Dictionary<string, object?>? ProjectedCanonicalContext = null
 );
 
 public record WorkflowCompensationPathDto(
@@ -69,6 +85,7 @@ public interface IWorkflowTimeTravelService
         int targetStepIndex,
         string alternativeEvent,
         object? alternativePayload = null,
+        IReadOnlyList<string>? simulatedRoles = null,
         CancellationToken cancellationToken = default);
 
     Task<WorkflowCompensationPathDto?> PlanCompensationPathAsync(

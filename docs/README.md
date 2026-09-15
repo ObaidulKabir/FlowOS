@@ -24,7 +24,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 14 | [API Reference](14-api-reference.md) | Every REST endpoint, request/response shapes |
 | 15 | [Known Limitations & Gaps](15-known-limitations-and-gaps.md) | Honest list of enforcement gaps proven by regression tests |
 | 16 | [Sample Applications](16-sample-applications.md) | ExpenseApp, the Tenant Dashboard, and the Node.js demo client |
-| 17 | [Workflow Context Bindings](17-workflow-context-bindings.md) | Reuse one process template across tenant business contexts |
+| 17 | [Workflow Context Bindings](17-workflow-context-bindings.md) | Reuse and simulate one process template across tenant business contexts |
 
 ## Reading paths
 

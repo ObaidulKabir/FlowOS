@@ -70,20 +70,18 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
         ActiveWorkflowContextBinding activeBinding,
         object? sourcePayload)
     {
-        var sourceRoot = ToObjectElement(sourcePayload);
-        ValidatePayload(activeBinding.Revision.Definition.SourcePayloadSchema, sourceRoot, "source payload");
-
-        var delta = Project(
-            sourceRoot,
-            activeBinding.Revision.Definition.InputMapping,
-            activeBinding.Revision.Definition.ConditionParameters);
-
-        ValidateCanonical(activeBinding.SourceWorkflowClass.Definition.ContextSchema, delta);
+        var prepared = PrepareSimulationStep(
+            activeBinding.Revision,
+            activeBinding.SourceWorkflowClass,
+            new Dictionary<string, object?>(),
+            contextualEventType: null,
+            sourcePayload,
+            isInitial: true);
         return new PreparedWorkflowContext(
             activeBinding.Revision,
             null,
-            delta,
-            ToExecutionPayload(delta));
+            prepared.Delta,
+            prepared.Payload);
     }
 
     public async Task<PreparedWorkflowContext?> PrepareForInstanceAsync(
@@ -194,12 +192,43 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
             .GetByIdAsNoTrackingAsync(revision.SourceWorkflowClassId, cancellationToken)
             ?? throw new InvalidOperationException("Workflow context source template was not found.");
 
-        var canonicalEvent = ResolveCanonicalEvent(contextualEventType, revision.Definition.EventAliases);
+        return PrepareSimulationStep(
+            revision,
+            source,
+            baseCanonicalContext,
+            contextualEventType,
+            sourcePayload,
+            isInitial: false).Payload;
+    }
+
+    public PreparedWorkflowSimulationContext PrepareSimulationStep(
+        WorkflowContextBindingRevision revision,
+        WorkflowClass sourceWorkflowClass,
+        IReadOnlyDictionary<string, object?> baseCanonicalContext,
+        string? contextualEventType,
+        object? sourcePayload,
+        bool isInitial)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        ArgumentNullException.ThrowIfNull(sourceWorkflowClass);
+        ArgumentNullException.ThrowIfNull(baseCanonicalContext);
+
+        var merged = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in baseCanonicalContext)
+        {
+            merged[item.Key] = JsonSerializer.SerializeToElement(item.Value);
+        }
+
+        var definition = revision.Definition;
+        var canonicalEvent = isInitial
+            ? null
+            : ResolveCanonicalEvent(contextualEventType, definition.EventAliases);
         var mappings = new Dictionary<string, string>(
-            revision.Definition.InputMapping,
+            definition.InputMapping,
             StringComparer.OrdinalIgnoreCase);
-        if (canonicalEvent != null &&
-            TryGetValue(revision.Definition.EventInputMappings, canonicalEvent, out var eventMappings))
+        if (!isInitial &&
+            canonicalEvent != null &&
+            TryGetValue(definition.EventInputMappings, canonicalEvent, out var eventMappings))
         {
             foreach (var mapping in eventMappings)
             {
@@ -207,29 +236,47 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
             }
         }
 
-        foreach (var parameter in revision.Definition.ConditionParameters)
+        var delta = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        if (isInitial)
         {
-            merged[parameter.Key] = parameter.Value.Clone();
+            var sourceRoot = ToObjectElement(sourcePayload);
+            ValidatePayload(definition.SourcePayloadSchema, sourceRoot, "simulation source payload");
+            delta = Project(sourceRoot, mappings, definition.ConditionParameters);
         }
-        if (sourcePayload != null)
+        else
         {
-            var sourcePayloadRoot = ToObjectElement(sourcePayload);
-            var sourceSchema = canonicalEvent != null &&
-                               TryGetValue(revision.Definition.EventSourcePayloadSchemas, canonicalEvent, out var eventSchema)
-                ? eventSchema
-                : revision.Definition.SourcePayloadSchema;
-            ValidatePayload(sourceSchema, sourcePayloadRoot, "simulation source payload");
-            foreach (var item in Project(
-                         sourcePayloadRoot,
-                         mappings,
-                         new Dictionary<string, JsonElement>()))
+            foreach (var parameter in definition.ConditionParameters)
             {
-                merged[item.Key] = item.Value;
+                merged[parameter.Key] = parameter.Value.Clone();
+            }
+
+            if (sourcePayload != null)
+            {
+                var sourceRoot = ToObjectElement(sourcePayload);
+                var sourceSchema = canonicalEvent != null &&
+                                   TryGetValue(definition.EventSourcePayloadSchemas, canonicalEvent, out var eventSchema)
+                    ? eventSchema
+                    : definition.SourcePayloadSchema;
+                ValidatePayload(sourceSchema, sourceRoot, "simulation event source payload");
+                delta = Project(
+                    sourceRoot,
+                    mappings,
+                    new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase));
             }
         }
 
-        ValidateCanonical(source.Definition.ContextSchema, merged);
-        return ToExecutionPayload(merged);
+        foreach (var item in delta)
+        {
+            merged[item.Key] = item.Value.Clone();
+        }
+
+        ValidateCanonical(sourceWorkflowClass.Definition.ContextSchema, merged);
+        return new PreparedWorkflowSimulationContext(
+            revision,
+            canonicalEvent,
+            delta,
+            merged,
+            ToExecutionPayload(merged));
     }
 
     public async Task<PreparedWorkflowContext?> PrepareCanonicalDeltaAsync(

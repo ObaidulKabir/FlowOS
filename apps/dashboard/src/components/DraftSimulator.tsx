@@ -731,7 +731,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       <div className="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Play size={16} className="text-emerald-400" /> Draft Sandbox Simulator
+            <Play size={16} className="text-emerald-400" /> Template Draft Simulator
           </h3>
           {currentStep && (
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-xs">

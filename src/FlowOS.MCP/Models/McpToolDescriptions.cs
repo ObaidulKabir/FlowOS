@@ -147,6 +147,13 @@ public static class McpToolDescriptions
                 "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-NOTFOUND-001, MCP-TENANT-001, MCP-TENANT-002. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["simulate_context_binding"] =
+                "[Business-Context Simulator] Runs a side-effect-free, production-parity simulation of a saved draft or pinned active context-binding revision. " +
+                "Projects source payloads into canonical context, applies contextual event aliases and event mappings, enforces workflow/state-machine guards and simulated roles, and reports actions, timers, and subworkflows without executing them. " +
+                "Returns: {ok:true,data:{contextBindingId,revisionKind,status,initialProjection,initialCanonicalContext,finalCanonicalContext,trace,pendingWork,graph,sideEffectsSuppressed:true}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-VALIDATION, CTX-STATE-001, MCP-INTERNAL. " +
+                "Input example: {\"contextType\":\"Expense\",\"revision\":\"draft\",\"initialPayload\":{\"expense\":{\"amount\":1500}},\"roles\":[\"FinanceManager\"],\"events\":[{\"eventType\":\"EVT-EXP-SUBMIT\"}],\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
             ["start_workflow"] =
                 "[Lifecycle Step 4: Run Instance] Starts a live runtime execution instance through exactly one workflow or active context-binding selector. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
@@ -353,11 +360,11 @@ public static class McpToolDescriptions
 
             ["fork_workflow_simulation"] =
                 "[Time-Travel Debugging] Evaluates a sandboxed what-if branch from a historical snapshot without writing to the live instance, audit log, or Outbox. " +
-                "Clones state at targetStepIndex, applies alternativeEvent/payload through the workflow engine, and returns the projected next step and state. " +
+                "Clones state at targetStepIndex, applies alternativeEvent/payload and simulatedRoles through the workflow engine, and preserves context-binding plus contextual/canonical event lineage. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
-                "Returns: {ok:true,data:{forkFromStepIndex,baseStepId,baseState,alternativeEvent,projectedStepId,projectedState,isAllowed,reason,projectedActions,sideEffects}}. " +
+                "Returns: {ok:true,data:{forkFromStepIndex,baseStepId,baseState,alternativeEvent,projectedStepId,projectedState,isAllowed,reason,projectedActions,simulatedRoles,contextualEventType,canonicalEventType,contextBindingId,contextBindingRevisionId,contextType,projectedCanonicalContext,sideEffects}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\",\"targetStepIndex\":1,\"alternativeEvent\":\"EVT-REJECT\"}",
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\",\"targetStepIndex\":1,\"alternativeEvent\":\"EVT-REJECT\",\"simulatedRoles\":[\"FinanceManager\"]}",
 
             ["plan_workflow_compensation_path"] =
                 "[Resilience & Saga Analysis] Computes an execution-aware compensation rollback path for a workflow instance using immutable replay history and configured OnFailure hooks. " +
@@ -478,6 +485,7 @@ public static class McpToolDescriptions
             ["archive_context_binding"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
             ["list_context_bindings"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["get_context_binding"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
+            ["simulate_context_binding"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["start_workflow"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["publish_event"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["complete_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium")

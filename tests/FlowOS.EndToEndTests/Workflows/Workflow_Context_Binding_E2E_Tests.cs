@@ -101,6 +101,37 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
         var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
         var bindingId = created.GetProperty("id").GetGuid();
 
+        var draftSimulationResponse = await client.PostAsJsonAsync("/api/context-bindings/simulate", new
+        {
+            contextBindingId = bindingId,
+            revision = "draft",
+            initialPayload = new { expense = new { amount = 1250 } },
+            roles = new[] { "FinanceManager" },
+            events = new[] { new { eventType = "EVT-EXP-APPROVE" } }
+        });
+        draftSimulationResponse.EnsureSuccessStatusCode();
+        var draftSimulation = await draftSimulationResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Completed", draftSimulation.GetProperty("status").GetString());
+        Assert.False(draftSimulation.GetProperty("isPersistedRuntime").GetBoolean());
+        Assert.True(draftSimulation.GetProperty("sideEffectsSuppressed").GetBoolean());
+        Assert.Equal(
+            "EVT-APPROVE",
+            draftSimulation.GetProperty("trace")[1].GetProperty("canonicalEventType").GetString());
+
+        var roleDeniedSimulationResponse = await client.PostAsJsonAsync("/api/context-bindings/simulate", new
+        {
+            contextBindingId = bindingId,
+            revision = "draft",
+            initialPayload = new { expense = new { amount = 1250 } },
+            events = new[] { new { eventType = "EVT-EXP-APPROVE" } }
+        });
+        roleDeniedSimulationResponse.EnsureSuccessStatusCode();
+        var roleDeniedSimulation = await roleDeniedSimulationResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Denied", roleDeniedSimulation.GetProperty("status").GetString());
+        Assert.Contains(
+            "FinanceManager",
+            roleDeniedSimulation.GetProperty("trace")[1].GetProperty("reason").GetString());
+
         var validateResponse = await client.PostAsync($"/api/context-bindings/{bindingId}/validate", null);
         validateResponse.EnsureSuccessStatusCode();
         var validation = await validateResponse.Content.ReadFromJsonAsync<JsonElement>();
@@ -108,6 +139,19 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
 
         var activateResponse = await client.PostAsync($"/api/context-bindings/{bindingId}/activate", null);
         activateResponse.EnsureSuccessStatusCode();
+
+        var activeSimulationResponse = await client.PostAsJsonAsync("/api/context-bindings/simulate", new
+        {
+            contextBindingId = bindingId,
+            revision = "active",
+            initialPayload = new { expense = new { amount = 1250 } },
+            roles = new[] { "FinanceManager" },
+            events = new[] { new { eventType = "EVT-EXP-APPROVE" } }
+        });
+        activeSimulationResponse.EnsureSuccessStatusCode();
+        var activeSimulation = await activeSimulationResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(activeSimulation.GetProperty("isPersistedRuntime").GetBoolean());
+        Assert.Equal("active", activeSimulation.GetProperty("revisionKind").GetString());
 
         var createLeaveResponse = await client.PostAsJsonAsync("/api/context-bindings", new
         {
@@ -275,6 +319,10 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
         Assert.NotNull(replay);
         Assert.Equal(1250L, replay!.Snapshots.First().Variables["Amount"]);
         Assert.Equal(5000L, replay.Snapshots.First().Variables["ApprovalLimit"]);
+        Assert.Equal(bindingId, replay.ContextBindingId);
+        Assert.Equal("Expense", replay.ContextType);
+        Assert.Equal("ERP", replay.SourceSystem);
+        Assert.Equal("WorkflowStarted", replay.Snapshots.First().CanonicalEventType);
 
         var instanceCountBeforeFork = await verifyDb.WorkflowInstances.CountAsync();
         var eventCountBeforeFork = await verifyDb.Events.CountAsync();
@@ -282,8 +330,13 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
             _tenantId,
             instanceId,
             0,
-            "EVT-EXP-APPROVE");
+            "EVT-EXP-APPROVE",
+            simulatedRoles: ["FinanceManager"]);
         Assert.True(fork.IsAllowed, fork.Reason);
+        Assert.Equal("EVT-APPROVE", fork.CanonicalEventType);
+        Assert.Equal(bindingId, fork.ContextBindingId);
+        Assert.Contains("FinanceManager", fork.SimulatedRoles!);
+        Assert.Equal(1250L, fork.ProjectedCanonicalContext!["Amount"]);
         Assert.Equal(instanceCountBeforeFork, await verifyDb.WorkflowInstances.CountAsync());
         Assert.Equal(eventCountBeforeFork, await verifyDb.Events.CountAsync());
     }
@@ -325,6 +378,14 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
         var response = await otherTenantClient.GetAsync($"/api/context-bindings/{bindingId}");
 
         Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+
+        var simulationResponse = await otherTenantClient.PostAsJsonAsync("/api/context-bindings/simulate", new
+        {
+            contextBindingId = bindingId,
+            revision = "draft",
+            initialPayload = new { }
+        });
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, simulationResponse.StatusCode);
     }
 
     private WorkflowClass CreateTemplate()

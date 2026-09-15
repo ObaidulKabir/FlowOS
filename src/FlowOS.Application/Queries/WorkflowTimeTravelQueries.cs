@@ -15,7 +15,8 @@ public record SimulateWorkflowForkQuery(
     Guid WorkflowInstanceId,
     int TargetStepIndex,
     string AlternativeEvent,
-    object? AlternativePayload = null
+    object? AlternativePayload = null,
+    IReadOnlyList<string>? SimulatedRoles = null
 ) : IRequest<WorkflowForkSimulationResultDto>;
 
 public record GetWorkflowCompensationPathQuery(

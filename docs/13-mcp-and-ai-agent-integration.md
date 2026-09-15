@@ -126,7 +126,7 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS registers **59 production tools** categorized by governance lifecycle, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
+FlowOS registers **60 production tools** categorized by governance lifecycle, context-aware simulation, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|
@@ -156,6 +156,7 @@ FlowOS registers **59 production tools** categorized by governance lifecycle, Co
 | `replay_workflow_history` | `low` | `none` | No | `ExecutionTools.ReplayWorkflowHistory` | Reconstructs a read-only time-travel timeline of snapshots, tokens, state, variables, and correlated actions. |
 | `fork_workflow_simulation` | `low` | `none` | No | `ExecutionTools.ForkWorkflowSimulation` | Sandboxed what-if branch from a historical snapshot; never writes the live instance or Outbox. |
 | `simulate_workflowclass` | `low` | `none` | No | `SimulationTools.SimulateWorkflowClass` | Dry-runs a draft or published blueprint without mutating production instances. |
+| `simulate_context_binding` | `low` | `none` | No | `ContextBindingMcpTools.Simulate` | Validates and dry-runs a saved draft or exact active context-binding revision with canonical mappings, aliases, roles, and side effects suppressed. |
 | `simulate_subworkflow` | `low` | `none` | No | `SimulationTools.SimulateSubWorkflow` | Simulates end-to-end parent-child subworkflow execution with parameter input mapping, child step progression, output mapping, and parent resumption. |
 | `simulate_parallel_execution` | `low` | `none` | No | `SimulationTools.SimulateParallelExecution` | Dry-runs parallel Fork/Join gateway branches concurrently to evaluate branch actions and barrier synchronization policies. |
 | `get_subworkflow_tree` | `low` | `none` | No | `ExecutionTools.GetSubWorkflowTree` | Reconstructs the complete parent-child subworkflow execution hierarchy tree for an instance. |
@@ -296,7 +297,7 @@ MCP governance tools (`create`/`update`/`validate`/`fork`/`list_public`) now go 
 
 ### Reuse a published template through context bindings
 
-The seven binding governance tools are `create_context_binding`, `update_context_binding`, `validate_context_binding`, `activate_context_binding`, `archive_context_binding`, `list_context_bindings`, and `get_context_binding`. After activation, call the existing `start_workflow` with `contextBindingId` or `contextType`; no duplicate start-by-context tool exists. Activation and archival require `confirmHumanApproval: true`. Full mapping examples are in [Chapter 17](17-workflow-context-bindings.md).
+The seven binding governance tools are `create_context_binding`, `update_context_binding`, `validate_context_binding`, `activate_context_binding`, `archive_context_binding`, `list_context_bindings`, and `get_context_binding`. `simulate_context_binding` is a separate read-only analysis tool for saved draft and exact active revisions. After activation, call the existing `start_workflow` with `contextBindingId` or `contextType`; no duplicate start-by-context tool exists. Activation and archival require `confirmHumanApproval: true`. Full mapping and simulation examples are in [Chapter 17](17-workflow-context-bindings.md).
 
 ### 5. Fork a public template instead of starting from scratch
 

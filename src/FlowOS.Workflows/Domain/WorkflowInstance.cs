@@ -134,4 +134,28 @@ public class WorkflowInstance : IWorkflowInstance
     {
         Status = WorkflowInstanceStatus.Waiting;
     }
+
+    public WorkflowInstance CreateTransientCopy()
+    {
+        var copy = new WorkflowInstance(
+            TenantId,
+            WorkflowDefinitionId,
+            WorkflowClassId,
+            WorkflowVersion,
+            CurrentStepId,
+            CorrelationId,
+            CurrentState,
+            ParentWorkflowInstanceId,
+            ParentStepId)
+        {
+            Id = Id,
+            Status = Status,
+            CreatedAt = CreatedAt,
+            CompletedAt = CompletedAt,
+            ActiveStepIds = new List<string>(ActiveStepIds),
+            CompletedParallelStepIds = new List<string>(CompletedParallelStepIds)
+        };
+
+        return copy;
+    }
 }

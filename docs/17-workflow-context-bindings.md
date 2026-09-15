@@ -149,6 +149,48 @@ Mappings use `canonicalField -> source.path`. Only explicitly mapped fields ente
 
 Activation never changes the template, overwrites a runtime definition, creates tenant roles, or upgrades another binding.
 
+## Business-context simulation
+
+Use the tenant dashboard **Context Simulator** or `POST /api/context-bindings/simulate` to test the binding before activation and to verify the exact pinned runtime after activation.
+
+- `revision: "draft"` validates the saved draft and compiles an ephemeral runtime package. It does not create workflow, state-machine, event, instance, snapshot, timer, outbox, or audit rows.
+- `revision: "active"` loads the exact `WorkflowDefinition` and `StateMachineDefinition` IDs pinned to the active binding revision.
+- Initial and event payloads use the same source schemas, aliases, global/event-specific mappings, immutable condition parameters, and canonical schema validation as production.
+- Simulated roles participate in human-task and state-machine role checks. Tenant decision-provider bindings are resolved exactly as they are at runtime.
+- A denied event is included in the trace, but its proposed canonical delta and transient instance changes are discarded.
+- Webhooks, notifications, timers, lifecycle actions, and child workflows appear as **would execute** or pending work; none are dispatched or persisted.
+
+Example:
+
+```json
+{
+  "contextType": "Expense",
+  "revision": "draft",
+  "initialPayload": {
+    "expense": {
+      "amount": 1250,
+      "justification": "Customer visit"
+    }
+  },
+  "roles": ["FinanceManager"],
+  "events": [
+    {
+      "eventType": "EVT-EXPENSE-SUBMIT",
+      "payload": {}
+    },
+    {
+      "eventType": "EVT-EXPENSE-APPROVE",
+      "payload": {}
+    }
+  ],
+  "maxSteps": 25
+}
+```
+
+Specify exactly one of `contextBindingId` or `contextType`. The result includes revision lineage, the compiled workflow/state-machine graph, initial projection details, canonical before/delta/after values, every allowed or denied transition, planned external work, final context, and `sideEffectsSuppressed: true`.
+
+`simulate_workflowclass` remains the template-design sandbox. Use `simulate_context_binding` when validating business vocabulary and source-to-canonical adaptation. Use `fork_workflow_simulation` after a real instance starts; replay/fork results preserve binding/revision and contextual/canonical event lineage and accept `simulatedRoles`.
+
 ## MCP sequence
 
 ```json
@@ -158,7 +200,9 @@ Activation never changes the template, overwrites a runtime definition, creates 
 Then call:
 
 - `validate_context_binding` with `id`
+- `simulate_context_binding` with exactly one binding selector and `revision: "draft"`
 - `activate_context_binding` with `id` and `confirmHumanApproval: true`
+- `simulate_context_binding` with `revision: "active"` to verify the pinned runtime
 - `start_workflow` with exactly one of `contextBindingId` or `contextType`
 - `publish_event` with the contextual event ID
 
@@ -189,6 +233,7 @@ Example start:
 - `POST /api/context-bindings/{id}/archive`
 - `GET /api/context-bindings`
 - `GET /api/context-bindings/{id}`
+- `POST /api/context-bindings/simulate`
 - `POST /api/workflows/start` with `contextBindingId` or `contextType`
 
 The authenticated tenant always wins over a tenant value supplied by a client. Cross-tenant identifiers return not found.

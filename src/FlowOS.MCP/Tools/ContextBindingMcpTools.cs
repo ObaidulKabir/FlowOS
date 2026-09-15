@@ -1,6 +1,8 @@
 using System.Text.Json;
 using FlowOS.Application.Commands;
 using FlowOS.Application.Common.Exceptions;
+using FlowOS.Application.DTOs;
+using FlowOS.Application.Queries;
 using FlowOS.Domain.ValueObjects;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
@@ -114,6 +116,28 @@ public class ContextBindingMcpTools
             return AsToken(result);
         }, "get context binding");
 
+    public Task<CallToolResult> Simulate(JObject args)
+        => Execute(async () =>
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            WorkflowContextSimulationRequest request;
+            try
+            {
+                request = JsonSerializer.Deserialize<WorkflowContextSimulationRequest>(
+                              args.ToString(Newtonsoft.Json.Formatting.None),
+                              JsonOptions)
+                          ?? throw new ArgumentException("Simulation request is invalid.");
+            }
+            catch (JsonException ex)
+            {
+                throw new ArgumentException("Simulation request is invalid.", ex);
+            }
+
+            var result = await _mediator.Send(
+                new SimulateWorkflowContextBindingQuery(tenantId, request));
+            return AsToken(result);
+        }, "simulate context binding");
+
     private static async Task<CallToolResult> Execute(
         Func<Task<JToken>> action,
         string operation)
@@ -132,6 +156,13 @@ public class ContextBindingMcpTools
                 "MCP-VALIDATION",
                 "Workflow context binding validation failed.",
                 ex.ValidationResult.Errors);
+        }
+        catch (WorkflowContextPayloadException ex)
+        {
+            return McpToolResults.Fail(
+                "MCP-VALIDATION",
+                ex.Message,
+                ex.Errors);
         }
         catch (KeyNotFoundException ex)
         {

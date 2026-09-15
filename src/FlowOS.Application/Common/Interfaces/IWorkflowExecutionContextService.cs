@@ -36,6 +36,13 @@ public sealed class PreparedWorkflowContext
     }
 }
 
+public sealed record PreparedWorkflowSimulationContext(
+    WorkflowContextBindingRevision Revision,
+    string? CanonicalEventType,
+    Dictionary<string, JsonElement> Delta,
+    Dictionary<string, JsonElement> CanonicalData,
+    Dictionary<string, object> Payload);
+
 public interface IWorkflowExecutionContextService
 {
     Task<ActiveWorkflowContextBinding> ResolveActiveAsync(
@@ -63,6 +70,14 @@ public interface IWorkflowExecutionContextService
         string? contextualEventType,
         object? sourcePayload,
         CancellationToken cancellationToken = default);
+
+    PreparedWorkflowSimulationContext PrepareSimulationStep(
+        WorkflowContextBindingRevision revision,
+        WorkflowClass sourceWorkflowClass,
+        IReadOnlyDictionary<string, object?> baseCanonicalContext,
+        string? contextualEventType,
+        object? sourcePayload,
+        bool isInitial);
 
     Task<PreparedWorkflowContext?> PrepareCanonicalDeltaAsync(
         Guid tenantId,

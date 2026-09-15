@@ -481,6 +481,11 @@ public class ExecutionTools
                 workflowVersion = replay.WorkflowVersion,
                 status = replay.Status,
                 totalSteps = replay.TotalSteps,
+                contextBindingId = replay.ContextBindingId,
+                contextBindingRevisionId = replay.ContextBindingRevisionId,
+                contextType = replay.ContextType,
+                sourceSystem = replay.SourceSystem,
+                externalEntityId = replay.ExternalEntityId,
                 snapshots = replay.Snapshots.Select(s => new
                 {
                     stepIndex = s.StepIndex,
@@ -494,6 +499,9 @@ public class ExecutionTools
                     toState = s.ToState,
                     actorId = s.ActorId,
                     variables = s.Variables,
+                    contextualEventType = s.ContextualEventType,
+                    canonicalEventType = s.CanonicalEventType,
+                    contextBindingRevisionId = s.ContextBindingRevisionId,
                     actionLogs = s.ActionLogs.Select(a => new
                     {
                         id = a.Id,
@@ -542,13 +550,17 @@ public class ExecutionTools
 
             var targetStepIndex = args["targetStepIndex"]?.Value<int>() ?? 0;
             object? payload = args["alternativePayload"] ?? args["payload"];
+            var simulatedRoles = args["simulatedRoles"] is JArray roles
+                ? roles.Values<string>().Where(role => !string.IsNullOrWhiteSpace(role)).Select(role => role!).ToList()
+                : new List<string>();
 
             var result = await _timeTravelService.SimulateForkAsync(
                 tenantId,
                 instanceId,
                 targetStepIndex,
                 alternativeEvent,
-                payload);
+                payload,
+                simulatedRoles);
 
             return McpToolResults.Success(new
             {
@@ -561,6 +573,13 @@ public class ExecutionTools
                 isAllowed = result.IsAllowed,
                 reason = result.Reason,
                 projectedActions = result.ProjectedActions,
+                simulatedRoles = result.SimulatedRoles,
+                contextualEventType = result.ContextualEventType,
+                canonicalEventType = result.CanonicalEventType,
+                contextBindingId = result.ContextBindingId,
+                contextBindingRevisionId = result.ContextBindingRevisionId,
+                contextType = result.ContextType,
+                projectedCanonicalContext = result.ProjectedCanonicalContext,
                 sideEffects = "none"
             });
         }

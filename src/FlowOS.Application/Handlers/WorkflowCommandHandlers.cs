@@ -968,36 +968,13 @@ public class WorkflowCommandHandlers :
         FlowOS.StateMachines.Models.ExecutionContext context,
         FlowOS.Domain.Entities.StateMachineDefinition? smDef = null)
     {
-        int autoAdvanceLimit = 10;
-        while (autoAdvanceLimit > 0)
-        {
-            var activeSteps = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
-                ? instance.ActiveStepIds.ToList()
-                : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
-
-            bool advancedAny = false;
-            foreach (var stepId in activeSteps)
-            {
-                var step = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
-                if (step != null && step.NextSteps.ContainsKey("Default") && 
-                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.HumanTask && 
-                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.Timer &&
-                    step.StepType != FlowOS.Workflows.Enums.WorkflowStepType.SubWorkflow)
-                {
-                    var defaultEvent = new StandardEvent(tenantId, "Default");
-                    var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
-                    var result = _engine.Advance(instance, definition, defaultEvent, context, smDef, currentEntityState);
-                    if (result.Success)
-                    {
-                        advancedAny = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!advancedAny) break;
-            autoAdvanceLimit--;
-        }
+        FlowOS.Application.Services.WorkflowAutoAdvanceRunner.Run(
+            _engine,
+            instance,
+            definition,
+            tenantId,
+            context,
+            smDef);
     }
 
     private async Task CheckAndScheduleTimerAsync(

@@ -60,6 +60,7 @@ export const TimeTravelPlayer: React.FC<Props> = ({
   const [playing, setPlaying] = useState(false);
   const [altEvent, setAltEvent] = useState('EVT-REJECT');
   const [altPayload, setAltPayload] = useState('{\n  "amount": 0\n}');
+  const [altRoles, setAltRoles] = useState('');
   const [forking, setForking] = useState(false);
   const [forkResult, setForkResult] = useState<TimeTravelForkResult | null>(null);
   const [forkError, setForkError] = useState<string | null>(null);
@@ -140,7 +141,14 @@ export const TimeTravelPlayer: React.FC<Props> = ({
     setForking(true);
     setForkError(null);
     try {
-      const result = await api.simulateFork(workflowInstanceId, snapshot.stepIndex, altEvent.trim(), payload);
+      const roles = altRoles.split(',').map(item => item.trim()).filter(Boolean);
+      const result = await api.simulateFork(
+        workflowInstanceId,
+        snapshot.stepIndex,
+        altEvent.trim(),
+        payload,
+        roles
+      );
       setForkResult(result);
     } catch (err: any) {
       setForkError(err.message || 'Fork simulation failed');
@@ -184,6 +192,18 @@ export const TimeTravelPlayer: React.FC<Props> = ({
             <div className="text-[10px] text-slate-500">
               {replay.workflowClassName} v{replay.workflowVersion} · {replay.totalSteps} snapshots · {replay.status}
             </div>
+            {replay.contextBindingRevisionId && (
+              <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
+                <span className="rounded border border-cyan-800 bg-cyan-950/50 px-1.5 py-0.5 text-cyan-300">
+                  {replay.contextType || 'Context'} · binding {replay.contextBindingId?.slice(0, 8)}… · revision {replay.contextBindingRevisionId.slice(0, 8)}…
+                </span>
+                {(replay.sourceSystem || replay.externalEntityId) && (
+                  <span className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-400">
+                    {replay.sourceSystem || 'source'}:{replay.externalEntityId || 'unlinked'}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -250,6 +270,14 @@ export const TimeTravelPlayer: React.FC<Props> = ({
               {snapshot.actorId && (
                 <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono text-[10px]">
                   actor:{snapshot.actorId}
+                </span>
+              )}
+              {snapshot.contextualEventType && (
+                <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono text-[10px]">
+                  {snapshot.contextualEventType}
+                  {snapshot.canonicalEventType && snapshot.canonicalEventType !== snapshot.contextualEventType
+                    ? ` → ${snapshot.canonicalEventType}`
+                    : ''}
                 </span>
               )}
             </div>
@@ -336,6 +364,12 @@ export const TimeTravelPlayer: React.FC<Props> = ({
               rows={4}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px] text-emerald-300 font-mono"
             />
+            <input
+              value={altRoles}
+              onChange={(event) => setAltRoles(event.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px] text-indigo-300 font-mono"
+              placeholder="Simulated roles, comma separated"
+            />
             <button
               onClick={handleFork}
               disabled={forking || !altEvent.trim()}
@@ -359,12 +393,23 @@ export const TimeTravelPlayer: React.FC<Props> = ({
                   {forkResult.baseStepId} → {forkResult.projectedStepId} ({forkResult.projectedState})
                 </div>
                 <div>{forkResult.reason}</div>
+                {(forkResult.contextBindingRevisionId || forkResult.canonicalEventType) && (
+                  <div className="mt-1 text-[10px] text-slate-400">
+                    {forkResult.contextType || 'Context'} · {forkResult.contextualEventType} → {forkResult.canonicalEventType}
+                    {forkResult.simulatedRoles?.length ? ` · roles: ${forkResult.simulatedRoles.join(', ')}` : ''}
+                  </div>
+                )}
                 {forkResult.projectedActions?.length > 0 && (
                   <ul className="mt-1 list-disc pl-4 text-slate-300">
                     {forkResult.projectedActions.map((action) => (
                       <li key={action}>{action}</li>
                     ))}
                   </ul>
+                )}
+                {forkResult.projectedCanonicalContext && (
+                  <pre className="mt-2 max-h-32 overflow-auto rounded bg-slate-950 p-2 text-[9px] text-emerald-300">
+                    {JSON.stringify(forkResult.projectedCanonicalContext, null, 2)}
+                  </pre>
                 )}
               </div>
             )}

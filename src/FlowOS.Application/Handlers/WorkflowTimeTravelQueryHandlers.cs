@@ -32,6 +32,7 @@ public class WorkflowTimeTravelQueryHandlers :
             request.TargetStepIndex,
             request.AlternativeEvent,
             request.AlternativePayload,
+            request.SimulatedRoles,
             cancellationToken);
     }
 

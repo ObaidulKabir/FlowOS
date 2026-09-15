@@ -89,6 +89,9 @@ public static class ToolRegistration
         registry.Register("get_context_binding", McpToolDescriptions.For("get_context_binding"), McpToolSchemas.ContextBindingById(),
             async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Get(args)));
 
+        registry.Register("simulate_context_binding", McpToolDescriptions.For("simulate_context_binding"), McpToolSchemas.SimulateContextBinding(),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Simulate(args)));
+
         registry.Register("list_registered_plugins", McpToolDescriptions.For("list_registered_plugins"), McpToolSchemas.ListRegisteredPlugins(),
             async (args) => await ExecuteScopedAsync<PluginDiscoveryMcpTools>(serviceProvider, t => t.ListRegisteredPlugins(args)));
 

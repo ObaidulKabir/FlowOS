@@ -57,6 +57,28 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == instance.WorkflowDefinitionId, cancellationToken);
 
+        var contextSnapshot = await _dbContext.WorkflowContextSnapshots
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                snapshot => snapshot.WorkflowInstanceId == instance.Id && snapshot.TenantId == tenantId,
+                cancellationToken);
+        var contextBindingRevisionId =
+            definition?.ContextBindingRevisionId ?? contextSnapshot?.ContextBindingRevisionId;
+        var contextRevision = contextBindingRevisionId.HasValue
+            ? await _dbContext.WorkflowContextBindingRevisions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    revision => revision.Id == contextBindingRevisionId.Value,
+                    cancellationToken)
+            : null;
+        var contextBinding = contextRevision != null
+            ? await _dbContext.WorkflowContextBindings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    binding => binding.Id == contextRevision.BindingId && binding.TenantId == tenantId,
+                    cancellationToken)
+            : null;
+
         var correlationIds = new List<Guid> { instance.Id };
         if (instance.CorrelationId.HasValue && instance.CorrelationId.Value != instance.Id)
         {
@@ -92,6 +114,12 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             string fromState = meta.GetValueOrDefault("FromState", currentState);
             string toState = meta.GetValueOrDefault("ToState", currentState);
             string? actorId = meta.GetValueOrDefault("ActorId");
+            string contextualEventType = meta.GetValueOrDefault("ContextualEventType", evt.EventType);
+            string canonicalEventType = meta.GetValueOrDefault("CanonicalEventType", evt.EventType);
+            Guid? eventBindingRevisionId =
+                Guid.TryParse(meta.GetValueOrDefault("ContextBindingRevisionId"), out var parsedRevisionId)
+                    ? parsedRevisionId
+                    : contextBindingRevisionId;
 
             if (evt.EventType == "WorkflowStarted")
             {
@@ -158,7 +186,10 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
                 ActorId: actorId,
                 Variables: new Dictionary<string, object?>(runningVariables),
                 ActionLogs: correlatedActions,
-                Summary: summary
+                Summary: summary,
+                ContextualEventType: contextualEventType,
+                CanonicalEventType: canonicalEventType,
+                ContextBindingRevisionId: eventBindingRevisionId
             ));
         }
 
@@ -168,7 +199,12 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             WorkflowVersion: instance.WorkflowVersion,
             Status: instance.Status.ToString(),
             TotalSteps: snapshots.Count,
-            Snapshots: snapshots
+            Snapshots: snapshots,
+            ContextBindingId: contextBinding?.Id,
+            ContextBindingRevisionId: contextBindingRevisionId,
+            ContextType: contextBinding?.ContextType,
+            SourceSystem: contextSnapshot?.SourceSystem,
+            ExternalEntityId: contextSnapshot?.ExternalEntityId
         );
     }
 
@@ -178,6 +214,7 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
         int targetStepIndex,
         string alternativeEvent,
         object? alternativePayload = null,
+        IReadOnlyList<string>? simulatedRoles = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(alternativeEvent))
@@ -236,7 +273,32 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
                     sm => sm.TenantId == tenantId && sm.EntityType == definition.Name,
                     cancellationToken);
 
+        var contextRevision = definition.ContextBindingRevisionId.HasValue
+            ? await _dbContext.WorkflowContextBindingRevisions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    revision => revision.Id == definition.ContextBindingRevisionId.Value,
+                    cancellationToken)
+            : null;
+        var contextBinding = contextRevision != null
+            ? await _dbContext.WorkflowContextBindings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    binding => binding.Id == contextRevision.BindingId && binding.TenantId == tenantId,
+                    cancellationToken)
+            : null;
+        var contextualEventType = alternativeEvent.Trim();
+        var canonicalEventType = ResolveCanonicalEvent(
+            contextualEventType,
+            contextRevision?.Definition.EventAliases);
+        var normalizedRoles = (simulatedRoles ?? Array.Empty<string>())
+            .Where(role => !string.IsNullOrWhiteSpace(role))
+            .Select(role => role.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var context = new StateMachines.Models.ExecutionContext();
+        context.Metadata["Roles"] = normalizedRoles;
         if (_workflowContextService != null)
         {
             context.Payload = await _workflowContextService.PrepareSimulationAsync(
@@ -307,7 +369,14 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
                 string.IsNullOrWhiteSpace(valid)
                     ? advance.FailureReason
                     : $"{advance.FailureReason} Valid transitions: {valid}",
-                new List<string>()
+                new List<string>(),
+                normalizedRoles,
+                contextualEventType,
+                canonicalEventType,
+                contextBinding?.Id,
+                contextRevision?.Id,
+                contextBinding?.ContextType,
+                ToNullablePayloadDictionary(context.Payload)
             );
         }
 
@@ -342,7 +411,14 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             ProjectedState: projectedState,
             IsAllowed: true,
             Reason: $"Sandboxed what-if: '{baseSnapshot.ToStepId}' --[{alternativeEvent}]--> '{projectedStepId}' (State: {baseSnapshot.ToState} ➔ {projectedState}). No production writes or outbox dispatches were performed.",
-            ProjectedActions: projectedActionSummaries
+            ProjectedActions: projectedActionSummaries,
+            SimulatedRoles: normalizedRoles,
+            ContextualEventType: contextualEventType,
+            CanonicalEventType: canonicalEventType,
+            ContextBindingId: contextBinding?.Id,
+            ContextBindingRevisionId: contextRevision?.Id,
+            ContextType: contextBinding?.ContextType,
+            ProjectedCanonicalContext: ToNullablePayloadDictionary(context.Payload)
         );
     }
 
@@ -471,6 +547,28 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             JsonValueKind.Null => null,
             _ => value.Clone()
         };
+
+    private static Dictionary<string, object?> ToNullablePayloadDictionary(
+        IReadOnlyDictionary<string, object> payload)
+        => payload.ToDictionary(
+            item => item.Key,
+            item => item.Value is JsonElement element ? ConvertJsonElement(element) : item.Value,
+            StringComparer.OrdinalIgnoreCase);
+
+    private static string ResolveCanonicalEvent(
+        string contextualEvent,
+        IReadOnlyDictionary<string, string>? aliases)
+    {
+        if (aliases != null)
+        {
+            foreach (var alias in aliases)
+            {
+                if (string.Equals(alias.Value, contextualEvent, StringComparison.OrdinalIgnoreCase))
+                    return alias.Key;
+            }
+        }
+        return contextualEvent;
+    }
 
     private static string GenerateStepSummary(DomainEvent evt, string fromStep, string toStep, string fromState, string toState)
     {
