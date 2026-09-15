@@ -4,8 +4,10 @@ import {
   Clock, Cpu, FileCheck2, ArrowRight,
   Zap, CheckCircle2, ChevronRight
 } from 'lucide-react';
+import { usePlatformMetrics } from '../platformMetrics';
 
 export const CapabilitiesShowcase: React.FC = () => {
+  const { mcpTools, tests } = usePlatformMetrics();
   const [selectedPillar, setSelectedPillar] = useState<number>(0);
 
   const capabilities = [
@@ -59,13 +61,13 @@ export const CapabilitiesShowcase: React.FC = () => {
     },
     {
       id: 5,
-      title: "Autonomous AI Agent Co-Pilot (MCP 32 Tools)",
+      title: `Autonomous AI Agent Co-Pilot (MCP ${mcpTools} Tools)`,
       badge: "AI Native",
       badgeColor: "bg-purple-500/20 text-purple-300 border-purple-500/30",
       icon: Cpu,
       summary: "End-to-end workflow design, simulation, and self-healing via Model Context Protocol.",
       situation: "Operations teams wanting AI agents (Claude, ChatGPT) to design, validate, and troubleshoot enterprise workflows without manual YAML/JSON wrangling.",
-      solution: "32 registered MCP tools allowing LLM agents to attach lifecycle hooks, simulate failure paths in-memory (simulateFailureAtStep), query execution audit logs, and retry failed outbox messages.",
+      solution: `${mcpTools} registered MCP tools allowing LLM agents to attach lifecycle hooks, simulate failure paths in-memory (simulateFailureAtStep), query execution audit logs, and retry failed outbox messages.`,
       example: "Autonomous AI agent analyzes error rate, diagnoses an expired partner webhook token via get_instance_action_history, updates the hook configuration, and re-dispatches failed tasks.",
       tags: ["Model Context Protocol", "Pre-Flight Simulation", "Failure Injection", "Agentic Ops"]
     },
@@ -113,12 +115,12 @@ export const CapabilitiesShowcase: React.FC = () => {
           <div className="flex items-center gap-2 shrink-0 bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
             <div className="text-right">
               <div className="text-[11px] text-slate-400">MCP Tool Registry</div>
-              <div className="text-lg font-bold text-blue-400 font-mono">32 Registered</div>
+              <div className="text-lg font-bold text-blue-400 font-mono">{mcpTools} Registered</div>
             </div>
             <div className="h-8 w-px bg-slate-800 mx-2" />
             <div className="text-right">
-              <div className="text-[11px] text-slate-400">Reliability Guarantee</div>
-              <div className="text-lg font-bold text-emerald-400 font-mono">Zero Dual-Write</div>
+              <div className="text-[11px] text-slate-400">Release Verification</div>
+              <div className="text-lg font-bold text-emerald-400 font-mono">{tests.total} Passing</div>
             </div>
           </div>
         </div>

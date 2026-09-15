@@ -9,6 +9,7 @@ import { DetailView } from './DetailView';
 import { DeadLetterQueueViewer } from './DeadLetterQueueViewer';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
+import { usePlatformMetrics } from '../platformMetrics';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
   Globe, Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export const AdminDashboard: React.FC<Props> = ({ session }) => {
+  const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
   const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities' | 'Comparison'>('Tenants');
   const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Public' | 'Shared' | 'Published'>('All');
 
@@ -383,7 +385,25 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
                   <div className="space-y-2 text-xs text-slate-300">
                     <div className="flex justify-between">
                       <span className="text-slate-400">Exposed Tools:</span>
-                      <span className="text-purple-300 font-bold font-mono">52 Tools Registered</span>
+                      <span className="text-purple-300 font-bold font-mono">{mcpTools} Registered</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Tool Count Source:</span>
+                      <span className="text-white font-mono">{isLiveMcpCount ? 'Live Discovery' : 'Verified Build'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Automated Tests:</span>
+                      <span className="text-emerald-300 font-bold font-mono">{tests.total} Passing</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-400">Test Breakdown:</span>
+                      <span className="text-slate-300 font-mono text-right">
+                        {tests.unit} unit / {tests.endToEnd} E2E / {tests.mcp} MCP
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Verified On:</span>
+                      <span className="text-slate-300 font-mono">{verifiedOn}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400">Protocol:</span>

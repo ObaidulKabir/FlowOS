@@ -7,7 +7,7 @@
     
     <!-- Primary Meta Tags -->
     <meta name="title" content="FlowOS — Dual-Kernel Orchestration & Agentic MCP Control Plane" />
-    <meta name="description" content="FlowOS is an enterprise-grade multi-tenant workflow orchestration platform separating mathematical state machine rules from declarative execution, featuring a native 52-tool Model Context Protocol (MCP) server for autonomous AI agents." />
+    <meta name="description" content="FlowOS is an enterprise-grade multi-tenant workflow orchestration platform separating mathematical state machine rules from declarative execution, featuring a native 59-tool Model Context Protocol (MCP) server backed by 366 passing automated tests." />
     <meta name="keywords" content="FlowOS, MCP, Model Context Protocol, State Machine, Workflow Engine, Multi-Tenant, Orchestration, AI Agents, Temporal, Camunda" />
     <meta name="author" content="Prospect BD Ltd." />
     <meta name="robots" content="index, follow" />
@@ -16,14 +16,14 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://flowos.prospectbdltd.com/" />
     <meta property="og:title" content="FlowOS — Dual-Kernel Orchestration & Agentic MCP Control Plane" />
-    <meta property="og:description" content="State Machine = Law, Workflow = Work, Event = Truth. Native 52-tool MCP server, zero-trust multi-tenancy, and declarative JSON workflows." />
+    <meta property="og:description" content="State Machine = Law, Workflow = Work, Event = Truth. Native 59-tool MCP server, 366 passing tests, zero-trust multi-tenancy, and declarative JSON workflows." />
     <meta property="og:site_name" content="FlowOS" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://flowos.prospectbdltd.com/" />
     <meta property="twitter:title" content="FlowOS — Dual-Kernel Orchestration & Agentic MCP Control Plane" />
-    <meta property="twitter:description" content="State Machine = Law, Workflow = Work, Event = Truth. Native 52-tool MCP server, zero-trust multi-tenancy, and declarative JSON workflows." />
+    <meta property="twitter:description" content="State Machine = Law, Workflow = Work, Event = Truth. Native 59-tool MCP server, 366 passing tests, zero-trust multi-tenancy, and declarative JSON workflows." />
 
     <!-- Structured JSON-LD Data for Search & AI Crawlers -->
     <script type="application/ld+json">
@@ -36,7 +36,8 @@
       "description": "Enterprise-grade multi-tenant workflow orchestration platform with dual-kernel mathematical state enforcement and native Model Context Protocol (MCP) server for AI agents.",
       "featureList": [
         "Dual-Kernel Architecture: State Machine = Law, Workflow = Work, Event = Truth",
-        "Native Model Context Protocol (MCP) Server with 52 Tools registered",
+        "Native Model Context Protocol (MCP) Server with 59 tools registered",
+        "366 automated tests passing: 300 unit, 28 end-to-end, and 38 MCP contract tests",
         "Strict Zero-Trust Multi-Tenancy with Scoped Tenant API Keys",
         "Declarative JSON Workflow Blueprints with Versioning and Governance",
         "Transactional PostgreSQL Event Log & Real-Time Notification Projections",
@@ -133,7 +134,7 @@
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
             <h2 style="font-size: 1.35rem; color: #ffffff; margin: 0;">🤖 MCP Endpoint Specification & Connect Guide</h2>
             <span style="background: #065f46; color: #a7f3d0; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold;">
-              52 Production Tools • 10/10 Score
+              59 Production Tools • 366 Tests Passing
             </span>
           </div>
 
@@ -160,7 +161,7 @@
             </tr>
             <tr>
               <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8;">Human Approval Gate</td>
-              <td style="padding: 0.6rem;"><code style="background: #0f172a; padding: 0.2rem 0.4rem; border-radius: 0.25rem; color: #fbbf24;">confirmHumanApproval: true</code> on publish_workflowclass</td>
+              <td style="padding: 0.6rem;"><code style="background: #0f172a; padding: 0.2rem 0.4rem; border-radius: 0.25rem; color: #fbbf24;">confirmHumanApproval: true</code> on workflow publication and context-binding activation/archival</td>
             </tr>
           </table>
 
@@ -192,7 +193,7 @@
             </p>
             <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0.75rem;">
               <li><strong>Interactive Browser Portal:</strong> Open <a href="/mcp" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">https://flowos.prospectbdltd.com/mcp</a> in any browser or web agent to view the interactive tool documentation and security contract.</li>
-              <li><strong>Machine-Readable JSON:</strong> Issue an HTTP <code>GET /mcp</code> with header <code>Accept: application/json</code> to receive all 35 tools, formal parameter JSON schemas, risk ratings, and human confirmation policies:</li>
+              <li><strong>Machine-Readable JSON:</strong> Issue an HTTP <code>GET /mcp</code> with header <code>Accept: application/json</code> to receive all 59 tools, formal parameter JSON schemas, risk ratings, and human confirmation policies:</li>
             </ul>
             <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #38bdf8; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s https://flowos.prospectbdltd.com/mcp -H "Accept: application/json"</pre>
           </div>
@@ -216,7 +217,7 @@
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
           </div>
 
-          <h3 style="font-size: 1rem; color: #ffffff; margin: 1.25rem 0 0.5rem 0;">Catalog of 52 Registered MCP Tools</h3>
+          <h3 style="font-size: 1rem; color: #ffffff; margin: 1.25rem 0 0.5rem 0;">Catalog of 59 Registered MCP Tools</h3>
           <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; margin-left: 1.25rem; margin-bottom: 0;">
             <li><strong>Discovery &amp; Inspection:</strong> <code>describe_workflowclass_schema</code>, <code>list_public_workflowclasses</code>, <code>list_draft_workflowclasses</code>, <code>get_draft_workflowclass</code></li>
             <li><strong>Workflow Execution:</strong> <code>start_workflow</code>, <code>publish_event</code>, <code>complete_task</code>, <code>list_workflow_instances</code>, <code>get_workflow_instance_status</code>, <code>get_workflow_history</code></li>
@@ -228,6 +229,7 @@
             <li><strong>Webhook Security:</strong> <code>verify_webhook_signature</code>, <code>test_webhook_endpoint</code>, <code>rotate_webhook_secret</code></li>
             <li><strong>Time-Travel &amp; Forensics:</strong> <code>get_instance_action_history</code>, <code>replay_workflow_history</code>, <code>fork_workflow_simulation</code>, <code>plan_workflow_compensation_path</code>, <code>get_subworkflow_tree</code></li>
             <li><strong>AI Copilot &amp; Synthesis:</strong> <code>generate_workflow_blueprint_from_nl</code>, <code>refine_workflow_blueprint_from_nl</code>, <code>suggest_agent_action</code>, <code>explain_validation_violation</code>, <code>lint_draft_workflowclass</code>, <code>list_available_agents</code></li>
+            <li><strong>Workflow Context Bindings:</strong> <code>create_context_binding</code>, <code>update_context_binding</code>, <code>validate_context_binding</code>, <code>activate_context_binding</code>, <code>archive_context_binding</code>, <code>list_context_bindings</code>, <code>get_context_binding</code></li>
             <li><strong>Notifications:</strong> <code>list_notifications</code>, <code>mark_notification_as_read</code></li>
           </ul>
         </section>

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Bot, Terminal, Copy, Check, ExternalLink, ShieldCheck, Code, Sparkles, BookOpen } from 'lucide-react';
+import { usePlatformMetrics } from '../platformMetrics';
 
 export const McpAgentGuideline: React.FC = () => {
+  const { mcpTools, tests } = usePlatformMetrics();
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'browser' | 'curl' | 'config' | 'javascript'>('browser');
 
@@ -74,7 +76,10 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
               AI Agent & Browser Guideline: How to Get MCP Tools
             </h2>
             <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
-              47 Production Tools
+              {mcpTools} Production Tools
+            </span>
+            <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
+              {tests.total} Tests Passing
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
@@ -124,7 +129,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
             <span>Human Approval Gate</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            High-risk publishing mandates <code className="text-amber-300 bg-slate-800 px-1 rounded">confirmHumanApproval: true</code> to prevent rogue mutations.
+            Publishing plus context-binding activation and archival mandate <code className="text-amber-300 bg-slate-800 px-1 rounded">confirmHumanApproval: true</code>.
           </p>
         </div>
 
@@ -204,7 +209,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
               <strong>Machine-Readable Discovery:</strong> For programmatic bots, make an HTTP <code className="text-blue-300">GET /mcp</code> with header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">Accept: application/json</code>. No API keys or authentication credentials are required.
             </li>
             <li>
-              <strong>Ingest Tools & Constraints:</strong> The payload delivers all 47 tools, parameter types, <code className="text-blue-300">riskLevel</code> (<code className="text-emerald-300">low</code>, <code className="text-amber-300">medium</code>, <code className="text-rose-300">high</code>), <code className="text-blue-300">sideEffect</code>, and <code className="text-blue-300">requiresHumanConfirmation</code>.
+              <strong>Ingest Tools & Constraints:</strong> The payload delivers all {mcpTools} tools, parameter types, <code className="text-blue-300">riskLevel</code> (<code className="text-emerald-300">low</code>, <code className="text-amber-300">medium</code>, <code className="text-rose-300">high</code>), <code className="text-blue-300">sideEffect</code>, and <code className="text-blue-300">requiresHumanConfirmation</code>.
             </li>
             <li>
               <strong>Execute via POST:</strong> Switch to <code className="text-blue-300">POST /mcp</code> for JSON-RPC 2.0 tool execution with your tenant header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">x-tenant-id</code>.

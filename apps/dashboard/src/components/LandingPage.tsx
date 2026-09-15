@@ -6,6 +6,7 @@ import {
 import { PlatformComparison } from './PlatformComparison';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { AuthModalMode } from './AuthModal';
+import { usePlatformMetrics } from '../platformMetrics';
 
 interface LandingPageProps {
   onOpenAuth: (mode: AuthModalMode) => void;
@@ -16,6 +17,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
   onLaunchSandbox
 }) => {
+  const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">
       
@@ -109,7 +112,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 text-xs font-medium text-slate-300 mb-6 shadow-sm">
           <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-emerald-400 font-bold">FlowOS 2.0 Live:</span>
-          <span>Native 52-Tool MCP Server & Verified Multi-Tenant Mesh</span>
+          <span>Native {mcpTools}-Tool MCP Server & Verified Multi-Tenant Mesh</span>
         </div>
 
         {/* Hero Title */}
@@ -170,7 +173,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
 
         {/* Hero Features Bar */}
-        <div className="mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto text-left">
+        <div className="mt-14 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 max-w-6xl mx-auto text-left">
           <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
             <div className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">State Engine</div>
             <div className="text-white font-bold text-sm">Mathematical Invariants</div>
@@ -178,8 +181,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
           <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
             <div className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1">AI Control Plane</div>
-            <div className="text-white font-bold text-sm">52 MCP Tools Registered</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Streamable JSON-RPC 2.0 & SSE.</div>
+            <div className="text-white font-bold text-sm">{mcpTools} MCP Tools Registered</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">
+              {isLiveMcpCount ? 'Live discovery' : 'Verified registry'} • JSON-RPC 2.0
+            </div>
           </div>
           <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
             <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">Audit Trail</div>
@@ -190,6 +195,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1">Multi-Tenancy</div>
             <div className="text-white font-bold text-sm">Strict Zero-Trust RBAC</div>
             <div className="text-[11px] text-slate-400 mt-0.5">Isolated UUID partitions & API keys.</div>
+          </div>
+          <div
+            className="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl"
+            title={`Verified ${verifiedOn}`}
+          >
+            <div className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1">Release Quality</div>
+            <div className="text-white font-bold text-sm">{tests.total} Tests Passing</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">
+              {tests.unit} unit • {tests.endToEnd} E2E • {tests.mcp} MCP
+            </div>
           </div>
         </div>
 
@@ -277,7 +292,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Native Model Context Protocol (MCP) Server
               </h2>
               <p className="text-sm text-slate-300 mt-3 leading-relaxed">
-                Empower AI agents (Claude Desktop, Cursor, Custom LLM workers) to author, validate, execute, and troubleshoot enterprise workflows via 52 production tools over Streamable JSON-RPC 2.0.
+                Empower AI agents (Claude Desktop, Cursor, Custom LLM workers) to author, validate, execute, and troubleshoot enterprise workflows via {mcpTools} production tools over Streamable JSON-RPC 2.0.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-3">
@@ -413,7 +428,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <ul className="space-y-2.5 text-slate-400 mb-6">
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Zero signup required to test</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Ephemeral FSM & Workflow Engine</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Full 52-Tool MCP Server Access</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Full {mcpTools}-Tool MCP Server Access</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Time-Travel Fork Simulator</li>
               </ul>
             </div>

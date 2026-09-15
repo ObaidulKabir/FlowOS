@@ -3,8 +3,10 @@ import {
   Scale, CheckCircle2, XCircle, 
   Layers, Zap
 } from 'lucide-react';
+import { usePlatformMetrics } from '../platformMetrics';
 
 export const CompetitiveComparison: React.FC = () => {
+  const { mcpTools } = usePlatformMetrics();
   const [selectedCompetitor, setSelectedCompetitor] = useState<'all' | 'temporal' | 'camunda' | 'stepfunctions' | 'conductor'>('all');
 
   const competitors = [
@@ -24,7 +26,7 @@ export const CompetitiveComparison: React.FC = () => {
         'No visual declarative authoring or human-friendly JSON blueprints; impossible for non-engineers or direct LLM JSON drafting.',
         'No built-in native Model Context Protocol (MCP) server or in-memory simulation API.'
       ],
-      flowosAdvantage: 'FlowOS offers pure declarative JSON blueprints, zero-code dry-run simulation via MCP (32 tools), guaranteed zero dual-write via transactional outbox, and lightweight single-binary deployment.'
+      flowosAdvantage: `FlowOS offers pure declarative JSON blueprints, zero-code dry-run simulation via MCP (${mcpTools} tools), guaranteed zero dual-write via transactional outbox, and lightweight single-binary deployment.`
     },
     {
       id: 'camunda',
@@ -78,7 +80,7 @@ export const CompetitiveComparison: React.FC = () => {
         'Infrastructure complexity requires running Redis/Dynomite, Elasticsearch, and relational databases.',
         'No native Model Context Protocol (MCP) server for autonomous AI agent tool-calling.'
       ],
-      flowosAdvantage: 'FlowOS decouples pure state machine guards from workflow step execution, uses atomic transactional outbox dispatching rather than poll churn, and features native MCP 32-tool integration.'
+      flowosAdvantage: `FlowOS decouples pure state machine guards from workflow step execution, uses atomic transactional outbox dispatching rather than poll churn, and features native MCP ${mcpTools}-tool integration.`
     }
   ];
 
@@ -179,7 +181,7 @@ export const CompetitiveComparison: React.FC = () => {
               </tr>
               <tr className="hover:bg-slate-850/50">
                 <td className="p-3.5 pl-5 font-sans font-bold text-slate-300">AI Agent / MCP Native</td>
-                <td className="p-3.5 font-bold text-purple-300 bg-blue-950/20 border-x border-blue-500/20">32 Native MCP Tools (Draft, Simulate, DLQ)</td>
+                <td className="p-3.5 font-bold text-purple-300 bg-blue-950/20 border-x border-blue-500/20">{mcpTools} Native MCP Tools (Govern, Bind, Simulate, Operate)</td>
                 <td className="p-3.5 text-rose-400 font-sans">None (Custom API glue required)</td>
                 <td className="p-3.5 text-rose-400 font-sans">None (Custom LangChain connectors)</td>
                 <td className="p-3.5 text-slate-400 font-sans">AWS Bedrock / Lambda glue</td>
