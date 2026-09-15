@@ -529,8 +529,99 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               Automated step executes directly under {activeRoleDisplay} system credentials.
             </p>
           </div>
+        ) : stepTypeLower.includes('timer') ? (
+          /* CASE 3: Timer Step (Relative Pre/Post-Event or Static Duration) */
+          <div className="bg-cyan-500/10 border border-cyan-500/30 p-3.5 rounded-xl space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-cyan-300 font-semibold flex items-center gap-1.5">
+                <Clock size={14} className="text-cyan-400" /> Timer Delay / Pre-Event Countdown
+              </p>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-200 border border-cyan-500/40">
+                System Timer
+              </span>
+            </div>
+
+            {/* Relative Timer vs Static Details */}
+            {(() => {
+              const targetProp = getProp(rawConditions, 'targetTimestampProperty', 'targetTimestamp', 'referenceDate', 'targetDate', 'eventDate', 'property');
+              const offsetStr = getProp(rawConditions, 'leadTime', 'offset', 'delay');
+              const staticDur = getProp(rawConditions, 'duration') || getProp(sla, 'duration', 'Duration');
+              const rawTargetVal = targetProp ? payload[targetProp] : undefined;
+
+              let calculatedDue: string | null = null;
+              if (rawTargetVal) {
+                try {
+                  const baseDate = new Date(rawTargetVal);
+                  if (!isNaN(baseDate.getTime()) && offsetStr) {
+                    const trimmed = offsetStr.trim();
+                    const isNeg = trimmed.startsWith('-');
+                    const numPart = parseFloat(trimmed.replace(/[+\-smhd]/gi, ''));
+                    const unit = trimmed.slice(-1).toLowerCase();
+                    let ms = 0;
+                    if (unit === 's') ms = numPart * 1000;
+                    else if (unit === 'm') ms = numPart * 60 * 1000;
+                    else if (unit === 'h') ms = numPart * 3600 * 1000;
+                    else if (unit === 'd') ms = numPart * 86400 * 1000;
+                    const dueTime = new Date(baseDate.getTime() + (isNeg ? -ms : ms));
+                    calculatedDue = dueTime.toISOString();
+                  }
+                } catch {}
+              }
+
+              return (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-xs">
+                  {targetProp ? (
+                    <>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Target Property:</span>
+                        <span className="text-cyan-300 font-mono font-semibold">{targetProp}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Payload Value:</span>
+                        <span className="text-slate-200 font-mono">{rawTargetVal ? String(rawTargetVal) : <span className="text-rose-400 italic">Not found in payload</span>}</span>
+                      </div>
+                      {offsetStr && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400">Offset / Lead Time:</span>
+                          <span className="text-amber-300 font-mono font-bold">{offsetStr}</span>
+                        </div>
+                      )}
+                      {calculatedDue && (
+                        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800/80">
+                          <span className="text-emerald-400 font-semibold">Scheduled Due:</span>
+                          <span className="text-emerald-300 font-mono text-[10px]">{calculatedDue}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">Duration:</span>
+                      <span className="text-cyan-300 font-mono font-semibold">{staticDur || 'Configured'}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <p className="text-[11px] text-slate-300">
+              Advance simulation by triggering timer elapsed event:
+            </p>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              {Object.entries(nextSteps).map(([outcome, target]) => (
+                <button
+                  key={outcome}
+                  onClick={() => fireEvent(outcome, target as string)}
+                  className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg shadow-md shadow-cyan-600/20 transition-all flex items-center gap-1.5"
+                >
+                  <span>Elapse Timer: <strong className="font-mono">{outcome}</strong></span>
+                  <ArrowRight size={14} />
+                </button>
+              ))}
+            </div>
+          </div>
         ) : (
-          /* CASE 3: Human Task Step */
+          /* CASE 4: Human Task Step */
           <div className="bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-xl space-y-3">
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -572,27 +663,62 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
           </div>
         )}
 
-        {/* SLA Escalation Option */}
+        {/* SLA Escalation & Multi-Tier Reminders */}
         {sla && (
-           <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl flex items-center justify-between">
-             <div>
-               <p className="text-xs text-rose-300 font-semibold mb-0.5 flex items-center gap-1">
-                 <Clock size={14}/> SLA Timeout: {getProp(sla, 'duration', 'Duration')}
-               </p>
-               <p className="text-[10px] text-slate-400">
-                 Escalates to: {getProp(sla, 'escalationStepId', 'EscalationStepId') || 'END'}
-               </p>
+           <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl space-y-2.5">
+             <div className="flex items-center justify-between">
+               <div>
+                 <p className="text-xs text-rose-300 font-semibold mb-0.5 flex items-center gap-1">
+                   <Clock size={14}/> SLA Timeout: {getProp(sla, 'duration', 'Duration')}
+                 </p>
+                 <p className="text-[10px] text-slate-400">
+                   Escalates to: {getProp(sla, 'escalationStepId', 'EscalationStepId') || 'END'}
+                 </p>
+               </div>
+               <button 
+                 onClick={() => {
+                   const evt = getProp(sla, 'timeoutEvent', 'TimeoutEvent') || 'TIMEOUT';
+                   const tgt = getProp(sla, 'escalationStepId', 'EscalationStepId') || 'END';
+                   fireEvent(evt, tgt);
+                 }}
+                 className="px-3 py-1.5 bg-rose-900/50 hover:bg-rose-800/80 text-rose-200 border border-rose-700 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 shrink-0"
+               >
+                 Force Timeout
+               </button>
              </div>
-             <button 
-               onClick={() => {
-                 const evt = getProp(sla, 'timeoutEvent', 'TimeoutEvent') || 'TIMEOUT';
-                 const tgt = getProp(sla, 'escalationStepId', 'EscalationStepId') || 'END';
-                 fireEvent(evt, tgt);
-               }}
-               className="px-3 py-1.5 bg-rose-900/50 hover:bg-rose-800/80 text-rose-200 border border-rose-700 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 shrink-0"
-             >
-               Force Timeout
-             </button>
+
+             {/* Intermediate SLA Reminders */}
+             {(() => {
+               const rawReminders = getProp(sla, 'reminders', 'Reminders');
+               if (!Array.isArray(rawReminders) || rawReminders.length === 0) return null;
+
+               return (
+                 <div className="pt-2 border-t border-rose-500/20 space-y-1.5">
+                   <p className="text-[10px] text-amber-300 font-semibold flex items-center gap-1">
+                     <Bell size={12} className="text-amber-400" /> Intermediate SLA Warnings & Reminders:
+                   </p>
+                   <div className="flex flex-wrap gap-1.5">
+                     {rawReminders.map((rem: any, rIdx: number) => {
+                       const dur = getProp(rem, 'duration', 'Duration') || '';
+                       const evt = getProp(rem, 'triggerEvent', 'TriggerEvent') || '';
+                       const target = nextSteps[evt] || currentStepId;
+
+                       return (
+                         <button
+                           key={rIdx}
+                           onClick={() => fireEvent(evt, target as string)}
+                           className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[10px] font-semibold rounded flex items-center gap-1 transition-colors"
+                           title={`Trigger reminder event '${evt}' (${dur})`}
+                         >
+                           <Bell size={10} />
+                           <span>Fire Reminder: <strong>{evt}</strong> ({dur})</span>
+                         </button>
+                       );
+                     })}
+                   </div>
+                 </div>
+               );
+             })()}
            </div>
         )}
       </div>

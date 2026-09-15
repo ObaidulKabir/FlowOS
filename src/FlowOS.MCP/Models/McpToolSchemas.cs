@@ -414,6 +414,11 @@ public static class McpToolSchemas
               "default":false,
               "description":"When true, automatically resolves subworkflow steps with completion events without requiring child blueprints or events queue."
             },
+            "autoAdvanceTimers":{
+              "type":"boolean",
+              "default":false,
+              "description":"When true, automatically elapses timer steps (advancing to their next step) without requiring events queue or waiting."
+            },
             "childEvents":{
               "type":"array",
               "items":{"type":"string"},
@@ -501,6 +506,11 @@ public static class McpToolSchemas
               "maximum":100,
               "default":25,
               "description":"Maximum step evaluation cap."
+            },
+            "autoAdvanceTimers":{
+              "type":"boolean",
+              "default":false,
+              "description":"When true, automatically elapses timer steps without requiring events queue or waiting."
             },
             "tenantId":{
               "type":"string",

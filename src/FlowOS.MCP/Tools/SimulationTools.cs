@@ -43,7 +43,8 @@ public class SimulationTools
         List<object> ActionsTriggered,
         List<object> ExecutionTrace,
         Dictionary<string, object> Payload,
-        List<object> SubWorkflowsExecuted
+        List<object> SubWorkflowsExecuted,
+        object? PendingTimer = null
     );
 
     public async Task<CallToolResult> SimulateWorkflowClass(JObject args)
@@ -129,6 +130,7 @@ public class SimulationTools
             var simulateFailureAtStep = args["simulateFailureAtStep"]?.ToString()?.Trim();
             var inlineSubWorkflows = ParseInlineSubWorkflows(args);
             bool autoCompleteSubWorkflows = args["autoCompleteSubWorkflows"]?.Value<bool>() ?? false;
+            bool autoAdvanceTimers = args["autoAdvanceTimers"]?.Value<bool>() ?? false;
 
             var runResult = await ExecuteSimulationRunAsync(
                 blueprint,
@@ -142,7 +144,8 @@ public class SimulationTools
                 inlineSubWorkflows,
                 autoCompleteSubWorkflows,
                 recursionDepth: 0,
-                childEventsQueue: childEventsQueue
+                childEventsQueue: childEventsQueue,
+                autoAdvanceTimers: autoAdvanceTimers
             );
 
             return McpToolResults.Success(new
@@ -157,6 +160,7 @@ public class SimulationTools
                 simulatedRole = runResult.SimulatedRole,
                 pendingHumanTask = runResult.PendingHumanTask,
                 pendingSubWorkflow = runResult.PendingSubWorkflow,
+                pendingTimer = runResult.PendingTimer,
                 decisionsEvaluated = runResult.DecisionsEvaluated,
                 stateTransitions = runResult.StateTransitions,
                 actionsTriggered = runResult.ActionsTriggered,
@@ -291,6 +295,8 @@ public class SimulationTools
             if (maxSteps < 1) maxSteps = 1;
             if (maxSteps > 100) maxSteps = 100;
 
+            bool autoAdvanceTimers = args["autoAdvanceTimers"]?.Value<bool>() ?? false;
+
             var runResult = await ExecuteSimulationRunAsync(
                 parentBlueprint,
                 parentWorkflowName,
@@ -303,7 +309,8 @@ public class SimulationTools
                 inlineSubWorkflows,
                 autoCompleteSubWorkflows: false,
                 recursionDepth: 0,
-                childEventsQueue: childEventsQueue
+                childEventsQueue: childEventsQueue,
+                autoAdvanceTimers: autoAdvanceTimers
             );
 
             return McpToolResults.Success(new
@@ -319,6 +326,7 @@ public class SimulationTools
                 updatedParentPayload = runResult.Payload,
                 subworkflowsExecuted = runResult.SubWorkflowsExecuted,
                 pendingSubWorkflow = runResult.PendingSubWorkflow,
+                pendingTimer = runResult.PendingTimer,
                 totalParentStepsExecuted = runResult.TotalStepsExecuted,
                 parentExecutionTrace = runResult.ExecutionTrace,
                 parentStateTransitions = runResult.StateTransitions
@@ -342,7 +350,8 @@ public class SimulationTools
         Dictionary<string, WorkflowClassBlueprint>? inlineSubWorkflows,
         bool autoCompleteSubWorkflows,
         int recursionDepth,
-        Queue<string>? childEventsQueue = null)
+        Queue<string>? childEventsQueue = null,
+        bool autoAdvanceTimers = false)
     {
         var startStepId = !string.IsNullOrWhiteSpace(blueprint.Workflow?.StartStepId)
             ? blueprint.Workflow.StartStepId
@@ -364,6 +373,7 @@ public class SimulationTools
         var subworkflowsExecuted = new List<object>();
         object? pendingHumanTask = null;
         object? pendingSubWorkflow = null;
+        object? pendingTimer = null;
 
         var initialStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
             string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
@@ -607,6 +617,14 @@ public class SimulationTools
             {
                 var roles = GetStepRoles(step);
                 bool authorized = IsRoleAuthorized(roles, simulatedRole);
+                var remindersPreview = (step.Sla?.Reminders != null && step.Sla.Reminders.Count > 0)
+                    ? step.Sla.Reminders.Select(r => new
+                    {
+                        duration = r.Duration,
+                        triggerEvent = r.TriggerEvent,
+                        offsetType = r.Duration.Trim().StartsWith("-") ? "BeforeDeadline" : "AfterEntry"
+                    }).ToList()
+                    : null;
 
                 if (!authorized)
                 {
@@ -617,6 +635,7 @@ public class SimulationTools
                         requiredRoles = roles,
                         allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
                         sla = step.Sla,
+                        reminders = remindersPreview,
                         unauthorizedAttempt = true,
                         simulatedRole
                     };
@@ -681,13 +700,18 @@ public class SimulationTools
                         currentState = smTrans.ToState;
                     }
 
+                    bool isReminderEvent = step.Sla?.Reminders?.Any(r => string.Equals(r.TriggerEvent, evt, StringComparison.OrdinalIgnoreCase)) ?? false;
+                    string actionDesc = isReminderEvent
+                        ? $"[SLA Reminder Fired] Reminder event '{evt}' dispatched. Advanced to '{targetStep}'. State is now '{currentState}'."
+                        : $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.";
+
                     totalStepsExecuted++;
                     executionTrace.Add(new
                     {
                         stepNumber = totalStepsExecuted,
                         stepId = step.StepId,
                         stepType = "HumanTask",
-                        action = $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.",
+                        action = actionDesc,
                         state = currentState
                     });
 
@@ -712,7 +736,8 @@ public class SimulationTools
                         stepId = step.StepId,
                         requiredRoles = roles,
                         allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
-                        sla = step.Sla
+                        sla = step.Sla,
+                        reminders = remindersPreview
                     };
                     executionTrace.Add(new
                     {
@@ -807,7 +832,9 @@ public class SimulationTools
                         tenantId,
                         inlineSubWorkflows,
                         autoCompleteSubWorkflows,
-                        recursionDepth + 1
+                        recursionDepth + 1,
+                        childEventsQueue: null,
+                        autoAdvanceTimers: autoAdvanceTimers
                     );
 
                     subworkflowsExecuted.Add(new
@@ -1060,18 +1087,29 @@ public class SimulationTools
             // --- TIMER STEP ---
             if (stepTypeLower.Contains("timer"))
             {
+                var timerDetails = ResolveTimerDetails(step, payload);
+                var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+
                 if (eventsQueue.Count > 0)
                 {
-                    var evt = eventsQueue.Dequeue();
-                    var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
-                    var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, evt, StringComparison.OrdinalIgnoreCase));
+                    var peekEvt = eventsQueue.Peek();
+                    var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, peekEvt, StringComparison.OrdinalIgnoreCase));
                     if (!string.IsNullOrEmpty(match.Value))
                     {
+                        var evt = eventsQueue.Dequeue();
                         var targetStep = match.Value;
                         var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
                         if (guardBlocked)
                         {
                             status = "BlockedByGuard";
+                            executionTrace.Add(new
+                            {
+                                stepNumber = totalStepsExecuted + 1,
+                                stepId = step.StepId,
+                                stepType = "Timer",
+                                action = $"Transition guard failed for timer event '{evt}': {guardReason}",
+                                state = currentState
+                            });
                             break;
                         }
                         if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
@@ -1085,7 +1123,75 @@ public class SimulationTools
                             stepNumber = totalStepsExecuted,
                             stepId = step.StepId,
                             stepType = "Timer",
-                            action = $"Timer step triggered by event '{evt}'. Advanced to '{targetStep}'.",
+                            action = $"Timer step elapsed via event '{evt}'. Advanced to '{targetStep}'. [{timerDetails.Description}]",
+                            state = currentState
+                        });
+
+                        EvaluateAndRecordActions(step.OnExit, "OnExit", step.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                        currentStepId = targetStep;
+                        if (!string.Equals(currentStepId, "END", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var targetStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
+                                string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
+                            if (targetStepObj != null)
+                            {
+                                EvaluateAndRecordActions(targetStepObj.OnEntry, "OnEntry", targetStepObj.StepId, payload, actionsTriggered, executionTrace, totalStepsExecuted);
+                            }
+                        }
+                        continue;
+                    }
+                }
+
+                if (autoAdvanceTimers)
+                {
+                    string? targetStep = null;
+                    string? triggeredEvent = null;
+
+                    if (nextSteps.TryGetValue("Default", out var dt))
+                    {
+                        targetStep = dt;
+                        triggeredEvent = "Default";
+                    }
+                    else if (nextSteps.Count > 0)
+                    {
+                        var first = nextSteps.First();
+                        triggeredEvent = first.Key;
+                        targetStep = first.Value;
+                    }
+
+                    if (!string.IsNullOrEmpty(targetStep))
+                    {
+                        if (!string.IsNullOrEmpty(triggeredEvent) && !string.Equals(triggeredEvent, "Default", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, triggeredEvent, payload);
+                            if (guardBlocked)
+                            {
+                                status = "BlockedByGuard";
+                                executionTrace.Add(new
+                                {
+                                    stepNumber = totalStepsExecuted + 1,
+                                    stepId = step.StepId,
+                                    stepType = "Timer",
+                                    action = $"Transition guard failed for auto-advanced timer event '{triggeredEvent}': {guardReason}",
+                                    state = currentState
+                                });
+                                break;
+                            }
+
+                            if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
+                            {
+                                stateTransitions.Add(new { from = currentState, to = smTrans.ToState, eventId = triggeredEvent });
+                                currentState = smTrans.ToState;
+                            }
+                        }
+
+                        totalStepsExecuted++;
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted,
+                            stepId = step.StepId,
+                            stepType = "Timer",
+                            action = $"Timer auto-advanced (autoAdvanceTimers=true) via '{triggeredEvent}'. Advanced to '{targetStep}'. [{timerDetails.Description}]",
                             state = currentState
                         });
 
@@ -1105,12 +1211,26 @@ public class SimulationTools
                 }
 
                 status = "WaitingForTimer";
+                pendingTimer = new
+                {
+                    stepId = step.StepId,
+                    timerType = timerDetails.TimerType,
+                    targetProperty = timerDetails.TargetProperty,
+                    rawTargetValue = timerDetails.RawTargetValue,
+                    baseTimestampUtc = timerDetails.BaseTimestampUtc?.ToString("o"),
+                    offset = timerDetails.OffsetStr,
+                    dueTimeUtc = timerDetails.ScheduledDueUtc?.ToString("o"),
+                    duration = timerDetails.DurationSpan.HasValue ? timerDetails.DurationSpan.Value.ToString() : null,
+                    allowedEvents = nextSteps.Keys.ToList(),
+                    description = timerDetails.Description
+                };
+
                 executionTrace.Add(new
                 {
                     stepNumber = totalStepsExecuted + 1,
                     stepId = step.StepId,
                     stepType = "Timer",
-                    action = $"Workflow paused at Timer step '{step.StepId}' (Duration: {step.Sla?.Duration ?? "configured"}).",
+                    action = $"Workflow paused at Timer step '{step.StepId}'. {timerDetails.Description}.",
                     state = currentState
                 });
                 break;
@@ -1250,7 +1370,8 @@ public class SimulationTools
             actionsTriggered,
             executionTrace,
             payload,
-            subworkflowsExecuted
+            subworkflowsExecuted,
+            pendingTimer
         );
     }
 
@@ -1924,5 +2045,226 @@ public class SimulationTools
             }
         }
         return queue;
+    }
+
+    public record ResolvedTimerInfo(
+        string TimerType,
+        string? TargetProperty,
+        string? RawTargetValue,
+        DateTime? BaseTimestampUtc,
+        string? OffsetStr,
+        TimeSpan? OffsetSpan,
+        DateTime? ScheduledDueUtc,
+        TimeSpan? DurationSpan,
+        string Description
+    );
+
+    private static ResolvedTimerInfo ResolveTimerDetails(StepBlueprint step, Dictionary<string, object> payload)
+    {
+        var conditions = step.Conditions ?? new Dictionary<string, string>();
+
+        // 1. Explicit scheduled timestamp condition (e.g. scheduledAt, scheduledTime, dueTime)
+        string? scheduledAtStr = GetConditionValue(conditions, "scheduledAt", "scheduledTime", "dueTime");
+        if (!string.IsNullOrWhiteSpace(scheduledAtStr) &&
+            DateTime.TryParse(scheduledAtStr, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var explicitDt))
+        {
+            var explicitUtc = explicitDt.Kind == DateTimeKind.Utc ? explicitDt : explicitDt.ToUniversalTime();
+            return new ResolvedTimerInfo(
+                TimerType: "Explicit",
+                TargetProperty: null,
+                RawTargetValue: scheduledAtStr,
+                BaseTimestampUtc: explicitUtc,
+                OffsetStr: null,
+                OffsetSpan: null,
+                ScheduledDueUtc: explicitUtc,
+                DurationSpan: null,
+                Description: $"Explicit timer scheduled for {explicitUtc:O}"
+            );
+        }
+
+        // 2. Relative dynamic timer (targetTimestampProperty + leadTime/offset)
+        string? targetProp = GetConditionValue(conditions, "targetTimestampProperty", "targetTimestamp", "referenceDate", "targetDate", "eventDate", "property");
+        if (!string.IsNullOrWhiteSpace(targetProp))
+        {
+            object? val = null;
+            if (payload != null)
+            {
+                var matchKey = payload.Keys.FirstOrDefault(k => string.Equals(k, targetProp, StringComparison.OrdinalIgnoreCase));
+                if (matchKey != null)
+                {
+                    val = payload[matchKey];
+                }
+            }
+
+            DateTime baseDt = default;
+            bool parsed = false;
+            string? rawValStr = val?.ToString();
+
+            if (val is DateTime dt)
+            {
+                baseDt = dt.Kind == DateTimeKind.Utc ? dt : dt.ToUniversalTime();
+                parsed = true;
+            }
+            else if (val is string str && DateTime.TryParse(str, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var sDt))
+            {
+                baseDt = sDt.Kind == DateTimeKind.Utc ? sDt : sDt.ToUniversalTime();
+                parsed = true;
+            }
+            else if (val is Newtonsoft.Json.Linq.JValue jVal && jVal.Value is DateTime jdt)
+            {
+                baseDt = jdt.Kind == DateTimeKind.Utc ? jdt : jdt.ToUniversalTime();
+                parsed = true;
+            }
+            else if (val is Newtonsoft.Json.Linq.JValue jVal2 && DateTime.TryParse(jVal2.ToString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var jsDt))
+            {
+                baseDt = jsDt.Kind == DateTimeKind.Utc ? jsDt : jsDt.ToUniversalTime();
+                parsed = true;
+            }
+            else if (val is System.Text.Json.JsonElement elem && elem.ValueKind == System.Text.Json.JsonValueKind.String &&
+                     DateTime.TryParse(elem.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var eDt))
+            {
+                baseDt = eDt.Kind == DateTimeKind.Utc ? eDt : eDt.ToUniversalTime();
+                parsed = true;
+            }
+
+            string? offsetStr = GetConditionValue(conditions, "leadTime", "offset", "delay");
+            var offsetSpan = !string.IsNullOrWhiteSpace(offsetStr) ? ParseDurationString(offsetStr) : TimeSpan.Zero;
+
+            if (parsed)
+            {
+                var dueUtc = baseDt.Add(offsetSpan);
+                var offsetDesc = !string.IsNullOrWhiteSpace(offsetStr) ? $" with offset {offsetStr}" : "";
+                return new ResolvedTimerInfo(
+                    TimerType: "Relative",
+                    TargetProperty: targetProp,
+                    RawTargetValue: rawValStr,
+                    BaseTimestampUtc: baseDt,
+                    OffsetStr: offsetStr,
+                    OffsetSpan: offsetSpan,
+                    ScheduledDueUtc: dueUtc,
+                    DurationSpan: null,
+                    Description: $"Relative timer scheduled for {dueUtc:O} (target property '{targetProp}' [{baseDt:O}]{offsetDesc})"
+                );
+            }
+            else
+            {
+                return new ResolvedTimerInfo(
+                    TimerType: "RelativeUnresolved",
+                    TargetProperty: targetProp,
+                    RawTargetValue: rawValStr,
+                    BaseTimestampUtc: null,
+                    OffsetStr: offsetStr,
+                    OffsetSpan: offsetSpan,
+                    ScheduledDueUtc: null,
+                    DurationSpan: null,
+                    Description: $"Relative timer referencing '{targetProp}' (value not found or invalid date in payload)"
+                );
+            }
+        }
+
+        // 3. Static duration string (from conditions or step.Sla?.Duration)
+        string? durStr = GetConditionValue(conditions, "duration");
+        if (string.IsNullOrWhiteSpace(durStr) && !string.IsNullOrWhiteSpace(step.Sla?.Duration))
+        {
+            durStr = step.Sla.Duration;
+        }
+
+        if (!string.IsNullOrWhiteSpace(durStr))
+        {
+            var durationSpan = ParseDurationString(durStr);
+            return new ResolvedTimerInfo(
+                TimerType: "Duration",
+                TargetProperty: null,
+                RawTargetValue: null,
+                BaseTimestampUtc: null,
+                OffsetStr: null,
+                OffsetSpan: null,
+                ScheduledDueUtc: null,
+                DurationSpan: durationSpan,
+                Description: $"Duration timer set for {durStr} ({durationSpan})"
+            );
+        }
+
+        return new ResolvedTimerInfo(
+            TimerType: "Default",
+            TargetProperty: null,
+            RawTargetValue: null,
+            BaseTimestampUtc: null,
+            OffsetStr: null,
+            OffsetSpan: null,
+            ScheduledDueUtc: null,
+            DurationSpan: TimeSpan.FromSeconds(5),
+            Description: "Default timer (Duration: configured)"
+        );
+    }
+
+    private static string? GetConditionValue(Dictionary<string, string> conditions, params string[] keys)
+    {
+        if (conditions == null || conditions.Count == 0) return null;
+        foreach (var key in keys)
+        {
+            var match = conditions.Keys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+            if (match != null && conditions.TryGetValue(match, out var val) && !string.IsNullOrWhiteSpace(val))
+            {
+                return val;
+            }
+        }
+        return null;
+    }
+
+    private static TimeSpan ParseDurationString(string? durationStr)
+    {
+        if (string.IsNullOrWhiteSpace(durationStr))
+            return TimeSpan.FromSeconds(5);
+
+        durationStr = durationStr.Trim();
+        bool isNegative = durationStr.StartsWith("-");
+        if (isNegative || durationStr.StartsWith("+"))
+        {
+            durationStr = durationStr[1..].Trim();
+        }
+
+        TimeSpan parsed;
+        if (durationStr.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var seconds))
+        {
+            parsed = TimeSpan.FromSeconds(seconds);
+        }
+        else if (durationStr.EndsWith("m", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var minutes))
+        {
+            parsed = TimeSpan.FromMinutes(minutes);
+        }
+        else if (durationStr.EndsWith("h", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var hours))
+        {
+            parsed = TimeSpan.FromHours(hours);
+        }
+        else if (durationStr.EndsWith("d", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(durationStr[..^1], out var days))
+        {
+            parsed = TimeSpan.FromDays(days);
+        }
+        else if (double.TryParse(durationStr, out var rawSecs))
+        {
+            parsed = TimeSpan.FromSeconds(rawSecs);
+        }
+        else if (durationStr.Contains(':') && TimeSpan.TryParse(durationStr, out var ts))
+        {
+            parsed = ts;
+        }
+        else
+        {
+            try
+            {
+                parsed = System.Xml.XmlConvert.ToTimeSpan(durationStr);
+            }
+            catch
+            {
+                parsed = TimeSpan.FromSeconds(5);
+            }
+        }
+
+        return isNegative ? -parsed : parsed;
     }
 }

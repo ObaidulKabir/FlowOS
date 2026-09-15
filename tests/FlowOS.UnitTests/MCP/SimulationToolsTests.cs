@@ -582,4 +582,295 @@ public class SimulationToolsTests
         Assert.NotNull(pending);
         Assert.Equal("ExternalSub", pending["stepId"]?.ToString());
     }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_RelativeTimerStep_ResolvesScheduleAndReturnsPendingTimer()
+    {
+        // Arrange: Blueprint 1 with a pre-event lead time timer
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "EVT-REMIND-24H", Name = "24h Pre-Event Reminder" },
+                new() { EventId = "EVT-CHECKIN", Name = "Check In" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Booked",
+                States = new List<string> { "Booked", "ReminderSent", "CheckedIn" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "Booked", ToState = "ReminderSent", EventId = "EVT-REMIND-24H" },
+                    new() { FromState = "ReminderSent", ToState = "CheckedIn", EventId = "EVT-CHECKIN" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "WaitForLeadTime",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "WaitForLeadTime",
+                        StepType = "Timer",
+                        Conditions = new Dictionary<string, string>
+                        {
+                            { "targetTimestampProperty", "appointmentDate" },
+                            { "leadTime", "-24h" }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "EVT-REMIND-24H", "SendPreEventAlert" }
+                        }
+                    },
+                    new()
+                    {
+                        StepId = "SendPreEventAlert",
+                        StepType = "Command",
+                        OnEntry = new List<StepActionBlueprint>
+                        {
+                            new()
+                            {
+                                ActionType = "Notification",
+                                Target = "Patient",
+                                Template = "Reminder: Your appointment is in 24 hours."
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "Default", "AwaitCheckIn" }
+                        }
+                    },
+                    new()
+                    {
+                        StepId = "AwaitCheckIn",
+                        StepType = "HumanTask",
+                        RequiredRoles = new List<string> { "Patient" },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "EVT-CHECKIN", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(blueprint),
+            ["payload"] = new JObject
+            {
+                ["appointmentDate"] = "2026-10-01T14:00:00Z"
+            }
+        };
+
+        // Act
+        var result = await _tools.SimulateWorkflowClass(args);
+
+        // Assert
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("WaitingForTimer", data["status"]?.ToString());
+
+        var pendingTimer = data["pendingTimer"] as JObject;
+        Assert.NotNull(pendingTimer);
+        Assert.Equal("WaitForLeadTime", pendingTimer["stepId"]?.ToString());
+        Assert.Equal("Relative", pendingTimer["timerType"]?.ToString());
+        Assert.Equal("appointmentDate", pendingTimer["targetProperty"]?.ToString());
+        Assert.Equal("-24h", pendingTimer["offset"]?.ToString());
+        Assert.Equal(DateTime.Parse("2026-09-30T14:00:00Z").ToUniversalTime(), pendingTimer["dueTimeUtc"]!.Value<DateTime>().ToUniversalTime());
+
+        var allowedEvents = pendingTimer["allowedEvents"] as JArray;
+        Assert.NotNull(allowedEvents);
+        Assert.Contains(allowedEvents, e => e.ToString() == "EVT-REMIND-24H");
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_RelativeTimerStep_WithAutoAdvanceTimers_ElapsesAndReachesEnd()
+    {
+        // Arrange: Blueprint with Timer and autoAdvanceTimers enabled
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "EVT-REMIND-24H", Name = "24h Pre-Event Reminder" },
+                new() { EventId = "EVT-CHECKIN", Name = "Check In" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Booked",
+                States = new List<string> { "Booked", "ReminderSent", "CheckedIn" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "Booked", ToState = "ReminderSent", EventId = "EVT-REMIND-24H" },
+                    new() { FromState = "ReminderSent", ToState = "CheckedIn", EventId = "EVT-CHECKIN" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "WaitForLeadTime",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "WaitForLeadTime",
+                        StepType = "Timer",
+                        Conditions = new Dictionary<string, string>
+                        {
+                            { "targetTimestampProperty", "appointmentDate" },
+                            { "leadTime", "-24h" }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "EVT-REMIND-24H", "SendPreEventAlert" }
+                        }
+                    },
+                    new()
+                    {
+                        StepId = "SendPreEventAlert",
+                        StepType = "Command",
+                        OnEntry = new List<StepActionBlueprint>
+                        {
+                            new()
+                            {
+                                ActionType = "Notification",
+                                Target = "Patient",
+                                Template = "Your appointment is tomorrow at 2:00 PM."
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "Default", "AwaitCheckIn" }
+                        }
+                    },
+                    new()
+                    {
+                        StepId = "AwaitCheckIn",
+                        StepType = "HumanTask",
+                        RequiredRoles = new List<string> { "Patient" },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "EVT-CHECKIN", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(blueprint),
+            ["payload"] = new JObject
+            {
+                ["appointmentDate"] = "2026-10-01T14:00:00Z"
+            },
+            ["role"] = "Patient",
+            ["autoAdvanceTimers"] = true,
+            ["events"] = new JArray { "EVT-CHECKIN" }
+        };
+
+        // Act
+        var result = await _tools.SimulateWorkflowClass(args);
+
+        // Assert
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("CheckedIn", data["finalState"]?.ToString());
+
+        var actions = data["actionsTriggered"] as JArray;
+        Assert.NotNull(actions);
+        Assert.Contains(actions, a => a["actionType"]?.ToString() == "Notification" && a["stepId"]?.ToString() == "SendPreEventAlert");
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_HumanTaskWithSlaReminders_SimulatesReminderLoopbackAndApproval()
+    {
+        // Arrange: Blueprint 2 with SLA multi-tier reminders and loopback transition
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "EVT-WARN-24H", Name = "24h Warning" },
+                new() { EventId = "EVT-APPROVE", Name = "Approved" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "PendingApproval",
+                States = new List<string> { "PendingApproval", "Approved" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "PendingApproval", ToState = "PendingApproval", EventId = "EVT-WARN-24H" },
+                    new() { FromState = "PendingApproval", ToState = "Approved", EventId = "EVT-APPROVE" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "ManagerReview",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "ManagerReview",
+                        StepType = "HumanTask",
+                        RequiredRoles = new List<string> { "FinanceManager" },
+                        Sla = new StepSlaBlueprint
+                        {
+                            Duration = "48h",
+                            TimeoutEvent = "EVT-ESCALATE",
+                            Reminders = new List<StepReminderBlueprint>
+                            {
+                                new() { Duration = "-24h", TriggerEvent = "EVT-WARN-24H" }
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "EVT-WARN-24H", "ManagerReview" },
+                            { "EVT-APPROVE", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        // 1. First test: Pausing without events exposes reminders in pendingHumanTask
+        var pauseArgs = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(blueprint),
+            ["role"] = "FinanceManager"
+        };
+        var pauseResult = await _tools.SimulateWorkflowClass(pauseArgs);
+        Assert.False(pauseResult.IsError);
+        var pauseData = JObject.Parse(pauseResult.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(pauseData);
+        Assert.Equal("WaitingForHumanTask", pauseData["status"]?.ToString());
+
+        var pendingTask = pauseData["pendingHumanTask"] as JObject;
+        Assert.NotNull(pendingTask);
+        var reminders = pendingTask["reminders"] as JArray;
+        Assert.NotNull(reminders);
+        Assert.Single(reminders);
+        Assert.Equal("-24h", reminders[0]["duration"]?.ToString());
+        Assert.Equal("EVT-WARN-24H", reminders[0]["triggerEvent"]?.ToString());
+
+        // 2. Second test: Dispatches intermediate reminder loopback event then approval event
+        var runArgs = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(blueprint),
+            ["role"] = "FinanceManager",
+            ["events"] = new JArray { "EVT-WARN-24H", "EVT-APPROVE" }
+        };
+        var runResult = await _tools.SimulateWorkflowClass(runArgs);
+        Assert.False(runResult.IsError);
+        var runData = JObject.Parse(runResult.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(runData);
+        Assert.Equal("Completed", runData["status"]?.ToString());
+        Assert.Equal("Approved", runData["finalState"]?.ToString());
+
+        var trace = runData["executionTrace"] as JArray;
+        Assert.NotNull(trace);
+        Assert.Contains(trace, t => t["action"]?.ToString()?.Contains("[SLA Reminder Fired]") == true);
+    }
 }
