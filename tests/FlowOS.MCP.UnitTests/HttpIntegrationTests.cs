@@ -4,6 +4,7 @@ using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
@@ -121,7 +122,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(52, httpNames.Length);
+        Assert.Equal(59, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);
@@ -184,7 +185,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var json = JObject.Parse(await response.Content.ReadAsStringAsync());
         var tools = Assert.IsType<JArray>(json["tools"]);
-        Assert.Equal(52, tools.Count);
+        Assert.Equal(59, tools.Count);
 
         foreach (var tool in tools)
         {
@@ -218,7 +219,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
             var requiresHumanConfirmation = tool["requiresHumanConfirmation"];
             Assert.NotNull(requiresHumanConfirmation);
-            if (name == "publish_workflowclass")
+            if (name is "publish_workflowclass" or "activate_context_binding" or "archive_context_binding")
             {
                 Assert.True(requiresHumanConfirmation.Value<bool>());
                 Assert.NotNull(schema["properties"]?["confirmHumanApproval"]);
@@ -825,6 +826,212 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         var treeJson = JObject.Parse(await treeCall.Content.ReadAsStringAsync());
         Assert.True(treeJson["result"]?["isError"]?.Value<bool>());
         Assert.Contains("MCP-NOTFOUND-001", treeJson.ToString());
+    }
+
+    [Fact]
+    public async Task Context_binding_create_validate_activate_start_and_publish_sequence_works_over_http()
+    {
+        Guid sourceId;
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var contextType = $"McpExpense{suffix}";
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            var blueprint = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
+            {
+                ContextSchema = """{"type":"object","required":["Amount","ApprovalLimit"],"properties":{"Amount":{"type":"number"},"ApprovalLimit":{"type":"number"}}}""",
+                Events = [new() { EventId = "EVT-APPROVE", Name = "Approve" }],
+                StateMachine = new()
+                {
+                    EntityType = "ApprovalSubject",
+                    InitialState = "Draft",
+                    States = ["Draft", "Approved"],
+                    Transitions =
+                    [
+                        new()
+                        {
+                            FromState = "Draft",
+                            ToState = "Approved",
+                            EventId = "EVT-APPROVE",
+                            Condition = "Amount <= ApprovalLimit"
+                        }
+                    ]
+                },
+                Workflow = new()
+                {
+                    StartStepId = "Review",
+                    Steps =
+                    [
+                        new()
+                        {
+                            StepId = "Review",
+                            StepType = "HumanTask",
+                            RequiredRoles = ["Approver"],
+                            NextSteps = new() { ["EVT-APPROVE"] = "END" }
+                        }
+                    ]
+                },
+                Roles = [new() { Name = "Approver" }],
+                Capabilities = [new() { Code = "event.publish.EVT-APPROVE" }]
+            };
+            var source = new FlowOS.Domain.Entities.WorkflowClass(
+                TenantId,
+                $"McpReusableApproval{suffix}",
+                "1.0.0",
+                blueprint);
+            Assert.True(new FlowOS.Domain.Services.WorkflowClassManager().Publish(source).IsValid);
+            db.WorkflowClasses.Add(source);
+
+            var admin = await db.Roles.FirstOrDefaultAsync(x => x.TenantId == TenantId && x.Name == "Admin");
+            if (admin == null)
+            {
+                admin = new FlowOS.Security.Models.Role(TenantId, "Admin");
+                db.Roles.Add(admin);
+            }
+            admin.AddPermission("workflow.start");
+            admin.AddPermission("event.publish");
+            db.Roles.Add(new FlowOS.Security.Models.Role(TenantId, $"FinanceManager{suffix}"));
+            await db.SaveChangesAsync();
+            sourceId = source.Id;
+        }
+
+        async Task<JObject> CallTool(string name, object arguments)
+        {
+            var response = await SendAsync($$"""
+            {
+              "jsonrpc":"2.0",
+              "id":901,
+              "method":"tools/call",
+              "params":{
+                "name":"{{name}}",
+                "arguments":{{JsonConvert.SerializeObject(arguments)}}
+              }
+            }
+            """);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return JObject.Parse(await response.Content.ReadAsStringAsync());
+        }
+
+        static JObject Data(JObject response)
+        {
+            Assert.False(
+                response["result"]?["isError"]?.Value<bool>(),
+                response.ToString());
+            var payload = JObject.Parse(response["result"]?["content"]?[0]?["text"]?.ToString() ?? "{}");
+            Assert.True(payload["ok"]?.Value<bool>());
+            return Assert.IsType<JObject>(payload["data"]);
+        }
+
+        var created = Data(await CallTool("create_context_binding", new
+        {
+            sourceWorkflowClassId = sourceId,
+            contextType,
+            name = $"McpExpenseApproval{suffix}",
+            definition = new
+            {
+                entityType = "ExpenseEntity",
+                eventAliases = new Dictionary<string, string>
+                {
+                    ["EVT-APPROVE"] = $"EVT-MCP-APPROVE-{suffix}"
+                },
+                roleOverrides = new Dictionary<string, string>
+                {
+                    ["Approver"] = $"FinanceManager{suffix}"
+                },
+                inputMapping = new Dictionary<string, string> { ["Amount"] = "expense.amount" },
+                conditionParameters = new Dictionary<string, object> { ["ApprovalLimit"] = 500 }
+            }
+        }));
+        var bindingId = Guid.Parse((created["Id"] ?? created["id"])!.ToString());
+
+        var validation = Data(await CallTool("validate_context_binding", new { id = bindingId }));
+        Assert.True((validation["IsValid"] ?? validation["isValid"])!.Value<bool>());
+
+        var activateWithoutApproval = await CallTool(
+            "activate_context_binding",
+            new { id = bindingId });
+        Assert.True(activateWithoutApproval["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-APPROVAL-REQUIRED", activateWithoutApproval.ToString());
+
+        var activateWithFalseApproval = await CallTool(
+            "activate_context_binding",
+            new { id = bindingId, confirmHumanApproval = false });
+        Assert.True(activateWithFalseApproval["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-APPROVAL-REQUIRED", activateWithFalseApproval.ToString());
+
+        _ = Data(await CallTool("activate_context_binding", new
+        {
+            id = bindingId,
+            confirmHumanApproval = true
+        }));
+
+        var invalidVersionSelector = await CallTool("start_workflow", new
+        {
+            contextType,
+            version = 1,
+            payload = new { expense = new { amount = 125 } }
+        });
+        Assert.True(invalidVersionSelector["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-ARG-001", invalidVersionSelector.ToString());
+
+        var invalidPayload = await CallTool("start_workflow", new
+        {
+            contextType,
+            payload = new { expense = new { description = "Missing amount" } }
+        });
+        Assert.True(invalidPayload["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-VALIDATION", invalidPayload.ToString());
+
+        var started = Data(await CallTool("start_workflow", new
+        {
+            contextType,
+            payload = new { expense = new { amount = 125 } },
+            businessReference = new { sourceSystem = "MCP-ERP", externalEntityId = $"EXP-{suffix}" }
+        }));
+        var instanceId = Guid.Parse(
+            (started["workflowInstanceId"] ?? started["WorkflowInstanceId"])!.ToString());
+
+        _ = Data(await CallTool("publish_event", new
+        {
+            workflowInstanceId = instanceId,
+            eventType = $"EVT-MCP-APPROVE-{suffix}"
+        }));
+
+        var archiveWithoutApproval = await CallTool(
+            "archive_context_binding",
+            new { id = bindingId });
+        Assert.True(archiveWithoutApproval["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-APPROVAL-REQUIRED", archiveWithoutApproval.ToString());
+
+        var archiveWithFalseApproval = await CallTool(
+            "archive_context_binding",
+            new { id = bindingId, confirmHumanApproval = false });
+        Assert.True(archiveWithFalseApproval["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-APPROVAL-REQUIRED", archiveWithFalseApproval.ToString());
+
+        _ = Data(await CallTool("archive_context_binding", new
+        {
+            id = bindingId,
+            confirmHumanApproval = true
+        }));
+
+        var archivedStart = await CallTool("start_workflow", new
+        {
+            contextType,
+            payload = new { expense = new { amount = 125 } }
+        });
+        Assert.True(archivedStart["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-NOTFOUND-001", archivedStart.ToString());
+
+        using var verificationScope = _app.Services.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider
+            .GetRequiredService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+        var snapshot = await verificationDb.WorkflowContextSnapshots
+            .AsNoTracking()
+            .SingleAsync(x => x.WorkflowInstanceId == instanceId);
+        Assert.Equal("MCP-ERP", snapshot.SourceSystem);
+        Assert.Equal($"EXP-{suffix}", snapshot.ExternalEntityId);
     }
 
     [Fact]

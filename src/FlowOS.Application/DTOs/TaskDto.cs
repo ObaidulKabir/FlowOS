@@ -9,6 +9,7 @@ public class TaskDto
     public Guid WorkflowId { get; set; }
     public string CurrentStep { get; set; } = string.Empty;
     public string RequiredRole { get; set; } = string.Empty;
+    public List<string> RequiredRoles { get; set; } = new();
     public string Status { get; set; } = string.Empty;
     public object? RelatedEntity { get; set; }
     public List<AgentInsightDto> AgentInsights { get; set; } = new();

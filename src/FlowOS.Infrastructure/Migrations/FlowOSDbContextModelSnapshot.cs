@@ -381,6 +381,8 @@ namespace FlowOS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "EntityType", "Version");
+
                     b.ToTable("StateMachineDefinitions");
                 });
 
@@ -671,6 +673,196 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("WorkflowClasses");
                 });
 
+            modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowContextBinding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActiveRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContextType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DraftRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("NormalizedContextType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "NormalizedContextType")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "NormalizedName")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("WorkflowContextBindings", (string)null);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowContextBindingRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ActivatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("BindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SourceWorkflowClassId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceWorkflowClassVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("StateMachineDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<DateTime?>("SupersededAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("WorkflowDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceWorkflowClassId");
+
+                    b.HasIndex("StateMachineDefinitionId")
+                        .IsUnique()
+                        .HasFilter("\"StateMachineDefinitionId\" IS NOT NULL");
+
+                    b.HasIndex("WorkflowDefinitionId")
+                        .IsUnique()
+                        .HasFilter("\"WorkflowDefinitionId\" IS NOT NULL");
+
+                    b.HasIndex("BindingId", "Revision")
+                        .IsUnique();
+
+                    b.HasIndex("BindingId", "Status");
+
+                    b.ToTable("WorkflowContextBindingRevisions", (string)null);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowContextSnapshot", b =>
+                {
+                    b.Property<Guid>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BusinessMetadata")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CanonicalData")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ContextBindingRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalEntityId")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceSystem")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("WorkflowInstanceId");
+
+                    b.HasIndex("ContextBindingRevisionId");
+
+                    b.HasIndex("TenantId", "ContextBindingRevisionId");
+
+                    b.HasIndex("WorkflowInstanceId", "TenantId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "SourceSystem", "ExternalEntityId");
+
+                    b.ToTable("WorkflowContextSnapshots", (string)null);
+                });
+
             modelBuilder.Entity("FlowOS.Events.Models.DomainEvent", b =>
                 {
                     b.Property<Guid>("EventId")
@@ -823,14 +1015,23 @@ namespace FlowOS.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ContextBindingRevisionId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("SourceWorkflowClassId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("StartStepId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("StateMachineDefinitionId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -843,6 +1044,12 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ContextBindingRevisionId");
+
+                    b.HasIndex("SourceWorkflowClassId");
+
+                    b.HasIndex("StateMachineDefinitionId");
 
                     b.HasIndex("TenantId");
 
@@ -969,6 +1176,12 @@ namespace FlowOS.Infrastructure.Migrations
 
                             NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
 
+                            b1.Property<string>("Constraints")
+                                .IsRequired()
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("text")
+                                .HasDefaultValueSql("'{}'");
+
                             b1.Property<string>("EventId")
                                 .HasColumnType("text");
 
@@ -1011,8 +1224,59 @@ namespace FlowOS.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowContextBindingRevision", b =>
+                {
+                    b.HasOne("FlowOS.Domain.Entities.WorkflowContextBinding", null)
+                        .WithMany()
+                        .HasForeignKey("BindingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FlowOS.Domain.Entities.WorkflowClass", null)
+                        .WithMany()
+                        .HasForeignKey("SourceWorkflowClassId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FlowOS.Domain.Entities.StateMachineDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("StateMachineDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FlowOS.Workflows.Domain.WorkflowDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("WorkflowDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowContextSnapshot", b =>
+                {
+                    b.HasOne("FlowOS.Domain.Entities.WorkflowContextBindingRevision", null)
+                        .WithMany()
+                        .HasForeignKey("ContextBindingRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FlowOS.Workflows.Domain.WorkflowInstance", null)
+                        .WithOne()
+                        .HasForeignKey("FlowOS.Domain.Entities.WorkflowContextSnapshot", "WorkflowInstanceId", "TenantId")
+                        .HasPrincipalKey("FlowOS.Workflows.Domain.WorkflowInstance", "Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FlowOS.Workflows.Domain.WorkflowDefinition", b =>
                 {
+                    b.HasOne("FlowOS.Domain.Entities.WorkflowClass", null)
+                        .WithMany()
+                        .HasForeignKey("SourceWorkflowClassId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FlowOS.Domain.Entities.StateMachineDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("StateMachineDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.OwnsMany("FlowOS.Workflows.Domain.WorkflowStepDefinition", "Steps", b1 =>
                         {
                             b1.Property<Guid>("WorkflowDefinitionId")
@@ -1097,6 +1361,10 @@ namespace FlowOS.Infrastructure.Migrations
 
                                     b2.Property<bool>("IsInterrupting")
                                         .HasColumnType("boolean");
+
+                                    b2.Property<string>("Reminders")
+                                        .IsRequired()
+                                        .HasColumnType("text");
 
                                     b2.Property<string>("TimeoutEvent")
                                         .IsRequired()

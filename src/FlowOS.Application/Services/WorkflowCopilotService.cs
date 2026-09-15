@@ -37,7 +37,39 @@ public class WorkflowCopilotService : IWorkflowCopilotService
             return Task.FromResult(RefineExistingBlueprint(prompt, currentBlueprint));
         }
 
+        if (mode.Equals("template", StringComparison.OrdinalIgnoreCase) ||
+            mode.Equals("reusable-template", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(SynthesizeReusableTemplate(prompt));
+        }
+
         return Task.FromResult(SynthesizeNewBlueprint(prompt));
+    }
+
+    private GenerateBlueprintCopilotResponse SynthesizeReusableTemplate(string prompt)
+    {
+        var generated = SynthesizeNewBlueprint(prompt);
+        var blueprint = generated.Blueprint with
+        {
+            ContextSchema =
+                """
+                {"type":"object","properties":{"Amount":{"type":"number"},"Description":{"type":"string"},"RequestedBy":{"type":"string"}}}
+                """,
+            StateMachine = generated.Blueprint.StateMachine with
+            {
+                EntityType = "ApprovalSubject"
+            }
+        };
+
+        return generated with
+        {
+            SuggestedName = "ReusableApprovalTemplate",
+            Summary = $"Synthesized reusable process template with {blueprint.StateMachine.States.Count} legal states and a canonical context schema.",
+            Explanation = generated.Explanation +
+                          "\n• **Reusable Template**: generic ApprovalSubject entity, canonical events/roles, and binding-ready context schema.",
+            Blueprint = blueprint,
+            Validation = _validator.Validate(blueprint)
+        };
     }
 
     private GenerateBlueprintCopilotResponse SynthesizeNewBlueprint(string prompt)

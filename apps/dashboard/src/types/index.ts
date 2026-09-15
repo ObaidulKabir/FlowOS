@@ -213,7 +213,58 @@ export interface DeadLetterDto {
 export interface GenerateBlueprintCopilotRequest {
   prompt: string;
   currentBlueprint?: any;
-  mode?: 'create' | 'refine';
+  mode?: 'create' | 'refine' | 'template';
+}
+
+export interface WorkflowContextBindingDefinition {
+  entityType: string;
+  eventAliases: Record<string, string>;
+  roleOverrides: Record<string, string>;
+  capabilityOverrides: Record<string, string>;
+  inputMapping: Record<string, string>;
+  eventInputMappings: Record<string, Record<string, string>>;
+  conditionParameters: Record<string, unknown>;
+  decisionProviderOverrides: Record<string, string>;
+  sourcePayloadSchema?: string;
+  eventSourcePayloadSchemas: Record<string, string>;
+  metadata: Record<string, string>;
+}
+
+export interface WorkflowContextBindingRevision {
+  id: string;
+  revision: number;
+  sourceWorkflowClassId: string;
+  sourceWorkflowClassVersion: string;
+  status: string;
+  definition: WorkflowContextBindingDefinition;
+  workflowDefinitionId?: string;
+  stateMachineDefinitionId?: string;
+  contentHash?: string;
+  createdAtUtc: string;
+  activatedAtUtc?: string;
+  supersededAtUtc?: string;
+}
+
+export interface WorkflowContextBinding {
+  id: string;
+  tenantId: string;
+  contextType: string;
+  name: string;
+  status: string;
+  activeRevisionId?: string;
+  draftRevisionId?: string;
+  activeRevision?: WorkflowContextBindingRevision;
+  draftRevision?: WorkflowContextBindingRevision;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+  archivedAtUtc?: string;
+}
+
+export interface CreateContextBindingRequest {
+  sourceWorkflowClassId: string;
+  contextType: string;
+  name: string;
+  definition: WorkflowContextBindingDefinition;
 }
 
 export interface GenerateBlueprintCopilotResponse {

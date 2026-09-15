@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Domain.Entities;
 using FlowOS.Events.Models;
@@ -23,19 +24,22 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
     private readonly StateMachineEngine _stateMachineEngine;
     private readonly ICompensationPlannerService _compensationPlanner;
     private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
+    private readonly IWorkflowExecutionContextService? _workflowContextService;
 
     public WorkflowTimeTravelService(
         FlowOSDbContext dbContext,
         WorkflowEngine engine,
         StateMachineEngine stateMachineEngine,
         ICompensationPlannerService compensationPlanner,
-        IPluginBindingRegistryService? pluginBindingRegistry = null)
+        IPluginBindingRegistryService? pluginBindingRegistry = null,
+        IWorkflowExecutionContextService? workflowContextService = null)
     {
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _stateMachineEngine = stateMachineEngine ?? throw new ArgumentNullException(nameof(stateMachineEngine));
         _compensationPlanner = compensationPlanner ?? throw new ArgumentNullException(nameof(compensationPlanner));
         _pluginBindingRegistry = pluginBindingRegistry;
+        _workflowContextService = workflowContextService;
     }
 
     public async Task<WorkflowTimeTravelReplayDto?> GetReplayTimelineAsync(
@@ -117,12 +121,12 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             {
                 try
                 {
-                    var parsed = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadJson);
+                    var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(payloadJson);
                     if (parsed != null)
                     {
                         foreach (var kv in parsed)
                         {
-                            runningVariables[kv.Key] = kv.Value?.ToString();
+                            runningVariables[kv.Key] = ConvertJsonElement(kv.Value);
                         }
                     }
                 }
@@ -220,15 +224,42 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
                 $"Step '{seedStepId}' does not exist in definition.");
         }
 
-        var smDef = await _dbContext.StateMachineDefinitions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(sm => sm.TenantId == tenantId && sm.EntityType == definition.Name, cancellationToken);
+        var smDef = definition.StateMachineDefinitionId.HasValue
+            ? await _dbContext.StateMachineDefinitions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    sm => sm.Id == definition.StateMachineDefinitionId.Value && sm.TenantId == tenantId,
+                    cancellationToken)
+            : await _dbContext.StateMachineDefinitions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    sm => sm.TenantId == tenantId && sm.EntityType == definition.Name,
+                    cancellationToken);
 
         var context = new StateMachines.Models.ExecutionContext();
-        var payload = ToPayloadDictionary(alternativePayload);
-        if (payload != null)
+        if (_workflowContextService != null)
         {
-            context.Payload = payload;
+            context.Payload = await _workflowContextService.PrepareSimulationAsync(
+                tenantId,
+                definition,
+                baseSnapshot.Variables,
+                alternativeEvent,
+                alternativePayload,
+                cancellationToken);
+        }
+        else
+        {
+            context.Payload = baseSnapshot.Variables.ToDictionary(
+                item => item.Key,
+                item => item.Value!);
+            var payload = ToPayloadDictionary(alternativePayload);
+            if (payload != null)
+            {
+                foreach (var item in payload)
+                {
+                    context.Payload[item.Key] = item.Value;
+                }
+            }
         }
         if (_pluginBindingRegistry != null)
         {
@@ -428,6 +459,18 @@ public class WorkflowTimeTravelService : IWorkflowTimeTravelService
             return null;
         }
     }
+
+    private static object? ConvertJsonElement(JsonElement value)
+        => value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number when value.TryGetInt64(out var integer) => integer,
+            JsonValueKind.Number when value.TryGetDecimal(out var number) => number,
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => value.Clone()
+        };
 
     private static string GenerateStepSummary(DomainEvent evt, string fromStep, string toStep, string fromState, string toState)
     {

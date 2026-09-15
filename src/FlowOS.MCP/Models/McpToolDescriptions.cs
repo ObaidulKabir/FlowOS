@@ -112,18 +112,53 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["create_context_binding"] =
+                "Creates a tenant-scoped draft context binding and immutable revision 1 from a Published or Public workflow template. " +
+                "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-ARG-001, MCP-NOTFOUND-001, CTX-STATE-001. " +
+                "Input example: {\"sourceWorkflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"contextType\":\"Expense\",\"name\":\"ExpenseApproval\",\"definition\":{\"entityType\":\"ExpenseEntity\"},\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["update_context_binding"] =
+                "Updates only a draft binding revision. Updating an active binding creates its next draft revision without affecting running instances. " +
+                "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-ARG-001, MCP-NOTFOUND-001, CTX-STATE-001. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"definition\":{\"entityType\":\"ExpenseEntity\"},\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["validate_context_binding"] =
+                "Validates source visibility, aliases, mappings, schemas, roles, capabilities, and decision providers without mutating the binding. " +
+                "Returns: {ok:true,data:{isValid,errors}}. Errors: MCP-NOTFOUND-001, CTX-STATE-001. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["activate_context_binding"] =
+                "Compiles and atomically activates the draft as immutable workflow, state-machine, and event definitions. Requires confirmHumanApproval=true. " +
+                "Existing instances remain pinned to prior revisions. Returns: {ok:true,data:<contextBinding>}. Errors: MCP-VALIDATION, MCP-NOTFOUND-001, CTX-STATE-001, MCP-APPROVAL-REQUIRED. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["archive_context_binding"] =
+                "Archives a context binding and blocks new starts while existing pinned instances continue. Requires confirmHumanApproval=true. " +
+                "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-NOTFOUND-001, CTX-STATE-001, MCP-APPROVAL-REQUIRED. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["list_context_bindings"] =
+                "Lists tenant-scoped context bindings, optionally filtered by sourceWorkflowClassId, with active and draft revisions. " +
+                "Returns: {ok:true,data:{totalCount,contextBindings}}. Errors: MCP-TENANT-001, MCP-TENANT-002. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["get_context_binding"] =
+                "Gets one tenant-scoped context binding and its active/draft revision details. Cross-tenant identifiers return not found. " +
+                "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-NOTFOUND-001, MCP-TENANT-001, MCP-TENANT-002. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
             ["start_workflow"] =
-                "[Lifecycle Step 4: Run Instance] Starts a live runtime execution instance of a published WorkflowClass or WorkflowDefinition. " +
+                "[Lifecycle Step 4: Run Instance] Starts a live runtime execution instance through exactly one workflow or active context-binding selector. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{workflowInstanceId,tenantId,status,correlationId,message}}. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
-                "Input example: {\"workflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500}}}",
 
             ["publish_event"] =
                 "[Lifecycle Step 5: State Transition] Publishes an event to advance the state machine and workflow step of an active workflow instance. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,eventType,message}}. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-EXEC-001, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-EXEC-001, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["complete_task"] =
@@ -436,6 +471,13 @@ public static class McpToolDescriptions
             ["list_draft_workflowclasses"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["fork_public_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["publish_workflowclass"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
+            ["create_context_binding"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["update_context_binding"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["validate_context_binding"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
+            ["activate_context_binding"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
+            ["archive_context_binding"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
+            ["list_context_bindings"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
+            ["get_context_binding"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["start_workflow"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["publish_event"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["complete_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium")

@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using FlowOS.Application.Commands;
+using FlowOS.Application.Common.Exceptions;
 using FlowOS.Application.DTOs;
 using FlowOS.Application.Queries;
+using FlowOS.Domain.ValueObjects;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
 using MediatR;
@@ -53,6 +56,14 @@ public class ExecutionTools
             }
 
             var workflowName = args["workflowName"]?.ToString();
+            Guid? contextBindingId = null;
+            if (args["contextBindingId"] != null)
+            {
+                if (!Guid.TryParse(args["contextBindingId"]?.ToString(), out var bindingId))
+                    return McpToolResults.Fail("MCP-ARG-002", "contextBindingId must be a valid UUID.");
+                contextBindingId = bindingId;
+            }
+            var contextType = args["contextType"]?.ToString()?.Trim();
             var initialStepId = args["initialStepId"]?.ToString();
 
             Guid? correlationId = null;
@@ -67,15 +78,30 @@ public class ExecutionTools
                 version = ver;
             }
 
-            if (workflowDefId == null && workflowClassId == Guid.Empty && string.IsNullOrWhiteSpace(workflowName))
+            var selectorCount =
+                (workflowDefId.HasValue ? 1 : 0) +
+                (workflowClassId != Guid.Empty ? 1 : 0) +
+                (!string.IsNullOrWhiteSpace(workflowName) ? 1 : 0) +
+                (contextBindingId.HasValue ? 1 : 0) +
+                (!string.IsNullOrWhiteSpace(contextType) ? 1 : 0);
+            if (selectorCount != 1)
             {
-                return McpToolResults.Fail("MCP-ARG-001", "Either workflowClassId, workflowDefinitionId, or workflowName is required.");
+                return McpToolResults.Fail(
+                    "MCP-ARG-001",
+                    "Specify exactly one of workflowClassId, workflowDefinitionId, workflowName, contextBindingId, or contextType.");
+            }
+            if ((contextBindingId.HasValue || !string.IsNullOrWhiteSpace(contextType)) && version.HasValue)
+            {
+                return McpToolResults.Fail(
+                    "MCP-ARG-001",
+                    "Version cannot be combined with contextBindingId or contextType; the active binding revision selects the runtime version.");
             }
 
             object? payload = null;
             if (args["payload"] != null)
             {
-                payload = args["payload"]?.ToObject<object>();
+                payload = JsonSerializer.Deserialize<JsonElement>(
+                    args["payload"]!.ToString(Newtonsoft.Json.Formatting.None));
             }
 
             var command = new StartWorkflowCommand(
@@ -87,7 +113,10 @@ public class ExecutionTools
                 InitialStepId: initialStepId,
                 CorrelationId: correlationId ?? Guid.NewGuid(),
                 IdempotencyKey: args["idempotencyKey"]?.ToString(),
-                Payload: payload
+                Payload: payload,
+                ContextBindingId: contextBindingId,
+                ContextType: contextType,
+                BusinessReference: args["businessReference"]?.ToObject<WorkflowBusinessReference>()
             );
 
             var instanceId = await _mediator.Send(command);
@@ -104,6 +133,14 @@ public class ExecutionTools
         catch (McpToolException ex)
         {
             return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (WorkflowContextPayloadException ex)
+        {
+            return McpToolResults.Fail("MCP-VALIDATION", ex.Message, ex.Errors);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", ex.Message);
         }
         catch (ArgumentException ex)
         {
@@ -142,7 +179,8 @@ public class ExecutionTools
             object? payload = null;
             if (args["payload"] != null)
             {
-                payload = args["payload"]?.ToObject<object>();
+                payload = JsonSerializer.Deserialize<JsonElement>(
+                    args["payload"]!.ToString(Newtonsoft.Json.Formatting.None));
             }
 
             var command = new PublishEventCommand(
@@ -172,6 +210,14 @@ public class ExecutionTools
         catch (McpToolException ex)
         {
             return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (WorkflowContextPayloadException ex)
+        {
+            return McpToolResults.Fail("MCP-VALIDATION", ex.Message, ex.Errors);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", ex.Message);
         }
         catch (Exception ex)
         {

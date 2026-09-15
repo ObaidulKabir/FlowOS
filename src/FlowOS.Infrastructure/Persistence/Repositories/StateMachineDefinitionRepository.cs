@@ -18,6 +18,12 @@ public class StateMachineDefinitionRepository : IStateMachineDefinitionRepositor
         _context = context;
     }
 
+    public Task<StateMachineDefinition?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.StateMachineDefinitions.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+    public Task<StateMachineDefinition?> GetByIdAsNoTrackingAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.StateMachineDefinitions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
     public Task<StateMachineDefinition?> GetByEntityTypeAndTenantAsync(string entityType, Guid tenantId, CancellationToken cancellationToken = default)
         => _context.StateMachineDefinitions
             .AsNoTracking()
@@ -30,4 +36,6 @@ public class StateMachineDefinitionRepository : IStateMachineDefinitionRepositor
 
     public Task<List<StateMachineDefinition>> ListAllAsync(CancellationToken cancellationToken = default)
         => _context.StateMachineDefinitions.AsNoTracking().ToListAsync(cancellationToken);
+
+    public void Add(StateMachineDefinition definition) => _context.StateMachineDefinitions.Add(definition);
 }

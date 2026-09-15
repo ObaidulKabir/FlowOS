@@ -11,6 +11,7 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
         builder.ToTable("WorkflowInstances");
 
         builder.HasKey(w => w.Id);
+        builder.HasAlternateKey(w => new { w.Id, w.TenantId });
 
         builder.Property(w => w.WorkflowDefinitionId)
             .IsRequired();

@@ -51,6 +51,17 @@ public class WorkflowDefinitionRepository : IWorkflowDefinitionRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Name == name && d.TenantId == tenantId, cancellationToken);
 
+    public async Task<IReadOnlyList<WorkflowDefinition>> GetByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+    {
+        var definitionIds = ids.Distinct().ToList();
+        return await _context.WorkflowDefinitions
+            .AsNoTracking()
+            .Where(d => definitionIds.Contains(d.Id))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
         => _context.WorkflowDefinitions
             .AsNoTracking()

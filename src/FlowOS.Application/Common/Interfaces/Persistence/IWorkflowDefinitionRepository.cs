@@ -15,6 +15,7 @@ public interface IWorkflowDefinitionRepository
     Task<WorkflowDefinition?> GetLatestByNameAsync(string name, Guid tenantId, CancellationToken cancellationToken = default);
     Task<WorkflowDefinition?> GetByNameAndVersionAsync(string name, int version, Guid tenantId, CancellationToken cancellationToken = default);
     Task<WorkflowDefinition?> GetAnyByNameAsync(string name, Guid tenantId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<WorkflowDefinition>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
     Task<Dictionary<Guid, string>> GetNamesByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
     void Add(WorkflowDefinition definition);
 }

@@ -145,6 +145,7 @@ public static class McpToolSchemas
           "type":"object",
           "required":["events","stateMachine","workflow","roles","capabilities"],
           "properties":{
+            "contextSchema":{"type":["string","null"],"description":"Optional canonical JSON Schema used by reusable workflow context bindings."},
             "events":{
               "type":"array",
               "items":{
@@ -177,6 +178,7 @@ public static class McpToolSchemas
                       "fromState":{"type":"string"},
                       "toState":{"type":"string"},
                       "eventId":{"type":"string"},
+                      "condition":{"type":["string","null"],"description":"Canonical transition guard expression."},
                       "constraints":{"type":"object","additionalProperties":{"type":"string"}}
                     },
                     "additionalProperties":false
@@ -297,16 +299,128 @@ public static class McpToolSchemas
             "workflowClassId":{"type":"string","format":"uuid"},
             "workflowDefinitionId":{"type":"string","format":"uuid"},
             "workflowName":{"type":"string"},
+            "contextBindingId":{"type":"string","format":"uuid"},
+            "contextType":{"type":"string","minLength":1},
             "version":{"type":"integer"},
             "initialStepId":{"type":"string"},
             "correlationId":{"type":"string","format":"uuid"},
             "idempotencyKey":{"type":"string","minLength":8},
             "tenantId":{"type":"string","format":"uuid"},
-            "payload":{"type":"object","description":"Optional initial workflow payload containing event dates or business context for relative timers and steps."}
+            "payload":{"type":"object","description":"Optional initial workflow payload containing event dates or business context for relative timers and steps."},
+            "businessReference":{
+              "type":"object",
+              "properties":{
+                "sourceSystem":{"type":"string"},
+                "externalEntityId":{"type":"string"},
+                "metadata":{"type":"object","additionalProperties":{"type":"string"}}
+              },
+              "additionalProperties":false
+            }
           },
           "additionalProperties":false
         }
         """);
+
+    public static JObject CreateContextBinding() => JObject.Parse(
+        $$"""
+        {
+          "type":"object",
+          "required":["sourceWorkflowClassId","contextType","name","definition"],
+          "properties":{
+            "sourceWorkflowClassId":{"type":"string","format":"uuid"},
+            "contextType":{"type":"string","minLength":1},
+            "name":{"type":"string","minLength":1},
+            "definition":{{ContextBindingDefinitionSchema()}},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject UpdateContextBinding() => JObject.Parse(
+        $$"""
+        {
+          "type":"object",
+          "required":["id","definition"],
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "sourceWorkflowClassId":{"type":"string","format":"uuid"},
+            "definition":{{ContextBindingDefinitionSchema()}},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ContextBindingById(bool requireConfirmation = false)
+    {
+        var properties = new JObject
+        {
+            ["id"] = new JObject
+            {
+                ["type"] = "string",
+                ["format"] = "uuid"
+            },
+            ["tenantId"] = new JObject
+            {
+                ["type"] = "string",
+                ["format"] = "uuid"
+            }
+        };
+        if (requireConfirmation)
+        {
+            properties["confirmHumanApproval"] = new JObject
+            {
+                ["type"] = "boolean",
+                ["description"] = "Explicit confirmation required for activation and archival."
+            };
+        }
+
+        return new JObject
+        {
+            ["type"] = "object",
+            ["required"] = new JArray("id"),
+            ["properties"] = properties,
+            ["additionalProperties"] = false
+        };
+    }
+
+    public static JObject ListContextBindings() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "sourceWorkflowClassId":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    private static string ContextBindingDefinitionSchema() =>
+        """
+        {
+          "type":"object",
+          "required":["entityType"],
+          "properties":{
+            "entityType":{"type":"string","minLength":1},
+            "eventAliases":{"type":"object","additionalProperties":{"type":"string"}},
+            "roleOverrides":{"type":"object","additionalProperties":{"type":"string"}},
+            "capabilityOverrides":{"type":"object","additionalProperties":{"type":"string"}},
+            "inputMapping":{"type":"object","additionalProperties":{"type":"string"}},
+            "eventInputMappings":{
+              "type":"object",
+              "additionalProperties":{"type":"object","additionalProperties":{"type":"string"}}
+            },
+            "conditionParameters":{"type":"object","additionalProperties":true},
+            "decisionProviderOverrides":{"type":"object","additionalProperties":{"type":"string"}},
+            "sourcePayloadSchema":{"type":["string","null"]},
+            "eventSourcePayloadSchemas":{"type":"object","additionalProperties":{"type":"string"}},
+            "metadata":{"type":"object","additionalProperties":{"type":"string"}}
+          },
+          "additionalProperties":false
+        }
+        """;
 
     public static JObject PublishEvent() => JObject.Parse(
         """
@@ -922,7 +1036,7 @@ public static class McpToolSchemas
           "properties":{
             "prompt":{"type":"string","minLength":1,"description":"Natural language description of the desired workflow (e.g. 'Insurance Claim with parallel damage inspection and medical assessment')."},
             "currentBlueprint":{"type":"object","description":"Optional existing WorkflowClassBlueprint to refine or augment."},
-            "mode":{"type":"string","enum":["create","refine"],"default":"create","description":"Whether to create a new blueprint from scratch or refine the existing one."},
+            "mode":{"type":"string","enum":["create","refine","template"],"default":"create","description":"Create a business-specific workflow, refine an existing one, or generate a reusable binding-ready template."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false

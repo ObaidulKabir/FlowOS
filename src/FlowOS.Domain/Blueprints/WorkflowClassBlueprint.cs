@@ -12,6 +12,7 @@ public record WorkflowClassBlueprint
     public WorkflowBlueprint Workflow { get; init; } = new();
     public List<RoleBlueprint> Roles { get; init; } = new();
     public List<CapabilityBlueprint> Capabilities { get; init; } = new();
+    public string? ContextSchema { get; init; }
 }
 
 // Event Vocabulary

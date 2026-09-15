@@ -126,7 +126,7 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS registers **52 production tools** categorized by governance lifecycle, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
+FlowOS registers **59 production tools** categorized by governance lifecycle, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|
@@ -294,6 +294,10 @@ Since only validated Drafts can ever be persisted, calling `validate_draft_workf
 
 MCP governance tools (`create`/`update`/`validate`/`fork`/`list_public`) now go through Application MediatR + `IUnitOfWork` (same path as the REST API), with an MCP `ICurrentUser` ambient tenant.
 
+### Reuse a published template through context bindings
+
+The seven binding governance tools are `create_context_binding`, `update_context_binding`, `validate_context_binding`, `activate_context_binding`, `archive_context_binding`, `list_context_bindings`, and `get_context_binding`. After activation, call the existing `start_workflow` with `contextBindingId` or `contextType`; no duplicate start-by-context tool exists. Activation and archival require `confirmHumanApproval: true`. Full mapping examples are in [Chapter 17](17-workflow-context-bindings.md).
+
 ### 5. Fork a public template instead of starting from scratch
 
 ```json
@@ -302,11 +306,11 @@ MCP governance tools (`create`/`update`/`validate`/`fork`/`list_public`) now go 
 
 ## Gap analysis — 10/10 Verification Status
 
-All previously identified MCP control plane gaps have been completely resolved and verified against the 25-test suite in `FlowOS.MCP.UnitTests`:
+Previously identified MCP control-plane gaps are covered by the maintained `FlowOS.MCP.UnitTests` contract suite:
 
 * **Read Gap**: Fully resolved via `get_draft_workflowclass`, `list_draft_workflowclasses`, `list_public_workflowclasses`, `describe_workflowclass_schema`, `get_workflow_instance_status`, `list_workflow_instances`, and `get_workflow_history`.
 * **Execution Boundary**: Fully implemented with `start_workflow`, `publish_event`, and `complete_task`, enforcing strict tenant boundaries and supporting cross-tenant public workflows.
-* **Human Approval Enforcement**: High-risk, irreversible operations (`publish_workflowclass`) require `confirmHumanApproval: true`, returning `MCP-APPROVAL-REQUIRED` on missing confirmation.
+* **Human Approval Enforcement**: High-risk, irreversible operations (`publish_workflowclass`, `activate_context_binding`, and `archive_context_binding`) require `confirmHumanApproval: true`, returning `MCP-APPROVAL-REQUIRED` on missing confirmation.
 * **Adversarial BOLA/IDOR Protection**: All foreign resource access attempts are denied and normalized to `MCP-NOTFOUND-001`, eliminating information leakage and existence oracles.
 * **Dual Discovery & Execution**: `GET /mcp` provides zero-auth public discovery (interactive HTML or JSON schema metadata) while `POST /mcp` enforces authentication, tenant isolation, and risk policies.
 

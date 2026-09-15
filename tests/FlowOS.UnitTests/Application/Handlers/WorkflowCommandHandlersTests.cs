@@ -93,6 +93,20 @@ public class WorkflowCommandHandlersTests : IDisposable
     }
 
     [Fact]
+    public async Task Handle_StartWorkflowCommand_ContextSelectorWithLegacyVersion_ShouldThrow()
+    {
+        var command = new StartWorkflowCommand(
+            TenantId: Guid.NewGuid(),
+            Version: 1,
+            ContextType: "Expense");
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => _handler.Handle(command, CancellationToken.None));
+
+        Assert.Contains("cannot be combined", ex.Message);
+    }
+
+    [Fact]
     public async Task Handle_PublishEventCommand_WithValidEvent_ShouldAdvanceWorkflow()
     {
         // Arrange
@@ -146,6 +160,34 @@ public class WorkflowCommandHandlersTests : IDisposable
         // Act & Assert
         await Assert.ThrowsAsync<FlowOS.Application.Common.Exceptions.PolicyViolationException>(
             () => _handler.Handle(command, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_CompleteTaskCommand_ContextBoundStepRequiresMappedRole()
+    {
+        var tenantId = Guid.NewGuid();
+        var definition = new WorkflowDefinition(tenantId, "ExpenseApproval", 1, "Review");
+        definition.AddStep(new WorkflowStepDefinition("Review", WorkflowStepType.HumanTask)
+        {
+            AllowedRoles = ["FinanceManager"],
+            NextSteps = new Dictionary<string, string> { ["TaskCompleted"] = "END" }
+        });
+        definition.SetContextLineage(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        definition.Publish();
+
+        var instance = new WorkflowInstance(tenantId, definition.Id, Guid.NewGuid(), 1, "Review");
+        _context.WorkflowDefinitions.Add(definition);
+        _context.WorkflowInstances.Add(instance);
+        await _context.SaveChangesAsync();
+
+        _mockCurrentUser.Setup(x => x.Roles).Returns(["Requester"]);
+
+        var exception = await Assert.ThrowsAsync<FlowOS.Application.Common.Exceptions.PolicyViolationException>(
+            () => _handler.Handle(
+                new CompleteTaskCommand(tenantId, instance.Id, Guid.NewGuid()),
+                CancellationToken.None));
+
+        Assert.Contains("ContextTaskRole", exception.Message);
     }
 
     [Fact]

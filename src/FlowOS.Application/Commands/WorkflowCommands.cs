@@ -1,8 +1,8 @@
 using System;
 using MediatR;
-using FlowOS.Application.Common.Attributes; // Add this
-using MediatR;
+using FlowOS.Application.Common.Attributes;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Domain.ValueObjects;
 
 namespace FlowOS.Application.Commands;
 
@@ -16,7 +16,10 @@ public record StartWorkflowCommand(
     string? InitialStepId = null,
     Guid? CorrelationId = null,
     string? IdempotencyKey = null,
-    object? Payload = null
+    object? Payload = null,
+    Guid? ContextBindingId = null,
+    string? ContextType = null,
+    WorkflowBusinessReference? BusinessReference = null
 ) : IRequest<Guid>, IPolicySecuredCommand;
 
 // [RequiresCapability("event.publish")] // Moved to Handler for dynamic check

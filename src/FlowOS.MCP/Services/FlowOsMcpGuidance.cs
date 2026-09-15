@@ -38,9 +38,13 @@ public static class FlowOsMcpGuidance
         [Step 3: Publish Blueprint]
           • Call `publish_workflowclass` with `id`.
           • This freezes the blueprint into a versioned runtime WorkflowDefinition and registers all state transitions.
+          • To reuse one published template in multiple business domains, call `create_context_binding`,
+            `validate_context_binding`, and `activate_context_binding` for each tenant context.
+          • Activation and archival require explicit human confirmation. Bindings never create roles or permissions.
 
         [Step 4: Instantiate Runtime Workflow]
-          • Call `start_workflow` with `workflowClassId` (or `workflowName`).
+          • Call `start_workflow` with exactly one selector: `workflowClassId`, `workflowName`,
+            `workflowDefinitionId`, `contextBindingId`, or `contextType`.
           • The response contains `workflowInstanceId`, starting step, and active state.
 
         [Step 5: Drive Workflow Transitions & Inspect Telemetry]

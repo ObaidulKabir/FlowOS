@@ -548,6 +548,7 @@ public partial class Program
         services.AddScoped<ExecutionTools>();
         services.AddScoped<CapabilityRegistryMcpTools>();
         services.AddScoped<PluginBindingMcpTools>();
+        services.AddScoped<ContextBindingMcpTools>();
         services.AddScoped<PluginDiscoveryMcpTools>();
         services.AddScoped<NotificationRepository>();
         services.AddScoped<INotificationRepository>(sp => sp.GetRequiredService<NotificationRepository>());

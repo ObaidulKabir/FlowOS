@@ -2,7 +2,7 @@
 
 Welcome to the FlowOS user guide. FlowOS is a kernel-style **Process Operating System**: it strictly separates **State Authority** (State Machines), **Process Orchestration** (Workflows), and **Business Logic** (Policies & AI Agents) so that every state change in your business is legal, auditable, and reproducible.
 
-This guide is organized as a linear path — read it in order if you are new, or jump directly to the chapter you need. Every example in this guide has been verified against the current codebase and the automated test suite (154 passing tests across `FlowOS.UnitTests`, `FlowOS.EndToEndTests`, and `FlowOS.MCP.UnitTests`).
+This guide is organized as a linear path — read it in order if you are new, or jump directly to the chapter you need. Examples are maintained alongside the current codebase and automated test suite.
 
 ## How the guide is organized
 
@@ -24,6 +24,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 14 | [API Reference](14-api-reference.md) | Every REST endpoint, request/response shapes |
 | 15 | [Known Limitations & Gaps](15-known-limitations-and-gaps.md) | Honest list of enforcement gaps proven by regression tests |
 | 16 | [Sample Applications](16-sample-applications.md) | ExpenseApp, the Tenant Dashboard, and the Node.js demo client |
+| 17 | [Workflow Context Bindings](17-workflow-context-bindings.md) | Reuse one process template across tenant business contexts |
 
 ## Reading paths
 
@@ -31,6 +32,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 * **"I want to design a business process"** → [Core Concepts](02-core-concepts.md) → [State Machines](03-state-machines.md) → [Events](04-events-and-registry.md) → [Workflows](05-workflows-and-versioning.md) → [WorkflowClass Governance](09-workflow-class-governance.md).
 * **"I'm building a client application"** → [Human Tasks & Decisions](06-human-tasks-and-decisions.md) → [Notifications](10-notifications.md) → [Anti-Patterns](12-anti-patterns.md) → [Sample Applications](16-sample-applications.md).
 * **"I'm integrating an AI agent"** → [AI Agents & Insights](07-ai-agents-and-insights.md) → [MCP & AI Agent Automation](13-mcp-and-ai-agent-integration.md).
+* **"I want one workflow template for many business domains"** → [WorkflowClass Governance](09-workflow-class-governance.md) → [Workflow Context Bindings](17-workflow-context-bindings.md).
 * **"I need to know exactly what is and isn't enforced today"** → [Known Limitations & Gaps](15-known-limitations-and-gaps.md).
 
 ## Documentation conventions

@@ -192,3 +192,4 @@ curl -X POST "http://localhost:5183/api/workflow-classes/<id>/copy" \
 
 * [Chapter 13 — MCP & AI Agent Automation](13-mcp-and-ai-agent-integration.md) for how AI agents author `WorkflowClass` drafts through a governed, design-time-only tool surface.
 * [Chapter 14 — API Reference](14-api-reference.md) for the full endpoint catalog including request/response DTOs.
+* [Chapter 17 — Workflow Context Bindings](17-workflow-context-bindings.md) for publishing a generic template once and deploying tenant-owned immutable context revisions without forking it.

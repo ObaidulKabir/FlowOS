@@ -68,6 +68,27 @@ public static class ToolRegistration
         registry.Register("resolve_plugin_binding", McpToolDescriptions.For("resolve_plugin_binding"), McpToolSchemas.ResolvePluginBinding(),
             async (args) => await ExecuteScopedAsync<PluginBindingMcpTools>(serviceProvider, t => t.ResolvePluginBinding(args)));
 
+        registry.Register("create_context_binding", McpToolDescriptions.For("create_context_binding"), McpToolSchemas.CreateContextBinding(),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Create(args)));
+
+        registry.Register("update_context_binding", McpToolDescriptions.For("update_context_binding"), McpToolSchemas.UpdateContextBinding(),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Update(args)));
+
+        registry.Register("validate_context_binding", McpToolDescriptions.For("validate_context_binding"), McpToolSchemas.ContextBindingById(),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Validate(args)));
+
+        registry.Register("activate_context_binding", McpToolDescriptions.For("activate_context_binding"), McpToolSchemas.ContextBindingById(true),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Activate(args)));
+
+        registry.Register("archive_context_binding", McpToolDescriptions.For("archive_context_binding"), McpToolSchemas.ContextBindingById(true),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Archive(args)));
+
+        registry.Register("list_context_bindings", McpToolDescriptions.For("list_context_bindings"), McpToolSchemas.ListContextBindings(),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.List(args)));
+
+        registry.Register("get_context_binding", McpToolDescriptions.For("get_context_binding"), McpToolSchemas.ContextBindingById(),
+            async (args) => await ExecuteScopedAsync<ContextBindingMcpTools>(serviceProvider, t => t.Get(args)));
+
         registry.Register("list_registered_plugins", McpToolDescriptions.For("list_registered_plugins"), McpToolSchemas.ListRegisteredPlugins(),
             async (args) => await ExecuteScopedAsync<PluginDiscoveryMcpTools>(serviceProvider, t => t.ListRegisteredPlugins(args)));
 

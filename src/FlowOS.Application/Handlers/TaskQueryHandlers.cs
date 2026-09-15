@@ -29,24 +29,32 @@ public class TaskQueryHandlers :
         var workflowIds = workflows.Select(w => w.Id).ToList();
         var insights = await _unitOfWork.AgentInsights
             .ListByWorkflowInstanceIdsAsync(workflowIds, cancellationToken);
+        var definitions = await _unitOfWork.WorkflowDefinitions
+            .GetByIdsAsync(workflows.Select(w => w.WorkflowDefinitionId), cancellationToken);
+        var definitionsById = definitions.ToDictionary(x => x.Id);
 
-        return workflows.Select(w => new TaskDto
+        return workflows.Select(w =>
         {
-            TaskId = w.Id,
-            WorkflowId = w.WorkflowDefinitionId,
-            CurrentStep = w.CurrentStepId,
-            Status = w.Status.ToString(),
-            RequiredRole = "User",
-            AgentInsights = insights
-                .Where(i => i.WorkflowInstanceId == w.Id)
-                .Select(i => new AgentInsightDto
-                {
-                    AgentId = i.AgentId,
-                    Insight = i.Insight,
-                    ContextObjective = i.ContextObjective,
-                    CreatedAt = i.CreatedAt
-                })
-                .ToList()
+            var requiredRoles = ResolveRequiredRoles(w.WorkflowDefinitionId, w.CurrentStepId, definitionsById);
+            return new TaskDto
+            {
+                TaskId = w.Id,
+                WorkflowId = w.WorkflowDefinitionId,
+                CurrentStep = w.CurrentStepId,
+                Status = w.Status.ToString(),
+                RequiredRole = requiredRoles.FirstOrDefault() ?? "User",
+                RequiredRoles = requiredRoles,
+                AgentInsights = insights
+                    .Where(i => i.WorkflowInstanceId == w.Id)
+                    .Select(i => new AgentInsightDto
+                    {
+                        AgentId = i.AgentId,
+                        Insight = i.Insight,
+                        ContextObjective = i.ContextObjective,
+                        CreatedAt = i.CreatedAt
+                    })
+                    .ToList()
+            };
         }).ToList();
     }
 
@@ -60,6 +68,14 @@ public class TaskQueryHandlers :
 
         var insights = await _unitOfWork.AgentInsights
             .ListByWorkflowInstanceIdAsync(request.TaskId, cancellationToken);
+        var definition = await _unitOfWork.WorkflowDefinitions
+            .GetByIdAsNoTrackingAsync(workflow.WorkflowDefinitionId, cancellationToken);
+        var requiredRoles = definition?.ContextBindingRevisionId.HasValue == true
+            ? definition.Steps
+                .FirstOrDefault(x => x.StepId == workflow.CurrentStepId)?
+                .AllowedRoles
+                .ToList() ?? new List<string>()
+            : new List<string>();
 
         return new TaskDto
         {
@@ -67,7 +83,8 @@ public class TaskQueryHandlers :
             WorkflowId = workflow.WorkflowDefinitionId,
             CurrentStep = workflow.CurrentStepId,
             Status = workflow.Status.ToString(),
-            RequiredRole = "User",
+            RequiredRole = requiredRoles.FirstOrDefault() ?? "User",
+            RequiredRoles = requiredRoles,
             AgentInsights = insights.Select(i => new AgentInsightDto
             {
                 AgentId = i.AgentId,
@@ -76,5 +93,22 @@ public class TaskQueryHandlers :
                 CreatedAt = i.CreatedAt
             }).ToList()
         };
+    }
+
+    private static List<string> ResolveRequiredRoles(
+        Guid definitionId,
+        string currentStepId,
+        IReadOnlyDictionary<Guid, FlowOS.Workflows.Domain.WorkflowDefinition> definitions)
+    {
+        if (!definitions.TryGetValue(definitionId, out var definition) ||
+            !definition.ContextBindingRevisionId.HasValue)
+        {
+            return new List<string>();
+        }
+
+        return definition.Steps
+            .FirstOrDefault(x => x.StepId == currentStepId)?
+            .AllowedRoles
+            .ToList() ?? new List<string>();
     }
 }

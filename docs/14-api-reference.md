@@ -155,7 +155,20 @@ See the full endpoint table, lifecycle diagram, and blueprint schema in [Chapter
 
 ---
 
-## 9. Notifications — `NotificationsController` (`/api/notifications`)
+## 9. Context bindings — `ContextBindingsController` (`/api/context-bindings`, `[Authorize]`)
+
+* `POST /api/context-bindings` — create binding plus draft revision 1.
+* `PUT /api/context-bindings/{id}/draft` — update the draft or create the next draft revision.
+* `POST /api/context-bindings/{id}/validate` — run binding validation without mutation.
+* `POST /api/context-bindings/{id}/activate` — materialize and activate an immutable runtime package.
+* `POST /api/context-bindings/{id}/archive` — block new starts.
+* `GET /api/context-bindings` and `GET /api/context-bindings/{id}` — tenant-scoped reads.
+
+`POST /api/workflows/start` accepts optional `contextBindingId`, `contextType`, and `businessReference`. A context selector cannot be combined with workflow definition, class, or name selectors. See [Chapter 17](17-workflow-context-bindings.md).
+
+---
+
+## 10. Notifications — `NotificationsController` (`/api/notifications`)
 
 * `GET /api/notifications` — history for the current tenant.
 * `GET /api/notifications/stream` — Server-Sent Events stream.

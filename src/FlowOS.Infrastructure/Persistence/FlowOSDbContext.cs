@@ -29,6 +29,9 @@ public class FlowOSDbContext : DbContext
     public DbSet<FlowOS.Core.Common.Models.IdempotencyRecord> IdempotencyRecords { get; set; }
     public DbSet<FlowOS.Core.Common.Models.CapabilityBindingRecord> CapabilityBindings { get; set; }
     public DbSet<FlowOS.Core.Common.Models.PluginBindingRecord> PluginBindings { get; set; }
+    public DbSet<WorkflowContextBinding> WorkflowContextBindings { get; set; }
+    public DbSet<WorkflowContextBindingRevision> WorkflowContextBindingRevisions { get; set; }
+    public DbSet<WorkflowContextSnapshot> WorkflowContextSnapshots { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

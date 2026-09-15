@@ -39,15 +39,14 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 * **Vocabulary 2 — the real validator** (`STR-*`, `WF-STR-*`, `CON-*`, `WF-COMP-*`, `WF-STRUCT-005`, `WF-VAL-*`, `EVT-SCHEMA-001`, `GOV-001`): what `WorkflowClassValidator.Validate` actually returns from `POST /api/workflow-classes/{id}/validate`, `.../publish`, `.../lint`, and the MCP `validate_draft_workflowclass` tool. This is the only vocabulary you'll ever see in a live API/tool response. Full table: [Chapter 9](09-workflow-class-governance.md#validation-rules--verified-against-workflowclassvalidatorvalidate-the-actual-error-codes-it-emits). The MCP `explain_validation_violation` tool now documents these same codes.
 * ~~**Vocabulary 3 — stale MCP explain knowledge base**~~ — **fixed**: `AnalysisTools.ExplainValidationViolation` now recognizes Vocabulary 2 codes (`CON-*`, `STR-*`, `WF-COMP-*`, `GOV-001`, etc.).
 
-## MCP "Read Gap" — partially closed, not fully
+## Workflow context binding v1 boundaries
 
-* As of this writing, MCP still has no `get_workflowclass(id)` tool to read back an existing (non-public) WorkflowClass, and no diagnostic/runtime-observability tools. Full detail: [Chapter 13](13-mcp-and-ai-agent-integration.md#gap-analysis--updated).
-* The earlier transport-safety gaps are resolved: all 10 tools publish canonical
-  schemas, HTTP requires API-key authentication and an authoritative tenant,
-  cross-tenant lint/agent lookups fail closed, errors are sanitized, and both
-  transports support protocol-correct JSON-RPC errors and batches. This does not
-  expand MCP into runtime mutation; execution, event publication, task completion,
-  publication, and admin mutation remain intentionally unavailable.
+* Conditions remain owned by the reusable template. Bindings can project canonical fields, add typed parameters, and select registered decision providers, but cannot rewrite expression strings.
+* Input mappings support dotted object paths only. Complex transformation belongs in a plugin.
+* Bindings reference tenant roles and capabilities but never provision them.
+* Nested subworkflows do not inherit or automatically select context bindings. Child references remain concrete.
+* Source business payloads are not retained by default; only the canonical snapshot and canonical audit deltas are durable.
+* Template publication does not auto-upgrade bindings. Each binding revision is explicitly validated and activated.
 
 ## Docker Compose does not publish the API's host port by default
 

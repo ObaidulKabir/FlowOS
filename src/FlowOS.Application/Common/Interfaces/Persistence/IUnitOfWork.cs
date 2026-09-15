@@ -17,6 +17,8 @@ public interface IUnitOfWork
     IEventDefinitionRepository EventDefinitions { get; }
     IAgentInsightRepository AgentInsights { get; }
     IPolicyRepository Policies { get; }
+    IWorkflowContextBindingRepository WorkflowContextBindings { get; }
+    IWorkflowContextSnapshotRepository WorkflowContextSnapshots { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

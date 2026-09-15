@@ -21,6 +21,8 @@ public class UnitOfWork : IUnitOfWork
         EventDefinitions = new EventDefinitionRepository(context);
         AgentInsights = new AgentInsightRepository(context);
         Policies = new PolicyRepository(context);
+        WorkflowContextBindings = new WorkflowContextBindingRepository(context);
+        WorkflowContextSnapshots = new WorkflowContextSnapshotRepository(context);
     }
 
     public IWorkflowInstanceRepository WorkflowInstances { get; }
@@ -32,6 +34,8 @@ public class UnitOfWork : IUnitOfWork
     public IEventDefinitionRepository EventDefinitions { get; }
     public IAgentInsightRepository AgentInsights { get; }
     public IPolicyRepository Policies { get; }
+    public IWorkflowContextBindingRepository WorkflowContextBindings { get; }
+    public IWorkflowContextSnapshotRepository WorkflowContextSnapshots { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         => _context.SaveChangesAsync(cancellationToken);

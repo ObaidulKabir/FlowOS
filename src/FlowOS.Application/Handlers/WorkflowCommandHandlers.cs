@@ -39,6 +39,7 @@ public class WorkflowCommandHandlers :
     private readonly FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? _actionDispatcher;
     private readonly IIdempotencyService? _idempotencyService;
     private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
+    private readonly IWorkflowExecutionContextService? _workflowContextService;
 
     public WorkflowCommandHandlers(
         IUnitOfWork unitOfWork, 
@@ -49,7 +50,8 @@ public class WorkflowCommandHandlers :
         FlowOS.Application.Common.Interfaces.IWorkflowTimerService? timerService = null,
         FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? actionDispatcher = null,
         IIdempotencyService? idempotencyService = null,
-        IPluginBindingRegistryService? pluginBindingRegistry = null)
+        IPluginBindingRegistryService? pluginBindingRegistry = null,
+        IWorkflowExecutionContextService? workflowContextService = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
@@ -60,6 +62,7 @@ public class WorkflowCommandHandlers :
         _actionDispatcher = actionDispatcher;
         _idempotencyService = idempotencyService;
         _pluginBindingRegistry = pluginBindingRegistry;
+        _workflowContextService = workflowContextService;
     }
 
     public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
@@ -86,8 +89,31 @@ public class WorkflowCommandHandlers :
         {
         WorkflowDefinition? fullDefinition = null;
         Guid definitionId;
+        ActiveWorkflowContextBinding? activeContextBinding = null;
+        PreparedWorkflowContext? preparedContext = null;
+        var hasContextSelector = request.ContextBindingId.HasValue ||
+                                 !string.IsNullOrWhiteSpace(request.ContextType);
+        var hasLegacySelector = request.WorkflowDefinitionId.HasValue ||
+                                request.WorkflowClassId != Guid.Empty ||
+                                !string.IsNullOrWhiteSpace(request.WorkflowName);
 
-        if (request.WorkflowDefinitionId.HasValue)
+        if (hasContextSelector)
+        {
+            if (hasLegacySelector || request.Version.HasValue)
+                throw new ArgumentException("Context binding selectors cannot be combined with workflow definition, class, name, or version selectors.");
+            if (_workflowContextService == null)
+                throw new InvalidOperationException("Workflow context binding service is not registered.");
+
+            activeContextBinding = await _workflowContextService.ResolveActiveAsync(
+                request.TenantId,
+                request.ContextBindingId,
+                request.ContextType,
+                cancellationToken);
+            fullDefinition = activeContextBinding.WorkflowDefinition;
+            definitionId = fullDefinition.Id;
+            preparedContext = _workflowContextService.PrepareInitial(activeContextBinding, request.Payload);
+        }
+        else if (request.WorkflowDefinitionId.HasValue)
         {
             definitionId = request.WorkflowDefinitionId.Value;
             fullDefinition = await _unitOfWork.WorkflowDefinitions
@@ -96,6 +122,10 @@ public class WorkflowCommandHandlers :
             if (fullDefinition == null || fullDefinition.TenantId != request.TenantId)
             {
                 throw new ArgumentException($"Workflow definition '{definitionId}' not found.");
+            }
+            if (fullDefinition.ContextBindingRevisionId.HasValue)
+            {
+                throw new ArgumentException("Context-materialized definitions must be started through ContextBindingId or ContextType.");
             }
         }
         else if (!string.IsNullOrEmpty(request.WorkflowName))
@@ -168,7 +198,12 @@ public class WorkflowCommandHandlers :
         }
         else
         {
-             throw new ArgumentException("Either WorkflowDefinitionId, WorkflowClassId, or WorkflowName must be provided.");
+             throw new ArgumentException("Either ContextBindingId, ContextType, WorkflowDefinitionId, WorkflowClassId, or WorkflowName must be provided.");
+        }
+
+        if (activeContextBinding == null && fullDefinition?.ContextBindingRevisionId.HasValue == true)
+        {
+            throw new ArgumentException("Context-materialized definitions must be started through ContextBindingId or ContextType.");
         }
 
         int actualVersion = request.Version ?? 1;
@@ -206,13 +241,32 @@ public class WorkflowCommandHandlers :
         var instance = new WorkflowInstance(
             request.TenantId,
             definitionId,
-            request.WorkflowClassId,
+            activeContextBinding?.Revision.SourceWorkflowClassId ?? request.WorkflowClassId,
             actualVersion,
             startStep,
-            request.CorrelationId
+            request.CorrelationId,
+            activeContextBinding?.SourceWorkflowClass.Definition.StateMachine.InitialState
         );
 
         _unitOfWork.WorkflowInstances.Add(instance);
+
+        var autoAdvanceContext = new FlowOS.StateMachines.Models.ExecutionContext();
+        if (preparedContext != null && _workflowContextService != null)
+        {
+            autoAdvanceContext.Payload = preparedContext.Payload;
+            var snapshot = _workflowContextService.CreateSnapshot(
+                instance.Id,
+                request.TenantId,
+                preparedContext,
+                request.BusinessReference);
+            _unitOfWork.WorkflowContextSnapshots.Add(snapshot);
+        }
+        else if (request.Payload != null)
+        {
+            autoAdvanceContext.Payload = ToPayloadDictionary(request.Payload) ?? new Dictionary<string, object>();
+        }
+        AddCurrentRolesToContext(autoAdvanceContext);
+        await EnrichExecutionContextWithPluginBindingsAsync(autoAdvanceContext, request.TenantId, cancellationToken);
 
         var startEvent = new StandardEvent(request.TenantId, "WorkflowStarted");
         startEvent.SetCorrelationId(instance.Id);
@@ -223,6 +277,32 @@ public class WorkflowCommandHandlers :
         if (!string.IsNullOrEmpty(_currentUser.Id))
         {
             startEvent.AddMetadata("ActorId", _currentUser.Id);
+        }
+        if (preparedContext != null)
+        {
+            startEvent.AddMetadata("ContextBindingRevisionId", preparedContext.Revision.Id.ToString());
+            startEvent.AddMetadata("ContextBindingId", preparedContext.Revision.BindingId.ToString());
+            startEvent.AddMetadata("Payload", System.Text.Json.JsonSerializer.Serialize(preparedContext.Delta));
+            startEvent.AddMetadata("CanonicalEventType", "WorkflowStarted");
+            startEvent.AddMetadata("ContextualEventType", "WorkflowStarted");
+            if (activeContextBinding != null)
+            {
+                startEvent.AddMetadata("ContextType", activeContextBinding.Binding.ContextType);
+            }
+            if (!string.IsNullOrWhiteSpace(request.BusinessReference?.SourceSystem))
+            {
+                startEvent.AddMetadata("SourceSystem", request.BusinessReference.SourceSystem);
+            }
+            if (!string.IsNullOrWhiteSpace(request.BusinessReference?.ExternalEntityId))
+            {
+                startEvent.AddMetadata("ExternalEntityId", request.BusinessReference.ExternalEntityId);
+            }
+            if (request.BusinessReference?.Metadata is { Count: > 0 })
+            {
+                startEvent.AddMetadata(
+                    "BusinessMetadata",
+                    System.Text.Json.JsonSerializer.Serialize(request.BusinessReference.Metadata));
+            }
         }
         _unitOfWork.Events.Add(startEvent);
 
@@ -241,7 +321,7 @@ public class WorkflowCommandHandlers :
                         initialStep.StepId,
                         "OnEntry",
                         initialStep.OnEntry,
-                        null,
+                        autoAdvanceContext.Payload,
                         cancellationToken);
                 }
             }
@@ -250,16 +330,18 @@ public class WorkflowCommandHandlers :
                 instance,
                 fullDefinition,
                 initialEnteredStepIds,
-                null,
+                autoAdvanceContext.Payload,
                 cancellationToken);
 
-            var autoAdvanceContext = new FlowOS.StateMachines.Models.ExecutionContext();
-            if (request.Payload != null)
-            {
-                autoAdvanceContext.Payload = ToPayloadDictionary(request.Payload) ?? new Dictionary<string, object>();
-            }
-            await EnrichExecutionContextWithPluginBindingsAsync(autoAdvanceContext, request.TenantId, cancellationToken);
-            RunAutoAdvance(instance, fullDefinition, request.TenantId, autoAdvanceContext);
+            var startStateMachine = fullDefinition.StateMachineDefinitionId.HasValue
+                ? await ResolveStateMachineDefinitionAsync(
+                    instance.WorkflowClassId,
+                    request.TenantId,
+                    fullDefinition.Name,
+                    cancellationToken,
+                    fullDefinition.StateMachineDefinitionId)
+                : null;
+            RunAutoAdvance(instance, fullDefinition, request.TenantId, autoAdvanceContext, startStateMachine);
             var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
                 ? instance.ActiveStepIds.ToList()
                 : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });
@@ -315,36 +397,25 @@ public class WorkflowCommandHandlers :
 
         try
         {
-        var userRoles = _currentUser.Roles ?? new List<string>();
-        if (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id))
-        {
-            var requiredCapability = $"event.publish.{request.EventType}";
-            var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
-            
-            bool hasSpecific = capabilities.Contains(requiredCapability);
-            bool hasRoot = capabilities.Contains("event.publish");
-            
-            if (!hasSpecific && !hasRoot)
-            {
-                 Console.WriteLine($"[WorkflowHandler] Access Denied. User {_currentUser.Id} (Roles: {string.Join(",", userRoles)}) lacks {requiredCapability}");
-                 throw new FlowOS.Application.Common.Exceptions.PolicyViolationException("EventPermission", $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
-            }
-        }
-
         Console.WriteLine($"[Handler] Handling PublishEventCommand: Event={request.EventType}, WorkflowInstanceId={request.WorkflowInstanceId}, Tenant={request.TenantId}");
-        
-        bool isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
-        if (!isRegistered && request.EventType.StartsWith("EVT-", StringComparison.OrdinalIgnoreCase))
-        {
-             Console.WriteLine($"[Handler] Event '{request.EventType}' not registered for tenant {request.TenantId}");
-             throw new ArgumentException($"Event '{request.EventType}' is not registered.");
-        }
 
         var instance = await _unitOfWork.WorkflowInstances
             .GetByIdAsync(request.WorkflowInstanceId, request.TenantId, cancellationToken);
 
-        if (instance == null) 
+        var userRoles = _currentUser.Roles ?? new List<string>();
+        if (instance == null)
         {
+            if (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id))
+            {
+                var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
+                var requiredCapability = $"event.publish.{request.EventType}";
+                if (!capabilities.Contains(requiredCapability) && !capabilities.Contains("event.publish"))
+                {
+                    throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
+                        "EventPermission",
+                        $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
+                }
+            }
             Console.WriteLine($"[Handler] Instance {request.WorkflowInstanceId} not found.");
             return false;
         }
@@ -358,6 +429,50 @@ public class WorkflowCommandHandlers :
             return false;
         }
 
+        WorkflowContextBindingRevision? contextRevisionForAuthorization = null;
+        if (definition.ContextBindingRevisionId.HasValue)
+        {
+            contextRevisionForAuthorization = await _unitOfWork.WorkflowContextBindings
+                .GetRevisionByIdAsNoTrackingAsync(definition.ContextBindingRevisionId.Value, cancellationToken);
+        }
+
+        if (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id))
+        {
+            var requiredCapability = ResolveEventCapability(
+                request.EventType,
+                contextRevisionForAuthorization);
+            var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
+            var hasSpecific = capabilities.Contains(requiredCapability);
+            var hasRoot = capabilities.Contains("event.publish");
+
+            if (!hasSpecific && !hasRoot)
+            {
+                Console.WriteLine($"[WorkflowHandler] Access Denied. User {_currentUser.Id} (Roles: {string.Join(",", userRoles)}) lacks {requiredCapability}");
+                throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
+                    "EventPermission",
+                    $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
+            }
+        }
+
+        var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);
+        if (!isRegistered && request.EventType.StartsWith("EVT-", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"[Handler] Event '{request.EventType}' not registered for tenant {request.TenantId}");
+            throw new ArgumentException($"Event '{request.EventType}' is not registered.");
+        }
+
+        PreparedWorkflowContext? preparedContext = null;
+        if (_workflowContextService != null)
+        {
+            preparedContext = await _workflowContextService.PrepareForInstanceAsync(
+                request.TenantId,
+                definition,
+                instance.Id,
+                request.EventType,
+                request.Payload,
+                cancellationToken);
+        }
+
         var domainEvent = new StandardEvent(request.TenantId, request.EventType);
         if (request.CorrelationId.HasValue)
         {
@@ -368,7 +483,11 @@ public class WorkflowCommandHandlers :
             domainEvent.SetCorrelationId(request.WorkflowInstanceId);
         }
 
-        if (request.Payload != null)
+        if (preparedContext != null)
+        {
+            AddContextAuditMetadata(domainEvent, preparedContext, request.EventType);
+        }
+        else if (request.Payload != null)
         {
             var json = System.Text.Json.JsonSerializer.Serialize(request.Payload);
             domainEvent.AddMetadata("Payload", json);
@@ -376,7 +495,11 @@ public class WorkflowCommandHandlers :
 
         var context = new FlowOS.StateMachines.Models.ExecutionContext();
         
-        if (request.Payload != null)
+        if (preparedContext != null)
+        {
+            context.Payload = preparedContext.Payload;
+        }
+        else if (request.Payload != null)
         {
             try 
             {
@@ -392,9 +515,15 @@ public class WorkflowCommandHandlers :
                 Console.WriteLine($"[Handler] Failed to parse payload for ExecutionContext: {ex.Message}");
             }
         }
+        AddCurrentRolesToContext(context);
         await EnrichExecutionContextWithPluginBindingsAsync(context, request.TenantId, cancellationToken);
 
-        var smDef = await ResolveStateMachineDefinitionAsync(instance.WorkflowClassId, request.TenantId, definition.Name, cancellationToken);
+        var smDef = await ResolveStateMachineDefinitionAsync(
+            instance.WorkflowClassId,
+            request.TenantId,
+            definition.Name,
+            cancellationToken,
+            definition.StateMachineDefinitionId);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
         var previousStepId = instance.CurrentStepId;
@@ -403,6 +532,8 @@ public class WorkflowCommandHandlers :
 
         if (result.Success)
         {
+            preparedContext?.CommitDelta();
+
             if (_timerService != null && !string.IsNullOrEmpty(previousStepId))
             {
                 await _timerService.CancelTimerAsync(instance.Id, previousStepId, cancellationToken);
@@ -572,6 +703,35 @@ public class WorkflowCommandHandlers :
 
         if (definition == null) return false;
 
+        if (definition.ContextBindingRevisionId.HasValue)
+        {
+            var currentStep = definition.Steps.FirstOrDefault(x => x.StepId == instance.CurrentStepId);
+            var requiredRoles = currentStep?.AllowedRoles ?? new List<string>();
+            var currentRoles = _currentUser.Roles ?? new List<string>();
+            var isAdmin = currentRoles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+            var hasRequiredRole = requiredRoles.Count == 0 ||
+                                  requiredRoles.Any(required =>
+                                      currentRoles.Contains(required, StringComparer.OrdinalIgnoreCase));
+            if (!isAdmin && !hasRequiredRole)
+            {
+                throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
+                    "ContextTaskRole",
+                    $"Current step requires one of these roles: {string.Join(", ", requiredRoles)}.");
+            }
+        }
+
+        PreparedWorkflowContext? preparedContext = null;
+        if (_workflowContextService != null)
+        {
+            preparedContext = await _workflowContextService.PrepareForInstanceAsync(
+                request.TenantId,
+                definition,
+                instance.Id,
+                null,
+                null,
+                cancellationToken);
+        }
+
         var domainEvent = new TaskCompleted(request.TenantId, request.TaskId, Guid.Empty);
         
         if (request.CorrelationId.HasValue)
@@ -584,8 +744,19 @@ public class WorkflowCommandHandlers :
         }
 
         var context = new FlowOS.StateMachines.Models.ExecutionContext();
+        if (preparedContext != null)
+        {
+            context.Payload = preparedContext.Payload;
+            AddContextAuditMetadata(domainEvent, preparedContext, domainEvent.EventType);
+        }
+        AddCurrentRolesToContext(context);
         await EnrichExecutionContextWithPluginBindingsAsync(context, request.TenantId, cancellationToken);
-        var smDef = await ResolveStateMachineDefinitionAsync(instance.WorkflowClassId, request.TenantId, definition.Name, cancellationToken);
+        var smDef = await ResolveStateMachineDefinitionAsync(
+            instance.WorkflowClassId,
+            request.TenantId,
+            definition.Name,
+            cancellationToken,
+            definition.StateMachineDefinitionId);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
         var previousStepId = instance.CurrentStepId;
@@ -611,7 +782,7 @@ public class WorkflowCommandHandlers :
                         previousStepId,
                         "OnExit",
                         departedStep.OnExit,
-                        null,
+                        context.Payload,
                         cancellationToken);
                 }
             }
@@ -634,7 +805,7 @@ public class WorkflowCommandHandlers :
                             stepId,
                             "OnEntry",
                             enteredStep.OnEntry,
-                            null,
+                            context.Payload,
                             cancellationToken);
                     }
                 }
@@ -644,7 +815,7 @@ public class WorkflowCommandHandlers :
                 instance,
                 definition,
                 enteredStepIds,
-                null,
+                context.Payload,
                 cancellationToken);
 
             domainEvent.AddMetadata("FromStep", previousStepId ?? "Start");
@@ -733,8 +904,19 @@ public class WorkflowCommandHandlers :
         Guid workflowClassId,
         Guid tenantId,
         string workflowName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? pinnedStateMachineDefinitionId = null)
     {
+        if (pinnedStateMachineDefinitionId.HasValue)
+        {
+            var pinned = await _unitOfWork.StateMachines.GetByIdAsNoTrackingAsync(
+                pinnedStateMachineDefinitionId.Value,
+                cancellationToken);
+            if (pinned == null || pinned.TenantId != tenantId)
+                throw new InvalidOperationException("Pinned state-machine definition was not found.");
+            return pinned;
+        }
+
         if (workflowClassId != Guid.Empty)
         {
             var wc = await _unitOfWork.WorkflowClasses.GetByIdAsNoTrackingAsync(workflowClassId, cancellationToken);
@@ -752,11 +934,19 @@ public class WorkflowCommandHandlers :
                 }
                 foreach (var tr in smBp.Transitions)
                 {
+                    var constraints = tr.Constraints != null
+                        ? new Dictionary<string, string>(tr.Constraints, StringComparer.OrdinalIgnoreCase)
+                        : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    if (!string.IsNullOrWhiteSpace(tr.Condition))
+                    {
+                        constraints["Expression"] = tr.Condition;
+                    }
                     smDef.AddTransition(new FlowOS.Domain.ValueObjects.StateTransition
                     {
                         FromState = tr.FromState,
                         ToState = tr.ToState,
-                        EventId = tr.EventId
+                        EventId = tr.EventId,
+                        Constraints = constraints
                     });
                 }
                 return smDef;
@@ -988,6 +1178,82 @@ public class WorkflowCommandHandlers :
         }
     }
 
+    private void AddCurrentRolesToContext(FlowOS.StateMachines.Models.ExecutionContext context)
+    {
+        context.Metadata["Roles"] = _currentUser.Roles ?? new List<string>();
+        if (!string.IsNullOrWhiteSpace(_currentUser.Id))
+        {
+            context.Metadata["ActorId"] = _currentUser.Id;
+        }
+    }
+
+    private static void AddContextAuditMetadata(
+        DomainEvent domainEvent,
+        PreparedWorkflowContext preparedContext,
+        string contextualEventType)
+    {
+        domainEvent.AddMetadata("Payload", System.Text.Json.JsonSerializer.Serialize(preparedContext.Delta));
+        domainEvent.AddMetadata("ContextBindingRevisionId", preparedContext.Revision.Id.ToString());
+        domainEvent.AddMetadata("ContextBindingId", preparedContext.Revision.BindingId.ToString());
+        domainEvent.AddMetadata(
+            "CanonicalEventType",
+            ResolveCanonicalEventType(contextualEventType, preparedContext.Revision));
+        domainEvent.AddMetadata("ContextualEventType", contextualEventType);
+
+        var snapshot = preparedContext.Snapshot;
+        if (!string.IsNullOrWhiteSpace(snapshot?.SourceSystem))
+        {
+            domainEvent.AddMetadata("SourceSystem", snapshot.SourceSystem);
+        }
+        if (!string.IsNullOrWhiteSpace(snapshot?.ExternalEntityId))
+        {
+            domainEvent.AddMetadata("ExternalEntityId", snapshot.ExternalEntityId);
+        }
+        if (snapshot?.BusinessMetadata is { Count: > 0 })
+        {
+            domainEvent.AddMetadata(
+                "BusinessMetadata",
+                System.Text.Json.JsonSerializer.Serialize(snapshot.BusinessMetadata));
+        }
+    }
+
+    private static string ResolveCanonicalEventType(
+        string contextualEventType,
+        WorkflowContextBindingRevision revision)
+    {
+        foreach (var alias in revision.Definition.EventAliases)
+        {
+            if (string.Equals(alias.Value, contextualEventType, StringComparison.OrdinalIgnoreCase))
+            {
+                return alias.Key;
+            }
+        }
+        return contextualEventType;
+    }
+
+    private static string ResolveEventCapability(
+        string contextualEventType,
+        WorkflowContextBindingRevision? revision)
+    {
+        if (revision == null)
+        {
+            return $"event.publish.{contextualEventType}";
+        }
+
+        var canonicalEventType = ResolveCanonicalEventType(contextualEventType, revision);
+        var canonicalCapability = $"event.publish.{canonicalEventType}";
+        foreach (var mapping in revision.Definition.CapabilityOverrides)
+        {
+            if (string.Equals(mapping.Key, canonicalCapability, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(mapping.Value))
+            {
+                return mapping.Value.Trim();
+            }
+        }
+
+        return $"event.publish.{contextualEventType}";
+    }
+
     private async Task EnrichExecutionContextWithPluginBindingsAsync(
         FlowOS.StateMachines.Models.ExecutionContext context,
         Guid tenantId,
@@ -1110,13 +1376,15 @@ public class WorkflowCommandHandlers :
         {
             Payload = childPayload
         };
+        AddCurrentRolesToContext(childContext);
         await EnrichExecutionContextWithPluginBindingsAsync(childContext, parentInstance.TenantId, cancellationToken);
 
         var childSmDef = await ResolveStateMachineDefinitionAsync(
             childInstance.WorkflowClassId,
             parentInstance.TenantId,
             childDefinition.Name,
-            cancellationToken);
+            cancellationToken,
+            childDefinition.StateMachineDefinitionId);
 
         RunAutoAdvance(childInstance, childDefinition, parentInstance.TenantId, childContext, childSmDef);
         var autoAdvancedEnteredStepIds = (childInstance.ActiveStepIds != null && childInstance.ActiveStepIds.Count > 0)
@@ -1158,10 +1426,13 @@ public class WorkflowCommandHandlers :
                 reference.WorkflowDefinitionId.Value,
                 cancellationToken);
 
-            if (definition == null || definition.TenantId != tenantId || definition.Status != WorkflowStatus.Published)
+            if (definition == null ||
+                definition.TenantId != tenantId ||
+                definition.Status != WorkflowStatus.Published ||
+                definition.ContextBindingRevisionId.HasValue)
             {
                 throw new ArgumentException(
-                    $"SubWorkflow step '{subWorkflowStep.StepId}' references workflowDefinitionId '{reference.WorkflowDefinitionId}' that is not accessible or not published.");
+                    $"SubWorkflow step '{subWorkflowStep.StepId}' references a definition that is unavailable or context-bound. Context-bound child selection is not supported in v1.");
             }
 
             return (definition, Guid.Empty);
@@ -1187,7 +1458,9 @@ public class WorkflowCommandHandlers :
                 definitionOwnerTenant,
                 cancellationToken);
 
-            if (definition == null || definition.Status != WorkflowStatus.Published)
+            if (definition == null ||
+                definition.Status != WorkflowStatus.Published ||
+                definition.ContextBindingRevisionId.HasValue)
             {
                 throw new ArgumentException(
                     $"SubWorkflow target '{workflowClass.Name}' is not published as runtime definition v{runtimeVersion}.");
@@ -1215,7 +1488,9 @@ public class WorkflowCommandHandlers :
                     cancellationToken);
             }
 
-            if (definition == null || definition.Status != WorkflowStatus.Published)
+            if (definition == null ||
+                definition.Status != WorkflowStatus.Published ||
+                definition.ContextBindingRevisionId.HasValue)
             {
                 throw new ArgumentException(
                     $"SubWorkflow step '{subWorkflowStep.StepId}' references workflow '{reference.WorkflowName}' that is not published.");
@@ -1267,17 +1542,33 @@ public class WorkflowCommandHandlers :
         if (string.IsNullOrWhiteSpace(completionEventType)) return;
 
         var contextPayload = BuildSubWorkflowOutputPayload(parentStep, childInstance);
+        PreparedWorkflowContext? preparedParentContext = null;
+        if (_workflowContextService != null)
+        {
+            preparedParentContext = await _workflowContextService.PrepareCanonicalDeltaAsync(
+                parentInstance.TenantId,
+                parentDefinition,
+                parentInstance.Id,
+                contextPayload,
+                cancellationToken);
+            if (preparedParentContext != null)
+            {
+                contextPayload = preparedParentContext.Payload;
+            }
+        }
         var context = new FlowOS.StateMachines.Models.ExecutionContext
         {
             Payload = contextPayload
         };
+        AddCurrentRolesToContext(context);
         await EnrichExecutionContextWithPluginBindingsAsync(context, parentInstance.TenantId, cancellationToken);
 
         var stateMachineDefinition = await ResolveStateMachineDefinitionAsync(
             parentInstance.WorkflowClassId,
             parentInstance.TenantId,
             parentDefinition.Name,
-            cancellationToken);
+            cancellationToken,
+            parentDefinition.StateMachineDefinitionId);
         var currentEntityState = parentInstance.CurrentState ?? parentInstance.CurrentStepId;
         var previousStepId = parentInstance.CurrentStepId;
         var previousState = parentInstance.CurrentState ?? parentInstance.CurrentStepId;
@@ -1287,6 +1578,10 @@ public class WorkflowCommandHandlers :
         domainEvent.AddMetadata("Source", "SubWorkflowCompletion");
         domainEvent.AddMetadata("ParentStepId", parentStep.StepId);
         domainEvent.AddMetadata("ChildWorkflowInstanceId", childInstance.Id.ToString());
+        if (preparedParentContext != null)
+        {
+            AddContextAuditMetadata(domainEvent, preparedParentContext, completionEventType);
+        }
 
         var result = _engine.Advance(
             parentInstance,
@@ -1299,6 +1594,7 @@ public class WorkflowCommandHandlers :
         {
             return;
         }
+        preparedParentContext?.CommitDelta();
 
         if (_timerService != null && !string.IsNullOrEmpty(previousStepId))
         {

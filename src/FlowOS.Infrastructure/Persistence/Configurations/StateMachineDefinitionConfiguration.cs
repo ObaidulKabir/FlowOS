@@ -1,6 +1,8 @@
 using FlowOS.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using System.Text.Json;
 
 namespace FlowOS.Infrastructure.Persistence.Configurations;
 
@@ -31,9 +33,21 @@ public class StateMachineDefinitionConfiguration : IEntityTypeConfiguration<Stat
             t.Property(tr => tr.ToState).IsRequired();
             t.Property(tr => tr.TriggerEventType);
             t.Property(tr => tr.EventId);
-            
-            // Ignore Constraints for now if they are complex dictionary
-            t.Ignore(tr => tr.Constraints);
+
+            var constraintsComparer = new ValueComparer<Dictionary<string, string>>(
+                (left, right) => JsonSerializer.Serialize(left, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(right, (JsonSerializerOptions?)null),
+                value => JsonSerializer.Serialize(value, (JsonSerializerOptions?)null).GetHashCode(),
+                value => JsonSerializer.Deserialize<Dictionary<string, string>>(
+                    JsonSerializer.Serialize(value, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)
+                    ?? new Dictionary<string, string>());
+
+            t.Property(tr => tr.Constraints)
+                .HasConversion(
+                    value => JsonSerializer.Serialize(value, (JsonSerializerOptions?)null),
+                    value => JsonSerializer.Deserialize<Dictionary<string, string>>(value, (JsonSerializerOptions?)null)
+                        ?? new Dictionary<string, string>())
+                .HasDefaultValueSql("'{}'")
+                .Metadata.SetValueComparer(constraintsComparer);
         });
 
         // States (HashSet<string>) - simplest is JSON conversion or separate table
@@ -42,5 +56,7 @@ public class StateMachineDefinitionConfiguration : IEntityTypeConfiguration<Stat
             .HasConversion(
                 v => string.Join(',', v),
                 v => new HashSet<string>(v.Split(',', StringSplitOptions.RemoveEmptyEntries)));
+
+        builder.HasIndex(s => new { s.TenantId, s.EntityType, s.Version });
     }
 }

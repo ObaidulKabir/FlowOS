@@ -5,7 +5,8 @@ import {
   RegisterTenantUserRequest, RegisterTenantUserResponse,
   VerifyEmailRequest, VerifyEmailResponse,
   LoginRequest, LoginResponse,
-  ResendVerificationResponse, TenantUserDto
+  ResendVerificationResponse, TenantUserDto,
+  WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -367,10 +368,96 @@ export const api = {
     return handleResponse(response, 'Failed to purge dead letter');
   },
 
+  listContextBindings: async (
+    sourceWorkflowClassId?: string,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<WorkflowContextBinding[]> => {
+    const headers = getHeaders(role);
+    const params = new URLSearchParams();
+    if (sourceWorkflowClassId) params.set('sourceWorkflowClassId', sourceWorkflowClassId);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`/api/context-bindings${query}`, { headers });
+    return handleResponse(response, 'Failed to list context bindings');
+  },
+
+  getContextBinding: async (id: string, role?: 'Tenant' | 'Admin'): Promise<WorkflowContextBinding> => {
+    const response = await fetch(`/api/context-bindings/${id}`, { headers: getHeaders(role) });
+    return handleResponse(response, 'Failed to get context binding');
+  },
+
+  createContextBinding: async (
+    request: CreateContextBindingRequest,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<WorkflowContextBinding> => {
+    const response = await fetch('/api/context-bindings', {
+      method: 'POST',
+      headers: getHeaders(role),
+      body: JSON.stringify(request)
+    });
+    return handleResponse(response, 'Failed to create context binding');
+  },
+
+  updateContextBindingDraft: async (
+    id: string,
+    definition: WorkflowContextBindingDefinition,
+    sourceWorkflowClassId?: string,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<WorkflowContextBinding> => {
+    const response = await fetch(`/api/context-bindings/${id}/draft`, {
+      method: 'PUT',
+      headers: getHeaders(role),
+      body: JSON.stringify({ definition, sourceWorkflowClassId })
+    });
+    return handleResponse(response, 'Failed to update context binding');
+  },
+
+  validateContextBinding: async (id: string, role?: 'Tenant' | 'Admin'): Promise<ValidationResult> => {
+    const response = await fetch(`/api/context-bindings/${id}/validate`, {
+      method: 'POST',
+      headers: getHeaders(role)
+    });
+    return handleResponse(response, 'Failed to validate context binding');
+  },
+
+  activateContextBinding: async (id: string, role?: 'Tenant' | 'Admin'): Promise<WorkflowContextBinding> => {
+    const response = await fetch(`/api/context-bindings/${id}/activate`, {
+      method: 'POST',
+      headers: getHeaders(role)
+    });
+    return handleResponse(response, 'Failed to activate context binding');
+  },
+
+  archiveContextBinding: async (id: string, role?: 'Tenant' | 'Admin'): Promise<WorkflowContextBinding> => {
+    const response = await fetch(`/api/context-bindings/${id}/archive`, {
+      method: 'POST',
+      headers: getHeaders(role)
+    });
+    return handleResponse(response, 'Failed to archive context binding');
+  },
+
+  startWorkflowByContext: async (
+    selector: { contextBindingId?: string; contextType?: string },
+    payload?: Record<string, unknown>,
+    businessReference?: { sourceSystem?: string; externalEntityId?: string; metadata?: Record<string, string> },
+    role?: 'Tenant' | 'Admin'
+  ): Promise<{ workflowInstanceId: string }> => {
+    const response = await fetch('/api/workflows/start', {
+      method: 'POST',
+      headers: getHeaders(role),
+      body: JSON.stringify({
+        tenantId: getActiveTenantId(),
+        ...selector,
+        payload,
+        businessReference
+      })
+    });
+    return handleResponse(response, 'Failed to start workflow by context');
+  },
+
   copilotGenerate: async (
     prompt: string,
     currentBlueprint?: any,
-    mode: 'create' | 'refine' = 'create',
+    mode: 'create' | 'refine' | 'template' = 'create',
     role?: 'Tenant' | 'Admin'
   ): Promise<import('../types').GenerateBlueprintCopilotResponse> => {
     const headers = getHeaders(role);

@@ -29,7 +29,7 @@ public record GenerateBlueprintCopilotRequest
 
     public WorkflowClassBlueprint? CurrentBlueprint { get; init; }
 
-    public string Mode { get; init; } = "create"; // "create" | "refine"
+    public string Mode { get; init; } = "create"; // "create" | "refine" | "template"
 }
 
 public record GenerateBlueprintCopilotResponse

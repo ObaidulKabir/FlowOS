@@ -10,7 +10,7 @@ public sealed class ContractAndTenantTests
     [Fact]
     public void Every_tool_has_self_describing_behavior_and_valid_example()
     {
-        Assert.Equal(52, McpToolDescriptions.All.Count);
+        Assert.Equal(59, McpToolDescriptions.All.Count);
 
         Assert.All(McpToolDescriptions.All, contract =>
         {
@@ -42,6 +42,11 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.DraftById("publicId"),
             McpToolSchemas.BlueprintSchema(),
             McpToolSchemas.StartWorkflow(),
+            McpToolSchemas.CreateContextBinding(),
+            McpToolSchemas.UpdateContextBinding(),
+            McpToolSchemas.ContextBindingById(),
+            McpToolSchemas.ContextBindingById(true),
+            McpToolSchemas.ListContextBindings(),
             McpToolSchemas.PublishEvent(),
             McpToolSchemas.CompleteTask(),
             McpToolSchemas.ListWorkflowInstances(),
@@ -115,6 +120,40 @@ public sealed class ContractAndTenantTests
         {
             McpRequestContext.Clear();
         }
+    }
+
+    [Fact]
+    public void Context_binding_tools_have_complete_contracts_and_confirmation_policy()
+    {
+        var toolNames = new[]
+        {
+            "create_context_binding",
+            "update_context_binding",
+            "validate_context_binding",
+            "activate_context_binding",
+            "archive_context_binding",
+            "list_context_bindings",
+            "get_context_binding"
+        };
+
+        Assert.All(toolNames, name =>
+        {
+            Assert.True(McpToolDescriptions.All.ContainsKey(name));
+            Assert.Equal("governance", McpToolDescriptions.ProfileFor(name).Category);
+        });
+        Assert.True(McpToolDescriptions.ProfileFor("activate_context_binding").RequiresHumanConfirmation);
+        Assert.True(McpToolDescriptions.ProfileFor("archive_context_binding").RequiresHumanConfirmation);
+
+        var startProperties = McpToolSchemas.StartWorkflow()["properties"]!;
+        Assert.NotNull(startProperties["contextBindingId"]);
+        Assert.NotNull(startProperties["contextType"]);
+        Assert.NotNull(startProperties["businessReference"]);
+
+        var blueprintProperties = McpToolSchemas.BlueprintSchema()["properties"]!;
+        Assert.NotNull(blueprintProperties["contextSchema"]);
+        var transitionProperties = blueprintProperties["stateMachine"]?["properties"]?["transitions"]?
+            ["items"]?["properties"];
+        Assert.NotNull(transitionProperties?["condition"]);
     }
 
     [Fact]

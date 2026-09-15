@@ -1,3 +1,4 @@
+using FlowOS.Domain.Entities;
 using FlowOS.Workflows.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -23,6 +24,17 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
 
         builder.Property(w => w.TenantId)
             .IsRequired();
+        builder.Property(w => w.SourceWorkflowClassId).IsRequired(false);
+        builder.Property(w => w.ContextBindingRevisionId).IsRequired(false);
+        builder.Property(w => w.StateMachineDefinitionId).IsRequired(false);
+        builder.HasOne<WorkflowClass>()
+            .WithMany()
+            .HasForeignKey(w => w.SourceWorkflowClassId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<StateMachineDefinition>()
+            .WithMany()
+            .HasForeignKey(w => w.StateMachineDefinitionId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Store Steps as JSONB
         builder.OwnsMany(w => w.Steps, step =>
@@ -99,6 +111,9 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
 
         // Current Index (Non-Unique)
         builder.HasIndex(w => w.TenantId);
+        builder.HasIndex(w => w.SourceWorkflowClassId);
+        builder.HasIndex(w => w.ContextBindingRevisionId);
+        builder.HasIndex(w => w.StateMachineDefinitionId);
 
         // Unique Constraint for Versioning
         builder.HasIndex(w => new { w.TenantId, w.Name, w.Version })

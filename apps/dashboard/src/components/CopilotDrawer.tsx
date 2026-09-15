@@ -40,7 +40,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
   onApplyBlueprint
 }) => {
   const [prompt, setPrompt] = useState('');
-  const [mode, setMode] = useState<'create' | 'refine'>('create');
+  const [mode, setMode] = useState<'create' | 'refine' | 'template'>('create');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateBlueprintCopilotResponse | null>(null);
@@ -130,6 +130,16 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
           >
             Refine Current Editor Blueprint
           </button>
+          <button
+            onClick={() => setMode('template')}
+            className={`flex-1 py-1.5 px-3 text-xs font-medium rounded-md transition ${
+              mode === 'template'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Reusable Template
+          </button>
         </div>
 
         {/* Input Box */}
@@ -144,6 +154,8 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
             placeholder={
               mode === 'create'
                 ? 'e.g., Create a high-value payment approval flow with parallel fraud and AML compliance checks, 48h SLA on manager signoff, and refund compensation webhook on failure...'
+                : mode === 'template'
+                  ? 'e.g., Create a generic two-level approval template with canonical Amount and Description fields...'
                 : 'e.g., Add a 24h SLA timeout to the human task and attach a rollback webhook compensation hook...'
             }
             className="w-full h-28 bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition resize-none font-mono"
@@ -161,7 +173,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{mode === 'create' ? 'Generate Workflow Blueprint' : 'Refine Current Blueprint'}</span>
+                <span>{mode === 'refine' ? 'Refine Current Blueprint' : mode === 'template' ? 'Generate Reusable Template' : 'Generate Workflow Blueprint'}</span>
               </>
             )}
           </button>
