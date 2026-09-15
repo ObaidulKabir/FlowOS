@@ -286,6 +286,21 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 }
             }
 
+            // Check Timer step relative configuration
+            if (string.Equals(step.StepType, "Timer", StringComparison.OrdinalIgnoreCase) && step.Conditions != null)
+            {
+                bool hasLeadTimeOrOffset = step.Conditions.ContainsKey("leadTime") || step.Conditions.ContainsKey("offset");
+                bool hasTargetTimestamp = step.Conditions.ContainsKey("targetTimestampProperty")
+                    || step.Conditions.ContainsKey("targetTimestamp")
+                    || step.Conditions.ContainsKey("referenceDate")
+                    || step.Conditions.ContainsKey("scheduledAt");
+
+                if (hasLeadTimeOrOffset && !hasTargetTimestamp)
+                {
+                    result.AddError("WF-TMR-001", "WorkflowTimer", $"Timer step '{step.StepId}' specifies a leadTime/offset but does not specify a targetTimestampProperty.", "Workflow");
+                }
+            }
+
             // Check Step SLA validation
             if (step.Sla != null)
             {
@@ -305,6 +320,26 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 if (!string.IsNullOrEmpty(step.Sla.EscalationStepId) && step.Sla.EscalationStepId != "END" && !stepIds.Contains(step.Sla.EscalationStepId))
                 {
                     result.AddError("CON-004", "Consistency", $"Step '{step.StepId}' SLA references unknown EscalationStepId '{step.Sla.EscalationStepId}'", "Workflow");
+                }
+
+                if (step.Sla.Reminders != null)
+                {
+                    for (int i = 0; i < step.Sla.Reminders.Count; i++)
+                    {
+                        var reminder = step.Sla.Reminders[i];
+                        if (string.IsNullOrWhiteSpace(reminder.Duration) || !System.Text.RegularExpressions.Regex.IsMatch(reminder.Duration.Trim(), @"^([+-])?\d+(s|m|h|d)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                        {
+                            result.AddError("WF-SLA-003", "WorkflowSla", $"Step '{step.StepId}' SLA reminder #{i + 1} has invalid Duration format '{reminder?.Duration}'. Expected format e.g. '-2h', '30m', '1d'.", "Workflow");
+                        }
+                        if (string.IsNullOrWhiteSpace(reminder.TriggerEvent))
+                        {
+                            result.AddError("WF-SLA-004", "WorkflowSla", $"Step '{step.StepId}' SLA reminder #{i + 1} defines no TriggerEvent", "Workflow");
+                        }
+                        else if (!declaredEvents.Contains(reminder.TriggerEvent))
+                        {
+                            result.AddError("WF-SLA-004", "WorkflowSla", $"Step '{step.StepId}' SLA reminder references undeclared trigger event '{reminder.TriggerEvent}'", "Workflow");
+                        }
+                    }
                 }
             }
 

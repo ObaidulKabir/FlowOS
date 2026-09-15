@@ -15,7 +15,8 @@ public record StartWorkflowCommand(
     Guid WorkflowClassId = default, // Added for Completeness
     string? InitialStepId = null,
     Guid? CorrelationId = null,
-    string? IdempotencyKey = null
+    string? IdempotencyKey = null,
+    object? Payload = null
 ) : IRequest<Guid>, IPolicySecuredCommand;
 
 // [RequiresCapability("event.publish")] // Moved to Handler for dynamic check

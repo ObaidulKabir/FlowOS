@@ -28,7 +28,14 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
         builder.OwnsMany(w => w.Steps, step =>
         {
             step.ToJson();
-            step.OwnsOne(s => s.Sla);
+            step.OwnsOne(s => s.Sla, sla =>
+            {
+                sla.Property(x => x.Reminders)
+                    .HasConversion(
+                        d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                        s => JsonSerializer.Deserialize<List<StepReminderDefinition>>(s, (JsonSerializerOptions)null) ?? new List<StepReminderDefinition>()
+                    );
+            });
             step.OwnsOne(s => s.SubWorkflow, sub =>
             {
                 sub.Property(s => s.InputMapping)

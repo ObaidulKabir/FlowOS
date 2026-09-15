@@ -35,6 +35,17 @@ public class WorkflowTimerService : IWorkflowTimerService
         CancellationToken cancellationToken = default)
     {
         var dueTimeUtc = DateTime.UtcNow.Add(duration);
+        await ScheduleTimerAtAsync(tenantId, workflowInstanceId, stepId, dueTimeUtc, triggerEventType, cancellationToken);
+    }
+
+    public async Task ScheduleTimerAtAsync(
+        Guid tenantId,
+        Guid workflowInstanceId,
+        string stepId,
+        DateTime dueTimeUtc,
+        string triggerEventType,
+        CancellationToken cancellationToken = default)
+    {
         var job = new WorkflowTimerJob(tenantId, workflowInstanceId, stepId, triggerEventType, dueTimeUtc);
 
         _dbContext.WorkflowTimerJobs.Add(job);

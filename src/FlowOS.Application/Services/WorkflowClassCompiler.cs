@@ -59,7 +59,8 @@ public static class WorkflowClassCompiler
                     stepBp.Sla.TimeoutEvent,
                     stepBp.Sla.EscalationStepId,
                     stepBp.Sla.EscalationRole,
-                    stepBp.Sla.IsInterrupting) : null,
+                    stepBp.Sla.IsInterrupting,
+                    stepBp.Sla.Reminders?.Select(r => new StepReminderDefinition(r.Duration, r.TriggerEvent)).ToList()) : null,
                 OnEntry = stepBp.OnEntry?.Select(a => new StepActionDefinition(a.ActionType)
                 {
                     Target = a.Target,

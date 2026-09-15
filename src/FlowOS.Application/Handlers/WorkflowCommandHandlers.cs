@@ -254,6 +254,10 @@ public class WorkflowCommandHandlers :
                 cancellationToken);
 
             var autoAdvanceContext = new FlowOS.StateMachines.Models.ExecutionContext();
+            if (request.Payload != null)
+            {
+                autoAdvanceContext.Payload = ToPayloadDictionary(request.Payload) ?? new Dictionary<string, object>();
+            }
             await EnrichExecutionContextWithPluginBindingsAsync(autoAdvanceContext, request.TenantId, cancellationToken);
             RunAutoAdvance(instance, fullDefinition, request.TenantId, autoAdvanceContext);
             var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
@@ -265,7 +269,7 @@ public class WorkflowCommandHandlers :
                 autoAdvancedEnteredStepIds,
                 autoAdvanceContext.Payload,
                 cancellationToken);
-            await CheckAndScheduleTimerAsync(instance, fullDefinition, request.TenantId, cancellationToken);
+            await CheckAndScheduleTimerAsync(instance, fullDefinition, request.TenantId, autoAdvanceContext.Payload, cancellationToken);
         }
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -484,7 +488,7 @@ public class WorkflowCommandHandlers :
                 autoAdvancedEnteredStepIds,
                 context.Payload,
                 cancellationToken);
-            await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
+            await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, context.Payload, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
@@ -675,7 +679,7 @@ public class WorkflowCommandHandlers :
                 autoAdvancedEnteredStepIds,
                 context.Payload,
                 cancellationToken);
-            await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, cancellationToken);
+            await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, context.Payload, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
@@ -810,6 +814,7 @@ public class WorkflowCommandHandlers :
         WorkflowInstance instance,
         WorkflowDefinition definition,
         Guid tenantId,
+        Dictionary<string, object>? payload = null,
         CancellationToken cancellationToken = default)
     {
         if (_timerService == null) return;
@@ -828,24 +833,158 @@ public class WorkflowCommandHandlers :
             var currentStep = definition.Steps.FirstOrDefault(s => s.StepId == stepId);
             if (currentStep == null) continue;
 
-            // 1. Standalone Timer Step
+            // 1. Standalone Timer Step (supports static duration, explicit scheduledAt, and relative pre/post-event timers)
             if (currentStep.StepType == FlowOS.Workflows.Enums.WorkflowStepType.Timer)
             {
                 var triggerEvent = currentStep.NextSteps.Keys.FirstOrDefault() ?? "Default";
-                var durStr = currentStep.Conditions.TryGetValue("Duration", out var d) ? d :
-                             currentStep.Conditions.TryGetValue("duration", out d) ? d : null;
-                var duration = ParseDuration(durStr);
+                var (dueTimeUtc, duration) = ResolveTimerSchedule(currentStep.Conditions, payload);
 
-                await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+                if (dueTimeUtc.HasValue)
+                {
+                    await _timerService.ScheduleTimerAtAsync(tenantId, instance.Id, currentStep.StepId, dueTimeUtc.Value, triggerEvent, cancellationToken);
+                }
+                else
+                {
+                    await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+                }
             }
-            // 2. Declarative Step SLA & Boundary Timer
+            // 2. Declarative Step SLA & Boundary Timer (with multi-tier reminders)
             else if (currentStep.Sla != null)
             {
                 var triggerEvent = currentStep.Sla.TimeoutEvent;
-                var duration = ParseDuration(currentStep.Sla.Duration);
+                var slaDuration = ParseDuration(currentStep.Sla.Duration);
+                var slaDueTimeUtc = DateTime.UtcNow.Add(slaDuration);
 
-                await _timerService.ScheduleTimerAsync(tenantId, instance.Id, currentStep.StepId, duration, triggerEvent, cancellationToken);
+                await _timerService.ScheduleTimerAtAsync(tenantId, instance.Id, currentStep.StepId, slaDueTimeUtc, triggerEvent, cancellationToken);
+
+                // Schedule SLA Reminders if defined
+                if (currentStep.Sla.Reminders != null && currentStep.Sla.Reminders.Count > 0)
+                {
+                    foreach (var reminder in currentStep.Sla.Reminders)
+                    {
+                        if (string.IsNullOrWhiteSpace(reminder.Duration) || string.IsNullOrWhiteSpace(reminder.TriggerEvent))
+                            continue;
+
+                        var remDurStr = reminder.Duration.Trim();
+                        DateTime remDueTimeUtc;
+
+                        if (remDurStr.StartsWith("-"))
+                        {
+                            // Negative offset relative to SLA timeout (e.g. "-2h" before SLA timeout)
+                            var offset = ParseDuration(remDurStr);
+                            remDueTimeUtc = slaDueTimeUtc.Add(offset);
+                        }
+                        else
+                        {
+                            // Positive offset relative to step start (e.g. "24h" into the task)
+                            var offset = ParseDuration(remDurStr);
+                            remDueTimeUtc = DateTime.UtcNow.Add(offset);
+                        }
+
+                        if (remDueTimeUtc <= DateTime.UtcNow)
+                        {
+                            remDueTimeUtc = DateTime.UtcNow.AddSeconds(1);
+                        }
+
+                        await _timerService.ScheduleTimerAtAsync(
+                            tenantId,
+                            instance.Id,
+                            currentStep.StepId,
+                            remDueTimeUtc,
+                            reminder.TriggerEvent,
+                            cancellationToken);
+                    }
+                }
             }
+        }
+    }
+
+    private (DateTime? DueTimeUtc, TimeSpan Duration) ResolveTimerSchedule(
+        Dictionary<string, string>? conditions,
+        Dictionary<string, object>? payload)
+    {
+        if (conditions == null || conditions.Count == 0)
+            return (null, TimeSpan.FromSeconds(5));
+
+        // 1. Explicit scheduled timestamp in conditions (e.g. "scheduledAt": "2026-10-01T15:00:00Z")
+        string? scheduledAtStr = GetConditionValue(conditions, "scheduledAt", "scheduledTime", "dueTime");
+        if (!string.IsNullOrWhiteSpace(scheduledAtStr) &&
+            DateTime.TryParse(scheduledAtStr, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var explicitDt))
+        {
+            var dueUtc = explicitDt <= DateTime.UtcNow ? DateTime.UtcNow.AddSeconds(1) : explicitDt;
+            return (dueUtc, dueUtc - DateTime.UtcNow);
+        }
+
+        // 2. Relative event-based timer (pre-event lead-time or post-event delay)
+        string? targetProp = GetConditionValue(conditions, "targetTimestampProperty", "targetTimestamp", "referenceDate", "targetDate", "eventDate");
+        if (!string.IsNullOrWhiteSpace(targetProp) && payload != null)
+        {
+            var key = payload.Keys.FirstOrDefault(k => string.Equals(k, targetProp, StringComparison.OrdinalIgnoreCase));
+            if (key != null && payload[key] != null)
+            {
+                var val = payload[key];
+                DateTime targetDt = default;
+                bool parsed = false;
+
+                if (val is DateTime dt)
+                {
+                    targetDt = dt.Kind == DateTimeKind.Utc ? dt : dt.ToUniversalTime();
+                    parsed = true;
+                }
+                else if (val is string str && DateTime.TryParse(str, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var sDt))
+                {
+                    targetDt = sDt;
+                    parsed = true;
+                }
+                else if (val is System.Text.Json.JsonElement elem && elem.ValueKind == System.Text.Json.JsonValueKind.String &&
+                         DateTime.TryParse(elem.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var eDt))
+                {
+                    targetDt = eDt;
+                    parsed = true;
+                }
+
+                if (parsed)
+                {
+                    string? leadTimeStr = GetConditionValue(conditions, "leadTime", "offset", "delay");
+                    var offset = !string.IsNullOrWhiteSpace(leadTimeStr) ? ParseDuration(leadTimeStr) : TimeSpan.Zero;
+                    var scheduledUtc = targetDt.Add(offset);
+                    var dueUtc = scheduledUtc <= DateTime.UtcNow ? DateTime.UtcNow.AddSeconds(1) : scheduledUtc;
+                    return (dueUtc, dueUtc - DateTime.UtcNow);
+                }
+            }
+        }
+
+        // 3. Static duration string (e.g. "duration": "24h", "duration": "5s")
+        string? durStr = GetConditionValue(conditions, "duration");
+        var duration = ParseDuration(durStr);
+        return (null, duration);
+    }
+
+    private static string? GetConditionValue(Dictionary<string, string> conditions, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var match = conditions.Keys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+            if (match != null && conditions.TryGetValue(match, out var val) && !string.IsNullOrWhiteSpace(val))
+            {
+                return val;
+            }
+        }
+        return null;
+    }
+
+    private static Dictionary<string, object>? ToPayloadDictionary(object? payload)
+    {
+        if (payload == null) return null;
+        if (payload is Dictionary<string, object> dict) return dict;
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(payload);
+            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -989,7 +1128,7 @@ public class WorkflowCommandHandlers :
             autoAdvancedEnteredStepIds,
             childContext.Payload,
             cancellationToken);
-        await CheckAndScheduleTimerAsync(childInstance, childDefinition, parentInstance.TenantId, cancellationToken);
+        await CheckAndScheduleTimerAsync(childInstance, childDefinition, parentInstance.TenantId, childContext.Payload, cancellationToken);
 
         if (childInstance.Status == WorkflowInstanceStatus.Completed)
         {
@@ -1244,7 +1383,7 @@ public class WorkflowCommandHandlers :
             autoAdvancedEnteredStepIds,
             context.Payload,
             cancellationToken);
-        await CheckAndScheduleTimerAsync(parentInstance, parentDefinition, parentInstance.TenantId, cancellationToken);
+        await CheckAndScheduleTimerAsync(parentInstance, parentDefinition, parentInstance.TenantId, context.Payload, cancellationToken);
     }
 
     private static Dictionary<string, object> BuildSubWorkflowInputPayload(
@@ -1326,46 +1465,53 @@ public class WorkflowCommandHandlers :
             return TimeSpan.FromSeconds(5);
 
         durationStr = durationStr.Trim();
+        bool isNegative = durationStr.StartsWith("-");
+        if (isNegative || durationStr.StartsWith("+"))
+        {
+            durationStr = durationStr[1..].Trim();
+        }
 
+        TimeSpan parsed;
         if (durationStr.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
             double.TryParse(durationStr[..^1], out var seconds))
         {
-            return TimeSpan.FromSeconds(seconds);
+            parsed = TimeSpan.FromSeconds(seconds);
         }
-        if (durationStr.EndsWith("m", StringComparison.OrdinalIgnoreCase) &&
+        else if (durationStr.EndsWith("m", StringComparison.OrdinalIgnoreCase) &&
             double.TryParse(durationStr[..^1], out var minutes))
         {
-            return TimeSpan.FromMinutes(minutes);
+            parsed = TimeSpan.FromMinutes(minutes);
         }
-        if (durationStr.EndsWith("h", StringComparison.OrdinalIgnoreCase) &&
+        else if (durationStr.EndsWith("h", StringComparison.OrdinalIgnoreCase) &&
             double.TryParse(durationStr[..^1], out var hours))
         {
-            return TimeSpan.FromHours(hours);
+            parsed = TimeSpan.FromHours(hours);
         }
-        if (durationStr.EndsWith("d", StringComparison.OrdinalIgnoreCase) &&
+        else if (durationStr.EndsWith("d", StringComparison.OrdinalIgnoreCase) &&
             double.TryParse(durationStr[..^1], out var days))
         {
-            return TimeSpan.FromDays(days);
+            parsed = TimeSpan.FromDays(days);
+        }
+        else if (double.TryParse(durationStr, out var rawSecs))
+        {
+            parsed = TimeSpan.FromSeconds(rawSecs);
+        }
+        else if (durationStr.Contains(':') && TimeSpan.TryParse(durationStr, out var ts))
+        {
+            parsed = ts;
+        }
+        else
+        {
+            try
+            {
+                parsed = System.Xml.XmlConvert.ToTimeSpan(durationStr);
+            }
+            catch
+            {
+                parsed = TimeSpan.FromSeconds(5);
+            }
         }
 
-        // Raw numbers (e.g. "1", "10") are seconds
-        if (double.TryParse(durationStr, out var rawSecs))
-        {
-            return TimeSpan.FromSeconds(rawSecs);
-        }
-
-        if (durationStr.Contains(':') && TimeSpan.TryParse(durationStr, out var ts))
-        {
-            return ts;
-        }
-
-        try
-        {
-            return System.Xml.XmlConvert.ToTimeSpan(durationStr);
-        }
-        catch
-        {
-            return TimeSpan.FromSeconds(5);
-        }
+        return isNegative ? -parsed : parsed;
     }
 }

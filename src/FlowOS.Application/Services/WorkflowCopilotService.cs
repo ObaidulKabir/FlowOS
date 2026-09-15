@@ -56,6 +56,7 @@ public class WorkflowCopilotService : IWorkflowCopilotService
         bool hasNotification = Regex.IsMatch(lowerPrompt, @"\b(notif\w*|email|slack|teams|sms|alert|message)\b");
         bool hasCompensation = Regex.IsMatch(lowerPrompt, @"\b(compensat\w*|rollback|refund|revert|saga|failure)\b");
         bool hasTimer = Regex.IsMatch(lowerPrompt, @"\b(timer|delay|wait|expir\w*)\b");
+        bool hasReminder = Regex.IsMatch(lowerPrompt, @"\b(reminder|alert|lead\s*time|countdown|before\s+event|after\s+event)\b");
 
         // Extract explicit SLA duration if present
         string slaDuration = "24h";
@@ -80,6 +81,11 @@ public class WorkflowCopilotService : IWorkflowCopilotService
             events.Add(new() { EventId = "EVT-ESCALATE", Name = "SLA Escalation Timeout" });
         }
 
+        if (hasReminder)
+        {
+            events.Add(new() { EventId = "EVT-REMINDER", Name = "Task Reminder Alert" });
+        }
+
         // 4. Synthesize State Machine
         var states = new List<string> { "Draft", "Reviewing", "Approved", "Rejected" };
         if (hasParallel)
@@ -97,6 +103,11 @@ public class WorkflowCopilotService : IWorkflowCopilotService
         if (hasSla)
         {
             transitions.Add(new() { FromState = states[1], ToState = states[3], EventId = "EVT-ESCALATE" });
+        }
+
+        if (hasReminder)
+        {
+            transitions.Add(new() { FromState = states[1], ToState = states[1], EventId = "EVT-REMINDER" });
         }
 
         var stateMachine = new StateMachineBlueprint
@@ -248,6 +259,29 @@ public class WorkflowCopilotService : IWorkflowCopilotService
             };
         }
 
+        if (hasReminder)
+        {
+            reviewStep.NextSteps["EVT-REMINDER"] = "ReviewStep";
+            if (reviewStep.Sla == null)
+            {
+                reviewStep.Sla = new StepSlaBlueprint
+                {
+                    Duration = slaDuration,
+                    TimeoutEvent = "EVT-ESCALATE",
+                    EscalationStepId = "RejectStep"
+                };
+            }
+            reviewStep.Sla.Reminders = new List<StepReminderBlueprint>
+            {
+                new() { Duration = "-2h", TriggerEvent = "EVT-REMINDER" }
+            };
+            reviewStep.OnEntry.Add(new StepActionBlueprint
+            {
+                ActionType = "Notification",
+                Template = "Task reminder: ReviewStep requires prompt review."
+            });
+        }
+
         if (hasCompensation)
         {
             reviewStep.OnFailure = new List<StepActionBlueprint>
@@ -348,6 +382,7 @@ public class WorkflowCopilotService : IWorkflowCopilotService
         if (hasParallel) explanationParts.Add($"• **Parallel Execution**: Fork step spawns concurrent branches with a WaitAll barrier synchronization Join.");
         if (hasDecision) explanationParts.Add($"• **Decision Rules**: Synchronous Dynamic LINQ condition evaluation.");
         if (hasSla) explanationParts.Add($"• **SLA Governance**: Strict {slaDuration} countdown timer with automatic escalation.");
+        if (hasReminder) explanationParts.Add($"• **Reminders & Alerts**: Pre/post-event countdown reminders configured on step SLA with 'EVT-REMINDER'.");
         if (hasCompensation) explanationParts.Add($"• **Saga Rollback**: OnFailure compensation hooks dispatch rollback side-effects upon failure.");
 
         return new GenerateBlueprintCopilotResponse
@@ -446,6 +481,49 @@ public class WorkflowCopilotService : IWorkflowCopilotService
                 });
                 addedFeature = true;
                 explanationParts.Add($"• Attached OnFailure compensation rollback hook to step '{targetStep.StepId}'.");
+            }
+        }
+
+        // Refine 4: Add Step Reminder / Pre-Event Alert
+        if (Regex.IsMatch(lowerPrompt, @"\b(reminder|alert|lead\s*time|countdown)\b"))
+        {
+            var targetStep = refined.Workflow.Steps.FirstOrDefault(s => s.StepType == "HumanTask")
+                             ?? refined.Workflow.Steps.FirstOrDefault(s => s.Sla != null);
+
+            if (targetStep != null)
+            {
+                if (!refined.Events.Any(e => e.EventId == "EVT-REMINDER"))
+                {
+                    refined.Events.Add(new EventBlueprint { EventId = "EVT-REMINDER", Name = "Task Reminder Alert" });
+                }
+
+                if (targetStep.Sla == null)
+                {
+                    targetStep.Sla = new StepSlaBlueprint
+                    {
+                        Duration = "24h",
+                        TimeoutEvent = "EVT-ESCALATE",
+                        EscalationStepId = targetStep.NextSteps.Values.FirstOrDefault() ?? "END"
+                    };
+                    if (!refined.Events.Any(e => e.EventId == "EVT-ESCALATE"))
+                    {
+                        refined.Events.Add(new EventBlueprint { EventId = "EVT-ESCALATE", Name = "SLA Escalation Timeout" });
+                    }
+                }
+
+                targetStep.Sla.Reminders.Add(new StepReminderBlueprint
+                {
+                    Duration = "-2h",
+                    TriggerEvent = "EVT-REMINDER"
+                });
+
+                if (!targetStep.NextSteps.ContainsKey("EVT-REMINDER"))
+                {
+                    targetStep.NextSteps["EVT-REMINDER"] = targetStep.StepId;
+                }
+
+                addedFeature = true;
+                explanationParts.Add($"• Added pre-deadline reminder (-2h before SLA) with event 'EVT-REMINDER' to step '{targetStep.StepId}'.");
             }
         }
 

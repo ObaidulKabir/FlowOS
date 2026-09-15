@@ -303,10 +303,10 @@ public static class McpToolDescriptions
 
             ["generate_workflow_blueprint_from_nl"] =
                 "[AI Copilot & Synthesis] Generates a complete, compliant WorkflowClassBlueprint from natural language instructions (or refines an existing blueprint). " +
-                "Automatically configures pure State Machine lifecycles, procedural steps, parallel Fork/Join execution branches, Decision rules, SLA timers, and Outbox hooks. " +
+                "Automatically configures pure State Machine lifecycles, procedural steps, parallel Fork/Join execution branches, Decision rules, SLA timers with intermediate countdown reminders, relative pre/post-event lead-time timers, and Outbox notification hooks. " +
                 "Returns: {ok:true,data:{suggestedName,suggestedVersion,summary,explanation,blueprint,validation}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
-                "Input example: {\"prompt\":\"Insurance claim with parallel vehicle appraisal and medical assessment, 24h SLA, and payment webhook.\"}",
+                "Input example: {\"prompt\":\"Appointment booking with reminder 24h before appointmentDate, and 48h approval SLA with reminder 2h before timeout.\"}",
 
             ["replay_workflow_history"] =
                 "[Time-Travel Debugging] Reconstructs a read-only chronological replay timeline from the immutable DomainEvent stream for a workflow instance. " +
@@ -373,10 +373,10 @@ public static class McpToolDescriptions
 
             ["refine_workflow_blueprint_from_nl"] =
                 "[AI Copilot & Blueprint Refinement] Incrementally refines and enriches an existing WorkflowClassBlueprint using natural language instructions. " +
-                "Allows modifying steps, adding parallel branches, inserting SLA timers, or attaching webhook and compensation actions while maintaining schema compliance. " +
+                "Allows modifying steps, adding parallel branches, inserting SLA timers with intermediate countdown reminders, adding relative pre/post-event timers, or attaching webhook and compensation actions while maintaining schema compliance. " +
                 "Returns: {ok:true,data:{suggestedName,suggestedVersion,summary,explanation,blueprint,validation}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
-                "Input example: {\"prompt\":\"Add 24h SLA timeout and manager escalation webhook.\",\"currentBlueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}"
+                "Input example: {\"prompt\":\"Add 24h SLA timeout with a reminder 2h before due time, and manager escalation webhook.\",\"currentBlueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}"
         };
 
     public static string For(string toolName) =>

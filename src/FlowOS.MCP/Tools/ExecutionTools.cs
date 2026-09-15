@@ -72,6 +72,12 @@ public class ExecutionTools
                 return McpToolResults.Fail("MCP-ARG-001", "Either workflowClassId, workflowDefinitionId, or workflowName is required.");
             }
 
+            object? payload = null;
+            if (args["payload"] != null)
+            {
+                payload = args["payload"]?.ToObject<object>();
+            }
+
             var command = new StartWorkflowCommand(
                 TenantId: tenantId,
                 WorkflowDefinitionId: workflowDefId,
@@ -80,7 +86,8 @@ public class ExecutionTools
                 WorkflowClassId: workflowClassId,
                 InitialStepId: initialStepId,
                 CorrelationId: correlationId ?? Guid.NewGuid(),
-                IdempotencyKey: args["idempotencyKey"]?.ToString()
+                IdempotencyKey: args["idempotencyKey"]?.ToString(),
+                Payload: payload
             );
 
             var instanceId = await _mediator.Send(command);

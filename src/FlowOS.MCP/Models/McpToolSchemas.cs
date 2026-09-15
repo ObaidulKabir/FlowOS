@@ -235,7 +235,20 @@ public static class McpToolSchemas
                           "timeoutEvent":{"type":"string","minLength":1},
                           "escalationStepId":{"type":"string"},
                           "escalationRole":{"type":"string"},
-                          "isInterrupting":{"type":"boolean"}
+                          "isInterrupting":{"type":"boolean"},
+                          "reminders":{
+                            "type":"array",
+                            "description":"Multi-tier intermediate countdown reminders fired before SLA timeout (negative offset, e.g. '-2h') or after step start (positive, e.g. '30m'). Automatically cancelled on step completion.",
+                            "items":{
+                              "type":"object",
+                              "required":["duration","triggerEvent"],
+                              "properties":{
+                                "duration":{"type":"string","minLength":1,"description":"Duration offset, e.g. '-2h', '-30m', '1d'."},
+                                "triggerEvent":{"type":"string","minLength":1,"description":"Event published when reminder fires. Must be defined in blueprint events."}
+                              },
+                              "additionalProperties":false
+                            }
+                          }
                         },
                         "additionalProperties":false
                       }
@@ -288,7 +301,8 @@ public static class McpToolSchemas
             "initialStepId":{"type":"string"},
             "correlationId":{"type":"string","format":"uuid"},
             "idempotencyKey":{"type":"string","minLength":8},
-            "tenantId":{"type":"string","format":"uuid"}
+            "tenantId":{"type":"string","format":"uuid"},
+            "payload":{"type":"object","description":"Optional initial workflow payload containing event dates or business context for relative timers and steps."}
           },
           "additionalProperties":false
         }

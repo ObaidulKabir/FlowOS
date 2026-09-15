@@ -14,6 +14,14 @@ public interface IWorkflowTimerService
         string triggerEventType,
         CancellationToken cancellationToken = default);
 
+    Task ScheduleTimerAtAsync(
+        Guid tenantId,
+        Guid workflowInstanceId,
+        string stepId,
+        DateTime dueTimeUtc,
+        string triggerEventType,
+        CancellationToken cancellationToken = default);
+
     Task CancelTimerAsync(
         Guid workflowInstanceId,
         string stepId,

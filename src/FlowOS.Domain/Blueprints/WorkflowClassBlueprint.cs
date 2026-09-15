@@ -99,6 +99,13 @@ public record StepSlaBlueprint
     public string? EscalationStepId { get; init; }
     public string? EscalationRole { get; init; }
     public bool IsInterrupting { get; init; } = true;
+    public List<StepReminderBlueprint> Reminders { get; set; } = new();
+}
+
+public record StepReminderBlueprint
+{
+    public string Duration { get; init; } = string.Empty;
+    public string TriggerEvent { get; init; } = string.Empty;
 }
 
 public record SubWorkflowReferenceBlueprint
