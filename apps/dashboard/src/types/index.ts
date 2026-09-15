@@ -96,9 +96,13 @@ export interface CreateKeyResponse {
   id: string;
   tenantId: string;
   name: string;
+  applicationName: string;
+  environment: string;
+  scopes: string[];
   apiKey: string;
   maskedKey: string;
   createdAt: string;
+  expiresAt?: string;
 }
 
 export interface PublishedEventDto {

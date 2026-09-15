@@ -7,7 +7,8 @@ import {
   LoginRequest, LoginResponse,
   ResendVerificationResponse, TenantUserDto,
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
-  WorkflowContextSimulationRequest, WorkflowContextSimulationResult
+  WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
+  TenantApiKeyDto, CreateKeyResponse
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -289,7 +290,7 @@ export const api = {
     return handleResponse(response, 'Failed to register tenant');
   },
 
-  listTenantKeys: async (tenantId: string): Promise<any[]> => {
+  listTenantKeys: async (tenantId: string): Promise<TenantApiKeyDto[]> => {
     const headers = getHeaders();
     const response = await fetch(`/api/tenants/${tenantId}/keys`, { headers });
     return handleResponse(response, 'Failed to list tenant keys');
@@ -302,7 +303,7 @@ export const api = {
     environment?: string, 
     scopes?: string[], 
     expiresInDays?: number
-  ): Promise<any> => {
+  ): Promise<CreateKeyResponse> => {
     const headers = getHeaders();
     const response = await fetch(`/api/tenants/${tenantId}/keys`, {
       method: 'POST',

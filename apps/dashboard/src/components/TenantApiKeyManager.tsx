@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import { TenantApiKeyDto } from '../types';
-import { Key, Plus, Copy, Check, Trash2, ShieldCheck, Terminal, AlertCircle, RefreshCw, Code2 } from 'lucide-react';
+import { CreateKeyResponse, TenantApiKeyDto } from '../types';
+import { Key, Plus, Copy, Check, Trash2, ShieldCheck, Terminal, AlertCircle, RefreshCw, Code2, LockKeyhole } from 'lucide-react';
 
 interface Props {
   tenantId: string;
@@ -24,7 +24,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
   const [submitting, setSubmitting] = useState(false);
 
   // Alert for newly created key
-  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [createdKey, setCreatedKey] = useState<CreateKeyResponse | null>(null);
 
   const loadKeys = async () => {
     setLoading(true);
@@ -40,13 +40,18 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
   };
 
   useEffect(() => {
+    setCreatedKey(null);
     loadKeys();
   }, [tenantId]);
 
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleCopy = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      setError('Unable to access the clipboard. Select and copy the one-time key manually.');
+    }
   };
 
   const handleGenerateKey = async (e: React.FormEvent) => {
@@ -62,7 +67,11 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
         expiresInDays > 0 ? expiresInDays : undefined
       );
 
-      setCreatedKey(res.apiKey);
+      if (!res.apiKey || res.apiKey === res.maskedKey || res.apiKey.includes('•')) {
+        throw new Error('The API did not return the one-time full key. Revoke this key and generate a replacement.');
+      }
+
+      setCreatedKey(res);
       setShowCreateModal(false);
       await loadKeys();
     } catch (err: any) {
@@ -132,12 +141,12 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
             </button>
           </div>
           <p className="text-xs text-slate-300">
-            Please copy this key now. For security purposes, FlowOS hashes the key with SHA-256 and will never display it again.
+            Please copy this full key now. FlowOS stores only its SHA-256 hash; after this notice is dismissed or the page is reloaded, the secret cannot be recovered.
           </p>
           <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-xl flex items-center justify-between font-mono text-xs text-emerald-300">
-            <span className="break-all select-all font-bold">{createdKey}</span>
+            <span className="break-all select-all font-bold">{createdKey.apiKey}</span>
             <button
-              onClick={() => handleCopy(createdKey, 'created')}
+              onClick={() => handleCopy(createdKey.apiKey, 'created')}
               className="ml-3 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5 shrink-0 transition-colors"
             >
               {copiedId === 'created' ? <Check size={13} /> : <Copy size={13} />}
@@ -156,12 +165,16 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
 
       {/* API Keys Table */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
+        <div className="flex items-start gap-2 border-b border-slate-700 bg-slate-900/70 px-4 py-3 text-[11px] text-slate-400">
+          <LockKeyhole size={14} className="mt-0.5 shrink-0 text-amber-400" />
+          <span>Masked identifiers help identify stored keys but cannot authenticate. Only the one-time full key shown immediately after generation is copyable.</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-900 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-700">
               <tr>
                 <th className="py-3.5 px-4">Application / Name</th>
-                <th className="py-3.5 px-4">Key Token</th>
+                <th className="py-3.5 px-4">Key Identifier</th>
                 <th className="py-3.5 px-4">Environment</th>
                 <th className="py-3.5 px-4">Scopes</th>
                 <th className="py-3.5 px-4">Created / Last Used</th>
@@ -178,13 +191,22 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-2 font-mono text-[11px] text-slate-300 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800 w-fit">
                       <span>{k.maskedKey}</span>
-                      <button
-                        onClick={() => handleCopy(k.maskedKey, k.id)}
-                        className="text-slate-500 hover:text-white"
-                        title="Copy Prefix"
-                      >
-                        {copiedId === k.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      </button>
+                      {createdKey?.id === k.id ? (
+                        <button
+                          onClick={() => handleCopy(createdKey.apiKey, k.id)}
+                          className="text-emerald-400 hover:text-emerald-300"
+                          title="Copy the one-time full API key"
+                          aria-label={`Copy full API key for ${k.name}`}
+                        >
+                          {copiedId === k.id ? <Check size={12} /> : <Copy size={12} />}
+                        </button>
+                      ) : (
+                        <LockKeyhole
+                          size={12}
+                          className="text-slate-600"
+                          aria-label={`Full API key for ${k.name} is no longer available`}
+                        />
+                      )}
                     </div>
                   </td>
                   <td className="py-3.5 px-4">
