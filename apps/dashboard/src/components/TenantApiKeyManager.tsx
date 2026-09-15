@@ -141,7 +141,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
             </button>
           </div>
           <p className="text-xs text-slate-300">
-            Please copy this full key now. FlowOS stores only its SHA-256 hash; after this notice is dismissed or the page is reloaded, the secret cannot be recovered.
+            Please copy this full key now. FlowOS stores only its SHA-256 hash; after this notice is dismissed or the page is reloaded, the secret cannot be recovered. Use it only against this environment&apos;s MCP URL — a local key will not authenticate to production.
           </p>
           <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-xl flex items-center justify-between font-mono text-xs text-emerald-300">
             <span className="break-all select-all font-bold">{createdKey.apiKey}</span>
@@ -152,6 +152,39 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
               {copiedId === 'created' ? <Check size={13} /> : <Copy size={13} />}
               <span>{copiedId === 'created' ? 'Copied' : 'Copy Key'}</span>
             </button>
+          </div>
+          <div className="p-3 bg-slate-950 border border-slate-700 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-300">Cursor MCP config for this tenant</span>
+              <button
+                onClick={() => handleCopy(JSON.stringify({
+                  mcpServers: {
+                    flowos: {
+                      url: `${window.location.origin}/mcp`,
+                      headers: {
+                        'x-tenant-id': tenantId,
+                        'X-MCP-API-Key': createdKey.apiKey
+                      }
+                    }
+                  }
+                }, null, 2), 'mcp-config')}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1.5 text-[10px]"
+              >
+                {copiedId === 'mcp-config' ? <Check size={12} /> : <Copy size={12} />}
+                <span>{copiedId === 'mcp-config' ? 'Copied' : 'Copy config'}</span>
+              </button>
+            </div>
+            <pre className="text-[10px] text-emerald-300 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify({
+              mcpServers: {
+                flowos: {
+                  url: `${typeof window !== 'undefined' ? window.location.origin : ''}/mcp`,
+                  headers: {
+                    'x-tenant-id': tenantId,
+                    'X-MCP-API-Key': createdKey.apiKey
+                  }
+                }
+              }
+            }, null, 2)}</pre>
           </div>
         </div>
       )}

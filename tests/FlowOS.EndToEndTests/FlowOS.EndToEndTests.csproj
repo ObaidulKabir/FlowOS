@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\FlowOS.Application\FlowOS.Application.csproj" />
     <ProjectReference Include="..\..\src\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\..\src\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\FlowOS.MCP\FlowOS.MCP.csproj" />
   </ItemGroup>
 
   <ItemGroup>

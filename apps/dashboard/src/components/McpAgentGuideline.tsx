@@ -6,6 +6,7 @@ export const McpAgentGuideline: React.FC = () => {
   const { mcpTools, tests } = usePlatformMetrics();
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'browser' | 'curl' | 'config' | 'javascript'>('browser');
+  const mcpUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/mcp`;
 
   const copyToClipboard = (text: string, tabId: string) => {
     navigator.clipboard.writeText(text);
@@ -13,9 +14,9 @@ export const McpAgentGuideline: React.FC = () => {
     setTimeout(() => setCopiedTab(null), 2000);
   };
 
-  const curlDiscovery = 'curl -s https://flowos.prospectbdltd.com/mcp -H "Accept: application/json"';
+  const curlDiscovery = `curl -s ${mcpUrl} -H "Accept: application/json"`;
 
-  const curlToolList = `curl -s -X POST https://flowos.prospectbdltd.com/mcp \\
+  const curlToolList = `curl -s -X POST ${mcpUrl} \\
   -H "Content-Type: application/json" \\
   -H "Accept: application/json, text/event-stream" \\
   -H "x-tenant-id: 22222222-2222-2222-2222-222222222222" \\
@@ -26,7 +27,7 @@ export const McpAgentGuideline: React.FC = () => {
   const mcpConfig = JSON.stringify({
     mcpServers: {
       flowos: {
-        url: "https://flowos.prospectbdltd.com/mcp",
+        url: mcpUrl,
         headers: {
           "x-tenant-id": "22222222-2222-2222-2222-222222222222",
           "X-MCP-API-Key": "flowos_prod_secret_key_32_chars_min"
@@ -36,14 +37,14 @@ export const McpAgentGuideline: React.FC = () => {
   }, null, 2);
 
   const jsSnippet = `// 1. Zero-Auth Public Discovery
-const discovery = await fetch('https://flowos.prospectbdltd.com/mcp', {
+const discovery = await fetch('${mcpUrl}', {
   headers: { 'Accept': 'application/json' }
 }).then(res => res.json());
 
 console.log(\`FlowOS MCP: \${discovery.name} - \${discovery.toolsCount} tools registered\`);
 
 // 2. Call an MCP Tool over Streamable JSON-RPC 2.0
-const rpcResponse = await fetch('https://flowos.prospectbdltd.com/mcp', {
+const rpcResponse = await fetch('${mcpUrl}', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -203,7 +204,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
           </h3>
           <ol className="list-decimal list-inside space-y-2 text-slate-300 leading-relaxed">
             <li>
-              <strong>Discover Endpoint:</strong> Navigate directly to <a href="/mcp" className="text-blue-400 underline hover:text-blue-300">/mcp</a> (or <code className="text-blue-300">https://flowos.prospectbdltd.com/mcp</code>). In human/browser mode, it renders a live interactive HTML tool catalog.
+              <strong>Discover Endpoint:</strong> Navigate directly to <a href="/mcp" className="text-blue-400 underline hover:text-blue-300">/mcp</a> (or <code className="text-blue-300">{mcpUrl}</code>). In human/browser mode, it renders a live interactive HTML tool catalog. Use a tenant API key generated in <em>this</em> environment — keys from local or staging will not authenticate against production.
             </li>
             <li>
               <strong>Machine-Readable Discovery:</strong> For programmatic bots, make an HTTP <code className="text-blue-300">GET /mcp</code> with header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">Accept: application/json</code>. No API keys or authentication credentials are required.

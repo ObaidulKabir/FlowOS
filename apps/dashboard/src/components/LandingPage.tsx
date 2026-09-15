@@ -18,6 +18,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onLaunchSandbox
 }) => {
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
+  const mcpUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/mcp`;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">
@@ -325,10 +326,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 {`{
   "mcpServers": {
     "flowos": {
-      "url": "https://flowos.prospectbdltd.com/mcp",
+      "url": "${mcpUrl}",
       "headers": {
-        "x-tenant-id": "22222222-2222-2222-2222-222222222222",
-        "X-MCP-API-Key": "flowos_prod_secret_key_32_chars_min",
+        "x-tenant-id": "YOUR_TENANT_ID",
+        "X-MCP-API-Key": "YOUR_TENANT_API_KEY",
         "MCP-Protocol-Version": "2025-03-26"
       }
     }

@@ -82,6 +82,55 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         using var noTenant = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""");
         noTenant.Headers.Add("X-MCP-API-Key", ApiKey);
         Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(noTenant)).StatusCode);
+
+        using var unknownKey = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""");
+        unknownKey.Headers.Add("X-MCP-API-Key", "flw_live_unknown_key_not_in_database");
+        unknownKey.Headers.Add("x-tenant-id", TenantId.ToString());
+        var unknownResponse = await _client.SendAsync(unknownKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, unknownResponse.StatusCode);
+        Assert.Contains("Invalid or unknown tenant API key", await unknownResponse.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Empty_or_wildcard_allowed_origins_accept_cursor_origin()
+    {
+        foreach (var allowedOrigins in new[] { "", "*" })
+        {
+            await using var app = FlowOS.MCP.Program.BuildHttpApp([], builder =>
+            {
+                builder.WebHost.UseTestServer();
+                builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["MCP_API_KEY"] = ApiKey,
+                    ["MCP_ROLE"] = "Admin",
+                    ["MCP_ALLOWED_ORIGINS"] = allowedOrigins
+                });
+            });
+            await app.StartAsync();
+            using var client = app.GetTestClient();
+
+            using var request = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"cursor","version":"1"},"capabilities":{}}}""");
+            Authorize(request);
+            request.Headers.Add("Origin", "https://www.cursor.com");
+            request.Headers.Add("MCP-Protocol-Version", McpJsonRpcDispatcher.SupportedProtocolVersion);
+
+            var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("https://www.cursor.com", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        }
+    }
+
+    [Fact]
+    public async Task Options_preflight_allows_api_key_headers()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/mcp");
+        request.Headers.Add("Origin", "https://allowed.example");
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var allowHeaders = string.Join(",", response.Headers.GetValues("Access-Control-Allow-Headers"));
+        Assert.Contains("X-MCP-API-Key", allowHeaders, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("X-API-Key", allowHeaders, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Authorization", allowHeaders, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -101,6 +150,14 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         Authorize(wrongOrigin);
         wrongOrigin.Headers.Add("Origin", "https://evil.example");
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.SendAsync(wrongOrigin)).StatusCode);
+
+        using var allowedOrigin = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"tests","version":"1"},"capabilities":{}}}""");
+        Authorize(allowedOrigin);
+        allowedOrigin.Headers.Add("Origin", "https://allowed.example");
+        allowedOrigin.Headers.Add("MCP-Protocol-Version", McpJsonRpcDispatcher.SupportedProtocolVersion);
+        var allowedOriginResponse = await _client.SendAsync(allowedOrigin);
+        Assert.Equal(HttpStatusCode.OK, allowedOriginResponse.StatusCode);
+        Assert.Equal("https://allowed.example", allowedOriginResponse.Headers.GetValues("Access-Control-Allow-Origin").Single());
 
         using var missingVersion = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""");
         Authorize(missingVersion);

@@ -48,24 +48,25 @@ builder.Services.AddDbContext<FlowOSDbContext>((sp, options) =>
 {
     var interceptor = sp.GetRequiredService<EventPublishingInterceptor>();
     bool useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    var hasPostgres = PostgresConnection.HasUsableHost(connectionString);
+    var environmentName = builder.Environment.EnvironmentName;
+    var isProduction = builder.Environment.IsProduction() || string.IsNullOrWhiteSpace(environmentName);
 
-    if (useInMemory)
+    if (hasPostgres && (isProduction || !useInMemory))
+    {
+        options.UseNpgsql(connectionString)
+               .AddInterceptors(interceptor);
+    }
+    else if (!isProduction && useInMemory)
     {
         options.UseInMemoryDatabase("FlowOS_Db")
                .AddInterceptors(interceptor);
     }
     else
     {
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        if (!string.IsNullOrEmpty(connectionString))
-        {
-            options.UseNpgsql(connectionString)
-                   .AddInterceptors(interceptor);
-        }
-        else
-        {
-            throw new InvalidOperationException("Database connection string 'DefaultConnection' is missing.");
-        }
+        throw new InvalidOperationException(
+            "Database connection string 'DefaultConnection' is missing or has an empty Host. Production cannot use the in-memory database.");
     }
 });
 

@@ -7,8 +7,9 @@ services:
       context: .
       dockerfile: src/FlowOS.Api/Dockerfile
     environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
-      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - UseInMemoryDatabase=false
+      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-flowos};Username=${POSTGRES_USER:-root};Password=${POSTGRES_PASSWORD:-toor};
       - SMTP_HOST=${SMTP_HOST:-smtp.zoho.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-admin@flowosbd.com}
@@ -59,9 +60,9 @@ services:
       - MCP_TRANSPORT=http
       - MCP_API_KEY=${MCP_API_KEY:?MCP_API_KEY is required}
       - MCP_ROLE=${MCP_ROLE:?MCP_ROLE is required}
-      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-*}
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
+      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-flowos};Username=${POSTGRES_USER:-root};Password=${POSTGRES_PASSWORD:-toor};
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.flowos-mcp.rule=Host(`${FLOWOS_DOMAIN}`) && PathPrefix(`/mcp`)"
@@ -113,11 +114,11 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=root
-      - POSTGRES_PASSWORD=toor
-      - POSTGRES_DB=flowos 
+      - POSTGRES_USER=${POSTGRES_USER:-root}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-toor}
+      - POSTGRES_DB=${POSTGRES_DB:-flowos}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d flowos"]
+      test: ["CMD-SHELL", "pg_isready"]
       interval: 5s
       timeout: 5s
       retries: 5
