@@ -19,7 +19,8 @@ public static class DecisionPacketFactory
         IReadOnlyList<DomainEvent> events,
         IReadOnlyDictionary<string, JsonElement>? canonicalData,
         string? policyGuideline,
-        string? objective = null)
+        string? objective = null,
+        IReadOnlyList<AgentToolDescriptor>? tools = null)
     {
         var step = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
         var eventPayloads = AggregateEventPayloads(events);
@@ -72,7 +73,7 @@ public static class DecisionPacketFactory
             string.IsNullOrWhiteSpace(objective) ? "Decide the next legal workflow event" : objective,
             autoCommit,
             Provider: null,
-            Tools: AgentToolCatalog.FromStep(legalNext, step?.AgentTools));
+            Tools: tools ?? AgentToolCatalog.FromStep(legalNext, step?.AgentTools));
     }
 
     public static DecisionPacket PreviewFromClass(

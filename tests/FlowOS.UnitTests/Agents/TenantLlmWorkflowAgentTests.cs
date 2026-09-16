@@ -109,16 +109,105 @@ public class TenantLlmWorkflowAgentTests
         Assert.Contains("API key", result.FailureReason);
     }
 
+    [Fact]
+    public async Task HostedAgent_AnthropicAdapter_BuildsAnthropicHeadersAndExtractsContent()
+    {
+        var handler = new StubHandler("""
+            {"content":[{"type":"text","text":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.95,\"reason\":\"within limits\",\"insight\":\"approved\"}"}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "anthropic",
+            "claude-3-5-sonnet-20241022",
+            "https://api.anthropic.com/v1/messages",
+            "sk-ant-test-key",
+            handler);
+
+        var packet = new DecisionPacket(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "ApproveQuote",
+            "Quoted",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?>(),
+            new[] { "QUOTE_APPROVED" },
+            new[] { "QUOTE_APPROVED" },
+            Array.Empty<string>(),
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Decide",
+            null);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(packet));
+        Assert.True(result.Success);
+        Assert.Single(result.SuggestedActions);
+        Assert.Equal("QUOTE_APPROVED", result.SuggestedActions[0].EventType);
+        Assert.Equal(0.95, result.SuggestedActions[0].Confidence);
+
+        Assert.NotNull(handler.LastRequest);
+        Assert.True(handler.LastRequest.Headers.Contains("x-api-key"));
+        Assert.True(handler.LastRequest.Headers.Contains("anthropic-version"));
+    }
+
+    [Fact]
+    public async Task HostedAgent_GoogleAdapter_BuildsGoogleQueryParamAndExtractsContent()
+    {
+        var handler = new StubHandler("""
+            {"candidates":[{"content":{"parts":[{"text":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.91,\"reason\":\"valid quote\",\"insight\":\"approved\"}"}]}}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "google",
+            "gemini-1.5-flash",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "AIza-google-key",
+            handler);
+
+        var packet = new DecisionPacket(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "ApproveQuote",
+            "Quoted",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?>(),
+            new[] { "QUOTE_APPROVED" },
+            new[] { "QUOTE_APPROVED" },
+            Array.Empty<string>(),
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Decide",
+            null);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(packet));
+        Assert.True(result.Success);
+        Assert.Single(result.SuggestedActions);
+        Assert.Equal("QUOTE_APPROVED", result.SuggestedActions[0].EventType);
+        Assert.Equal(0.91, result.SuggestedActions[0].Confidence);
+
+        Assert.NotNull(handler.LastUri);
+        Assert.Contains("key=AIza-google-key", handler.LastUri.Query);
+    }
+
     private sealed class StubHandler : HttpMessageHandler
     {
         private readonly string _body;
         public Uri? LastUri { get; private set; }
         public string LastAuthorization { get; private set; } = string.Empty;
+        public HttpRequestMessage? LastRequest { get; private set; }
 
         public StubHandler(string body) => _body = body;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastRequest = request;
             LastUri = request.RequestUri;
             LastAuthorization = request.Headers.Authorization?.ToString() ?? string.Empty;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)

@@ -1,35 +1,36 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using FlowOS.Agents.Abstractions;
+using FlowOS.Agents.Implementations.Adapters;
 
 namespace FlowOS.Agents.Implementations;
 
 /// <summary>
-/// Hosted OpenAI-compatible chat client. The API key is loaded internally and never copied onto Agent Context.
+/// Hosted LLM workflow agent supporting OpenAI, Anthropic, and Google via provider adapters.
+/// The API key is loaded internally and never copied onto Agent Context.
 /// </summary>
 public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
 {
     private readonly string _providerName;
-    private readonly string? _model;
+    private readonly string _model;
     private readonly string _endpoint;
     private readonly string? _apiKey;
     private readonly HttpMessageHandler? _handler;
+    private readonly ILlmProviderAdapter _adapter;
 
     public TenantLlmWorkflowAgent(
         string providerName,
         string? model,
         string? endpoint,
         string? apiKey,
-        HttpMessageHandler? handler = null)
+        HttpMessageHandler? handler = null,
+        ILlmProviderAdapter? adapter = null)
     {
         _providerName = string.IsNullOrWhiteSpace(providerName) ? "openai" : providerName.Trim();
         _model = string.IsNullOrWhiteSpace(model) ? "gpt-4o-mini" : model.Trim();
-        _endpoint = string.IsNullOrWhiteSpace(endpoint)
-            ? "https://api.openai.com/v1/chat/completions"
-            : endpoint.Trim();
+        _endpoint = string.IsNullOrWhiteSpace(endpoint) ? string.Empty : endpoint.Trim();
         _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
         _handler = handler;
+        _adapter = adapter ?? LlmProviderAdapterFactory.GetAdapter(_providerName);
     }
 
     public async Task<AgentResult> ExecuteAsync(AgentContext context)
@@ -40,9 +41,9 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         try
         {
             using var client = _handler == null ? new HttpClient() : new HttpClient(_handler, disposeHandler: false);
-            using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-            request.Content = new StringContent(BuildRequestBody(context), Encoding.UTF8, "application/json");
+            var systemPrompt = BuildSystemPrompt(context);
+            var userPrompt = BuildUserPrompt(context);
+            using var request = _adapter.CreateRequest(_endpoint, _apiKey, _model, systemPrompt, userPrompt);
 
             using var response = await client.SendAsync(request);
             var body = await response.Content.ReadAsStringAsync();
@@ -64,87 +65,62 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         }
     }
 
-    private string BuildRequestBody(AgentContext context)
+    private static string BuildSystemPrompt(AgentContext context)
     {
         var packet = context.Packet;
         var legal = packet?.LegalNextStepEvents ?? context.LegalEvents;
         var system = packet?.Prompt.System
             ?? "You are a FlowOS workflow agent. Suggest one legal nextSteps event as JSON.";
+        return $"{system}\nLegal events: {string.Join(", ", legal)}\nReply with JSON: eventType, confidence, reason, insight.";
+    }
+
+    private static string BuildUserPrompt(AgentContext context)
+    {
+        var packet = context.Packet;
         var instructions = packet?.Prompt.Instructions
             ?? packet?.Objective
             ?? context.Objective;
-        var payload = new
+        return JsonSerializer.Serialize(new
         {
-            model = _model,
-            response_format = new { type = "json_object" },
-            messages = new object[]
-            {
-                new
-                {
-                    role = "system",
-                    content = $"{system}\nLegal events: {string.Join(", ", legal)}\nReply with JSON: eventType, confidence, reason, insight."
-                },
-                new
-                {
-                    role = "user",
-                    content = JsonSerializer.Serialize(new
-                    {
-                        instructions,
-                        templateGuideline = packet?.Prompt.TemplateGuideline,
-                        policyGuideline = packet?.Prompt.PolicyGuideline,
-                        currentStepId = packet?.CurrentStepId,
-                        currentState = packet?.CurrentState,
-                        data = packet?.CanonicalContext,
-                        eventPayloads = packet?.EventPayloads,
-                        toolResults = packet?.ToolResults,
-                        snapshot = context.EntitySnapshot
-                    })
-                }
-            }
-        };
-
-        return JsonSerializer.Serialize(payload);
+            instructions,
+            templateGuideline = packet?.Prompt.TemplateGuideline,
+            policyGuideline = packet?.Prompt.PolicyGuideline,
+            currentStepId = packet?.CurrentStepId,
+            currentState = packet?.CurrentState,
+            data = packet?.CanonicalContext,
+            eventPayloads = packet?.EventPayloads,
+            toolResults = packet?.ToolResults,
+            snapshot = context.EntitySnapshot
+        });
     }
 
-    private static ParsedSuggestion? ParseSuggestion(string body)
+    private ParsedSuggestion? ParseSuggestion(string body)
     {
-        using var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
-        var content = ExtractContent(root);
+        var content = _adapter.ExtractContent(body);
         if (string.IsNullOrWhiteSpace(content))
             return null;
 
-        using var suggestion = JsonDocument.Parse(content);
-        var s = suggestion.RootElement;
-        var eventType = ReadString(s, "eventType") ?? ReadString(s, "event");
-        var reason = ReadString(s, "reason") ?? "Hosted agent suggestion.";
-        var insight = ReadString(s, "insight") ?? reason;
-        var confidence = 0.5;
-        if (s.TryGetProperty("confidence", out var confProp) && confProp.TryGetDouble(out var conf))
-            confidence = conf;
-
-        var actions = new List<SuggestedAction>();
-        if (!string.IsNullOrWhiteSpace(eventType))
-            actions.Add(new SuggestedAction(eventType, reason, confidence));
-
-        return new ParsedSuggestion(insight, actions);
-    }
-
-    private static string? ExtractContent(JsonElement root)
-    {
-        if (root.TryGetProperty("choices", out var choices) &&
-            choices.ValueKind == JsonValueKind.Array &&
-            choices.GetArrayLength() > 0)
+        try
         {
-            var first = choices[0];
-            if (first.TryGetProperty("message", out var message) &&
-                message.TryGetProperty("content", out var content))
-            {
-                return content.GetString();
-            }
-        }
+            using var suggestion = JsonDocument.Parse(content);
+            var s = suggestion.RootElement;
+            var eventType = ReadString(s, "eventType") ?? ReadString(s, "event");
+            var reason = ReadString(s, "reason") ?? "Hosted agent suggestion.";
+            var insight = ReadString(s, "insight") ?? reason;
+            var confidence = 0.5;
+            if (s.TryGetProperty("confidence", out var confProp) && confProp.TryGetDouble(out var conf))
+                confidence = conf;
 
-        return root.TryGetProperty("content", out var direct) ? direct.GetString() : root.GetRawText();
+            var actions = new List<SuggestedAction>();
+            if (!string.IsNullOrWhiteSpace(eventType))
+                actions.Add(new SuggestedAction(eventType, reason, confidence));
+
+            return new ParsedSuggestion(insight, actions);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string? ReadString(JsonElement element, string name) =>

@@ -2,6 +2,7 @@ using FlowOS.Agents.Abstractions;
 using FlowOS.Application.Commands;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
+using FlowOS.Core.Common.Services;
 using FlowOS.Domain.Enums;
 using FlowOS.Workflows.Enums;
 using MediatR;
@@ -29,7 +30,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
         _mediator = mediator;
         _unitOfWork = unitOfWork;
         _toolHost = toolHost;
-        _agentFactory = agentFactory ?? new WorkflowAgentFactory(new MissingPluginBindingRegistry());
+        _agentFactory = agentFactory ?? new WorkflowAgentFactory(NullPluginBindingRegistryService.Instance);
     }
 
     public Task<AgentTaskRunResult> SuggestAsync(
@@ -212,34 +213,5 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                 packet.Objective,
                 workflowInstanceId),
             cancellationToken);
-    }
-
-    private sealed class MissingPluginBindingRegistry : FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService
-    {
-        public Task<FlowOS.Core.Common.Interfaces.PluginBindingDto> UpsertAsync(
-            Guid tenantId, string bindingType, string sourceName, string providerName,
-            bool isEnabled = true, string? configurationJson = null, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyList<FlowOS.Core.Common.Interfaces.PluginBindingDto>> ListAsync(
-            Guid tenantId, string? bindingType = null, string? sourceName = null,
-            bool? enabledOnly = null, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<FlowOS.Core.Common.Interfaces.PluginBindingDto>>(Array.Empty<FlowOS.Core.Common.Interfaces.PluginBindingDto>());
-
-        public Task<string?> ResolveProviderNameAsync(
-            Guid tenantId, string bindingType, string sourceName, CancellationToken ct = default) =>
-            Task.FromResult<string?>(null);
-
-        public Task<Dictionary<string, string>> ResolveBindingsAsync(
-            Guid tenantId, string bindingType, CancellationToken ct = default) =>
-            Task.FromResult(new Dictionary<string, string>());
-
-        public Task<FlowOS.Core.Common.Interfaces.PluginBindingDto?> GetEnabledAsync(
-            Guid tenantId, string bindingType, string sourceName, CancellationToken ct = default) =>
-            Task.FromResult<FlowOS.Core.Common.Interfaces.PluginBindingDto?>(null);
-
-        public Task<FlowOS.Core.Common.Models.AgentProviderConfiguration?> GetAgentSecretsAsync(
-            Guid tenantId, string sourceName, CancellationToken ct = default) =>
-            Task.FromResult<FlowOS.Core.Common.Models.AgentProviderConfiguration?>(null);
     }
 }

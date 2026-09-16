@@ -108,18 +108,51 @@ public static class AgentToolCatalog
             null);
     }
 
+    private static readonly HashSet<string> MutationVerbs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "create", "update", "delete", "remove", "patch", "modify", "insert", "add",
+        "drop", "cancel", "void", "approve", "reject", "escalate", "submit",
+        "execute", "run", "dispatch", "trigger", "publish", "send", "notify", "write"
+    };
+
+    private static readonly HashSet<string> ReadVerbs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "get", "read", "lookup", "query", "search", "fetch", "check", "find",
+        "list", "info", "status", "view", "document", "documents", "policy",
+        "policies", "knowledge", "kb", "records", "preview", "audit"
+    };
+
     private static bool LooksLikeRead(string capability)
     {
+        if (string.IsNullOrWhiteSpace(capability))
+            return false;
+
         var value = capability.ToLowerInvariant();
-        return value.Contains("get")
-            || value.Contains("lookup")
+
+        // 1. If explicitly tagged or prefixed
+        if (value.EndsWith(":read") || value.StartsWith("read:"))
+            return true;
+        if (value.EndsWith(":write") || value.StartsWith("write:"))
+            return false;
+
+        // 2. Tokenize by separators: '.', ':', '/', '-', '_'
+        var tokens = value.Split(new[] { '.', ':', '/', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+
+        // 3. If any token is an explicit mutation/write verb, fail closed (it is a write)
+        if (tokens.Any(token => MutationVerbs.Contains(token)))
+            return false;
+
+        // 4. If any token matches a known read verb or domain entity accessor
+        if (tokens.Any(token => ReadVerbs.Contains(token)))
+            return true;
+
+        // 5. Fallback heuristics for prefixes like kb. or doc.
+        return value.Contains("lookup")
             || value.Contains("query")
             || value.Contains("search")
             || value.Contains("fetch")
-            || value.Contains("document")
-            || value.Contains("policy")
             || value.Contains("kb.")
-            || value.Contains("knowledge");
+            || value.Contains("doc.");
     }
 
     private static (string Head, string Tail) Split(string name)
