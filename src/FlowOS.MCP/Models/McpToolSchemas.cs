@@ -216,7 +216,11 @@ public static class McpToolSchemas
                       },
                       "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
                       "requiredRoles":{"type":"array","items":{"type":"string"}},
+                      "allowedRoles":{"type":"array","items":{"type":"string"}},
                       "conditions":{"type":"object","additionalProperties":{"type":"string"}},
+                      "branches":{"type":"array","items":{"type":"string"}},
+                      "joinPolicy":{"type":"string"},
+                      "inboundSteps":{"type":"array","items":{"type":"string"}},
                       "onEntry":{
                         "type":"array",
                         "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"capability":{"type":"string"},"url":{"type":"string"}}}

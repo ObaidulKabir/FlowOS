@@ -46,8 +46,10 @@ public static class FlowOsMcpGuidance
         [Step 3: Publish Blueprint]
           • Call `publish_workflowclass` with `id`.
           • This freezes the blueprint into a versioned runtime WorkflowDefinition and registers all state transitions.
-          • To reuse one published template in multiple business domains, call `create_context_binding`,
-            `validate_context_binding`, and `activate_context_binding` for each tenant context.
+          • To reuse one template in multiple business domains, call `create_context_binding` against the draft or published class,
+            then `simulate_context_binding` with revision `draft`. Do not publish a throwaway simulator variant first.
+            `validate_context_binding` and `activate_context_binding` require a Published or Public source.
+            Simulation does not require tenant roles to exist; activation does (CTX-ROLE-002).
           • Call `simulate_context_binding` with revision `draft` before activation, then with `active`
             to verify the exact pinned runtime. Simulation never dispatches or persists side effects.
           • Activation and archival require explicit human confirmation. Bindings never create roles or permissions.
@@ -72,7 +74,7 @@ public static class FlowOsMcpGuidance
         - If the state machine still requires that event (e.g. ApproveQuote auto-routes to MaterialDecision while Assigned → Quoted needs QUOTE_APPROVED), you MUST still send the event in `simulate_workflowclass` / `simulate_context_binding` / `publish_event`.
         - FlowOS then applies it as a state-only catch-up: step stays put, state advances. Omitting it leaves state behind; the next event is Denied as a state-machine violation.
         - Preferred design: HumanTask/Command `nextSteps` consume the same event the state machine uses. Do not auto-skip a legal gate unless you still emit that event.
-        - Context bindings do not create tenant roles. Map `roleOverrides` to roles that already exist, or declare no template roles. Never strip roles only to make simulate pass.
+        - Context bindings do not create tenant roles. `simulate_context_binding` may use a Draft template and does not require tenant roles to exist. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source and real tenant roles (CTX-ROLE-002).
         - Diagnose divergence: if `currentStep` is ahead of `currentState` (e.g. MaterialDecision / Assigned), the missing event is the unused state-machine trigger.
         """;
 
@@ -438,19 +440,19 @@ public static class FlowOsMcpGuidance
         2. `create_draft_workflowclass` — declare `events`, `stateMachine.transitions`, and `workflow.steps` together.
         3. `validate_draft_workflowclass` then `lint_draft_workflowclass`
         4. `simulate_workflowclass` with the **full** event list, including every state-machine trigger, even after Decision auto-routes.
-        5. `publish_workflowclass` with `confirmHumanApproval: true` when required
-        6. Tenant context (do not strip roles to cheat validation):
-           - Ensure tenant roles exist, or map `definition.roleOverrides` to existing tenant roles, or declare no template `roles`.
-           - `create_context_binding` with `inputMapping` for canonical fields
-           - `validate_context_binding`
-           - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, `roles` that exist, and the same full event list
+        5. Tenant context (do not strip roles or publish a throwaway no-roles variant):
+           - `create_context_binding` against the **draft** template id, with `inputMapping` for canonical fields
+           - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, optional `roles` for the trace, and the same full event list
+           - CTX-ROLE-002 applies to `validate_context_binding` / `activate_context_binding`, not to simulation
+        6. `publish_workflowclass` with `confirmHumanApproval: true` when required, then `validate_context_binding`
         7. `activate_context_binding` only after draft simulation is Allowed through the expected final state
         8. Runtime: `start_workflow` then `publish_event` for each remaining state-machine trigger
 
         ## Context-binding rules
 
         - Bindings never create roles or permissions.
-        - Unknown tenant role names fail `validate_context_binding` (CTX-ROLE-002). Probe existing roles or provision them in the tenant; do not invent Admin/User/Provider mappings.
+        - Unknown tenant role names fail `validate_context_binding` and `activate_context_binding` (CTX-ROLE-002). They do not fail `simulate_context_binding`.
+        - Do not publish a stripped-roles copy of the template just to bind and simulate. Bind the draft, simulate, then publish once.
         - `simulate_context_binding` never persists instances or snapshots. A Denied trace is a design signal, not a reason to delete the template.
 
         ## Tool names to use

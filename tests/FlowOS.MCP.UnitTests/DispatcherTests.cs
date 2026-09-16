@@ -115,6 +115,7 @@ public sealed class DispatcherTests
         var dualKernelText = dualKernelResult["contents"]![0]!["text"]!.ToString();
         Assert.Contains("state-only", dualKernelText);
         Assert.Contains("QUOTE_APPROVED", dualKernelText);
+        Assert.Contains("throwaway", dualKernelText);
     }
 
     [Fact]

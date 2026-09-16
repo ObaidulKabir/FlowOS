@@ -217,9 +217,11 @@ public sealed class WorkflowContextBindingHandlers :
             throw new KeyNotFoundException("Source workflow template was not found.");
         }
         if (source.Status != WorkflowClassStatus.Published &&
-            source.Status != WorkflowClassStatus.Public)
+            source.Status != WorkflowClassStatus.Public &&
+            source.Status != WorkflowClassStatus.Draft)
         {
-            throw new InvalidOperationException("Source workflow template must be Published or Public.");
+            throw new InvalidOperationException(
+                $"Source workflow template cannot be used while it is {source.Status}.");
         }
         return source;
     }

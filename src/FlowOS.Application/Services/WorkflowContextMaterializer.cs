@@ -104,7 +104,6 @@ public class WorkflowContextMaterializer : IWorkflowContextMaterializer
             if (existing.Status != StateMachineStatus.Published ||
                 existing.Category != candidate.Category ||
                 existing.IsTerminal != candidate.IsTerminal ||
-                !string.Equals(existing.EntityType, candidate.EntityType, StringComparison.OrdinalIgnoreCase) ||
                 !EquivalentJson(existing.PayloadSchema, candidate.PayloadSchema))
             {
                 throw new InvalidOperationException(

@@ -336,7 +336,11 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         {
             if (revision.Status != WorkflowContextBindingRevisionStatus.Draft)
                 throw new InvalidOperationException("The selected revision is not a draft.");
-            var validation = await _validator.ValidateAsync(binding, revision, cancellationToken);
+            var validation = await _validator.ValidateAsync(
+                binding,
+                revision,
+                WorkflowContextBindingValidationOptions.Simulation,
+                cancellationToken);
             if (!validation.IsValid)
                 throw new WorkflowContextBindingValidationException(validation);
 

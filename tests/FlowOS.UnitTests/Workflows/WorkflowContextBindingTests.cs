@@ -1,6 +1,8 @@
 using System.Text.Json;
+using FlowOS.Application.Commands;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.DTOs;
+using FlowOS.Application.Handlers;
 using FlowOS.Application.Services;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Domain.Blueprints;
@@ -568,6 +570,149 @@ public class WorkflowContextBindingTests
             item.IsAllowed &&
             item.FromState == "Quoted");
         Assert.Equal("RepairInProgress", result.CurrentState);
+    }
+
+    [Fact]
+    public void ContextCompiler_EmptyEventName_UsesEventId()
+    {
+        var source = CreateRepairSource();
+        source.UpdateDraft(
+            source.Name,
+            source.Version,
+            source.Definition with
+            {
+                Events = source.Definition.Events.Select(item => item with { Name = string.Empty }).ToList()
+            });
+        var binding = new WorkflowContextBinding(source.TenantId, "Repair", "RepairBinding");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id,
+            1,
+            source.Id,
+            source.Version,
+            new WorkflowContextBindingDefinition { EntityType = "RepairJobContext" });
+
+        var package = WorkflowClassCompiler.MapToContextRuntimePackage(source, binding, revision);
+
+        Assert.All(package.EventDefinitions, item => Assert.False(string.IsNullOrWhiteSpace(item.Name)));
+        Assert.Contains(package.EventDefinitions, item => item.EventId == "JOB_REQUESTED" && item.Name == "JOB_REQUESTED");
+        Assert.Equal("RepairJobContext", package.StateMachineDefinition.EntityType);
+    }
+
+    [Fact]
+    public async Task CreateBinding_AcceptsDraftSource_AndSimulationSkipsMissingTenantRoles()
+    {
+        var source = CreateSource();
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var validator = new WorkflowContextBindingValidator(
+            unitOfWork,
+            new Mock<IPolicyDecisionPluginRegistry>().Object);
+        var handler = new WorkflowContextBindingHandlers(
+            unitOfWork,
+            validator,
+            new WorkflowContextMaterializer(unitOfWork, validator));
+
+        var created = await handler.Handle(
+            new CreateWorkflowContextBindingCommand(
+                source.TenantId,
+                source.Id,
+                "ExpenseDraftSim",
+                "ExpenseDraftSimBinding",
+                new WorkflowContextBindingDefinition
+                {
+                    EntityType = "ExpenseEntity",
+                    RoleOverrides = new Dictionary<string, string> { ["Approver"] = "FinanceManager" },
+                    InputMapping = new Dictionary<string, string> { ["Amount"] = "expense.amount" },
+                    ConditionParameters = new Dictionary<string, JsonElement>
+                    {
+                        ["ApprovalLimit"] = JsonSerializer.SerializeToElement(1000)
+                    }
+                }),
+            default);
+
+        Assert.NotNull(created.DraftRevisionId);
+
+        var validation = await handler.Handle(
+            new ValidateWorkflowContextBindingCommand(source.TenantId, created.Id),
+            default);
+        Assert.False(validation.IsValid);
+        Assert.Contains(validation.Errors, item => item.Code == "CTX-SOURCE-002");
+        Assert.Contains(validation.Errors, item => item.Code == "CTX-ROLE-002");
+
+        var simulation = await new WorkflowContextSimulationService(
+                unitOfWork,
+                validator,
+                new WorkflowExecutionContextService(unitOfWork),
+                new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()))
+            .SimulateAsync(
+                source.TenantId,
+                new WorkflowContextSimulationRequest(
+                    ContextBindingId: created.Id,
+                    Revision: "draft",
+                    InitialPayload: new { expense = new { amount = 125 } },
+                    Roles: ["FinanceManager"],
+                    Events: [new WorkflowContextSimulationEventRequest("EVT-APPROVE")]));
+
+        Assert.NotEqual("Denied", simulation.Status);
+        Assert.Equal("Completed", simulation.Status);
+    }
+
+    [Fact]
+    public async Task Activation_AllowsSameEventId_WhenOnlyEntityTypeDiffers()
+    {
+        var source = CreateRepairSource();
+        source.Definition.Workflow.Steps.Single(item => item.StepId == "ApproveQuote").OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "RepairContext", "RepairContextBinding");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id,
+            1,
+            source.Id,
+            source.Version,
+            new WorkflowContextBindingDefinition { EntityType = "RepairJobContext" });
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        foreach (var evt in source.Definition.Events)
+        {
+            var existing = new EventDefinition(
+                evt.EventId,
+                source.TenantId,
+                string.IsNullOrWhiteSpace(evt.Name) ? evt.EventId : evt.Name,
+                evt.Description,
+                "ServiceRepairJob",
+                evt.Category,
+                1,
+                evt.PayloadSchema,
+                evt.IsTerminal);
+            existing.Publish();
+            context.EventDefinitions.Add(existing);
+        }
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var validator = new WorkflowContextBindingValidator(
+            unitOfWork,
+            new Mock<IPolicyDecisionPluginRegistry>().Object);
+        var materializer = new WorkflowContextMaterializer(unitOfWork, validator);
+
+        var package = await materializer.ActivateAsync(binding, revision);
+
+        Assert.Equal("RepairJobContext", package.StateMachineDefinition.EntityType);
+        Assert.Equal(WorkflowContextBindingStatus.Active, binding.Status);
     }
 
     [Fact]

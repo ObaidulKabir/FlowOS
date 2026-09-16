@@ -23,15 +23,18 @@ public static class TenantEntitlementPolicy
 
     public static bool McpToolRequiresPaidPlan(string toolName, bool mutating, string sideEffect)
     {
-        if (string.Equals(toolName, "create_draft_workflowclass", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(toolName, "update_draft_workflowclass", StringComparison.OrdinalIgnoreCase))
-        {
+        if (IsDesignTimeTool(toolName))
             return false;
-        }
 
         if (!mutating && string.Equals(sideEffect, "none", StringComparison.OrdinalIgnoreCase))
             return false;
 
         return true;
     }
+
+    private static bool IsDesignTimeTool(string toolName) =>
+        toolName.Equals("create_draft_workflowclass", StringComparison.OrdinalIgnoreCase) ||
+        toolName.Equals("update_draft_workflowclass", StringComparison.OrdinalIgnoreCase) ||
+        toolName.Equals("create_context_binding", StringComparison.OrdinalIgnoreCase) ||
+        toolName.Equals("update_context_binding", StringComparison.OrdinalIgnoreCase);
 }

@@ -113,7 +113,8 @@ public static class McpToolDescriptions
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["create_context_binding"] =
-                "Creates a tenant-scoped draft context binding and immutable revision 1 from a Published or Public workflow template. " +
+                "Creates a tenant-scoped draft context binding and revision 1 from a Draft, Published, or Public workflow template. " +
+                "Draft sources are for simulate_context_binding only; activate_context_binding still requires the template to be Published or Public. " +
                 "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-ARG-001, MCP-NOTFOUND-001, CTX-STATE-001. " +
                 "Input example: {\"sourceWorkflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"contextType\":\"Expense\",\"name\":\"ExpenseApproval\",\"definition\":{\"entityType\":\"ExpenseEntity\"},\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
@@ -149,6 +150,8 @@ public static class McpToolDescriptions
 
             ["simulate_context_binding"] =
                 "[Business-Context Simulator] Runs a side-effect-free, production-parity simulation of a saved draft or pinned active context-binding revision. " +
+                "Draft bindings may point at a Draft workflow class; do not publish a throwaway variant just to simulate. " +
+                "Tenant-role existence (CTX-ROLE-002) is not enforced during simulation; activation still requires existing tenant roles. " +
                 "Projects source payloads into canonical context, applies contextual event aliases and event mappings, enforces workflow/state-machine guards and simulated roles, and reports actions, timers, and subworkflows without executing them. " +
                 "Returns: {ok:true,data:{contextBindingId,revisionKind,status,initialProjection,initialCanonicalContext,finalCanonicalContext,trace,pendingWork,graph,sideEffectsSuppressed:true}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-VALIDATION, CTX-STATE-001, MCP-INTERNAL. " +

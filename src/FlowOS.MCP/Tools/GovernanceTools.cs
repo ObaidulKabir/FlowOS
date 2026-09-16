@@ -45,9 +45,9 @@ public class GovernanceTools
         {
             return McpToolResults.Fail(ex.Code, ex.Message);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return McpToolResults.Fail("MCP-INTERNAL", "Failed to create draft.");
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to create draft: {ex.Message}");
         }
     }
 
@@ -92,9 +92,9 @@ public class GovernanceTools
         {
             return McpToolResults.Fail(ex.Code, ex.Message);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return McpToolResults.Fail("MCP-INTERNAL", "Failed to update draft.");
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to update draft: {ex.Message}");
         }
     }
 

@@ -35,9 +35,16 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
         _decisionPluginRegistry = decisionPluginRegistry;
     }
 
+    public Task<ValidationResult> ValidateAsync(
+        WorkflowContextBinding binding,
+        WorkflowContextBindingRevision revision,
+        CancellationToken cancellationToken = default)
+        => ValidateAsync(binding, revision, WorkflowContextBindingValidationOptions.Strict, cancellationToken);
+
     public async Task<ValidationResult> ValidateAsync(
         WorkflowContextBinding binding,
         WorkflowContextBindingRevision revision,
+        WorkflowContextBindingValidationOptions options,
         CancellationToken cancellationToken = default)
     {
         var result = new ValidationResult();
@@ -51,13 +58,14 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
             return result;
         }
 
-        if (source.Status != WorkflowClassStatus.Published &&
+        if (options.RequirePublishedSource &&
+            source.Status != WorkflowClassStatus.Published &&
             source.Status != WorkflowClassStatus.Public)
         {
             result.AddError(
                 "CTX-SOURCE-002",
                 "Source",
-                $"Source workflow template must be Published or Public, but is {source.Status}.",
+                $"Source workflow template must be Published or Public before activation, but is {source.Status}. Draft sources are allowed for draft bindings and simulate_context_binding.",
                 "SourceWorkflowClassId");
         }
 
@@ -72,7 +80,13 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
         }
 
         ValidateEventAliases(source, revision, result);
-        await ValidateRolesAsync(source, binding.TenantId, revision, result, cancellationToken);
+        await ValidateRolesAsync(
+            source,
+            binding.TenantId,
+            revision,
+            result,
+            options.RequireExistingTenantRoles,
+            cancellationToken);
         ValidateCapabilities(source, revision, result);
         ValidateMappings(source, revision, result);
         ValidateDecisionProviders(source, revision, result);
@@ -179,6 +193,7 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
         Guid tenantId,
         WorkflowContextBindingRevision revision,
         ValidationResult result,
+        bool requireExistingTenantRoles,
         CancellationToken cancellationToken)
     {
         var declared = source.Definition.Roles
@@ -198,6 +213,8 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
                 continue;
             }
 
+            if (!requireExistingTenantRoles) continue;
+
             if (string.IsNullOrWhiteSpace(role.Value) ||
                 !await _unitOfWork.Roles.ExistsByNameAsync(tenantId, role.Value, cancellationToken))
             {
@@ -209,6 +226,8 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
                     $"Definition.RoleOverrides.{role.Key}");
             }
         }
+
+        if (!requireExistingTenantRoles) return;
 
         foreach (var declaredRole in declared)
         {

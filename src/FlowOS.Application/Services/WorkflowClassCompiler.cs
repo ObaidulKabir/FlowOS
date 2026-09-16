@@ -211,8 +211,10 @@ public static class WorkflowClassCompiler
                         WorkflowClassId = step.SubWorkflow.WorkflowClassId,
                         WorkflowName = step.SubWorkflow.WorkflowName,
                         Version = step.SubWorkflow.Version,
-                        InputMapping = new Dictionary<string, string>(step.SubWorkflow.InputMapping),
-                        OutputMapping = new Dictionary<string, string>(step.SubWorkflow.OutputMapping)
+                        InputMapping = new Dictionary<string, string>(
+                            step.SubWorkflow.InputMapping ?? new Dictionary<string, string>()),
+                        OutputMapping = new Dictionary<string, string>(
+                            step.SubWorkflow.OutputMapping ?? new Dictionary<string, string>())
                     },
                 AllowedRoles = declaredRoles,
                 NextSteps = step.NextSteps.ToDictionary(
@@ -263,10 +265,13 @@ public static class WorkflowClassCompiler
                 ? eventSourceSchema
                 : eventBlueprint.PayloadSchema;
 
+            var eventName = string.IsNullOrWhiteSpace(eventBlueprint.Name)
+                ? contextualEventId
+                : eventBlueprint.Name;
             var eventDefinition = new EventDefinition(
                 contextualEventId,
                 binding.TenantId,
-                eventBlueprint.Name,
+                eventName,
                 eventBlueprint.Description,
                 mapping.EntityType.Trim(),
                 eventBlueprint.Category,
