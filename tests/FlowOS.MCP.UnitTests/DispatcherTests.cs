@@ -81,6 +81,8 @@ public sealed class DispatcherTests
         Assert.Contains("Managed Cloud", initResult["instructions"]!.ToString());
         Assert.Contains("design_dual_kernel_workflow", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/dual-kernel-design", initResult["instructions"]!.ToString());
+        Assert.Contains("test_sla_reminders_in_simulator", initResult["instructions"]!.ToString());
+        Assert.Contains("flowos://guides/sla-reminder-simulation", initResult["instructions"]!.ToString());
         Assert.Contains("state-only catch-up", initResult["instructions"]!.ToString());
         Assert.Contains("autoAdvanceTimers", initResult["instructions"]!.ToString());
         Assert.NotNull(initResult["capabilities"]?["prompts"]);
@@ -102,6 +104,14 @@ public sealed class DispatcherTests
         Assert.Contains("simulate_context_binding", dualText);
         Assert.Contains("ServiceRepair", dualText);
 
+        var slaPrompt = await dispatcher.DispatchAsync(Request(32, "prompts/get", new { name = "test_sla_reminders_in_simulator", arguments = new { stepId = "ExecuteRepair" } }));
+        var slaPromptResult = JObject.FromObject(((JsonRpcResponse)slaPrompt.Response!).Result!);
+        var slaText = slaPromptResult["messages"]![0]!["content"]!["text"]!.ToString();
+        Assert.Contains("ExecuteRepair", slaText);
+        Assert.Contains("[SLA Reminder Fired]", slaText);
+        Assert.Contains("autoAdvanceTimers", slaText);
+        Assert.Contains("Do not call `start_workflow`", slaText);
+
         // 3. Resources list & read
         var resourcesList = await dispatcher.DispatchAsync(Request(4, "resources/list"));
         var resourcesResult = JObject.FromObject(((JsonRpcResponse)resourcesList.Response!).Result!);
@@ -119,6 +129,13 @@ public sealed class DispatcherTests
         Assert.Contains("throwaway", dualKernelText);
         Assert.Contains("autoAdvanceTimers", dualKernelText);
         Assert.Contains("SLA", dualKernelText);
+
+        var slaGuideRead = await dispatcher.DispatchAsync(Request(7, "resources/read", new { uri = "flowos://guides/sla-reminder-simulation" }));
+        var slaGuideResult = JObject.FromObject(((JsonRpcResponse)slaGuideRead.Response!).Result!);
+        var slaGuideText = slaGuideResult["contents"]![0]!["text"]!.ToString();
+        Assert.Contains("QUOTE_RESPONSE_OVERDUE", slaGuideText);
+        Assert.Contains("[SLA Timeout Fired]", slaGuideText);
+        Assert.Contains("wall-clock", slaGuideText);
     }
 
     [Fact]

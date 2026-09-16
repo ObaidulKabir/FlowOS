@@ -67,6 +67,7 @@ public static class FlowOsMcpGuidance
 
         Tip: Call MCP Prompts (`prompts/list` & `prompts/get`) or read MCP Resources (`resources/list` & `resources/read`) for full templates.
           Preferred prompt: `design_dual_kernel_workflow`. Preferred resource: `flowos://guides/dual-kernel-design`.
+          For SLA reminders/timeouts: prompt `test_sla_reminders_in_simulator` and resource `flowos://guides/sla-reminder-simulation`.
 
         Dual-kernel design law (read before drafting Decision steps):
         - The workflow graph moves `currentStep`. The state machine moves `currentState`. They are independent kernels.
@@ -76,7 +77,16 @@ public static class FlowOsMcpGuidance
         - Preferred design: HumanTask/Command `nextSteps` consume the same event the state machine uses. Do not auto-skip a legal gate unless you still emit that event.
         - Context bindings do not create tenant roles. `simulate_context_binding` may use a Draft template and does not require tenant roles to exist. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source and real tenant roles (CTX-ROLE-002).
         - Diagnose divergence: if `currentStep` is ahead of `currentState` (e.g. MaterialDecision / Assigned), the missing event is the unused state-machine trigger.
-        - SLA reminders do not need a live waiting instance. `simulate_workflowclass` / `simulate_context_binding` inject reminder triggerEvents in duration order before a completing nextSteps event (e.g. QUOTE_APPROVED). Put TimeoutEvent (QUOTE_RESPONSE_OVERDUE) on nextSteps. Set autoAdvanceTimers=true and omit the completing event to fire the timeout. Trace lines contain `[SLA Reminder Fired]` / `[SLA Timeout Fired]`.
+
+        SLA reminder / timeout simulation law (read before concluding the simulator is broken):
+        - `validate_draft_workflowclass` only proves the SLA JSON is legal. It does not fire reminders.
+        - A full-path simulate to Paid is a business-event executor, not a wall clock. If `QUOTE_APPROVED` is in `events`, timeout MUST NOT fire (the human responded in time). That is success, not a missing timer.
+        - Do not start a live instance and wait. Use `simulate_workflowclass` / `simulate_context_binding`.
+        - Happy path: put the completing `nextSteps` event in `events` (`QUOTE_APPROVED`). Omit reminder ids. Trace must show `[SLA Reminder Fired]` in duration order, then the completing event, never `[SLA Timeout Fired]`.
+        - Overdue path: set `autoAdvanceTimers: true` and OMIT the completing event. Put `TimeoutEvent` on that step's `nextSteps`. Trace must show reminders then `[SLA Timeout Fired]` (`QUOTE_RESPONSE_OVERDUE`).
+        - Pause path: call simulate with no events. Status is WaitingForHumanTask; `pendingHumanTask.reminders` lists the schedule. Nothing fires until you choose happy path or overdue path.
+        - Timer steps and HumanTask SLA are different. `autoAdvanceTimers` elapses Timer steps AND unlocks SLA overdue. Completing-event reminder injection does not need the flag.
+        - Preferred prompt: `test_sla_reminders_in_simulator`. Preferred resource: `flowos://guides/sla-reminder-simulation`.
         """;
 
     public static object GetPromptsList() => new
@@ -112,6 +122,15 @@ public static class FlowOsMcpGuidance
             },
             new
             {
+                name = "test_sla_reminders_in_simulator",
+                description = "Why and how to prove HumanTask/Command SLA reminders and TimeoutEvent in simulate_workflowclass / simulate_context_binding without starting a live waiting instance.",
+                arguments = new[]
+                {
+                    new { name = "stepId", description = "Waiting step with SLA (e.g., ApproveQuote, ExecuteRepair)", required = false }
+                }
+            },
+            new
+            {
                 name = "run_workflow_instance",
                 description = "Guidance on starting a live execution instance and advancing steps using events and task completions.",
                 arguments = new[]
@@ -137,6 +156,7 @@ public static class FlowOsMcpGuidance
         var workflowClassId = arguments?["workflowClassId"]?.ToString() ?? "<workflowClassId>";
         var instanceId = arguments?["instanceId"]?.ToString() ?? "<instanceId>";
         var domain = arguments?["domain"]?.ToString() ?? "ServiceRepair";
+        var stepId = arguments?["stepId"]?.ToString() ?? "ApproveQuote";
 
         return name switch
         {
@@ -248,6 +268,23 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "test_sla_reminders_in_simulator" => new
+            {
+                description = "How to test SLA reminders and timeouts in the FlowOS simulator",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = SlaReminderSimulationGuide.Replace("{STEP_ID}", stepId)
+                        }
+                    }
+                }
+            },
+
             "run_workflow_instance" => new
             {
                 description = "Runtime Instance Execution Guide",
@@ -327,6 +364,13 @@ public static class FlowOsMcpGuidance
             },
             new
             {
+                uri = "flowos://guides/sla-reminder-simulation",
+                name = "SLA Reminder and Timeout Simulation Guide",
+                description = "Why a simulate-to-Paid run is not a wall clock, and how to prove reminders vs TimeoutEvent without a live instance.",
+                mimeType = "text/markdown"
+            },
+            new
+            {
                 uri = "flowos://templates/expense-approval",
                 name = "Reference Blueprint: Expense Approval",
                 description = "Canonical declarative JSON blueprint featuring a 4-state dual-kernel approval process with roles and events.",
@@ -368,6 +412,19 @@ public static class FlowOsMcpGuidance
                         uri,
                         mimeType = "text/markdown",
                         text = DualKernelDesignGuide.Replace("{DOMAIN}", "ServiceRepair")
+                    }
+                }
+            },
+
+            "flowos://guides/sla-reminder-simulation" => new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        uri,
+                        mimeType = "text/markdown",
+                        text = SlaReminderSimulationGuide.Replace("{STEP_ID}", "ApproveQuote")
                     }
                 }
             },
@@ -440,10 +497,10 @@ public static class FlowOsMcpGuidance
         1. `describe_workflowclass_schema`
         2. `create_draft_workflowclass` — declare `events`, `stateMachine.transitions`, and `workflow.steps` together.
         3. `validate_draft_workflowclass` then `lint_draft_workflowclass`
-        4. `simulate_workflowclass` with the **full** event list, including every state-machine trigger, even after Decision auto-routes. SLA reminder events may be omitted: they fire automatically before a completing nextSteps event. Use `autoAdvanceTimers: true` without the completing event to fire TimeoutEvent (do not start a live instance just to prove reminders).
+        4. `simulate_workflowclass` with the **full** event list, including every state-machine trigger, even after Decision auto-routes. To prove SLA reminders/timeouts, read `flowos://guides/sla-reminder-simulation` (do not start a live instance).
         5. Tenant context (do not strip roles or publish a throwaway no-roles variant):
            - `create_context_binding` against the **draft** template id, with `inputMapping` for canonical fields
-           - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, optional `roles` for the trace, the same full event list, and `autoAdvanceTimers: true` when you need SLA timeout as well as reminders
+           - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, optional `roles` for the trace, and the same full event list. SLA overdue uses `autoAdvanceTimers: true` without the completing event — see `flowos://guides/sla-reminder-simulation`.
            - CTX-ROLE-002 applies to `validate_context_binding` / `activate_context_binding`, not to simulation
         6. `publish_workflowclass` with `confirmHumanApproval: true` when required, then `validate_context_binding`
         7. `activate_context_binding` only after draft simulation is Allowed through the expected final state
@@ -461,12 +518,144 @@ public static class FlowOsMcpGuidance
         - Design sandbox: `simulate_workflowclass`
         - Bound business payload: `simulate_context_binding`
         - After a live instance exists: `fork_workflow_simulation` / `replay_workflow_history`
+        - SLA reminder vs timeout in the simulator: `test_sla_reminders_in_simulator` / `flowos://guides/sla-reminder-simulation`
+        """;
 
-        ## SLA reminders (no live clock required)
+    public const string SlaReminderSimulationGuide =
+        """
+        # FlowOS SLA Reminder and Timeout Simulation Guide
 
-        Put `sla.duration`, `sla.timeoutEvent`, and `sla.reminders[]` on the waiting HumanTask or Command. Declare reminder and timeout event IDs. Put TimeoutEvent on `nextSteps` (and a state-machine transition if state should change). Reminder events may loop back, be state-only, or be notification-only.
+        Target waiting step: {STEP_ID}
 
-        Happy path: send the completing event (`QUOTE_APPROVED`). The simulator injects `QUOTE_REMINDER_SENT` at 2h then 12h before approval. Overdue path: `autoAdvanceTimers: true` and omit the completing event so `QUOTE_RESPONSE_OVERDUE` fires after the reminders. Do not start a live instance just to prove the clock.
+        Read this before you start a live workflow instance "to wait for reminders."
+
+        ## Why agents get confused
+
+        FlowOS accepts `sla.reminders` and `sla.timeoutEvent` on validate. A later `simulate_workflowclass` / `simulate_context_binding` with the **full business event list to Paid** still looks like a straight workflow executor:
+
+        - It does **not** wait 2h / 12h / 24h of wall-clock time.
+        - If the completing event is in `events` (`QUOTE_APPROVED`, `REPAIR_COMPLETED`), the human responded **in time**. Timeout must **not** fire. That is correct.
+        - Reminders **do** fire on that same run: the simulator injects them in duration order **before** the completing event. Look for `[SLA Reminder Fired]` in `executionTrace` / `trace`.
+        - `isValid: true` plus `finalState: Paid` does **not** by itself prove timeout. It only proves the happy path.
+
+        Do not conclude "the simulator has no timer mode." Do not call `start_workflow` and leave the instance sitting at {STEP_ID}.
+
+        Tools: `simulate_workflowclass` (blueprint/draft) and `simulate_context_binding` (bound payload). Same rules.
+
+        ## Blueprint that can be tested
+
+        Put SLA on a **waiting** HumanTask or Command (a step that actually sits until an event). Not on a Decision/`Default` Command that auto-routes away immediately.
+
+        ```json
+        {
+          "stepId": "{STEP_ID}",
+          "stepType": "HumanTask",
+          "sla": {
+            "duration": "24h",
+            "timeoutEvent": "QUOTE_RESPONSE_OVERDUE",
+            "reminders": [
+              { "duration": "2h", "triggerEvent": "QUOTE_REMINDER_SENT" },
+              { "duration": "12h", "triggerEvent": "QUOTE_REMINDER_SENT" }
+            ]
+          },
+          "nextSteps": {
+            "QUOTE_APPROVED": "MaterialDecision",
+            "QUOTE_RESPONSE_OVERDUE": "QuoteOverdue"
+          }
+        }
+        ```
+
+        Required:
+        1. Declare reminder and timeout ids in `events`.
+        2. Put **TimeoutEvent on `nextSteps`** (and a state-machine transition if state should change, e.g. Assigned → Overdue).
+        3. Reminder events do **not** need `nextSteps`. They may loop back, be state-only, or be notification-only. Simulation still logs `[SLA Reminder Fired]` and stays on the step.
+        4. Duration: `"2h"` = 2 hours after step entry. `"-2h"` = 2 hours before timeout.
+        5. Clock events are not human actions. Simulation does not require the HumanTask role on reminder/timeout.
+
+        Same pattern for ExecuteRepair: timeout `8h`, reminders `2h`/`6h`, timeout event `REPAIR_OVERDUE`.
+
+        ## Three simulator tests (use all three)
+
+        ### 1. Pause — schedule is visible, nothing fires
+
+        Call simulate with **no** `events` (or stop the list so the instance is sitting on {STEP_ID}).
+
+        Expect:
+        - `status`: `WaitingForHumanTask`
+        - `pendingHumanTask.reminders` lists each `duration` + `triggerEvent`
+        - no `[SLA Reminder Fired]`, no timeout
+
+        This only proves the blueprint is waiting. It is not the reminder test.
+
+        ### 2. Happy path — reminders then completing event, never timeout
+
+        `events` must include the completing `nextSteps` key (`QUOTE_APPROVED`). **Omit** `QUOTE_REMINDER_SENT` and `QUOTE_RESPONSE_OVERDUE`. Do not set `autoAdvanceTimers`.
+
+        Expect, in order:
+        1. `[SLA Reminder Fired]` for 2h
+        2. `[SLA Reminder Fired]` for 12h
+        3. `QUOTE_APPROVED` advances the step
+        4. **no** `[SLA Timeout Fired]` / `QUOTE_RESPONSE_OVERDUE`
+
+        Meaning: the customer answered after the reminder schedule and before 24h. A run that reaches Paid without timeout is the intended happy path.
+
+        ### 3. Overdue — reminders then TimeoutEvent
+
+        Set `"autoAdvanceTimers": true`. **Omit** the completing event (`QUOTE_APPROVED` must not be in the remaining `events` while sitting on {STEP_ID}).
+
+        Expect, in order:
+        1. `[SLA Reminder Fired]` (2h, then 12h)
+        2. `[SLA Timeout Fired]` with `QUOTE_RESPONSE_OVERDUE`
+        3. step follows `nextSteps.QUOTE_RESPONSE_OVERDUE`
+
+        This is the timer-specific simulation mode. You do not need a live instance.
+
+        Example overdue call:
+
+        ```json
+        {
+          "id": "<draft-or-class-uuid>",
+          "autoAdvanceTimers": true,
+          "events": ["JOB_REQUESTED"]
+        }
+        ```
+
+        Stop the list so the current step is {STEP_ID}. Do not include `QUOTE_APPROVED`.
+
+        Context-binding overdue:
+
+        ```json
+        {
+          "contextType": "ServiceRepair",
+          "revision": "draft",
+          "autoAdvanceTimers": true,
+          "events": [{ "eventType": "JOB_REQUESTED" }]
+        }
+        ```
+
+        ## What each flag/event means
+
+        | You send | Simulator does |
+        |---|---|
+        | Completing `nextSteps` event, no reminder ids | Inject reminders in duration order, then complete. No timeout. |
+        | `autoAdvanceTimers: true`, no completing event | Inject reminders, then TimeoutEvent. |
+        | No events | Pause; show `pendingHumanTask.reminders`. |
+        | Reminder ids already in `events` | Use yours; do not double-inject that id. |
+        | Completing event **and** `autoAdvanceTimers: true` | Still no timeout (human responded in time). Flag only elapses Timer **steps** plus overdue when no completing event remains. |
+
+        Timer **steps** (`stepType: Timer`) are not HumanTask SLA. `autoAdvanceTimers` also auto-elapses those steps. Do not mix the two tests.
+
+        ## Pass/fail checklist
+
+        - Validate `isValid: true` — config only.
+        - Pause run shows reminders — schedule only.
+        - Happy-path trace contains `[SLA Reminder Fired]` and the completing event, not timeout — reminder proof.
+        - Overdue trace contains `[SLA Timeout Fired]` / `QUOTE_RESPONSE_OVERDUE` — timeout proof.
+        - If happy path has no `[SLA Reminder Fired]`: SLA is not on a waiting step, or the completing event is not that step's `nextSteps` key (Decision `Default` auto-route skipped the wait).
+        - If overdue is `InvalidEvent` / Denied: TimeoutEvent is missing from `nextSteps`.
+        - If overdue is `Denied` for roles: you used a human event, not the clock path; clock events do not need the task role.
+
+        Live `start_workflow` is for production execution after publish/activate, not for proving the 2h reminder.
         """;
 
     public const string ReferenceExpenseApprovalJson =
