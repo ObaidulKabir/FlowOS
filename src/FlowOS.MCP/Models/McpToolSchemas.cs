@@ -567,7 +567,7 @@ public static class McpToolSchemas
             "events":{
               "type":"array",
               "items":{"type":"string"},
-              "description":"Optional sequence of event IDs to simulate dispatching sequentially (e.g. ['EVT-SUBMIT', 'EVT-APPROVE']). Automated steps advance automatically."
+              "description":"Optional sequence of event IDs dispatched in order. HumanTask/Timer events must match that step's NextSteps keys. Other events are applied to the state machine when Decision or Default Command steps complete if a transition exists from the current state. Do not strip unused system events; they keep finalState in sync with step progression."
             },
             "maxSteps":{
               "type":"integer",

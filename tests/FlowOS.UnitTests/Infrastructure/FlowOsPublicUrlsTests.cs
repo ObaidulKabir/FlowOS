@@ -21,6 +21,7 @@ public class FlowOsPublicUrlsTests
 
         Assert.Equal("https://flowosbd.com", origin);
         Assert.Equal("https://flowosbd.com/mcp/", FlowOsPublicUrls.McpEndpoint(origin));
+        Assert.Equal("/mcp/", FlowOsPublicUrls.McpPath(origin));
     }
 
     [Fact]
@@ -67,6 +68,17 @@ public class FlowOsPublicUrlsTests
     {
         Assert.False(FlowOsPublicUrls.IsMcpPath("/health"));
         Assert.False(FlowOsPublicUrls.IsMcpPath("/mcp/tools"));
+    }
+
+    [Theory]
+    [InlineData("https://flowosbd.com", "/mcp/")]
+    [InlineData("https://app.flowosbd.com/mcp", "/mcp/")]
+    [InlineData("https://flowos.prospectbdltd.com", "/mcp")]
+    [InlineData("http://localhost:8080", "/mcp")]
+    public void Json_rpc_path_keeps_production_trailing_slash(string origin, string expectedPath)
+    {
+        Assert.Equal(expectedPath, FlowOsPublicUrls.McpPath(origin));
+        Assert.EndsWith(expectedPath, FlowOsPublicUrls.McpEndpoint(origin));
     }
 
     private static IConfiguration NewConfig(Dictionary<string, string?> values) =>

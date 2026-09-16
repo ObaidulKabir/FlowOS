@@ -37,16 +37,23 @@ public static class FlowOsPublicUrls
         return $"{scheme}://{hostHeader.Trim().TrimEnd('/')}";
     }
 
+    public const string AgentJsonRpcRule =
+        "POST JSON-RPC to the advertised `url` exactly, including a trailing slash when present. " +
+        "Do not normalize /mcp/ down to /mcp. Do not follow 301/302 redirects for POST — nginx on flowosbd.com currently redirects POST /mcp to http://flowosbd.com/mcp/, which drops the body and API key. " +
+        "Accept must include both application/json and text/event-stream. Send X-MCP-API-Key (or Authorization: Bearer) plus x-tenant-id. " +
+        "Tenant keys are host-scoped: a key from flowosbd.com does not authenticate on flowos.prospectbdltd.com, and the reverse is also true.";
+
     public static string McpEndpoint(string origin)
     {
         var baseOrigin = NormalizeOrigin(origin);
         if (string.IsNullOrWhiteSpace(baseOrigin))
-            return "/mcp";
+            return McpPath(origin);
 
-        return IsProductionHost(baseOrigin)
-            ? $"{baseOrigin}/mcp/"
-            : $"{baseOrigin}/mcp";
+        return $"{baseOrigin}{McpPath(baseOrigin)}";
     }
+
+    public static string McpPath(string? originOrUrl) =>
+        IsProductionHost(originOrUrl ?? string.Empty) ? "/mcp/" : "/mcp";
 
     public static bool IsMcpPath(string? path) =>
         string.Equals(path, "/mcp", StringComparison.OrdinalIgnoreCase) ||

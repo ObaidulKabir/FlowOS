@@ -7,7 +7,7 @@ import { PlatformComparison } from './PlatformComparison';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { AuthModalMode } from './AuthModal';
 import { usePlatformMetrics } from '../platformMetrics';
-import { mcpRpcUrl } from '../mcpUrl';
+import { mcpRpcUrl, mcpRpcPath } from '../mcpUrl';
 
 interface LandingPageProps {
   onOpenAuth: (mode: AuthModalMode) => void;
@@ -20,6 +20,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
   const mcpUrl = mcpRpcUrl();
+  const mcpPath = mcpRpcPath();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">
@@ -164,7 +165,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           {/* Connect MCP Button */}
           <a
-            href="/mcp"
+            href={mcpUrl}
             target="_blank"
             className="w-full sm:w-auto px-5 py-3.5 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white font-semibold rounded-2xl border border-slate-800 transition-all flex items-center justify-center gap-2 text-sm"
           >
@@ -299,12 +300,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="/mcp"
+                  href={mcpUrl}
                   target="_blank"
                   className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-500/20"
                 >
                   <Bot size={14} />
-                  <span>Open MCP Interactive Portal (/mcp) ↗</span>
+                  <span>Open MCP Interactive Portal ({mcpPath}) ↗</span>
                 </a>
                 <a
                   href="/.well-known/mcp"
@@ -520,7 +521,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="flex flex-wrap items-center gap-6">
             <button onClick={() => onOpenAuth('verify')} className="hover:text-cyan-400 text-slate-400 transition-colors">Verify Account Email</button>
-            <a href="/mcp" target="_blank" className="hover:text-white transition-colors">MCP Portal</a>
+            <a href={mcpUrl} target="_blank" className="hover:text-white transition-colors">MCP Portal</a>
             <a href="/.well-known/mcp" target="_blank" className="hover:text-white transition-colors">MCP Manifest</a>
             <a href="/swagger" target="_blank" className="hover:text-white transition-colors">Swagger API</a>
             <a href="/health" target="_blank" className="hover:text-white transition-colors">Health Endpoint</a>

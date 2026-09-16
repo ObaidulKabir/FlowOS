@@ -74,6 +74,9 @@ public sealed class DispatcherTests
         }));
         var initResult = JObject.FromObject(((JsonRpcResponse)init.Response!).Result!);
         Assert.NotNull(initResult["instructions"]);
+        Assert.Contains("/mcp/", initResult["instructions"]!.ToString());
+        Assert.Contains("Never strip a trailing slash", initResult["instructions"]!.ToString());
+        Assert.Contains("Never follow HTTP 301/302 for POST", initResult["instructions"]!.ToString());
         Assert.NotNull(initResult["capabilities"]?["prompts"]);
         Assert.NotNull(initResult["capabilities"]?["resources"]);
 

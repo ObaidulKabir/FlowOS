@@ -1,15 +1,23 @@
+export const MCP_JSONRPC_RULE =
+  'POST JSON-RPC to the advertised URL exactly, including a trailing slash when present. Do not normalize /mcp/ down to /mcp. Do not follow 301/302 redirects for POST. Accept must include application/json and text/event-stream. Production (flowosbd.com) is /mcp/; staging (flowos.prospectbdltd.com) is /mcp. Tenant keys are host-scoped.';
+
+function isProductionHost(originOrUrl: string): boolean {
+  try {
+    const host = new URL(originOrUrl).hostname.toLowerCase();
+    return host === 'flowosbd.com' || host.endsWith('.flowosbd.com');
+  } catch {
+    return originOrUrl.toLowerCase().includes('flowosbd.com');
+  }
+}
+
+export function mcpRpcPath(origin = typeof window !== 'undefined' ? window.location.origin : ''): string {
+  return isProductionHost(origin) ? '/mcp/' : '/mcp';
+}
+
 export function mcpRpcUrl(origin = typeof window !== 'undefined' ? window.location.origin : ''): string {
   const base = (origin || '').replace(/\/$/, '');
   if (!base)
-    return '/mcp';
+    return mcpRpcPath(origin);
 
-  try {
-    const host = new URL(base).hostname.toLowerCase();
-    if (host === 'flowosbd.com' || host.endsWith('.flowosbd.com'))
-      return `${base}/mcp/`;
-  } catch {
-    // ignore invalid origin
-  }
-
-  return `${base}/mcp`;
+  return `${base}${mcpRpcPath(base)}`;
 }

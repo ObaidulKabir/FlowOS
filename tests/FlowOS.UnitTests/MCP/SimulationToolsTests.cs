@@ -873,4 +873,97 @@ public class SimulationToolsTests
         Assert.NotNull(trace);
         Assert.Contains(trace, t => t["action"]?.ToString()?.Contains("[SLA Reminder Fired]") == true);
     }
+
+    [Fact]
+    public async Task Simulate_DecisionAndDefaultCommand_ApplyQueuedSystemStateEvents()
+    {
+        var blueprint = JObject.FromObject(new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "JOB_REQUESTED" },
+                new() { EventId = "QUOTE_APPROVED" },
+                new() { EventId = "MATERIALS_SKIPPED" },
+                new() { EventId = "REPAIR_COMPLETED" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Requested",
+                States = new List<string> { "Requested", "Assigned", "Quoted", "RepairInProgress", "Completed" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "Requested", ToState = "Assigned", EventId = "JOB_REQUESTED" },
+                    new() { FromState = "Assigned", ToState = "Quoted", EventId = "QUOTE_APPROVED" },
+                    new() { FromState = "Quoted", ToState = "RepairInProgress", EventId = "MATERIALS_SKIPPED" },
+                    new() { FromState = "RepairInProgress", ToState = "Completed", EventId = "REPAIR_COMPLETED" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "IntakeRequest",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "IntakeRequest",
+                        StepType = "HumanTask",
+                        RequiredRoles = new List<string> { "provider" },
+                        NextSteps = new Dictionary<string, string> { { "JOB_REQUESTED", "ApproveQuote" } }
+                    },
+                    new()
+                    {
+                        StepId = "ApproveQuote",
+                        StepType = "Decision",
+                        Conditions = new Dictionary<string, string> { { "Default", "MaterialDecision" } }
+                    },
+                    new()
+                    {
+                        StepId = "MaterialDecision",
+                        StepType = "Decision",
+                        Conditions = new Dictionary<string, string> { { "Default", "ExecuteRepair" } }
+                    },
+                    new()
+                    {
+                        StepId = "ExecuteRepair",
+                        StepType = "Command",
+                        NextSteps = new Dictionary<string, string> { { "Default", "CloseJob" } }
+                    },
+                    new()
+                    {
+                        StepId = "CloseJob",
+                        StepType = "Command",
+                        NextSteps = new Dictionary<string, string> { { "Default", "END" } }
+                    }
+                }
+            }
+        });
+
+        var args = new JObject
+        {
+            ["blueprint"] = blueprint,
+            ["role"] = "provider",
+            ["events"] = new JArray("JOB_REQUESTED", "QUOTE_APPROVED", "MATERIALS_SKIPPED", "REPAIR_COMPLETED")
+        };
+
+        var result = await _tools.SimulateWorkflowClass(args);
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("END", data["currentStepId"]?.ToString());
+        Assert.Equal("Requested", data["initialState"]?.ToString());
+        Assert.Equal("Completed", data["finalState"]?.ToString());
+
+        var transitions = data["stateTransitions"] as JArray;
+        Assert.NotNull(transitions);
+        Assert.Equal(4, transitions.Count);
+        Assert.Equal("Assigned", transitions[0]["to"]?.ToString());
+        Assert.Equal("Quoted", transitions[1]["to"]?.ToString());
+        Assert.Equal("RepairInProgress", transitions[2]["to"]?.ToString());
+        Assert.Equal("Completed", transitions[3]["to"]?.ToString());
+
+        var remaining = data["eventsRemaining"] as JArray;
+        Assert.NotNull(remaining);
+        Assert.Empty(remaining);
+    }
 }

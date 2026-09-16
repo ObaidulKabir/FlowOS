@@ -6,12 +6,14 @@ import { AuthModal, AuthModalMode } from './components/AuthModal';
 import { TenantDashboard } from './components/TenantDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { McpAgentGuideline } from './components/McpAgentGuideline';
+import { mcpRpcPath } from './mcpUrl';
 import { 
   Shield, Building2, LogOut, Bot, Home, 
   Sparkles, CheckCircle2
 } from 'lucide-react';
 
 function App() {
+  const mcpPath = mcpRpcPath();
   const [session, setSession] = useState<AuthSession>(() => {
     return getStoredSession() || getDefaultSandboxSession();
   });
@@ -199,7 +201,7 @@ function App() {
                 </button>
 
                 <a 
-                  href="/mcp" 
+                  href={mcpPath} 
                   target="_blank" 
                   className="inline-flex px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all items-center gap-1.5 shadow-sm"
                   title="Access Model Context Protocol (MCP) tool discovery & catalog"
@@ -254,7 +256,7 @@ function App() {
               <div>© 2026 FlowOS — Prospect BD Ltd. Official system email: <a href="mailto:admin@flowosbd.com" className="text-blue-400 hover:underline">admin@flowosbd.com</a></div>
               <div className="flex space-x-6">
                 <a href="/swagger" target="_blank" className="hover:underline">Swagger Docs</a>
-                <a href="/mcp" target="_blank" className="hover:underline">MCP Endpoint</a>
+                <a href={mcpPath} target="_blank" className="hover:underline">MCP Endpoint</a>
                 <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" className="hover:underline">GitHub</a>
               </div>
             </div>

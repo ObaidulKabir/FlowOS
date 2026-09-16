@@ -11,6 +11,13 @@ public static class FlowOsMcpGuidance
         FlowOS Process Operating System — Autonomous Agent Operating Guide
         ===================================================================
 
+        Connection contract (read this before the first JSON-RPC POST):
+        - Use the absolute `url` from GET discovery / GET /.well-known/mcp exactly.
+        - On https://flowosbd.com the JSON-RPC path is `/mcp/` (trailing slash required). On https://flowos.prospectbdltd.com it is `/mcp`.
+        - Never strip a trailing slash. Never follow HTTP 301/302 for POST; a slash redirect can switch to http:// and drop the body and API key.
+        - Accept: application/json, text/event-stream. Headers: X-MCP-API-Key (or Authorization: Bearer) and x-tenant-id.
+        - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com.
+
         FlowOS is a dual-kernel enterprise process operating system that strictly separates:
         1. State Authority (Mathematical State Machine) - Controls what state transitions are legally permitted.
         2. Process Orchestration (Workflow Engine) - Manages step execution, timer SLAs, and task completion.

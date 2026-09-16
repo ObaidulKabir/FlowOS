@@ -193,9 +193,10 @@ public static class McpToolDescriptions
             ["simulate_workflowclass"] =
                 "[Simulator] Runs a zero-side-effect, in-memory dry-run simulation of a WorkflowClass using either an existing draft/published ID or an inline blueprint. " +
                 "Evaluates decision conditions against context payloads, validates state machine guards, enforces human-task role permissions, advances automated steps, " +
-                "evaluates dynamic payload mappings and Handlebars templates, and injects simulated step faults via `simulateFailureAtStep` to test OnFailure Saga rollback compensation actions. " +
+                "and applies queued domain events to the state machine on Decision and Default Command steps when the event is not reserved for a HumanTask/Timer. " +
+                "Evaluates dynamic payload mappings and Handlebars templates, and injects simulated step faults via `simulateFailureAtStep` to test OnFailure Saga rollback compensation actions. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
-                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload}}. " +
+                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload,eventsRemaining}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"simulateFailureAtStep\":\"PaymentStep\"}",
 

@@ -7,9 +7,19 @@ Unlike standard MCP servers that merely expose thin CRUD wrappers, FlowOS functi
 ## Architecture: Discovery & Execution Separation
 
 ```
-GET /mcp  ──► Public Discovery (HTML / JSON metadata, schemas, risk levels, human confirmation)
-POST /mcp ──► Authenticated JSON-RPC 2.0 (tenant resolution, object-level IDOR check, human gates)
+GET  advertised path  ──► Public Discovery (HTML / JSON metadata, schemas, risk levels, human confirmation)
+POST advertised path  ──► Authenticated JSON-RPC 2.0 (tenant resolution, object-level IDOR check, human gates)
 ```
+
+Agents must POST JSON-RPC to the **advertised `url` exactly**. Do not strip a trailing slash. Do not follow 301/302 for POST.
+
+| Host | JSON-RPC path | Absolute URL |
+|------|---------------|--------------|
+| `https://flowosbd.com` | `/mcp/` (trailing slash required) | `https://flowosbd.com/mcp/` |
+| `https://flowos.prospectbdltd.com` | `/mcp` | `https://flowos.prospectbdltd.com/mcp` |
+| localhost | `/mcp` | `http://localhost:8080/mcp` |
+
+On production, nginx currently 301s `POST /mcp` to `http://flowosbd.com/mcp/`, which drops the body and API key. Discovery JSON (`GET /mcp`, `GET /.well-known/mcp`) therefore publishes `url` / `connection.jsonrpcUrl` / `connection.jsonrpcPath` for the current host. `initialize` instructions repeat the same contract. Tenant API keys are host-scoped.
 
 ## Running the MCP server
 
@@ -43,9 +53,9 @@ Endpoints:
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/mcp` | **Public Discovery**: Returns interactive HTML documentation (Accept: `text/html`) or machine-readable JSON metadata (Accept: `application/json`) including all 50 tool schemas, risk levels, side effects, and confirmation requirements without requiring credentials. |
-| `POST` | `/mcp` | **Protected Execution**: Authenticated JSON-RPC 2.0 body (`initialize`, `tools/list`, `tools/call`). Requires `x-tenant-id` and API key/bearer. |
-| `OPTIONS`| `/mcp` | CORS preflight handling for web/browser agent environments. |
+| `GET` | `/mcp` or `/mcp/` | **Public Discovery**: Returns interactive HTML documentation (Accept: `text/html`) or machine-readable JSON metadata (Accept: `application/json`) including all tool schemas, risk levels, side effects, confirmation requirements, and a `connection` object with the exact JSON-RPC URL. No credentials required. |
+| `POST` | advertised `url` (`/mcp` on staging/local, `/mcp/` on flowosbd.com) | **Protected Execution**: Authenticated JSON-RPC 2.0 body (`initialize`, `tools/list`, `tools/call`). Requires `x-tenant-id` and API key/bearer. Do not follow POST redirects. |
+| `OPTIONS`| `/mcp` or `/mcp/` | CORS preflight handling for web/browser agent environments. |
 | `GET` | `/health` | `200` `{ "status": "ok" }` |
 
 > 💡 **Pre-Payment Gateway & Sandbox Mode**:
@@ -313,7 +323,7 @@ Previously identified MCP control-plane gaps are covered by the maintained `Flow
 * **Execution Boundary**: Fully implemented with `start_workflow`, `publish_event`, and `complete_task`, enforcing strict tenant boundaries and supporting cross-tenant public workflows.
 * **Human Approval Enforcement**: High-risk, irreversible operations (`publish_workflowclass`, `activate_context_binding`, and `archive_context_binding`) require `confirmHumanApproval: true`, returning `MCP-APPROVAL-REQUIRED` on missing confirmation.
 * **Adversarial BOLA/IDOR Protection**: All foreign resource access attempts are denied and normalized to `MCP-NOTFOUND-001`, eliminating information leakage and existence oracles.
-* **Dual Discovery & Execution**: `GET /mcp` provides zero-auth public discovery (interactive HTML or JSON schema metadata) while `POST /mcp` enforces authentication, tenant isolation, and risk policies.
+* **Dual Discovery & Execution**: Public `GET` discovery (interactive HTML or JSON schema metadata, including `connection.jsonrpcUrl`) while `POST` to that advertised URL enforces authentication, tenant isolation, and risk policies. Production agents must keep the trailing slash on `https://flowosbd.com/mcp/`.
 
 ## Where to go next
 

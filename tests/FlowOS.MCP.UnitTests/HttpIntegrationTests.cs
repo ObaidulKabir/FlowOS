@@ -66,6 +66,8 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         Assert.Contains("mutating", jsonContent);
         Assert.Contains("category", jsonContent);
         Assert.Contains("tenantScoped", jsonContent);
+        Assert.Contains("jsonrpcUrl", jsonContent);
+        Assert.Contains("Do not normalize /mcp/", jsonContent);
 
         // HTML discovery test
         using var htmlReq = new HttpRequestMessage(HttpMethod.Get, "/mcp");
@@ -75,6 +77,8 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         var html = await htmlResponse.Content.ReadAsStringAsync();
         Assert.Contains("FlowOS MCP Control Plane", html);
         Assert.Contains("Registered Agent Tools", html);
+        Assert.Contains("JSON-RPC connection", html);
+        Assert.Contains("trailing slash", html);
     }
 
     [Fact]
@@ -139,8 +143,12 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         await staging.StartAsync();
         using var stagingClient = staging.GetTestClient();
         var stagingJson = await stagingClient.GetStringAsync("/mcp");
-        Assert.Contains("https://flowos.prospectbdltd.com/mcp", stagingJson);
-        Assert.DoesNotContain("https://flowosbd.com/mcp", stagingJson);
+        var stagingDoc = JObject.Parse(stagingJson);
+        Assert.Equal("https://flowos.prospectbdltd.com/mcp", stagingDoc["jsonrpcUrl"]?.ToString());
+        Assert.Equal("/mcp", stagingDoc["endpoint"]?.ToString());
+        Assert.Equal("/mcp", stagingDoc["connection"]?["jsonrpcPath"]?.ToString());
+        Assert.Contains("Do not normalize /mcp/", stagingDoc["connection"]?["rule"]?.ToString());
+        Assert.Equal(false, (bool?)stagingDoc["connection"]?["followRedirectsOnPost"]);
 
         await using var production = FlowOS.MCP.Program.BuildHttpApp([], builder =>
         {
@@ -158,8 +166,15 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         });
         await production.StartAsync();
         using var productionClient = production.GetTestClient();
-        var productionJson = await productionClient.GetStringAsync("/.well-known/mcp");
-        Assert.Contains("https://flowosbd.com/mcp/", productionJson);
+        var productionWellKnown = JObject.Parse(await productionClient.GetStringAsync("/.well-known/mcp"));
+        Assert.Equal("https://flowosbd.com/mcp/", productionWellKnown["url"]?.ToString());
+        Assert.Equal("/mcp/", productionWellKnown["endpoint"]?.ToString());
+        Assert.Equal("/mcp/", productionWellKnown["connection"]?["jsonrpcPath"]?.ToString());
+        Assert.Contains("trailing slash", productionWellKnown["connection"]?["rule"]?.ToString());
+
+        var productionDiscovery = JObject.Parse(await productionClient.GetStringAsync("/mcp"));
+        Assert.Equal("https://flowosbd.com/mcp/", productionDiscovery["jsonrpcUrl"]?.ToString());
+        Assert.Equal("/mcp/", productionDiscovery["endpoint"]?.ToString());
     }
 
     [Fact]

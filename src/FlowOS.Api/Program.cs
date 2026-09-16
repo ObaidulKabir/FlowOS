@@ -126,31 +126,42 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 
 app.MapGet("/.well-known/mcp", (HttpContext context) =>
 {
-    var accepts = context.Request.Headers.Accept.ToString();
-    if (accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase))
-    {
-        return Results.Redirect("/mcp");
-    }
-
     var mcpUrl = FlowOsPublicUrls.McpEndpoint(FlowOsPublicUrls.ResolveOrigin(
         context.RequestServices.GetRequiredService<IConfiguration>(),
         context.Request.Scheme,
         context.Request.Host.Value,
         context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault(),
         context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()));
+    var mcpPath = FlowOsPublicUrls.McpPath(mcpUrl);
+
+    var accepts = context.Request.Headers.Accept.ToString();
+    if (accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.Redirect(mcpPath);
+    }
 
     return Results.Ok(new
     {
         schema = "https://modelcontextprotocol.io/schema/discovery.json",
         name = "FlowOS MCP Control Plane",
         version = "1.0.0",
-        description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction.",
+        description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction. " + FlowOsPublicUrls.AgentJsonRpcRule,
         transport = "streamable-http",
         protocolVersion = "2025-03-26",
-        endpoint = "/mcp",
+        endpoint = mcpPath,
         url = mcpUrl,
         documentation = mcpUrl,
-        toolsEndpoint = "/mcp",
+        toolsEndpoint = mcpPath,
+        connection = new
+        {
+            jsonrpcUrl = mcpUrl,
+            jsonrpcPath = mcpPath,
+            rule = FlowOsPublicUrls.AgentJsonRpcRule,
+            accept = "application/json, text/event-stream",
+            apiKeyHeader = "X-MCP-API-Key",
+            tenantHeader = "x-tenant-id",
+            followRedirectsOnPost = false
+        },
         auth = new
         {
             type = "apiKey",
@@ -160,17 +171,26 @@ app.MapGet("/.well-known/mcp", (HttpContext context) =>
         },
         endpoints = new
         {
-            discovery = "/mcp",
-            jsonrpc = "/mcp",
+            discovery = mcpPath,
+            jsonrpc = mcpPath,
             wellKnown = "/.well-known/mcp",
-            sse = "/mcp",
+            sse = mcpPath,
             health = "/health/ready"
         }
     });
 });
 
 app.MapGet("/.well-known/mcp.json", () => Results.Redirect("/.well-known/mcp"));
-app.MapGet("/sse", () => Results.Redirect("/mcp"));
+app.MapGet("/sse", (HttpContext context) =>
+{
+    var mcpUrl = FlowOsPublicUrls.McpEndpoint(FlowOsPublicUrls.ResolveOrigin(
+        context.RequestServices.GetRequiredService<IConfiguration>(),
+        context.Request.Scheme,
+        context.Request.Host.Value,
+        context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault(),
+        context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()));
+    return Results.Redirect(FlowOsPublicUrls.McpPath(mcpUrl));
+});
 
 using (var scope = app.Services.CreateScope())
 {

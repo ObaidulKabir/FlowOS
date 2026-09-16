@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Bot, Terminal, Copy, Check, ExternalLink, ShieldCheck, Code, Sparkles, BookOpen } from 'lucide-react';
 import { usePlatformMetrics } from '../platformMetrics';
-import { mcpRpcUrl } from '../mcpUrl';
+import { mcpRpcUrl, mcpRpcPath, MCP_JSONRPC_RULE } from '../mcpUrl';
 
 export const McpAgentGuideline: React.FC = () => {
   const { mcpTools, tests } = usePlatformMetrics();
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'browser' | 'curl' | 'config' | 'javascript'>('browser');
   const mcpUrl = mcpRpcUrl();
+  const mcpPath = mcpRpcPath();
 
   const copyToClipboard = (text: string, tabId: string) => {
     navigator.clipboard.writeText(text);
@@ -49,6 +50,7 @@ const rpcResponse = await fetch('${mcpUrl}', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json, text/event-stream',
     'x-tenant-id': '22222222-2222-2222-2222-222222222222',
     'X-MCP-API-Key': 'flowos_prod_secret_key_32_chars_min',
     'MCP-Protocol-Version': '2025-03-26'
@@ -85,19 +87,19 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-            FlowOS is an authoritative, multi-tenant workflow control plane. Autonomous AI agents, browser bots, and LLM crawlers can discover schemas, inspect invariants, and orchestrate stateful processes under zero-trust governance.
+            FlowOS is an authoritative, multi-tenant workflow control plane. Autonomous AI agents, browser bots, and LLM crawlers can discover schemas, inspect invariants, and orchestrate stateful processes under zero-trust governance. JSON-RPC must be posted to <code className="text-blue-300">{mcpUrl}</code> exactly — {MCP_JSONRPC_RULE}
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <a
-            href="/mcp"
+            href={mcpPath}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg shadow-blue-500/20 transition-all border border-blue-400/30"
           >
             <Sparkles size={14} />
-            <span>Open /mcp Portal</span>
+            <span>Open {mcpPath} Portal</span>
             <ExternalLink size={12} />
           </a>
         </div>
@@ -111,7 +113,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
             <span>Public GET Discovery</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            Fetch <code className="text-blue-300 bg-slate-800 px-1 rounded">GET /mcp</code> without credentials to read full schemas and security metadata.
+            Fetch <code className="text-blue-300 bg-slate-800 px-1 rounded">GET {mcpPath}</code> without credentials to read full schemas and security metadata.
           </p>
         </div>
 
@@ -205,16 +207,16 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
           </h3>
           <ol className="list-decimal list-inside space-y-2 text-slate-300 leading-relaxed">
             <li>
-              <strong>Discover Endpoint:</strong> Navigate directly to <a href="/mcp" className="text-blue-400 underline hover:text-blue-300">/mcp</a> (or <code className="text-blue-300">{mcpUrl}</code>). In human/browser mode, it renders a live interactive HTML tool catalog. Use a tenant API key generated in <em>this</em> environment — staging keys authenticate only on flowos.prospectbdltd.com, production keys only on flowosbd.com.
+              <strong>Discover Endpoint:</strong> Navigate directly to <a href={mcpPath} className="text-blue-400 underline hover:text-blue-300">{mcpPath}</a> (or <code className="text-blue-300">{mcpUrl}</code>). In human/browser mode, it renders a live interactive HTML tool catalog. Use a tenant API key generated in <em>this</em> environment — staging keys authenticate only on flowos.prospectbdltd.com, production keys only on flowosbd.com.
             </li>
             <li>
-              <strong>Machine-Readable Discovery:</strong> For programmatic bots, make an HTTP <code className="text-blue-300">GET /mcp</code> with header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">Accept: application/json</code>. No API keys or authentication credentials are required.
+              <strong>Machine-Readable Discovery:</strong> For programmatic bots, make an HTTP <code className="text-blue-300">GET {mcpPath}</code> with header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">Accept: application/json</code>. The JSON <code className="text-blue-300">url</code> / <code className="text-blue-300">connection.jsonrpcUrl</code> is the exact JSON-RPC address. No API keys or authentication credentials are required for discovery.
             </li>
             <li>
               <strong>Ingest Tools & Constraints:</strong> The payload delivers all {mcpTools} tools, parameter types, <code className="text-blue-300">riskLevel</code> (<code className="text-emerald-300">low</code>, <code className="text-amber-300">medium</code>, <code className="text-rose-300">high</code>), <code className="text-blue-300">sideEffect</code>, and <code className="text-blue-300">requiresHumanConfirmation</code>.
             </li>
             <li>
-              <strong>Execute via POST:</strong> Switch to <code className="text-blue-300">POST /mcp</code> for JSON-RPC 2.0 tool execution with your tenant header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">x-tenant-id</code>.
+              <strong>Execute via POST:</strong> Switch to <code className="text-blue-300">POST {mcpUrl}</code> for JSON-RPC 2.0. Keep a trailing slash if the URL has one. Do not follow 301 redirects for POST. Send tenant header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">x-tenant-id</code> and <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">X-MCP-API-Key</code>.
             </li>
             <li>
               <strong>Compensation Safety Loop:</strong> Run <code className="text-blue-300">lint_draft_workflowclass</code>, then fix <code className="text-blue-300">WF-COMP-010</code> / <code className="text-blue-300">LINT-COMP-001</code> by attaching <code className="text-blue-300">OnFailure</code> hooks. Validate with <code className="text-blue-300">simulate_compensation_path</code> (design-time) and <code className="text-blue-300">plan_workflow_compensation_path</code> (runtime instance).

@@ -44,7 +44,8 @@ public class SimulationTools
         List<object> ExecutionTrace,
         Dictionary<string, object> Payload,
         List<object> SubWorkflowsExecuted,
-        object? PendingTimer = null
+        object? PendingTimer = null,
+        IReadOnlyList<string>? EventsRemaining = null
     );
 
     public async Task<CallToolResult> SimulateWorkflowClass(JObject args)
@@ -166,7 +167,8 @@ public class SimulationTools
                 actionsTriggered = runResult.ActionsTriggered,
                 executionTrace = runResult.ExecutionTrace,
                 payload = runResult.Payload,
-                subworkflowsExecuted = runResult.SubWorkflowsExecuted
+                subworkflowsExecuted = runResult.SubWorkflowsExecuted,
+                eventsRemaining = runResult.EventsRemaining
             });
         }
         catch (Exception ex)
@@ -502,13 +504,33 @@ public class SimulationTools
 
                 if (winningTarget != null)
                 {
+                    var queuedState = TryApplyQueuedSystemStateEvent(
+                        blueprint, eventsQueue, payload, ref currentState, stateTransitions,
+                        out var appliedEvent, out var guardReason);
+                    if (queuedState == QueuedStateApplyKind.GuardBlocked)
+                    {
+                        status = "BlockedByGuard";
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = "Decision",
+                            action = $"Transition guard failed for queued state event '{appliedEvent}': {guardReason}",
+                            state = currentState
+                        });
+                        break;
+                    }
+
                     totalStepsExecuted++;
+                    var stateNote = queuedState == QueuedStateApplyKind.Applied
+                        ? $" Applied queued state event '{appliedEvent}'. State is now '{currentState}'."
+                        : $" State remains '{currentState}'.";
                     executionTrace.Add(new
                     {
                         stepNumber = totalStepsExecuted,
                         stepId = step.StepId,
                         stepType = "Decision",
-                        action = $"Condition '{winningExpr}' evaluated to TRUE => Advanced to '{winningTarget}'.",
+                        action = $"Condition '{winningExpr}' evaluated to TRUE => Advanced to '{winningTarget}'.{stateNote}",
                         state = currentState
                     });
 
@@ -1316,6 +1338,28 @@ public class SimulationTools
                         currentState = smTrans.ToState;
                     }
                 }
+                else
+                {
+                    var queuedState = TryApplyQueuedSystemStateEvent(
+                        blueprint, eventsQueue, payload, ref currentState, stateTransitions,
+                        out var appliedEvent, out var queuedGuardReason);
+                    if (queuedState == QueuedStateApplyKind.GuardBlocked)
+                    {
+                        status = "BlockedByGuard";
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = stepType,
+                            action = $"Transition guard failed for queued state event '{appliedEvent}': {queuedGuardReason}",
+                            state = currentState
+                        });
+                        break;
+                    }
+
+                    if (queuedState == QueuedStateApplyKind.Applied)
+                        triggeredEvent = appliedEvent;
+                }
 
                 totalStepsExecuted++;
                 executionTrace.Add(new
@@ -1371,7 +1415,8 @@ public class SimulationTools
             executionTrace,
             payload,
             subworkflowsExecuted,
-            pendingTimer
+            pendingTimer,
+            eventsQueue.ToList()
         );
     }
 
@@ -1823,6 +1868,74 @@ public class SimulationTools
         {
             return false;
         }
+    }
+
+    private enum QueuedStateApplyKind
+    {
+        None,
+        Applied,
+        GuardBlocked
+    }
+
+    private static QueuedStateApplyKind TryApplyQueuedSystemStateEvent(
+        WorkflowClassBlueprint blueprint,
+        Queue<string> eventsQueue,
+        Dictionary<string, object> payload,
+        ref string currentState,
+        List<object> stateTransitions,
+        out string? appliedEvent,
+        out string? guardReason)
+    {
+        appliedEvent = null;
+        guardReason = null;
+        if (eventsQueue.Count == 0)
+            return QueuedStateApplyKind.None;
+
+        var peek = eventsQueue.Peek();
+        if (IsEventReservedForHumanOrTimer(blueprint, peek))
+            return QueuedStateApplyKind.None;
+
+        var (smTrans, blocked, reason) = FindTransition(blueprint.StateMachine, currentState, peek, payload);
+        if (blocked)
+        {
+            appliedEvent = peek;
+            guardReason = reason;
+            return QueuedStateApplyKind.GuardBlocked;
+        }
+
+        if (smTrans == null || string.IsNullOrWhiteSpace(smTrans.ToState))
+            return QueuedStateApplyKind.None;
+
+        appliedEvent = eventsQueue.Dequeue();
+        stateTransitions.Add(new
+        {
+            from = currentState,
+            to = smTrans.ToState,
+            eventId = appliedEvent
+        });
+        currentState = smTrans.ToState;
+        return QueuedStateApplyKind.Applied;
+    }
+
+    private static bool IsEventReservedForHumanOrTimer(WorkflowClassBlueprint blueprint, string eventId)
+    {
+        if (blueprint.Workflow?.Steps == null)
+            return false;
+
+        foreach (var step in blueprint.Workflow.Steps)
+        {
+            var type = step.StepType?.ToLowerInvariant() ?? string.Empty;
+            if (!type.Contains("human") && !type.Contains("timer"))
+                continue;
+
+            if (step.NextSteps != null &&
+                step.NextSteps.Keys.Any(key => string.Equals(key, eventId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static (TransitionBlueprint? transition, bool guardBlocked, string? guardReason) FindTransition(

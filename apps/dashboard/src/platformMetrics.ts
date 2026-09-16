@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { mcpRpcPath } from './mcpUrl';
 
 export const VERIFIED_PLATFORM_METRICS = {
   mcpTools: 60,
@@ -17,7 +18,7 @@ let discoveryRequest: Promise<number> | undefined;
 const discoverMcpToolCount = async (): Promise<number> => {
   if (discoveredMcpToolCount !== undefined) return discoveredMcpToolCount;
 
-  discoveryRequest ??= fetch('/mcp', {
+  discoveryRequest ??= fetch(mcpRpcPath(), {
     headers: { Accept: 'application/json' }
   })
     .then(async response => {

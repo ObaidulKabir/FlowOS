@@ -293,29 +293,40 @@ public partial class Program
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-        app.MapGet("/", () => Results.Redirect("/mcp"));
+        app.MapGet("/", (HttpContext context) => Results.Redirect(FlowOsPublicUrls.McpPath(ResolvePublicMcpUrl(context))));
 
         app.MapGet("/.well-known/mcp", (HttpContext context) =>
         {
             var accepts = context.Request.Headers.Accept.ToString();
             if (accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Redirect("/mcp");
+                return Results.Redirect(FlowOsPublicUrls.McpPath(ResolvePublicMcpUrl(context)));
             }
 
             var mcpUrl = ResolvePublicMcpUrl(context);
+            var mcpPath = FlowOsPublicUrls.McpPath(mcpUrl);
             return Results.Ok(new
             {
                 schema = "https://modelcontextprotocol.io/schema/discovery.json",
                 name = "FlowOS MCP Control Plane",
                 version = "1.0.0",
-                description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction.",
+                description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction. " + FlowOsPublicUrls.AgentJsonRpcRule,
                 transport = "streamable-http",
                 protocolVersion = "2025-03-26",
-                endpoint = "/mcp",
+                endpoint = mcpPath,
                 url = mcpUrl,
                 documentation = mcpUrl,
-                toolsEndpoint = "/mcp",
+                toolsEndpoint = mcpPath,
+                connection = new
+                {
+                    jsonrpcUrl = mcpUrl,
+                    jsonrpcPath = mcpPath,
+                    rule = FlowOsPublicUrls.AgentJsonRpcRule,
+                    accept = "application/json, text/event-stream",
+                    apiKeyHeader = "X-MCP-API-Key",
+                    tenantHeader = "x-tenant-id",
+                    followRedirectsOnPost = false
+                },
                 auth = new
                 {
                     type = "apiKey",
@@ -325,17 +336,17 @@ public partial class Program
                 },
                 endpoints = new
                 {
-                    discovery = "/mcp",
-                    jsonrpc = "/mcp",
+                    discovery = mcpPath,
+                    jsonrpc = mcpPath,
                     wellKnown = "/.well-known/mcp",
-                    sse = "/mcp",
+                    sse = mcpPath,
                     health = "/health"
                 }
             });
         });
 
         app.MapGet("/.well-known/mcp.json", () => Results.Redirect("/.well-known/mcp"));
-        app.MapGet("/sse", () => Results.Redirect("/mcp"));
+        app.MapGet("/sse", (HttpContext context) => Results.Redirect(FlowOsPublicUrls.McpPath(ResolvePublicMcpUrl(context))));
 
         IResult HandleMcpGet(HttpContext context, IToolRegistry toolRegistry)
         {
@@ -343,6 +354,7 @@ public partial class Program
             var accepts = context.Request.Headers.Accept.ToString();
             var isHtml = accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase);
             var mcpUrl = ResolvePublicMcpUrl(context);
+            var mcpPath = FlowOsPublicUrls.McpPath(mcpUrl);
 
             var toolItems = toolRegistry.GetTools()
                 .OrderBy(t => t.Name)
@@ -381,8 +393,17 @@ public partial class Program
                 defaultProtocolVersion = McpJsonRpcDispatcher.DefaultProtocolVersion,
                 supportedProtocolVersions = McpJsonRpcDispatcher.SupportedProtocolVersions,
                 toolsCount = toolItems.Count,
-                description = "FlowOS Agentic Control Plane: Multi-tenant state machine and declarative workflow engine.",
-                endpoint = "/mcp",
+                description = "FlowOS Agentic Control Plane: Multi-tenant state machine and declarative workflow engine. " + FlowOsPublicUrls.AgentJsonRpcRule,
+                endpoint = mcpPath,
+                jsonrpcUrl = mcpUrl,
+                connection = new
+                {
+                    jsonrpcUrl = mcpUrl,
+                    jsonrpcPath = mcpPath,
+                    rule = FlowOsPublicUrls.AgentJsonRpcRule,
+                    accept = "application/json, text/event-stream",
+                    followRedirectsOnPost = false
+                },
                 methodsSupported = new[] { "GET", "POST", "OPTIONS" },
                 authentication = "Header X-MCP-API-Key or Authorization: Bearer, plus x-tenant-id header",
                 tools = toolItems.Select(t => new
@@ -418,7 +439,7 @@ public partial class Program
                 },
                 agentSetup = new
                 {
-                    description = "Connect your AI agent to FlowOS via MCP streamable HTTP transport",
+                    description = "Connect your AI agent to FlowOS via MCP streamable HTTP transport. POST to jsonrpcUrl exactly; do not strip a trailing slash or follow POST redirects.",
                     quickstart = new
                     {
                         mcpServers = new
@@ -725,6 +746,10 @@ public partial class Program
     <div class="badge"><div class="badge-dot"></div> MCP SERVER ONLINE &bull; PROTOCOL 2025-03-26 &amp; 2024-11-05</div>
     <h1>Flow<span>OS</span> MCP Control Plane</h1>
     <p class="lead">Model Context Protocol (MCP) server providing autonomous AI agents with governed execution, mathematical state enforcement, and real-time event telemetry.</p>
+    <div class="card" style="border-left: 4px solid #3b82f6; margin-bottom: 1.5rem;">
+      <h3>JSON-RPC connection (agents must follow this)</h3>
+      <p>POST JSON-RPC to <code>{{MCP_URL}}</code> exactly. Keep a trailing slash if the URL has one. Do not follow 301 redirects for POST. Send <code>Accept: application/json, text/event-stream</code>, <code>X-MCP-API-Key</code>, and <code>x-tenant-id</code>. Keys are host-scoped (production ≠ staging).</p>
+    </div>
 
     <div class="grid-3">
       <div class="card">
