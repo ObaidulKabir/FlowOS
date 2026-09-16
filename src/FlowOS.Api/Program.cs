@@ -197,7 +197,7 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    int maxRetries = 10;
+    int maxRetries = 30;
     int delaySeconds = 2;
     for (int retry = 1; retry <= maxRetries; retry++)
     {
@@ -214,14 +214,27 @@ using (var scope = app.Services.CreateScope())
             }
             break;
         }
-        catch (Exception ex) when (retry < maxRetries)
+        catch (Exception ex)
         {
-            logger.LogWarning(ex, "Database connection/migration failed on attempt {Retry}. Retrying in {Delay}s...", retry, delaySeconds);
-            await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+            if (retry < maxRetries)
+            {
+                logger.LogWarning(ex, "Database connection/migration failed on attempt {Retry}. Retrying in {Delay}s...", retry, delaySeconds);
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                continue;
+            }
+
+            logger.LogError(ex, "Database migration failed after {Max} attempts; the API will still listen.", maxRetries);
         }
     }
 
-    await DataSeeder.SeedAsync(context, scope.ServiceProvider, app.Environment);
+    try
+    {
+        await DataSeeder.SeedAsync(context, scope.ServiceProvider, app.Environment);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Data seeding failed; the API will still listen so /api is not a 502.");
+    }
 }
 
 app.Run();

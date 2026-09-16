@@ -36,6 +36,5 @@ jobs:
           script: |
             set -euo pipefail
             cd ${{ secrets.APP_PATH }}  
-            docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml up --build -d
             docker builder prune --filter "until=12h" -f

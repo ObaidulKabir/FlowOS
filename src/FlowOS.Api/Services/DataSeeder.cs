@@ -1281,21 +1281,37 @@ public static class DataSeeder
     {
         foreach (var name in SandboxSampleWorkflowNames)
         {
-            var hasPublished = await context.WorkflowDefinitions.AnyAsync(d =>
-                d.TenantId == tenantId && d.Name == name && d.Status == WorkflowStatus.Published);
-            if (hasPublished)
-                continue;
+            try
+            {
+                var existing = await context.WorkflowDefinitions
+                    .Where(d => d.TenantId == tenantId && d.Name == name)
+                    .OrderByDescending(d => d.Version)
+                    .FirstOrDefaultAsync();
+                if (existing != null)
+                {
+                    if (existing.Status != WorkflowStatus.Published)
+                    {
+                        existing.Publish();
+                        await context.SaveChangesAsync();
+                    }
+                    continue;
+                }
 
-            var workflowClass = await context.WorkflowClasses.FirstOrDefaultAsync(
-                w => w.TenantId == tenantId && w.Name == name);
-            if (workflowClass == null)
-                continue;
+                var workflowClass = await context.WorkflowClasses.FirstOrDefaultAsync(
+                    w => w.TenantId == tenantId && w.Name == name);
+                if (workflowClass == null)
+                    continue;
 
-            var definition = WorkflowClassCompiler.MapToRuntimeDefinition(workflowClass);
-            if (definition.Status != WorkflowStatus.Published)
-                definition.Publish();
-            context.WorkflowDefinitions.Add(definition);
-            await context.SaveChangesAsync();
+                var definition = WorkflowClassCompiler.MapToRuntimeDefinition(workflowClass);
+                if (definition.Status != WorkflowStatus.Published)
+                    definition.Publish();
+                context.WorkflowDefinitions.Add(definition);
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DataSeeder] Skipping runtime definition for '{name}': {ex.Message}");
+            }
         }
     }
 

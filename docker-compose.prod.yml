@@ -20,6 +20,9 @@ services:
       - SMTP_FROM=${SMTP_FROM:-admin@flowosbd.com}
     volumes:
       - ./flowos-config:/app/flowos-config
+    depends_on:
+      postgres:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.flowos-api.rule=Host(`${FLOWOS_DOMAIN}`) && PathPrefix(`/api`)"
@@ -69,6 +72,9 @@ services:
       - UseInMemoryDatabase=false
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-flowos};Username=${POSTGRES_USER:-root};Password=${POSTGRES_PASSWORD:-toor};
+    depends_on:
+      postgres:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.flowos-mcp.rule=Host(`${FLOWOS_DOMAIN}`) && PathPrefix(`/mcp`)"
