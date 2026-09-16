@@ -398,7 +398,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             FlowOS vs. Industry Orchestration Platforms
           </h2>
           <p className="text-sm text-slate-400 max-w-2xl mx-auto mt-2">
-            Detailed comparison of architecture, state enforcement, AI readiness, and operational complexity against Temporal.io, Camunda 8, and AWS Step Functions.
+            Detailed OS-1 comparison against Temporal.io, Camunda 8, AWS Step Functions, Conductor/Orkes, and n8n/Zapier. Native kernel vs custom work vs not that product.
           </p>
         </div>
 
