@@ -14,12 +14,81 @@
 #>
 
 param (
-    [string]$Url = "https://flowos.prospectbdltd.com/mcp",
-    [string]$ApiKey = "flowos_prod_secret_key_32_chars_min",
-    [string]$TenantId = "22222222-2222-2222-2222-222222222222"
+    [string]$Url = "",
+    [string]$ApiKey = "",
+    [string]$TenantId = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+$envFromShell = @{}
+Get-ChildItem Env: | ForEach-Object { $envFromShell[$_.Name] = $true }
+
+function Import-DotEnv([string]$Path) {
+    if (-not (Test-Path $Path)) { return }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith('#')) { return }
+        $eq = $line.IndexOf('=')
+        if ($eq -le 0) { return }
+        $name = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim().Trim('"').Trim("'")
+        if ($envFromShell.ContainsKey($name)) { return }
+        Set-Item -Path "Env:$name" -Value $value
+    }
+}
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Import-DotEnv (Join-Path $repoRoot '.env')
+$envFlavor = ([string]$env:FLOWOS_ENV).Trim().ToLowerInvariant()
+if ($envFlavor -eq 'staging' -or $envFlavor -eq 'production') {
+    Import-DotEnv (Join-Path $repoRoot ".env.$envFlavor")
+}
+Import-DotEnv (Join-Path $repoRoot '.env.local')
+
+function Test-ProductionHost([string]$Hostname) {
+    $hostName = $Hostname.ToLowerInvariant()
+    return ($hostName -eq 'flowosbd.com') -or $hostName.EndsWith('.flowosbd.com')
+}
+
+function Resolve-McpUrl([string]$Candidate, [string]$Origin) {
+    if ($Candidate) {
+        try {
+            $parsed = [Uri]$Candidate
+            $path = $parsed.AbsolutePath.TrimEnd('/')
+            if ($path -eq '/mcp' -and (Test-ProductionHost $parsed.Host) -and -not $Candidate.EndsWith('/')) {
+                return "$Candidate/"
+            }
+            if ($path -eq '/mcp' -and -not (Test-ProductionHost $parsed.Host)) {
+                return $Candidate.TrimEnd('/')
+            }
+            return $Candidate
+        } catch {
+            return $Candidate
+        }
+    }
+
+    if ($Origin) {
+        $base = $Origin.Trim().TrimEnd('/')
+        try {
+            $parsed = [Uri]$base
+            if (Test-ProductionHost $parsed.Host) { return "$base/mcp/" }
+        } catch { }
+        return "$base/mcp"
+    }
+
+    throw 'Set MCP_URL or FLOWOS_PUBLIC_ORIGIN. Staging: https://flowos.prospectbdltd.com/mcp  Production: https://flowosbd.com/mcp/'
+}
+
+if (-not $Url) { $Url = $env:MCP_URL }
+$Url = Resolve-McpUrl $Url $env:FLOWOS_PUBLIC_ORIGIN
+
+if (-not $ApiKey) { $ApiKey = $env:MCP_API_KEY }
+if (-not $TenantId) { $TenantId = $env:MCP_TENANT_ID }
+
+if ([string]::IsNullOrWhiteSpace($ApiKey) -or [string]::IsNullOrWhiteSpace($TenantId)) {
+    throw 'Set MCP_API_KEY and MCP_TENANT_ID in .env.local (or pass -ApiKey / -TenantId) before running this script.'
+}
 
 function Write-Step([string]$title) {
     Write-Host "`n========================================================" -ForegroundColor Cyan

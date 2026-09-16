@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Bot, Terminal, Copy, Check, ExternalLink, ShieldCheck, Code, Sparkles, BookOpen } from 'lucide-react';
 import { usePlatformMetrics } from '../platformMetrics';
+import { mcpRpcUrl } from '../mcpUrl';
 
 export const McpAgentGuideline: React.FC = () => {
   const { mcpTools, tests } = usePlatformMetrics();
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'browser' | 'curl' | 'config' | 'javascript'>('browser');
-  const mcpUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/mcp`;
+  const mcpUrl = mcpRpcUrl();
 
   const copyToClipboard = (text: string, tabId: string) => {
     navigator.clipboard.writeText(text);
@@ -204,7 +205,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
           </h3>
           <ol className="list-decimal list-inside space-y-2 text-slate-300 leading-relaxed">
             <li>
-              <strong>Discover Endpoint:</strong> Navigate directly to <a href="/mcp" className="text-blue-400 underline hover:text-blue-300">/mcp</a> (or <code className="text-blue-300">{mcpUrl}</code>). In human/browser mode, it renders a live interactive HTML tool catalog. Use a tenant API key generated in <em>this</em> environment — keys from local or staging will not authenticate against production.
+              <strong>Discover Endpoint:</strong> Navigate directly to <a href="/mcp" className="text-blue-400 underline hover:text-blue-300">/mcp</a> (or <code className="text-blue-300">{mcpUrl}</code>). In human/browser mode, it renders a live interactive HTML tool catalog. Use a tenant API key generated in <em>this</em> environment — staging keys authenticate only on flowos.prospectbdltd.com, production keys only on flowosbd.com.
             </li>
             <li>
               <strong>Machine-Readable Discovery:</strong> For programmatic bots, make an HTTP <code className="text-blue-300">GET /mcp</code> with header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">Accept: application/json</code>. No API keys or authentication credentials are required.

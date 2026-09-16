@@ -7,6 +7,7 @@ import { PlatformComparison } from './PlatformComparison';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { AuthModalMode } from './AuthModal';
 import { usePlatformMetrics } from '../platformMetrics';
+import { mcpRpcUrl } from '../mcpUrl';
 
 interface LandingPageProps {
   onOpenAuth: (mode: AuthModalMode) => void;
@@ -18,7 +19,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onLaunchSandbox
 }) => {
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
-  const mcpUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/mcp`;
+  const mcpUrl = mcpRpcUrl();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">

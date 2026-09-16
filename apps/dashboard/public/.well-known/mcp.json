@@ -3,10 +3,10 @@
   "name": "FlowOS MCP Control Plane",
   "version": "1.0.0",
   "description": "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction.",
-  "endpoint": "https://flowos.prospectbdltd.com/mcp",
+  "endpoint": "/mcp",
   "transport": "streamable-http",
   "protocolVersion": "2025-03-26",
-  "documentation": "https://flowos.prospectbdltd.com/mcp",
+  "documentation": "/mcp",
   "auth": {
     "type": "apiKey",
     "header": "X-MCP-API-Key",
@@ -14,10 +14,10 @@
     "sandboxAllowed": true
   },
   "endpoints": {
-    "discovery": "https://flowos.prospectbdltd.com/mcp",
-    "jsonrpc": "https://flowos.prospectbdltd.com/mcp",
-    "wellKnown": "https://flowos.prospectbdltd.com/.well-known/mcp",
-    "sse": "https://flowos.prospectbdltd.com/mcp",
-    "health": "https://flowos.prospectbdltd.com/health"
+    "discovery": "/mcp",
+    "jsonrpc": "/mcp",
+    "wellKnown": "/.well-known/mcp",
+    "sse": "/mcp",
+    "health": "/health"
   }
 }

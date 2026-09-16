@@ -7,6 +7,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - UseInMemoryDatabase=false
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     volumes:
       - ./flowos-config:/app/flowos-config
@@ -45,6 +46,7 @@ services:
       - MCP_ROLE=${MCP_ROLE:-Admin}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-*}
       - ASPNETCORE_URLS=http://+:8080
+      - UseInMemoryDatabase=false
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
     ports:
       - "8081:8080"

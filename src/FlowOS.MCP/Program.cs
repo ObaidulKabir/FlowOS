@@ -109,7 +109,14 @@ public partial class Program
 
         app.Use(async (context, next) =>
         {
-            if (!context.Request.Path.Equals("/mcp", StringComparison.OrdinalIgnoreCase) &&
+            if (context.Request.Path.Equals("/mcp/", StringComparison.OrdinalIgnoreCase))
+                context.Request.Path = "/mcp";
+            await next();
+        });
+
+        app.Use(async (context, next) =>
+        {
+            if (!FlowOsPublicUrls.IsMcpPath(context.Request.Path.Value) &&
                 !context.Request.Path.Equals("/", StringComparison.OrdinalIgnoreCase))
             {
                 await next();
@@ -296,6 +303,7 @@ public partial class Program
                 return Results.Redirect("/mcp");
             }
 
+            var mcpUrl = ResolvePublicMcpUrl(context);
             return Results.Ok(new
             {
                 schema = "https://modelcontextprotocol.io/schema/discovery.json",
@@ -305,8 +313,8 @@ public partial class Program
                 transport = "streamable-http",
                 protocolVersion = "2025-03-26",
                 endpoint = "/mcp",
-                url = "https://flowos.prospectbdltd.com/mcp",
-                documentation = "https://flowos.prospectbdltd.com/mcp",
+                url = mcpUrl,
+                documentation = mcpUrl,
                 toolsEndpoint = "/mcp",
                 auth = new
                 {
@@ -329,11 +337,12 @@ public partial class Program
         app.MapGet("/.well-known/mcp.json", () => Results.Redirect("/.well-known/mcp"));
         app.MapGet("/sse", () => Results.Redirect("/mcp"));
 
-        app.MapGet("/mcp", (HttpContext context, IToolRegistry toolRegistry) =>
+        IResult HandleMcpGet(HttpContext context, IToolRegistry toolRegistry)
         {
             context.Response.Headers.Append("Allow", "GET, POST, OPTIONS");
             var accepts = context.Request.Headers.Accept.ToString();
             var isHtml = accepts.Contains("text/html", StringComparison.OrdinalIgnoreCase);
+            var mcpUrl = ResolvePublicMcpUrl(context);
 
             var toolItems = toolRegistry.GetTools()
                 .OrderBy(t => t.Name)
@@ -359,7 +368,7 @@ public partial class Program
 
             if (isHtml)
             {
-                var html = GenerateDiscoveryHtml(toolItems);
+                var html = GenerateDiscoveryHtml(toolItems, mcpUrl);
                 return Results.Content(html, "text/html; charset=utf-8");
             }
 
@@ -421,7 +430,7 @@ public partial class Program
                                 {
                                     "-y",
                                     "mcp-remote-client",
-                                    "https://flowos.prospectbdltd.com/mcp",
+                                    mcpUrl,
                                     "--header", "X-MCP-API-Key: YOUR_TENANT_API_KEY",
                                     "--header", "x-tenant-id: YOUR_TENANT_ID"
                                 }
@@ -432,7 +441,9 @@ public partial class Program
             };
 
             return Results.Content(JsonConvert.SerializeObject(payload, Formatting.Indented), "application/json; charset=utf-8");
-        });
+        }
+
+        app.MapGet("/mcp", HandleMcpGet);
 
         var mcpPostHandler = async (HttpRequest request, IMcpJsonRpcDispatcher dispatcher, CancellationToken ct) =>
         {
@@ -529,14 +540,11 @@ public partial class Program
     {
         services.AddDbContext<FlowOSDbContext>((serviceProvider, options) =>
         {
-            var configuration = serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
-            var connectionString = configuration.GetConnectionString("DefaultConnection")
-                ?? configuration["ConnectionStrings:DefaultConnection"];
-
-            if (PostgresConnection.HasUsableHost(connectionString))
-                options.UseNpgsql(connectionString);
-            else
-                options.UseInMemoryDatabase("FlowOS_MCP_Db");
+            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+            var environmentName = configuration["ASPNETCORE_ENVIRONMENT"];
+            if (string.IsNullOrWhiteSpace(environmentName))
+                environmentName = serviceProvider.GetService<IHostEnvironment>()?.EnvironmentName;
+            FlowOsDatabase.Configure(options, environmentName, configuration, "FlowOS_MCP_Db");
         });
 
         services.AddFlowOSPersistence();
@@ -585,7 +593,19 @@ public partial class Program
         services.AddScoped<ActionObservabilityMcpTools>();
     }
 
-    private static string GenerateDiscoveryHtml(IReadOnlyList<ToolDiscoveryItem> tools)
+    private static string ResolvePublicMcpUrl(HttpContext context)
+    {
+        var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
+        var origin = FlowOsPublicUrls.ResolveOrigin(
+            configuration,
+            context.Request.Scheme,
+            context.Request.Host.Value,
+            context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault(),
+            context.Request.Headers["X-Forwarded-Host"].FirstOrDefault());
+        return FlowOsPublicUrls.McpEndpoint(origin);
+    }
+
+    private static string GenerateDiscoveryHtml(IReadOnlyList<ToolDiscoveryItem> tools, string mcpUrl)
     {
         var sb = new StringBuilder();
         sb.Append("""
@@ -802,7 +822,7 @@ public partial class Program
       "args": [
         "-y",
         "mcp-remote-client",
-        "https://flowos.prospectbdltd.com/mcp",
+        "{{MCP_URL}}",
         "--header", "X-MCP-API-Key: &lt;YOUR_TENANT_API_KEY&gt;",
         "--header", "x-tenant-id: &lt;YOUR_TENANT_ID&gt;"
       ]
@@ -811,7 +831,7 @@ public partial class Program
 }</code></pre>
 
     <h2>Quick cURL Discovery</h2>
-    <pre><code>curl -X POST https://flowos.prospectbdltd.com/mcp \
+    <pre><code>curl -X POST {{MCP_URL}} \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "X-MCP-API-Key: &lt;YOUR_API_KEY&gt;" \
@@ -828,7 +848,7 @@ public partial class Program
 </body>
 </html>
 """);
-        return sb.ToString();
+        return sb.ToString().Replace("{{MCP_URL}}", mcpUrl, StringComparison.Ordinal);
     }
 }
 

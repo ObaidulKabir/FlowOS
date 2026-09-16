@@ -29,6 +29,8 @@ services:
       - MCP_TRANSPORT=http
       - MCP_API_KEY=disabled  # Pre-payment gateway unauthenticated testing mode
       - MCP_ROLE=Admin
+      - ASPNETCORE_ENVIRONMENT=Development
+      - UseInMemoryDatabase=true
       - FLOWOS_API_URL=http://flowos-api-sandbox:8080
     depends_on:
       - flowos-api-sandbox

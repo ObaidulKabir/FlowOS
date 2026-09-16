@@ -47,27 +47,12 @@ builder.Services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredServic
 builder.Services.AddDbContext<FlowOSDbContext>((sp, options) =>
 {
     var interceptor = sp.GetRequiredService<EventPublishingInterceptor>();
-    bool useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    var hasPostgres = PostgresConnection.HasUsableHost(connectionString);
-    var environmentName = builder.Environment.EnvironmentName;
-    var isProduction = builder.Environment.IsProduction() || string.IsNullOrWhiteSpace(environmentName);
-
-    if (hasPostgres && (isProduction || !useInMemory))
-    {
-        options.UseNpgsql(connectionString)
-               .AddInterceptors(interceptor);
-    }
-    else if (!isProduction && useInMemory)
-    {
-        options.UseInMemoryDatabase("FlowOS_Db")
-               .AddInterceptors(interceptor);
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            "Database connection string 'DefaultConnection' is missing or has an empty Host. Production cannot use the in-memory database.");
-    }
+    FlowOsDatabase.Configure(
+        options,
+        builder.Environment.EnvironmentName,
+        builder.Configuration,
+        "FlowOS_Db",
+        interceptor);
 });
 
 builder.Services.AddFlowOSPersistence();
@@ -147,6 +132,13 @@ app.MapGet("/.well-known/mcp", (HttpContext context) =>
         return Results.Redirect("/mcp");
     }
 
+    var mcpUrl = FlowOsPublicUrls.McpEndpoint(FlowOsPublicUrls.ResolveOrigin(
+        context.RequestServices.GetRequiredService<IConfiguration>(),
+        context.Request.Scheme,
+        context.Request.Host.Value,
+        context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault(),
+        context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()));
+
     return Results.Ok(new
     {
         schema = "https://modelcontextprotocol.io/schema/discovery.json",
@@ -156,8 +148,8 @@ app.MapGet("/.well-known/mcp", (HttpContext context) =>
         transport = "streamable-http",
         protocolVersion = "2025-03-26",
         endpoint = "/mcp",
-        url = "https://flowos.prospectbdltd.com/mcp",
-        documentation = "https://flowos.prospectbdltd.com/mcp",
+        url = mcpUrl,
+        documentation = mcpUrl,
         toolsEndpoint = "/mcp",
         auth = new
         {

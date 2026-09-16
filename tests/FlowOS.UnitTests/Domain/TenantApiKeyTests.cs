@@ -35,6 +35,10 @@ public class TenantApiKeyTests
         Assert.True(key.IsActive);
         Assert.NotNull(key.MaskedKey);
         Assert.StartsWith("flw_live_", key.KeyPrefix);
+        Assert.Equal(TenantApiKey.HashKey(rawKey), key.KeyHash);
+        Assert.DoesNotContain(rawKey, key.KeyHash);
+        Assert.DoesNotContain(rawKey, key.MaskedKey);
+        Assert.NotEqual(rawKey, key.MaskedKey);
     }
 
     [Fact]

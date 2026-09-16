@@ -24,8 +24,12 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         _app = FlowOS.MCP.Program.BuildHttpApp([], builder =>
         {
             builder.WebHost.UseTestServer();
+            builder.Environment.EnvironmentName = "Development";
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["UseInMemoryDatabase"] = "true",
+                ["ASPNETCORE_ENVIRONMENT"] = "Development",
+                ["ConnectionStrings:DefaultConnection"] = "Host=",
                 ["MCP_API_KEY"] = ApiKey,
                 ["MCP_ROLE"] = "Admin",
                 ["MCP_ALLOWED_ORIGINS"] = "https://allowed.example"
@@ -92,6 +96,73 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Trailing_slash_mcp_path_is_authenticated_the_same_as_mcp()
+    {
+        using var noKey = new HttpRequestMessage(HttpMethod.Post, "/mcp/")
+        {
+            Content = JsonContent("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""")
+        };
+        AddAccept(noKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _client.SendAsync(noKey)).StatusCode);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp/")
+        {
+            Content = JsonContent("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"tests","version":"1"},"capabilities":{}}}""")
+        };
+        AddAccept(request);
+        Authorize(request);
+        request.Headers.Add("MCP-Protocol-Version", McpJsonRpcDispatcher.SupportedProtocolVersion);
+        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(request)).StatusCode);
+
+        using var options = new HttpRequestMessage(HttpMethod.Options, "/mcp/");
+        options.Headers.Add("Origin", "https://allowed.example");
+        Assert.Equal(HttpStatusCode.NoContent, (await _client.SendAsync(options)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Discovery_advertises_staging_or_production_origin()
+    {
+        await using var staging = FlowOS.MCP.Program.BuildHttpApp([], builder =>
+        {
+            builder.WebHost.UseTestServer();
+            builder.Environment.EnvironmentName = "Development";
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["UseInMemoryDatabase"] = "true",
+                ["ASPNETCORE_ENVIRONMENT"] = "Development",
+                ["ConnectionStrings:DefaultConnection"] = "Host=",
+                ["MCP_API_KEY"] = ApiKey,
+                ["MCP_ROLE"] = "Admin",
+                ["FLOWOS_PUBLIC_ORIGIN"] = "https://flowos.prospectbdltd.com"
+            });
+        });
+        await staging.StartAsync();
+        using var stagingClient = staging.GetTestClient();
+        var stagingJson = await stagingClient.GetStringAsync("/mcp");
+        Assert.Contains("https://flowos.prospectbdltd.com/mcp", stagingJson);
+        Assert.DoesNotContain("https://flowosbd.com/mcp", stagingJson);
+
+        await using var production = FlowOS.MCP.Program.BuildHttpApp([], builder =>
+        {
+            builder.WebHost.UseTestServer();
+            builder.Environment.EnvironmentName = "Development";
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["UseInMemoryDatabase"] = "true",
+                ["ASPNETCORE_ENVIRONMENT"] = "Development",
+                ["ConnectionStrings:DefaultConnection"] = "Host=",
+                ["MCP_API_KEY"] = ApiKey,
+                ["MCP_ROLE"] = "Admin",
+                ["FLOWOS_PUBLIC_ORIGIN"] = "https://flowosbd.com"
+            });
+        });
+        await production.StartAsync();
+        using var productionClient = production.GetTestClient();
+        var productionJson = await productionClient.GetStringAsync("/.well-known/mcp");
+        Assert.Contains("https://flowosbd.com/mcp/", productionJson);
+    }
+
+    [Fact]
     public async Task Empty_or_wildcard_allowed_origins_accept_cursor_origin()
     {
         foreach (var allowedOrigins in new[] { "", "*" })
@@ -99,8 +170,12 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             await using var app = FlowOS.MCP.Program.BuildHttpApp([], builder =>
             {
                 builder.WebHost.UseTestServer();
+                builder.Environment.EnvironmentName = "Development";
                 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
+                    ["UseInMemoryDatabase"] = "true",
+                    ["ASPNETCORE_ENVIRONMENT"] = "Development",
+                    ["ConnectionStrings:DefaultConnection"] = "Host=",
                     ["MCP_API_KEY"] = ApiKey,
                     ["MCP_ROLE"] = "Admin",
                     ["MCP_ALLOWED_ORIGINS"] = allowedOrigins

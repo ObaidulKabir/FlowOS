@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { CreateKeyResponse, TenantApiKeyDto } from '../types';
 import { Key, Plus, Copy, Check, Trash2, ShieldCheck, Terminal, AlertCircle, RefreshCw, Code2, LockKeyhole } from 'lucide-react';
+import { mcpRpcUrl } from '../mcpUrl';
 
 interface Props {
   tenantId: string;
@@ -141,7 +142,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
             </button>
           </div>
           <p className="text-xs text-slate-300">
-            Please copy this full key now. FlowOS stores only its SHA-256 hash; after this notice is dismissed or the page is reloaded, the secret cannot be recovered. Use it only against this environment&apos;s MCP URL — a local key will not authenticate to production.
+            Please copy this full key now. FlowOS stores only its SHA-256 hash; after this notice is dismissed or the page is reloaded, the secret cannot be recovered. Use it only against this environment&apos;s MCP URL ({mcpRpcUrl()}) — staging and production keys are not interchangeable.
           </p>
           <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-xl flex items-center justify-between font-mono text-xs text-emerald-300">
             <span className="break-all select-all font-bold">{createdKey.apiKey}</span>
@@ -160,7 +161,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
                 onClick={() => handleCopy(JSON.stringify({
                   mcpServers: {
                     flowos: {
-                      url: `${window.location.origin}/mcp`,
+                      url: mcpRpcUrl(),
                       headers: {
                         'x-tenant-id': tenantId,
                         'X-MCP-API-Key': createdKey.apiKey
@@ -177,7 +178,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
             <pre className="text-[10px] text-emerald-300 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify({
               mcpServers: {
                 flowos: {
-                  url: `${typeof window !== 'undefined' ? window.location.origin : ''}/mcp`,
+                  url: mcpRpcUrl(),
                   headers: {
                     'x-tenant-id': tenantId,
                     'X-MCP-API-Key': createdKey.apiKey

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api, getActiveTenantId, setActiveTenantId } from '../api/client';
 import { TenantDto } from '../types';
+import { mcpRpcUrl } from '../mcpUrl';
 import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle2, ShieldCheck, Globe, UserCheck } from 'lucide-react';
 
 interface TenantManagerProps {
@@ -334,7 +335,7 @@ headers = {
     "Content-Type": "application/json"
 }`;
                   } else {
-                    text = `curl -X POST ${window.location.origin}/mcp \\
+                    text = `curl -X POST ${mcpRpcUrl()} \\
   -H "X-API-Key: ${latestKeyInfo.apiKey}" \\
   -H "x-tenant-id: ${latestKeyInfo.tenantId}" \\
   -H "Content-Type: application/json"`;
@@ -372,7 +373,7 @@ headers = {
 }`}
 
                 {codeTab === 'curl' &&
-                  `curl -X POST ${window.location.origin}/mcp \\
+                  `curl -X POST ${mcpRpcUrl()} \\
   -H "X-API-Key: ${latestKeyInfo.apiKey}" \\
   -H "x-tenant-id: ${latestKeyInfo.tenantId}" \\
   -H "Content-Type: application/json"`}
