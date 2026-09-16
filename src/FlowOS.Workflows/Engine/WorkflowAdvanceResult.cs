@@ -20,6 +20,9 @@ public class WorkflowAdvanceResult
     public static WorkflowAdvanceResult StateSynchronized(string stepId, string eventType, string newState) =>
         new(true, $"Applied state-only event '{eventType}'. State is now '{newState}'.", stepId);
 
+    public static WorkflowAdvanceResult SlaReminderFired(string stepId, string eventType) =>
+        new(true, $"[SLA Reminder Fired] Reminder event '{eventType}' dispatched. Step remains '{stepId}'.", stepId);
+
     public static WorkflowAdvanceResult Completed() => 
         new(true, "Workflow completed.", null);
 

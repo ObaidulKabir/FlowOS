@@ -153,9 +153,10 @@ public static class McpToolDescriptions
                 "Draft bindings may point at a Draft workflow class; do not publish a throwaway variant just to simulate. " +
                 "Tenant-role existence (CTX-ROLE-002) is not enforced during simulation; activation still requires existing tenant roles. " +
                 "Projects source payloads into canonical context, applies contextual event aliases and event mappings, enforces workflow/state-machine guards and simulated roles, and reports actions, timers, and subworkflows without executing them. " +
+                "SLA reminders fire in duration order before a completing nextSteps event; set autoAdvanceTimers=true with no completing event to also fire TimeoutEvent. Do not start a live instance just to prove reminders. " +
                 "Returns: {ok:true,data:{contextBindingId,revisionKind,status,initialProjection,initialCanonicalContext,finalCanonicalContext,trace,pendingWork,graph,sideEffectsSuppressed:true}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-VALIDATION, CTX-STATE-001, MCP-INTERNAL. " +
-                "Input example: {\"contextType\":\"Expense\",\"revision\":\"draft\",\"initialPayload\":{\"expense\":{\"amount\":1500}},\"roles\":[\"FinanceManager\"],\"events\":[{\"eventType\":\"EVT-EXP-SUBMIT\"}],\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+                "Input example: {\"contextType\":\"Expense\",\"revision\":\"draft\",\"initialPayload\":{\"expense\":{\"amount\":1500}},\"roles\":[\"FinanceManager\"],\"events\":[{\"eventType\":\"EVT-EXP-SUBMIT\"}],\"autoAdvanceTimers\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["start_workflow"] =
                 "[Lifecycle Step 4: Run Instance] Starts a live runtime execution instance through exactly one workflow or active context-binding selector. " +
@@ -197,11 +198,12 @@ public static class McpToolDescriptions
                 "[Simulator] Runs a zero-side-effect, in-memory dry-run simulation of a WorkflowClass using either an existing draft/published ID or an inline blueprint. " +
                 "Evaluates decision conditions against context payloads, validates state machine guards, enforces human-task role permissions, advances automated steps, " +
                 "and applies queued domain events to the state machine on Decision and Default Command steps when the event is not reserved for a HumanTask/Timer. " +
+                "HumanTask/Command SLA reminders fire in duration order before a completing nextSteps event; set autoAdvanceTimers=true with no completing event to also fire TimeoutEvent. Timer steps still require autoAdvanceTimers to elapse. " +
                 "Evaluates dynamic payload mappings and Handlebars templates, and injects simulated step faults via `simulateFailureAtStep` to test OnFailure Saga rollback compensation actions. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
                 "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload,eventsRemaining}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"simulateFailureAtStep\":\"PaymentStep\"}",
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"autoAdvanceTimers\":true,\"simulateFailureAtStep\":\"PaymentStep\"}",
 
             ["simulate_subworkflow"] =
                 "[Simulator] Simulates end-to-end execution of a parent-child subworkflow relationship, including parent-to-child input parameter mapping, nested child workflow step execution, child-to-parent output mapping, and parent workflow resumption. " +

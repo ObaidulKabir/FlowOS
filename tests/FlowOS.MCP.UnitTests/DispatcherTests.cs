@@ -82,6 +82,7 @@ public sealed class DispatcherTests
         Assert.Contains("design_dual_kernel_workflow", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/dual-kernel-design", initResult["instructions"]!.ToString());
         Assert.Contains("state-only catch-up", initResult["instructions"]!.ToString());
+        Assert.Contains("autoAdvanceTimers", initResult["instructions"]!.ToString());
         Assert.NotNull(initResult["capabilities"]?["prompts"]);
         Assert.NotNull(initResult["capabilities"]?["resources"]);
 
@@ -116,6 +117,8 @@ public sealed class DispatcherTests
         Assert.Contains("state-only", dualKernelText);
         Assert.Contains("QUOTE_APPROVED", dualKernelText);
         Assert.Contains("throwaway", dualKernelText);
+        Assert.Contains("autoAdvanceTimers", dualKernelText);
+        Assert.Contains("SLA", dualKernelText);
     }
 
     [Fact]

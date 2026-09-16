@@ -15,7 +15,8 @@ public sealed record WorkflowContextSimulationRequest(
     object? InitialPayload = null,
     IReadOnlyList<string>? Roles = null,
     IReadOnlyList<WorkflowContextSimulationEventRequest>? Events = null,
-    int MaxSteps = 25);
+    int MaxSteps = 25,
+    bool AutoAdvanceTimers = false);
 
 public sealed record WorkflowContextSimulationProjectionItemDto(
     string CanonicalField,

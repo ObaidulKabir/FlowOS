@@ -185,6 +185,44 @@ public class WorkflowStateEnforcementTests
         Assert.Equal("Assigned", instance.CurrentState);
     }
 
+    [Fact]
+    public void Advance_SlaReminderWithoutNextSteps_StaysOnStep()
+    {
+        var wfDef = new WorkflowDefinition(_tenantId, "QuoteSla", 1, "ApproveQuote");
+        wfDef.AddStep(new WorkflowStepDefinition("ApproveQuote", WorkflowStepType.HumanTask)
+        {
+            NextSteps = { { "QUOTE_APPROVED", "END" } },
+            Sla = new StepSlaDefinition(
+                "24h",
+                "QUOTE_RESPONSE_OVERDUE",
+                reminders: new List<StepReminderDefinition>
+                {
+                    new("2h", "QUOTE_REMINDER_SENT"),
+                    new("12h", "QUOTE_REMINDER_SENT")
+                })
+        });
+        wfDef.Publish();
+
+        var smDef = new StateMachineDefinition(_tenantId, "ServiceRepairJob", "Assigned");
+        smDef.AddState("Assigned");
+        smDef.AddState("Quoted");
+        smDef.AddTransition(new StateTransition("Assigned", "Quoted", "QUOTE_APPROVED"));
+
+        var instance = new WorkflowInstance(_tenantId, wfDef.Id, Guid.NewGuid(), 1, "ApproveQuote", initialState: "Assigned");
+        var result = _engine.Advance(
+            instance,
+            wfDef,
+            new TestDomainEvent(_tenantId, "QUOTE_REMINDER_SENT"),
+            new FlowOS.StateMachines.Models.ExecutionContext(),
+            smDef,
+            "Assigned");
+
+        Assert.True(result.Success);
+        Assert.Contains("[SLA Reminder Fired]", result.Message);
+        Assert.Equal("ApproveQuote", instance.CurrentStepId);
+        Assert.Equal("Assigned", instance.CurrentState);
+    }
+
     public class TestDomainEvent : DomainEvent
     {
         public override string EventType { get; }

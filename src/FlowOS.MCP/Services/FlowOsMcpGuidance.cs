@@ -76,6 +76,7 @@ public static class FlowOsMcpGuidance
         - Preferred design: HumanTask/Command `nextSteps` consume the same event the state machine uses. Do not auto-skip a legal gate unless you still emit that event.
         - Context bindings do not create tenant roles. `simulate_context_binding` may use a Draft template and does not require tenant roles to exist. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source and real tenant roles (CTX-ROLE-002).
         - Diagnose divergence: if `currentStep` is ahead of `currentState` (e.g. MaterialDecision / Assigned), the missing event is the unused state-machine trigger.
+        - SLA reminders do not need a live waiting instance. `simulate_workflowclass` / `simulate_context_binding` inject reminder triggerEvents in duration order before a completing nextSteps event (e.g. QUOTE_APPROVED). Put TimeoutEvent (QUOTE_RESPONSE_OVERDUE) on nextSteps. Set autoAdvanceTimers=true and omit the completing event to fire the timeout. Trace lines contain `[SLA Reminder Fired]` / `[SLA Timeout Fired]`.
         """;
 
     public static object GetPromptsList() => new
@@ -439,10 +440,10 @@ public static class FlowOsMcpGuidance
         1. `describe_workflowclass_schema`
         2. `create_draft_workflowclass` — declare `events`, `stateMachine.transitions`, and `workflow.steps` together.
         3. `validate_draft_workflowclass` then `lint_draft_workflowclass`
-        4. `simulate_workflowclass` with the **full** event list, including every state-machine trigger, even after Decision auto-routes.
+        4. `simulate_workflowclass` with the **full** event list, including every state-machine trigger, even after Decision auto-routes. SLA reminder events may be omitted: they fire automatically before a completing nextSteps event. Use `autoAdvanceTimers: true` without the completing event to fire TimeoutEvent (do not start a live instance just to prove reminders).
         5. Tenant context (do not strip roles or publish a throwaway no-roles variant):
            - `create_context_binding` against the **draft** template id, with `inputMapping` for canonical fields
-           - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, optional `roles` for the trace, and the same full event list
+           - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, optional `roles` for the trace, the same full event list, and `autoAdvanceTimers: true` when you need SLA timeout as well as reminders
            - CTX-ROLE-002 applies to `validate_context_binding` / `activate_context_binding`, not to simulation
         6. `publish_workflowclass` with `confirmHumanApproval: true` when required, then `validate_context_binding`
         7. `activate_context_binding` only after draft simulation is Allowed through the expected final state
@@ -460,6 +461,12 @@ public static class FlowOsMcpGuidance
         - Design sandbox: `simulate_workflowclass`
         - Bound business payload: `simulate_context_binding`
         - After a live instance exists: `fork_workflow_simulation` / `replay_workflow_history`
+
+        ## SLA reminders (no live clock required)
+
+        Put `sla.duration`, `sla.timeoutEvent`, and `sla.reminders[]` on the waiting HumanTask or Command. Declare reminder and timeout event IDs. Put TimeoutEvent on `nextSteps` (and a state-machine transition if state should change). Reminder events may loop back, be state-only, or be notification-only.
+
+        Happy path: send the completing event (`QUOTE_APPROVED`). The simulator injects `QUOTE_REMINDER_SENT` at 2h then 12h before approval. Overdue path: `autoAdvanceTimers: true` and omit the completing event so `QUOTE_RESPONSE_OVERDUE` fires after the reminders. Do not start a live instance just to prove the clock.
         """;
 
     public const string ReferenceExpenseApprovalJson =

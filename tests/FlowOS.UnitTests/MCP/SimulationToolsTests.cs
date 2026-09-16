@@ -875,6 +875,178 @@ public class SimulationToolsTests
     }
 
     [Fact]
+    public async Task SimulateWorkflowClass_HumanTaskSla_FiresRemindersBeforeCompletingEventWithoutQueuingThem()
+    {
+        var blueprint = CreateQuoteSlaBlueprint(includeTimeoutNextStep: false);
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(blueprint),
+            ["role"] = "Customer",
+            ["events"] = new JArray { "QUOTE_APPROVED" }
+        };
+
+        var result = await _tools.SimulateWorkflowClass(args);
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("Quoted", data["finalState"]?.ToString());
+
+        var trace = data["executionTrace"] as JArray;
+        Assert.NotNull(trace);
+        var reminderActions = trace
+            .Select(t => t["action"]?.ToString() ?? "")
+            .Where(action => action.Contains("[SLA Reminder Fired]"))
+            .ToList();
+        Assert.Equal(2, reminderActions.Count);
+        Assert.Contains(reminderActions, action => action.Contains("QUOTE_REMINDER_SENT"));
+        Assert.DoesNotContain(trace, t => t["action"]?.ToString()?.Contains("[SLA Timeout Fired]") == true);
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_HumanTaskSla_AutoAdvanceTimersFiresTimeoutWithoutLiveInstance()
+    {
+        var blueprint = CreateQuoteSlaBlueprint(includeTimeoutNextStep: true);
+        var args = new JObject
+        {
+            ["blueprint"] = JObject.FromObject(blueprint),
+            ["role"] = "Customer",
+            ["autoAdvanceTimers"] = true
+        };
+
+        var result = await _tools.SimulateWorkflowClass(args);
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("Overdue", data["finalState"]?.ToString());
+
+        var trace = data["executionTrace"] as JArray;
+        Assert.NotNull(trace);
+        Assert.Equal(2, trace.Count(t => t["action"]?.ToString()?.Contains("[SLA Reminder Fired]") == true));
+        Assert.Contains(trace, t => t["action"]?.ToString()?.Contains("[SLA Timeout Fired]") == true);
+        Assert.Contains(trace, t => t["action"]?.ToString()?.Contains("QUOTE_RESPONSE_OVERDUE") == true);
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_CommandSla_FiresRemindersBeforeQuoteApproved()
+    {
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "QUOTE_REMINDER_SENT" },
+                new() { EventId = "QUOTE_APPROVED" },
+                new() { EventId = "QUOTE_RESPONSE_OVERDUE" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Assigned",
+                States = new List<string> { "Assigned", "Quoted" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "Assigned", ToState = "Quoted", EventId = "QUOTE_APPROVED" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "ApproveQuote",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "ApproveQuote",
+                        StepType = "Command",
+                        Sla = new StepSlaBlueprint
+                        {
+                            Duration = "24h",
+                            TimeoutEvent = "QUOTE_RESPONSE_OVERDUE",
+                            Reminders = new List<StepReminderBlueprint>
+                            {
+                                new() { Duration = "2h", TriggerEvent = "QUOTE_REMINDER_SENT" },
+                                new() { Duration = "12h", TriggerEvent = "QUOTE_REMINDER_SENT" }
+                            }
+                        },
+                        NextSteps = new Dictionary<string, string>
+                        {
+                            { "QUOTE_APPROVED", "END" },
+                            { "QUOTE_RESPONSE_OVERDUE", "END" }
+                        }
+                    }
+                }
+            }
+        };
+
+        var result = await _tools.SimulateWorkflowClass(new JObject
+        {
+            ["blueprint"] = JObject.FromObject(blueprint),
+            ["events"] = new JArray { "QUOTE_APPROVED" }
+        });
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("Quoted", data["finalState"]?.ToString());
+        var trace = data["executionTrace"] as JArray;
+        Assert.NotNull(trace);
+        Assert.Equal(2, trace.Count(t => t["action"]?.ToString()?.Contains("[SLA Reminder Fired]") == true));
+    }
+
+    private static WorkflowClassBlueprint CreateQuoteSlaBlueprint(bool includeTimeoutNextStep)
+    {
+        var nextSteps = new Dictionary<string, string>
+        {
+            { "QUOTE_APPROVED", "END" }
+        };
+        if (includeTimeoutNextStep)
+            nextSteps["QUOTE_RESPONSE_OVERDUE"] = "END";
+
+        return new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "QUOTE_REMINDER_SENT" },
+                new() { EventId = "QUOTE_APPROVED" },
+                new() { EventId = "QUOTE_RESPONSE_OVERDUE" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Assigned",
+                States = new List<string> { "Assigned", "Quoted", "Overdue" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "Assigned", ToState = "Quoted", EventId = "QUOTE_APPROVED" },
+                    new() { FromState = "Assigned", ToState = "Overdue", EventId = "QUOTE_RESPONSE_OVERDUE" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "ApproveQuote",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "ApproveQuote",
+                        StepType = "HumanTask",
+                        RequiredRoles = new List<string> { "Customer" },
+                        Sla = new StepSlaBlueprint
+                        {
+                            Duration = "24h",
+                            TimeoutEvent = "QUOTE_RESPONSE_OVERDUE",
+                            Reminders = new List<StepReminderBlueprint>
+                            {
+                                new() { Duration = "2h", TriggerEvent = "QUOTE_REMINDER_SENT" },
+                                new() { Duration = "12h", TriggerEvent = "QUOTE_REMINDER_SENT" }
+                            }
+                        },
+                        NextSteps = nextSteps
+                    }
+                }
+            }
+        };
+    }
+
+    [Fact]
     public async Task Simulate_DecisionAndDefaultCommand_ApplyQueuedSystemStateEvents()
     {
         var blueprint = JObject.FromObject(new WorkflowClassBlueprint

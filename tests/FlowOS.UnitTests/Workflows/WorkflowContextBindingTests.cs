@@ -664,6 +664,100 @@ public class WorkflowContextBindingTests
     }
 
     [Fact]
+    public async Task ContextSimulation_HumanTaskSla_FiresRemindersBeforeCompletingEvent()
+    {
+        var source = CreateSlaReminderSource();
+        var binding = new WorkflowContextBinding(source.TenantId, "QuoteSla", "QuoteSlaBinding");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id,
+            1,
+            source.Id,
+            source.Version,
+            new WorkflowContextBindingDefinition
+            {
+                EntityType = "ServiceRepairJob",
+                InputMapping = new Dictionary<string, string> { ["JobId"] = "job.id" }
+            });
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var pluginRegistry = new Mock<IPolicyDecisionPluginRegistry>().Object;
+        var result = await new WorkflowContextSimulationService(
+                unitOfWork,
+                new WorkflowContextBindingValidator(unitOfWork, pluginRegistry),
+                new WorkflowExecutionContextService(unitOfWork),
+                new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()))
+            .SimulateAsync(
+                source.TenantId,
+                new WorkflowContextSimulationRequest(
+                    ContextBindingId: binding.Id,
+                    Revision: "draft",
+                    InitialPayload: new { job = new { id = "JOB-1" } },
+                    Roles: ["Customer"],
+                    Events: [new WorkflowContextSimulationEventRequest("QUOTE_APPROVED")]));
+
+        Assert.Equal("Completed", result.Status);
+        Assert.Equal("Quoted", result.CurrentState);
+        Assert.Equal(2, result.Trace.Count(item =>
+            item.EventType == "QUOTE_REMINDER_SENT" &&
+            item.IsAllowed &&
+            item.Outcome.Contains("[SLA Reminder Fired]")));
+        Assert.DoesNotContain(result.Trace, item => item.EventType == "QUOTE_RESPONSE_OVERDUE");
+        Assert.Contains(result.Trace[0].PendingWork, item => item.Kind == "SlaReminder");
+    }
+
+    [Fact]
+    public async Task ContextSimulation_HumanTaskSla_AutoAdvanceTimersFiresTimeout()
+    {
+        var source = CreateSlaReminderSource(includeTimeoutNextStep: true);
+        var binding = new WorkflowContextBinding(source.TenantId, "QuoteSlaOverdue", "QuoteSlaOverdueBinding");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id,
+            1,
+            source.Id,
+            source.Version,
+            new WorkflowContextBindingDefinition { EntityType = "ServiceRepairJob" });
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var pluginRegistry = new Mock<IPolicyDecisionPluginRegistry>().Object;
+        var result = await new WorkflowContextSimulationService(
+                unitOfWork,
+                new WorkflowContextBindingValidator(unitOfWork, pluginRegistry),
+                new WorkflowExecutionContextService(unitOfWork),
+                new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()))
+            .SimulateAsync(
+                source.TenantId,
+                new WorkflowContextSimulationRequest(
+                    ContextBindingId: binding.Id,
+                    Revision: "draft",
+                    AutoAdvanceTimers: true));
+
+        Assert.Equal("Completed", result.Status);
+        Assert.Equal("Overdue", result.CurrentState);
+        Assert.Contains(result.Trace, item =>
+            item.EventType == "QUOTE_RESPONSE_OVERDUE" && item.IsAllowed);
+    }
+
+    [Fact]
     public async Task Activation_AllowsSameEventId_WhenOnlyEntityTypeDiffers()
     {
         var source = CreateRepairSource();
@@ -859,6 +953,64 @@ public class WorkflowContextBindingTests
                             StepId = "CloseJob",
                             StepType = "Command",
                             NextSteps = new Dictionary<string, string> { ["Default"] = "END" }
+                        }
+                    ]
+                }
+            });
+    }
+
+    private static WorkflowClass CreateSlaReminderSource(bool includeTimeoutNextStep = false)
+    {
+        var nextSteps = new Dictionary<string, string> { ["QUOTE_APPROVED"] = "END" };
+        if (includeTimeoutNextStep)
+            nextSteps["QUOTE_RESPONSE_OVERDUE"] = "END";
+
+        var tenantId = Guid.NewGuid();
+        return new WorkflowClass(
+            tenantId,
+            "QuoteSlaReminderSimulator",
+            "1.0.0",
+            new WorkflowClassBlueprint
+            {
+                ContextSchema = """{"type":"object","properties":{"JobId":{"type":"string"}}}""",
+                Events =
+                [
+                    new EventBlueprint { EventId = "QUOTE_REMINDER_SENT", Name = "Quote reminder" },
+                    new EventBlueprint { EventId = "QUOTE_APPROVED", Name = "Quote approved" },
+                    new EventBlueprint { EventId = "QUOTE_RESPONSE_OVERDUE", Name = "Quote overdue" }
+                ],
+                StateMachine = new StateMachineBlueprint
+                {
+                    EntityType = "ServiceRepairJob",
+                    InitialState = "Assigned",
+                    States = ["Assigned", "Quoted", "Overdue"],
+                    Transitions =
+                    [
+                        new TransitionBlueprint { FromState = "Assigned", ToState = "Quoted", EventId = "QUOTE_APPROVED" },
+                        new TransitionBlueprint { FromState = "Assigned", ToState = "Overdue", EventId = "QUOTE_RESPONSE_OVERDUE" }
+                    ]
+                },
+                Workflow = new WorkflowBlueprint
+                {
+                    StartStepId = "ApproveQuote",
+                    Steps =
+                    [
+                        new StepBlueprint
+                        {
+                            StepId = "ApproveQuote",
+                            StepType = "HumanTask",
+                            RequiredRoles = ["Customer"],
+                            Sla = new StepSlaBlueprint
+                            {
+                                Duration = "24h",
+                                TimeoutEvent = "QUOTE_RESPONSE_OVERDUE",
+                                Reminders =
+                                [
+                                    new() { Duration = "2h", TriggerEvent = "QUOTE_REMINDER_SENT" },
+                                    new() { Duration = "12h", TriggerEvent = "QUOTE_REMINDER_SENT" }
+                                ]
+                            },
+                            NextSteps = nextSteps
                         }
                     ]
                 }

@@ -69,6 +69,11 @@ public class WorkflowEngine : IWorkflowEngine
                 return synchronized;
             }
 
+            if (IsSlaReminderEvent(currentStep, domainEvent.EventType))
+            {
+                return WorkflowAdvanceResult.SlaReminderFired(currentStep.StepId, domainEvent.EventType);
+            }
+
             return WorkflowAdvanceResult.Failed($"No transition defined for event '{domainEvent.EventType}' from step '{currentStep.StepId}'.");
         }
 
@@ -387,5 +392,14 @@ public class WorkflowEngine : IWorkflowEngine
         }
 
         return false;
+    }
+
+    private static bool IsSlaReminderEvent(WorkflowStepDefinition step, string eventType)
+    {
+        if (step.Sla?.Reminders == null || step.Sla.Reminders.Count == 0)
+            return false;
+
+        return step.Sla.Reminders.Any(reminder =>
+            string.Equals(reminder.TriggerEvent, eventType, StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -103,10 +103,21 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
 
         var denied = false;
         var processedEvents = 0;
-        foreach (var scenarioEvent in request.Events ?? Array.Empty<WorkflowContextSimulationEventRequest>())
+        var eventQueue = new Queue<WorkflowContextSimulationEventRequest>(
+            request.Events ?? Array.Empty<WorkflowContextSimulationEventRequest>());
+        var slaClockApplied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        InjectSlaClockEvents(
+            runtime.WorkflowDefinition,
+            instance,
+            eventQueue,
+            request.AutoAdvanceTimers,
+            slaClockApplied);
+
+        while (eventQueue.Count > 0)
         {
             if (processedEvents >= request.MaxSteps) break;
             processedEvents++;
+            var scenarioEvent = eventQueue.Dequeue();
 
             if (string.IsNullOrWhiteSpace(scenarioEvent.EventType))
                 throw new ArgumentException($"Simulation event {processedEvents} must declare EventType.");
@@ -167,7 +178,9 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 break;
             }
 
-            var roleFailure = ValidateHumanTaskRole(beforeStep, eventRoles);
+            var roleFailure = IsSlaClockEvent(beforeStep, eventType)
+                ? null
+                : ValidateHumanTaskRole(beforeStep, eventRoles);
             if (roleFailure != null)
             {
                 trace.Add(DeniedTrace(
@@ -249,10 +262,16 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 instance,
                 executionContext,
                 canonicalContext);
+            InjectSlaClockEvents(
+                runtime.WorkflowDefinition,
+                instance,
+                eventQueue,
+                request.AutoAdvanceTimers,
+                slaClockApplied);
         }
 
         var stepLimitReached =
-            (request.Events?.Count ?? 0) > processedEvents &&
+            eventQueue.Count > 0 &&
             processedEvents >= request.MaxSteps;
         var status = denied
             ? "Denied"
@@ -491,6 +510,10 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             PlanActions(currentStep, "OnFailure"),
             PendingWorkForStep(currentStep));
 
+    private static bool IsSlaClockEvent(WorkflowStepDefinition? step, string eventType) =>
+        SlaSimulationClock.IsReminderEvent(step?.Sla, eventType) ||
+        SlaSimulationClock.IsTimeoutEvent(step?.Sla, eventType);
+
     private static string? ValidateHumanTaskRole(
         WorkflowStepDefinition? step,
         IReadOnlyList<string> roles)
@@ -601,16 +624,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         if (step == null) return Array.Empty<WorkflowContextSimulationPendingWorkDto>();
         return step.StepType switch
         {
-            WorkflowStepType.HumanTask => new[]
-            {
-                new WorkflowContextSimulationPendingWorkDto(
-                    "HumanTask",
-                    step.StepId,
-                    step.NextSteps.Keys.FirstOrDefault(),
-                    step.AllowedRoles.Count == 0
-                        ? "Waiting for human completion."
-                        : $"Waiting for role: {string.Join(" or ", step.AllowedRoles)}.")
-            },
+            WorkflowStepType.HumanTask => DescribeHumanTaskPendingWork(step),
             WorkflowStepType.Timer => new[]
             {
                 new WorkflowContextSimulationPendingWorkDto(
@@ -619,7 +633,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     step.NextSteps.Keys.FirstOrDefault(),
                     step.Sla == null
                         ? "Timer is planned but not scheduled in simulation."
-                        : $"Timer/SLA {step.Sla.Duration} is planned but not scheduled in simulation.")
+                        : $"Timer/SLA {step.Sla.Duration} fires in simulation when autoAdvanceTimers is true.")
             },
             WorkflowStepType.SubWorkflow => new[]
             {
@@ -631,6 +645,96 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             },
             _ => Array.Empty<WorkflowContextSimulationPendingWorkDto>()
         };
+    }
+
+    private static WorkflowContextSimulationPendingWorkDto[] DescribeHumanTaskPendingWork(
+        WorkflowStepDefinition step)
+    {
+        var waiting = step.AllowedRoles.Count == 0
+            ? "Waiting for human completion."
+            : $"Waiting for role: {string.Join(" or ", step.AllowedRoles)}.";
+        if (step.Sla == null)
+        {
+            return new[]
+            {
+                new WorkflowContextSimulationPendingWorkDto(
+                    "HumanTask",
+                    step.StepId,
+                    step.NextSteps.Keys.FirstOrDefault(),
+                    waiting)
+            };
+        }
+
+        var reminders = step.Sla.Reminders.Count == 0
+            ? "none"
+            : string.Join(", ", step.Sla.Reminders.Select(r => $"{r.TriggerEvent}@{r.Duration}"));
+        var items = new List<WorkflowContextSimulationPendingWorkDto>
+        {
+            new(
+                "HumanTask",
+                step.StepId,
+                step.NextSteps.Keys.FirstOrDefault(),
+                waiting +
+                $" SLA {step.Sla.Duration} reminders [{reminders}] timeout {step.Sla.TimeoutEvent}. " +
+                "Simulation fires those clock events when autoAdvanceTimers is true or a completing nextSteps event is queued.")
+        };
+        foreach (var reminder in step.Sla.Reminders)
+        {
+            items.Add(new WorkflowContextSimulationPendingWorkDto(
+                "SlaReminder",
+                step.StepId,
+                reminder.TriggerEvent,
+                $"Reminder at {reminder.Duration}."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(step.Sla.TimeoutEvent))
+        {
+            items.Add(new WorkflowContextSimulationPendingWorkDto(
+                "SlaTimeout",
+                step.StepId,
+                step.Sla.TimeoutEvent,
+                $"Timeout after {step.Sla.Duration}."));
+        }
+
+        return items.ToArray();
+    }
+
+    private static void InjectSlaClockEvents(
+        WorkflowDefinition definition,
+        WorkflowInstance instance,
+        Queue<WorkflowContextSimulationEventRequest> eventQueue,
+        bool autoAdvanceTimers,
+        ISet<string> slaClockApplied)
+    {
+        var step = FindCurrentStep(definition, instance);
+        if (step?.Sla == null) return;
+        if (step.StepType is WorkflowStepType.Decision or WorkflowStepType.Fork or WorkflowStepType.Join)
+            return;
+        if (step.StepType != WorkflowStepType.HumanTask &&
+            step.NextSteps.ContainsKey("Default"))
+        {
+            return;
+        }
+
+        if (!slaClockApplied.Add(step.StepId)) return;
+
+        var queuedTypes = eventQueue.Select(e => e.EventType).ToList();
+        var completing = queuedTypes.Any(evt =>
+            !SlaSimulationClock.IsReminderEvent(step.Sla, evt) &&
+            step.NextSteps.ContainsKey(evt));
+        var selected = SlaSimulationClock.SelectForSimulation(
+            SlaSimulationClock.Plan(step.Sla),
+            completing,
+            autoAdvanceTimers,
+            queuedTypes);
+        if (selected.Count == 0) return;
+
+        var rest = eventQueue.ToList();
+        eventQueue.Clear();
+        foreach (var job in selected)
+            eventQueue.Enqueue(new WorkflowContextSimulationEventRequest(job.EventType));
+        foreach (var remaining in rest)
+            eventQueue.Enqueue(remaining);
     }
 
     private static WorkflowStepDefinition? FindCurrentStep(

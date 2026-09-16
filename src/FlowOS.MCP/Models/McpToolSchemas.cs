@@ -448,13 +448,18 @@ public static class McpToolSchemas
                 },
                 "additionalProperties":false
               },
-              "description":"Ordered contextual business events with optional source payload and role overrides."
+              "description":"Ordered contextual business events with optional source payload and role overrides. SLA reminder triggerEvents may be omitted; the simulator injects them in duration order before a completing nextSteps event."
             },
             "maxSteps":{
               "type":"integer",
               "minimum":1,
               "maximum":100,
               "default":25
+            },
+            "autoAdvanceTimers":{
+              "type":"boolean",
+              "default":false,
+              "description":"When true, also fires HumanTask/Command SLA reminders then TimeoutEvent if no completing event remains. Use this instead of starting a live instance to prove QUOTE_RESPONSE_OVERDUE / REPAIR_OVERDUE."
             },
             "tenantId":{"type":"string","format":"uuid"}
           },
@@ -571,7 +576,7 @@ public static class McpToolSchemas
             "events":{
               "type":"array",
               "items":{"type":"string"},
-              "description":"Optional sequence of event IDs dispatched in order. HumanTask/Timer events must match that step's NextSteps keys. Other events are applied to the state machine when Decision or Default Command steps complete if a transition exists from the current state. Do not strip unused system events; they keep finalState in sync with step progression."
+              "description":"Optional sequence of event IDs dispatched in order. HumanTask/Timer events must match that step's NextSteps keys. SLA reminder triggerEvents may be omitted: the simulator injects them in duration order before a completing nextSteps event. TimeoutEvent is injected only when autoAdvanceTimers is true and no completing event remains. Other events are applied to the state machine when Decision or Default Command steps complete if a transition exists from the current state. Do not strip unused system events; they keep finalState in sync with step progression."
             },
             "maxSteps":{
               "type":"integer",
@@ -596,7 +601,7 @@ public static class McpToolSchemas
             "autoAdvanceTimers":{
               "type":"boolean",
               "default":false,
-              "description":"When true, automatically elapses timer steps (advancing to their next step) without requiring events queue or waiting."
+              "description":"When true, automatically elapses Timer steps AND HumanTask/Command SLA clocks (reminders in duration order, then TimeoutEvent) without waiting for a live clock. When false, a completing nextSteps event still fires SLA reminders that would elapse while waiting, but does not fire the timeout. Omit completing events and set this true to simulate QUOTE_RESPONSE_OVERDUE / REPAIR_OVERDUE. Do not start a live instance just to prove reminders."
             },
             "childEvents":{
               "type":"array",
@@ -689,7 +694,7 @@ public static class McpToolSchemas
             "autoAdvanceTimers":{
               "type":"boolean",
               "default":false,
-              "description":"When true, automatically elapses timer steps without requiring events queue or waiting."
+              "description":"When true, automatically elapses Timer steps and HumanTask/Command SLA reminder/timeout clocks without requiring a live waiting instance."
             },
             "tenantId":{
               "type":"string",

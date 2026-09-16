@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Queries.Governance;
+using FlowOS.Application.Services;
 using FlowOS.Domain.Blueprints;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
@@ -376,6 +377,7 @@ public class SimulationTools
         object? pendingHumanTask = null;
         object? pendingSubWorkflow = null;
         object? pendingTimer = null;
+        var slaClockApplied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var initialStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
             string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
@@ -648,6 +650,8 @@ public class SimulationTools
                     }).ToList()
                     : null;
 
+                TryPrependSlaClockEvents(step, eventsQueue, autoAdvanceTimers, slaClockApplied);
+
                 if (!authorized)
                 {
                     status = "WaitingForHumanTask";
@@ -682,6 +686,14 @@ public class SimulationTools
 
                     if (string.IsNullOrEmpty(nextStepPair.Value))
                     {
+                        if (SlaSimulationClock.IsReminderEvent(step.Sla, evt))
+                        {
+                            ApplySlaReminderStay(
+                                blueprint, step, evt, payload, ref currentState, stateTransitions,
+                                executionTrace, ref totalStepsExecuted);
+                            continue;
+                        }
+
                         status = "InvalidEvent";
                         executionTrace.Add(new
                         {
@@ -722,10 +734,13 @@ public class SimulationTools
                         currentState = smTrans.ToState;
                     }
 
-                    bool isReminderEvent = step.Sla?.Reminders?.Any(r => string.Equals(r.TriggerEvent, evt, StringComparison.OrdinalIgnoreCase)) ?? false;
+                    bool isReminderEvent = SlaSimulationClock.IsReminderEvent(step.Sla, evt);
+                    bool isTimeoutEvent = SlaSimulationClock.IsTimeoutEvent(step.Sla, evt);
                     string actionDesc = isReminderEvent
                         ? $"[SLA Reminder Fired] Reminder event '{evt}' dispatched. Advanced to '{targetStep}'. State is now '{currentState}'."
-                        : $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.";
+                        : isTimeoutEvent
+                            ? $"[SLA Timeout Fired] Timeout event '{evt}' dispatched after simulated SLA elapsed. Advanced to '{targetStep}'. State is now '{currentState}'."
+                            : $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.";
 
                     totalStepsExecuted++;
                     executionTrace.Add(new
@@ -1263,6 +1278,10 @@ public class SimulationTools
                 var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
                 string? targetStep = null;
                 string? triggeredEvent = null;
+                var hasDefaultRoute = nextSteps.Keys.Any(k =>
+                    string.Equals(k, "Default", StringComparison.OrdinalIgnoreCase));
+                if (step.Sla != null && !hasDefaultRoute)
+                    TryPrependSlaClockEvents(step, eventsQueue, autoAdvanceTimers, slaClockApplied);
 
                 if (eventsQueue.Count > 0)
                 {
@@ -1272,6 +1291,14 @@ public class SimulationTools
                     {
                         triggeredEvent = eventsQueue.Dequeue();
                         targetStep = match.Value;
+                    }
+                    else if (SlaSimulationClock.IsReminderEvent(step.Sla, peekEvt))
+                    {
+                        var reminderEvt = eventsQueue.Dequeue();
+                        ApplySlaReminderStay(
+                            blueprint, step, reminderEvt, payload, ref currentState, stateTransitions,
+                            executionTrace, ref totalStepsExecuted);
+                        continue;
                     }
                 }
 
@@ -1936,6 +1963,75 @@ public class SimulationTools
         }
 
         return false;
+    }
+
+    private static void TryPrependSlaClockEvents(
+        StepBlueprint step,
+        Queue<string> eventsQueue,
+        bool autoAdvanceTimers,
+        ISet<string> slaClockApplied)
+    {
+        if (step.Sla == null) return;
+        if (!slaClockApplied.Add(step.StepId)) return;
+
+        var plan = SlaSimulationClock.Plan(step.Sla);
+        var queued = eventsQueue.ToList();
+        var completing = HasCompletingEventQueued(step, queued);
+        var selected = SlaSimulationClock.SelectForSimulation(plan, completing, autoAdvanceTimers, queued);
+        if (selected.Count == 0) return;
+
+        eventsQueue.Clear();
+        foreach (var job in selected)
+            eventsQueue.Enqueue(job.EventType);
+        foreach (var evt in queued)
+            eventsQueue.Enqueue(evt);
+    }
+
+    private static bool HasCompletingEventQueued(StepBlueprint step, IReadOnlyCollection<string> queuedEvents)
+    {
+        var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+        foreach (var evt in queuedEvents)
+        {
+            if (SlaSimulationClock.IsReminderEvent(step.Sla, evt))
+                continue;
+            if (nextSteps.Keys.Any(key => string.Equals(key, evt, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void ApplySlaReminderStay(
+        WorkflowClassBlueprint blueprint,
+        StepBlueprint step,
+        string evt,
+        Dictionary<string, object> payload,
+        ref string currentState,
+        List<object> stateTransitions,
+        List<object> executionTrace,
+        ref int totalStepsExecuted)
+    {
+        var (smTrans, _, _) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
+        if (smTrans != null && !string.IsNullOrWhiteSpace(smTrans.ToState))
+        {
+            stateTransitions.Add(new
+            {
+                from = currentState,
+                to = smTrans.ToState,
+                eventId = evt
+            });
+            currentState = smTrans.ToState;
+        }
+
+        totalStepsExecuted++;
+        executionTrace.Add(new
+        {
+            stepNumber = totalStepsExecuted,
+            stepId = step.StepId,
+            stepType = step.StepType,
+            action = $"[SLA Reminder Fired] Reminder event '{evt}' dispatched. Step remains '{step.StepId}'. State is now '{currentState}'.",
+            state = currentState
+        });
     }
 
     private static (TransitionBlueprint? transition, bool guardBlocked, string? guardReason) FindTransition(
