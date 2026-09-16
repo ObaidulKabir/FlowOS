@@ -5,16 +5,16 @@ import { WorkflowTable } from './WorkflowTable';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { TenantApiKeyManager } from './TenantApiKeyManager';
-import { AgentPromptManager } from './AgentPromptManager';
 import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
 import { ContextBindingsView } from './ContextBindingsView';
 import { ContextSimulationStudio } from './ContextSimulationStudio';
+import { AiContextView } from './AiContextView';
 import { 
   Building2, Plus, Play, RefreshCw, Key, Activity, FileText, 
-  Cpu, Copy, Check, Filter, Sparkles, Scale, Link2, MessageSquarePlus
+  Cpu, Copy, Check, Filter, Sparkles, Scale, Link2, Brain
 } from 'lucide-react';
 
 interface Props {
@@ -24,7 +24,7 @@ interface Props {
 }
 
 export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
-  const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Bindings' | 'Prompts' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Instances');
+  const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Bindings' | 'AiContext' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Instances');
   const [blueprintSubTab, setBlueprintSubTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared'>('All');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
@@ -104,7 +104,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
   const handleStartInstance = async () => {
     setStartingInstance(true);
     try {
-      const res = await api.startInstance(startWorkflowName, undefined, undefined, 'Tenant');
+      const res = await api.startInstance(startWorkflowName, undefined, undefined, session.role === 'Admin' ? 'Admin' : 'Tenant');
       const instanceId = res.WorkflowInstanceId || res.workflowInstanceId || res.Id || res.id;
       alert(`Workflow Instance Started Successfully!\nInstance ID: ${instanceId}`);
       setShowStartModal(false);
@@ -285,10 +285,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
       {/* Tenant Navigation Tabs */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
         <div className="border-b border-slate-700 bg-slate-850">
-          <nav className="flex divide-x divide-slate-700 text-xs font-semibold">
+          <nav className="flex flex-wrap text-xs font-semibold">
             <button
               onClick={() => setActiveTab('Instances')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Instances' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
               }`}
             >
@@ -297,7 +297,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </button>
             <button
               onClick={() => setActiveTab('Blueprints')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Blueprints' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
               }`}
             >
@@ -306,25 +306,25 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </button>
             <button
               onClick={() => setActiveTab('Bindings')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Bindings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
               }`}
             >
               <Link2 size={15} />
-              <span>Context Bindings</span>
+              <span>Business Context</span>
             </button>
             <button
-              onClick={() => setActiveTab('Prompts')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Prompts' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
+              onClick={() => setActiveTab('AiContext')}
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
+                activeTab === 'AiContext' ? 'bg-violet-600 text-white' : 'text-violet-300 hover:text-white hover:bg-slate-750'
               }`}
             >
-              <MessageSquarePlus size={15} />
-              <span>Agent Prompts</span>
+              <Brain size={15} />
+              <span>AI Context</span>
             </button>
             <button
               onClick={() => setActiveTab('Events')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Events' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
               }`}
             >
@@ -333,7 +333,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </button>
             <button
               onClick={() => setActiveTab('Keys')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Keys' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
               }`}
             >
@@ -342,7 +342,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </button>
             <button
               onClick={() => setActiveTab('Simulator')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Simulator' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
               }`}
             >
@@ -351,7 +351,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </button>
             <button
               onClick={() => setActiveTab('Capabilities')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Capabilities' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' : 'text-amber-400 hover:text-white hover:bg-slate-750'
               }`}
             >
@@ -360,7 +360,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </button>
             <button
               onClick={() => setActiveTab('Comparison')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Comparison' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'text-indigo-400 hover:text-white hover:bg-slate-750'
               }`}
             >
@@ -464,7 +464,12 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           )}
 
           {activeTab === 'Bindings' && (
-            <ContextBindingsView
+            <div className="space-y-4">
+              <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-xs text-slate-300">
+                <strong className="text-amber-200">Business Context</strong> binds a published workflow template to a domain entity
+                (events, roles, payload mapping). That mapping is the <strong>Data</strong> part of AI Context at runtime.
+              </div>
+              <ContextBindingsView
               workflowClasses={blueprints.filter(item => item.status === 1 || item.status === 3)}
               role="Tenant"
               onSimulate={(bindingId, revision) => {
@@ -472,6 +477,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                 setActiveTab('Simulator');
               }}
             />
+            </div>
           )}
 
           {activeTab === 'Events' && (
@@ -482,8 +488,11 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
           )}
 
-          {activeTab === 'Prompts' && (
-            <AgentPromptManager tenantName={session.tenantName} />
+          {activeTab === 'AiContext' && (
+            <AiContextView
+              tenantName={session.tenantName}
+              onOpenBusinessContext={() => setActiveTab('Bindings')}
+            />
           )}
 
           {activeTab === 'Simulator' && (

@@ -44,6 +44,15 @@ public static class DataSeeder
             context.Tenants.Add(clientTenant);
             await context.SaveChangesAsync();
         }
+        else
+        {
+            var existingDemo = await context.Tenants.FirstAsync(t => t.TenantId == demoClientTenantId);
+            if (!existingDemo.CanRunRuntime)
+            {
+                existingDemo.AssignPlan(TenantPlan.Managed, TenantBillingStatus.Active);
+                await context.SaveChangesAsync();
+            }
+        }
 
         // 1.2 Ensure Demo Tenant API Keys
         if (!await context.TenantApiKeys.AnyAsync(k => k.TenantId == demoClientTenantId))
@@ -605,18 +614,22 @@ public static class DataSeeder
         await context.SaveChangesAsync();
     }
     
-    // 5. Ensure Admin Role for Client Tenant (to allow start workflow)
-    if (!await context.Roles.AnyAsync(r => r.Name == "Admin" && r.TenantId == clientTenantId))
-    {
-        var adminRole = new Role(clientTenantId, "Admin");
-        adminRole.AddPermission("workflow.start");
-        adminRole.AddPermission("workflow.create");
-        adminRole.AddPermission("workflow.read");
-        adminRole.AddPermission("event.publish");
-        adminRole.AddPermission("task.complete");
-        adminRole.AddPermission("workflow.approve_public");
-        context.Roles.Add(adminRole);
-    }
+    // 5. Ensure runtime roles for sandbox + production API keys (demo key maps to Admin).
+    await EnsureRoleWithPermissionsAsync(
+        context,
+        clientTenantId,
+        "Admin",
+        "workflow.start", "workflow.create", "workflow.read", "event.publish", "task.complete", "workflow.approve_public");
+    await EnsureRoleWithPermissionsAsync(
+        context,
+        clientTenantId,
+        "Tenant",
+        "workflow.start", "workflow.create", "workflow.read", "event.publish", "task.complete");
+    await EnsureRoleWithPermissionsAsync(
+        context,
+        clientTenantId,
+        "ApiKey",
+        "workflow.start", "workflow.create", "workflow.read", "event.publish", "task.complete");
     
     // 5.1. Seed Employee Role
     if (!await context.Roles.AnyAsync(r => r.Name == "Employee" && r.TenantId == clientTenantId))
@@ -705,6 +718,7 @@ public static class DataSeeder
 
         // 7. Seed Enterprise Flagship Workflows
         await SeedFlagshipWorkflowsAsync(context, clientTenantId);
+        await EnsurePublishedRuntimeDefinitionsAsync(context, clientTenantId);
     }
 
     public static async Task SeedFlagshipWorkflowsAsync(FlowOSDbContext context, Guid clientTenantId)
@@ -1235,6 +1249,54 @@ public static class DataSeeder
         }
 
         await context.SaveChangesAsync();
+    }
+
+    private static readonly string[] SandboxSampleWorkflowNames =
+    {
+        "ExpenseApproval",
+        "ExpenseApprovalV2",
+        "OrderSagaFulfillment",
+        "LoanUnderwritingFlow",
+        "SecOpsAccessGovernance"
+    };
+
+    private static async Task EnsureRoleWithPermissionsAsync(
+        FlowOSDbContext context,
+        Guid tenantId,
+        string roleName,
+        params string[] permissions)
+    {
+        var role = await context.Roles.FirstOrDefaultAsync(r => r.Name == roleName && r.TenantId == tenantId);
+        if (role == null)
+        {
+            role = new Role(tenantId, roleName);
+            context.Roles.Add(role);
+        }
+
+        foreach (var permission in permissions)
+            role.AddPermission(permission);
+    }
+
+    private static async Task EnsurePublishedRuntimeDefinitionsAsync(FlowOSDbContext context, Guid tenantId)
+    {
+        foreach (var name in SandboxSampleWorkflowNames)
+        {
+            var hasPublished = await context.WorkflowDefinitions.AnyAsync(d =>
+                d.TenantId == tenantId && d.Name == name && d.Status == WorkflowStatus.Published);
+            if (hasPublished)
+                continue;
+
+            var workflowClass = await context.WorkflowClasses.FirstOrDefaultAsync(
+                w => w.TenantId == tenantId && w.Name == name);
+            if (workflowClass == null)
+                continue;
+
+            var definition = WorkflowClassCompiler.MapToRuntimeDefinition(workflowClass);
+            if (definition.Status != WorkflowStatus.Published)
+                definition.Publish();
+            context.WorkflowDefinitions.Add(definition);
+            await context.SaveChangesAsync();
+        }
     }
 
     private static void SetPrivateProperty(object obj, string propName, object value)

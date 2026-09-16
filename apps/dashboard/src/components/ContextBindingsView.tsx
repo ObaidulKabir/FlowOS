@@ -163,8 +163,8 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
       <section className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2"><Link2 size={15} /> Context Bindings</h3>
-            <p className="text-[11px] text-slate-400 mt-1">Deploy reusable templates per business domain.</p>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2"><Link2 size={15} /> Business Context</h3>
+            <p className="text-[11px] text-slate-400 mt-1">Map a workflow template to a business domain (entity, events, payload).</p>
           </div>
           <div className="flex gap-1">
             <button onClick={load} className="p-2 rounded-lg bg-slate-800 text-slate-300"><RefreshCw size={13} /></button>
@@ -186,14 +186,14 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
               <div className="text-[10px] text-slate-500 mt-1">Active r{binding.activeRevision?.revision ?? '—'} · Draft r{binding.draftRevision?.revision ?? '—'}</div>
             </button>
           ))}
-          {!bindings.length && <div className="p-6 text-xs text-slate-500 text-center">No context bindings yet.</div>}
+          {!bindings.length && <div className="p-6 text-xs text-slate-500 text-center">No business contexts yet.</div>}
         </div>
       </section>
 
       <section className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-4">
         {error && <div className="p-3 rounded-lg bg-rose-900/30 border border-rose-700 text-xs text-rose-300">{error}</div>}
         {!selected ? (
-          <div className="text-sm text-slate-400">Select or create a context binding.</div>
+          <div className="text-sm text-slate-400">Select or create a business context.</div>
         ) : (
           <>
             <div className="flex flex-wrap justify-between gap-3">
@@ -234,7 +234,7 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
       {showCreate && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-5">
           <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-700 p-5 space-y-4">
-            <h3 className="font-bold text-white">Create Context Binding</h3>
+            <h3 className="font-bold text-white">Create Business Context</h3>
             <select value={sourceWorkflowClassId} onChange={event => setSourceWorkflowClassId(event.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm text-white">
               <option value="">Select a published template</option>
               {workflowClasses.map(workflow => <option key={workflow.id} value={workflow.id}>{workflow.name} v{workflow.version}</option>)}

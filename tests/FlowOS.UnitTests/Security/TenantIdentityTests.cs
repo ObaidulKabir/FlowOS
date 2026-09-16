@@ -48,6 +48,16 @@ public class TenantIdentityTests
     }
 
     [Fact]
+    public void ResolveApiKeyRole_MapsDemoAndWildcardKeysToAdmin()
+    {
+        Assert.Equal("Admin", TenantIdentityRules.ResolveApiKeyRole(Array.Empty<string>(), isDemoKey: true));
+        Assert.Equal("Admin", TenantIdentityRules.ResolveApiKeyRole(new[] { "*" }, isDemoKey: false));
+        Assert.Equal("Admin", TenantIdentityRules.ResolveApiKeyRole(new[] { "admin:*" }, isDemoKey: false));
+        Assert.Equal("ApiKey", TenantIdentityRules.ResolveApiKeyRole(new[] { "mcp:read" }, isDemoKey: false));
+        Assert.Equal("ApiKey", TenantIdentityRules.ResolveApiKeyRole(null, isDemoKey: false));
+    }
+
+    [Fact]
     public void CurrentUser_IgnoresHeaderTenant_WhenMockAuthIsOff()
     {
         var accessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };

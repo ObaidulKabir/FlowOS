@@ -22,8 +22,8 @@ export const getDefaultSandboxSession = (): AuthSession => ({
   username: 'demo-tenant-user',
   isSandbox: true,
   isEmailVerified: true,
-  plan: 'None',
-  billingStatus: 'Unpaid',
+  plan: 'Managed',
+  billingStatus: 'Active',
   canRunRuntime: true
 });
 

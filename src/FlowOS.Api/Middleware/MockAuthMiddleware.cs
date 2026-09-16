@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using FlowOS.Core.Security;
@@ -104,7 +105,12 @@ public class MockAuthMiddleware
             if (!await EnsureTenantMatchAsync(context, credentialTenant, headerTenant))
                 return;
 
-            var role = allowMock ? ReadMockRole(context) : "ApiKey";
+            var scopes = extraClaims
+                .Where(c => string.Equals(c.Type, "scope", StringComparison.OrdinalIgnoreCase))
+                .Select(c => c.Value);
+            var role = allowMock
+                ? ReadMockRole(context)
+                : TenantIdentityRules.ResolveApiKeyRole(scopes, TenantIdentityRules.IsDemoApiKey(suppliedApiKey));
             var userId = allowMock ? ReadMockUserId(context) : "api-key";
             var claims = new List<Claim>
             {

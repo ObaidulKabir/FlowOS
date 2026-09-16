@@ -4,6 +4,7 @@ import { MessageSquarePlus, Plus, Pencil, RefreshCw, Check, X } from 'lucide-rea
 
 interface Props {
   tenantName: string;
+  compact?: boolean;
 }
 
 interface PromptForm {
@@ -31,7 +32,7 @@ const promptBody = (binding: PluginBindingDto) => {
   };
 };
 
-export const AgentPromptManager: React.FC<Props> = ({ tenantName }) => {
+export const AgentPromptManager: React.FC<Props> = ({ tenantName, compact = false }) => {
   const [prompts, setPrompts] = useState<PluginBindingDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +103,7 @@ export const AgentPromptManager: React.FC<Props> = ({ tenantName }) => {
 
   return (
     <div className="space-y-6">
+      {!compact && (
       <div className="bg-slate-850 p-6 rounded-2xl border border-slate-700/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -130,6 +132,18 @@ export const AgentPromptManager: React.FC<Props> = ({ tenantName }) => {
           </button>
         </div>
       </div>
+      )}
+      {compact && (
+        <div className="flex justify-end">
+          <button
+            onClick={openCreate}
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-semibold rounded-xl text-xs flex items-center gap-2"
+          >
+            <Plus size={14} />
+            New prompt
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-rose-900/30 border border-rose-700 rounded-xl text-xs text-rose-300">{error}</div>

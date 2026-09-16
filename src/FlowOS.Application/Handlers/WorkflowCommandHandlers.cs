@@ -241,14 +241,35 @@ public class WorkflowCommandHandlers :
         }
         // -----------------------------------------
 
+        Guid resolvedClassId = activeContextBinding?.Revision.SourceWorkflowClassId ?? request.WorkflowClassId;
+        string? resolvedInitialState = activeContextBinding?.SourceWorkflowClass.Definition.StateMachine.InitialState;
+
+        if (resolvedClassId == Guid.Empty && fullDefinition != null)
+        {
+            var publishedClasses = await _unitOfWork.WorkflowClasses.ListAsync(
+                request.TenantId,
+                null,
+                Domain.Enums.WorkflowClassStatus.Published,
+                cancellationToken);
+            var matchingClass = publishedClasses.FirstOrDefault(c =>
+                string.Equals(c.Name, fullDefinition.Name, StringComparison.OrdinalIgnoreCase) &&
+                (c.TenantId == request.TenantId || c.Scope == Domain.Enums.WorkflowClassScope.Public));
+            if (matchingClass != null)
+            {
+                resolvedClassId = matchingClass.Id;
+                if (string.IsNullOrWhiteSpace(resolvedInitialState))
+                    resolvedInitialState = matchingClass.Definition.StateMachine.InitialState;
+            }
+        }
+
         var instance = new WorkflowInstance(
             request.TenantId,
             definitionId,
-            activeContextBinding?.Revision.SourceWorkflowClassId ?? request.WorkflowClassId,
+            resolvedClassId,
             actualVersion,
             startStep,
             request.CorrelationId,
-            activeContextBinding?.SourceWorkflowClass.Definition.StateMachine.InitialState
+            resolvedInitialState
         );
 
         _unitOfWork.WorkflowInstances.Add(instance);

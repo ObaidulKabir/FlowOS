@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace FlowOS.Core.Security;
 
@@ -38,4 +39,27 @@ public static class TenantIdentityRules
         string.Equals(suppliedApiKey, "flowos_prod_secret_key_32_chars_min", StringComparison.Ordinal) ||
         string.Equals(suppliedApiKey, "local-development-key-change-me", StringComparison.Ordinal) ||
         string.Equals(suppliedApiKey, "YOUR_PRODUCTION_API_KEY", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Production API keys cannot spoof X-Mock-Role. Full-tenant keys (<c>*</c>, demo playground)
+    /// map to Admin so sandbox and service accounts keep workflow.start without header privilege.
+    /// </summary>
+    public static string ResolveApiKeyRole(IEnumerable<string>? scopes, bool isDemoKey)
+    {
+        if (isDemoKey)
+            return "Admin";
+
+        if (scopes == null)
+            return "ApiKey";
+
+        foreach (var scope in scopes)
+        {
+            if (string.IsNullOrWhiteSpace(scope))
+                continue;
+            if (scope == "*" || string.Equals(scope, "admin:*", StringComparison.OrdinalIgnoreCase))
+                return "Admin";
+        }
+
+        return "ApiKey";
+    }
 }
