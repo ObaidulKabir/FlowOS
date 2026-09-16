@@ -103,7 +103,13 @@ public static class WorkflowClassCompiler
                     Headers = a.Headers,
                     SignPayload = a.SignPayload,
                     SecretName = a.SecretName
-                }).ToList() ?? new List<StepActionDefinition>()
+                }).ToList() ?? new List<StepActionDefinition>(),
+                Actor = FlowOS.Domain.Enums.StepActor.Normalize(stepBp.Actor),
+                DecisionGuideline = stepBp.DecisionGuideline,
+                AutoCommit = MapAutoCommit(stepBp.AutoCommit),
+                AgentProvider = string.IsNullOrWhiteSpace(stepBp.AgentProvider) ? null : stepBp.AgentProvider.Trim(),
+                AgentPrompt = string.IsNullOrWhiteSpace(stepBp.AgentPrompt) ? null : stepBp.AgentPrompt.Trim(),
+                AgentTools = stepBp.AgentTools != null ? new List<string>(stepBp.AgentTools) : new List<string>()
             };
             def.AddStep(stepDef);
         }
@@ -246,7 +252,13 @@ public static class WorkflowClassCompiler
                             .ToList()),
                 OnEntry = MapActions(step.OnEntry, mapping),
                 OnExit = MapActions(step.OnExit, mapping),
-                OnFailure = MapActions(step.OnFailure, mapping)
+                OnFailure = MapActions(step.OnFailure, mapping),
+                Actor = FlowOS.Domain.Enums.StepActor.Normalize(step.Actor),
+                DecisionGuideline = step.DecisionGuideline,
+                AutoCommit = MapAutoCommit(step.AutoCommit, mapping.EventAliases),
+                AgentProvider = string.IsNullOrWhiteSpace(step.AgentProvider) ? null : step.AgentProvider.Trim(),
+                AgentPrompt = string.IsNullOrWhiteSpace(step.AgentPrompt) ? null : step.AgentPrompt.Trim(),
+                AgentTools = step.AgentTools != null ? new List<string>(step.AgentTools) : new List<string>()
             };
 
             workflow.AddStep(compiledStep);
@@ -294,6 +306,25 @@ public static class WorkflowClassCompiler
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)));
 
         return new WorkflowContextCompilationPackage(workflow, stateMachine, eventDefinitions, contentHash);
+    }
+
+    private static StepAutoCommitDefinition? MapAutoCommit(
+        StepAutoCommitBlueprint? source,
+        IReadOnlyDictionary<string, string>? eventAliases = null)
+    {
+        if (source == null) return null;
+
+        var allowed = source.AllowedEvents ?? new List<string>();
+        if (eventAliases != null && eventAliases.Count > 0)
+        {
+            allowed = allowed.Select(eventId => MapValue(eventId, eventAliases)).ToList();
+        }
+
+        return new StepAutoCommitDefinition
+        {
+            MinConfidence = source.MinConfidence,
+            AllowedEvents = allowed
+        };
     }
 
     private static List<StepActionDefinition> MapActions(

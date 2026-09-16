@@ -137,7 +137,7 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS registers **60 production tools** categorized by governance lifecycle, context-aware simulation, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
+FlowOS registers **66 production tools** categorized by governance lifecycle, context-aware simulation, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|
@@ -146,7 +146,13 @@ FlowOS registers **60 production tools** categorized by governance lifecycle, co
 | `list_notifications` | `low` | `none` | No | `NotificationTools.ListNotifications` | Lists recent tenant and user notifications with severity levels. |
 | `mark_notification_as_read` | `low` | `reversible` | No | `NotificationTools.MarkNotificationAsRead` | Marks a specific notification as read. |
 | `list_available_agents` | `low` | `none` | No | `AgentTools.ListAvailableAgents` | Lists registered runtime agents (e.g. `RiskAnalysisAgent`) and their capabilities. |
-| `suggest_agent_action` | `low` | `none` | No | `AgentTools.SuggestAgentAction` | Runs advisory reasoning against tenant-isolated instance state to return a `SuggestedAction`. |
+| `suggest_agent_action` | `low` | `none` | No | `AgentTools.SuggestAgentAction` | Builds a DecisionPacket and returns legal `SuggestedAction`s without publishing. |
+| `run_agent_task` | `medium` | `irreversible` | No | `AgentTools.RunAgentTask` | Hosts wait → packet → agent → auto-commit or park. Does not take an arbitrary event. |
+| `get_agent_context` | `low` | `none` | No | `AgentContextMcpTools.GetAgentContext` | Composes live Agent Context (Prompt + Data + Tools + Provider) without running the agent. |
+| `preview_agent_context` | `low` | `none` | No | `AgentContextMcpTools.PreviewAgentContext` | Design-time Agent Context for a workflow class step. Does not start an instance. |
+| `upsert_agent_prompt` | `low` | `reversible` | No | `AgentContextMcpTools.UpsertAgentPrompt` | Create/edit a tenant-owned named prompt. Point the step with `agentPrompt`. |
+| `list_agent_prompts` | `low` | `none` | No | `AgentContextMcpTools.ListAgentPrompts` | Lists tenant prompt bindings (no API keys). |
+| `get_agent_prompt` | `low` | `none` | No | `AgentContextMcpTools.GetAgentPrompt` | Reads one tenant prompt by alias. |
 | `explain_validation_violation` | `low` | `none` | No | `AnalysisTools.ExplainValidationViolation` | Explains formal `WorkflowClassValidator` codes (`STR-*`, `CON-*`, `WF-COMP-*`, `GOV-001`, `WF-SLA-*`). |
 | `lint_draft_workflowclass` | `low` | `none` | No | `AnalysisTools.LintDraftWorkflowClass` | Advisory linting of private drafts: unreachable states, excessive state count, short step IDs. |
 | `create_draft_workflowclass` | `low` | `reversible` | No | `GovernanceTools.CreateDraft` | Authoritatively validates and creates a new private draft blueprint. |
@@ -217,9 +223,11 @@ tenant-scoped tool requires an explicit `tenantId` argument.
 
 1. Call `list_registered_plugins` to discover server-registered action and decision providers, runtime strictness flags, and rich capability metadata (category, description, supported parameters with types/required flags, and blueprint-ready example payload mappings) for communication (`Email`, `Slack`, `WhatsApp`), integration (`Webhook`), and internal action plugins.
 2. Use `test_action_plugin` to test/dry-run action configurations and verify channel deliverability parameters (such as email recipient syntax, WhatsApp E.164 phone numbers, Slack blocks, and webhook URLs) without mutating state or enqueuing outbox records.
-3. Use `register_plugin_binding` to map tenant aliases (`plugin:*` / `plugin.*` action types or decision provider aliases) to concrete providers.
-4. Verify each alias with `resolve_plugin_binding` before publishing.
+3. Use `register_plugin_binding` to map tenant aliases (`plugin:*` / `plugin.*` action types or decision provider aliases) to concrete providers, **or** `bindingType: agent` for a tenant-owned LLM (`configuration` `{model,endpoint,apiKey}`; the key is write-only).
+4. Verify each alias with `resolve_plugin_binding` before publishing. Agent bindings report `hasApiKey`, never the secret.
 5. Use `list_plugin_bindings` to audit all active mappings for the tenant.
+6. On an agent-handled waiting step, set `agentProvider` to the agent-binding alias and `agentTools` to resource plugins plus notify/write aliases. FlowOS puts them on DecisionPacket.Tools; the model does not call HTTP itself.
+7. Tenant resources are capability bindings, not plugin DLLs. Register the URL with `register_capability_binding`, then declare `LookupRecord:<capability>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, or `CheckPolicy:` on the waiting step. FlowOS prefetches those reads into Agent Context. Write APIs stay `capability:<name>` and are not prefetched. The model never sees the endpoint URL.
 
 ## Usage example: design loop for "Leave Approval"
 
@@ -310,7 +318,7 @@ MCP governance tools (`create`/`update`/`validate`/`fork`/`list_public`) now go 
 
 The seven binding governance tools are `create_context_binding`, `update_context_binding`, `validate_context_binding`, `activate_context_binding`, `archive_context_binding`, `list_context_bindings`, and `get_context_binding`. `simulate_context_binding` is a separate read-only analysis tool. A draft binding may point at a Draft workflow class so agents can simulate a business payload without publishing a throwaway variant. `validate_context_binding` and `activate_context_binding` still require a Published or Public source. Simulation does not enforce tenant-role existence (CTX-ROLE-002); activation does. After activation, call the existing `start_workflow` with `contextBindingId` or `contextType`. Activation and archival require `confirmHumanApproval: true`. Full mapping and simulation examples are in [Chapter 17](17-workflow-context-bindings.md).
 
-Agents should load MCP prompt `design_dual_kernel_workflow` or resource `flowos://guides/dual-kernel-design` before authoring Decision steps. Workflow `currentStep` and state-machine `currentState` move independently. A Decision `Default`/`true` auto-route does not consume a business event; include that event in `simulate_workflowclass` / `simulate_context_binding` so FlowOS can apply it as state-only catch-up. To prove SLA reminders vs timeout, load prompt `test_sla_reminders_in_simulator` or resource `flowos://guides/sla-reminder-simulation`: a simulate-to-Paid run is not a wall clock (completing event means in-time; look for `[SLA Reminder Fired]`); overdue requires `autoAdvanceTimers: true` with the completing event omitted. Do not start a live instance to wait. Context bindings never create tenant roles. Do not publish a stripped-roles simulator class just to bind; bind the draft and simulate, then publish once.
+Agents should load MCP prompt `design_dual_kernel_workflow` or resource `flowos://guides/dual-kernel-design` before authoring Decision steps. Workflow `currentStep` and state-machine `currentState` move independently. A Decision `Default`/`true` auto-route does not consume a business event; include that event in `simulate_workflowclass` / `simulate_context_binding` so FlowOS can apply it as state-only catch-up. To prove SLA reminders vs timeout, load prompt `test_sla_reminders_in_simulator` or resource `flowos://guides/sla-reminder-simulation`: a simulate-to-Paid run is not a wall clock (completing event means in-time; look for `[SLA Reminder Fired]`); overdue requires `autoAdvanceTimers: true` with the completing event omitted. Do not start a live instance to wait. For agent-handled waiting steps, load `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`: keep a HumanTask/Command wait, set `actor` Agent/Either, put how-to-decide on `decisionGuideline` and tenant policy on binding `policyGuideline`, point `agentProvider` at a tenant `agent` plugin binding (BYO model/key, never in Agent Context), declare `agentTools` as resource plugins (`LookupRecord:<capability>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify/write capabilities, and auto-commit only events listed on both `nextSteps` and `autoCommit.allowedEvents`. Context bindings never create tenant roles. Do not publish a stripped-roles simulator class just to bind; bind the draft and simulate, then publish once.
 
 ### 5. Fork a public template instead of starting from scratch
 
@@ -332,3 +340,4 @@ Previously identified MCP control-plane gaps are covered by the maintained `Flow
 
 * [Chapter 9 — WorkflowClass Governance](09-workflow-class-governance.md) for the REST equivalent of the same lifecycle.
 * [Chapter 15 — Known Limitations](15-known-limitations-and-gaps.md) for core engine boundaries.
+* [Chapter 19 — OS-1 Honesty Gate](19-os-release-gate.md) before calling FlowOS a business automation OS (`check_os_release_gate` / `flowos://guides/os-release-gate`). If `VERDICT` is GREEN, use the OS sentence; otherwise it is a dual-kernel process engine with MCP.

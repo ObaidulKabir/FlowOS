@@ -48,6 +48,14 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                         s => JsonSerializer.Deserialize<List<StepReminderDefinition>>(s, (JsonSerializerOptions)null) ?? new List<StepReminderDefinition>()
                     );
             });
+            step.OwnsOne(s => s.AutoCommit, autoCommit =>
+            {
+                autoCommit.Property(x => x.AllowedEvents)
+                    .HasConversion(
+                        d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                        s => JsonSerializer.Deserialize<List<string>>(s, (JsonSerializerOptions)null) ?? new List<string>()
+                    );
+            });
             step.OwnsOne(s => s.SubWorkflow, sub =>
             {
                 sub.Property(s => s.InputMapping)
@@ -103,6 +111,12 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                 );
 
             step.Property(s => s.InboundSteps)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => JsonSerializer.Deserialize<List<string>>(s, (JsonSerializerOptions)null) ?? new List<string>()
+                );
+
+            step.Property(s => s.AgentTools)
                 .HasConversion(
                     d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
                     s => JsonSerializer.Deserialize<List<string>>(s, (JsonSerializerOptions)null) ?? new List<string>()

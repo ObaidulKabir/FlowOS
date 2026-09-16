@@ -1,15 +1,15 @@
 # FlowOS
 
 **Version 1.0.0-MVP**
-*Enterprise Process Operating System*
+*Dual-kernel business automation operating system with an MCP control plane*
 
-FlowOS is a kernel-style process engine designed for correctness, compliance, and enterprise scale. It strictly separates **State Authority (State Machines)** from **Process Orchestration (Workflows)** and **Business Logic (Policy & Agents)**.
+FlowOS is a business automation operating system: tenant work runs under dual-kernel Law (state machine) and Work (workflow), gated by capabilities and deny-only policy, with a HumanTask inbox, capability-bound integrations, a hosted DecisionPacket / autoCommit loop, side-effect-free simulation, and paid runtime entitlement. The claim is gated by [OS-1 Honesty Gate](docs/19-os-release-gate.md).
 
 ## 📚 Documentation
 
-The full user guide lives in **[`docs/`](docs/README.md)** — a 17-chapter, example-driven guide covering everything from getting started to the API reference, all verified against the current codebase and the 369-test automated suite. See also **[`CHANGELOG.md`](CHANGELOG.md)** for release notes.
+The full user guide lives in **[`docs/`](docs/README.md)** — a 19-chapter, example-driven guide covering everything from getting started to the API reference, all verified against the current codebase and the 369-test automated suite. See also **[`CHANGELOG.md`](CHANGELOG.md)** for release notes.
 
-Quick links: [Getting Started](docs/01-getting-started.md) · [Core Concepts](docs/02-core-concepts.md) · [API Reference](docs/14-api-reference.md) · [Known Limitations](docs/15-known-limitations-and-gaps.md) · [Sample Applications](docs/16-sample-applications.md)
+Quick links: [Getting Started](docs/01-getting-started.md) · [Core Concepts](docs/02-core-concepts.md) · [API Reference](docs/14-api-reference.md) · [Known Limitations](docs/15-known-limitations-and-gaps.md) · [OS-1 Honesty Gate](docs/19-os-release-gate.md) · [Sample Applications](docs/16-sample-applications.md)
 
 ## 🚀 Getting Started
 
@@ -47,7 +47,7 @@ dotnet test FlowOS.sln
 ## 🤖 MCP AI Control Plane
 FlowOS is a **multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction**. It exposes a standalone **Model Context Protocol (MCP)** server (`src/FlowOS.MCP`) supporting both **stdio** and **Streamable HTTP** (`MCP_TRANSPORT=http`, `GET /mcp` and `POST /mcp`):
 * **Public Discovery (`GET /mcp`)**: Self-documenting endpoint returning interactive HTML or machine-readable JSON discovery metadata, tool schemas, tenant security semantics, risk ratings, and human confirmation requirements.
-* **Protected Execution (`POST /mcp`)**: Authenticated JSON-RPC 2.0 interface exposing **60 tools** across workflow design, context-aware simulation, context bindings, Copilot synthesis, time-travel replay, state machine verification, execution, human tasks, notifications, and advisory agents.
+* **Protected Execution (`POST /mcp`)**: Authenticated JSON-RPC 2.0 interface exposing **66 tools** across workflow design, context-aware simulation, context bindings, Copilot synthesis, time-travel replay, state machine verification, execution, human tasks, notifications, and advisory agents.
 * **Enforced Agent Governance Policy**: High-risk actions (`publish_workflowclass`, `activate_context_binding`, and `archive_context_binding`) mandate explicit human confirmation (`confirmHumanApproval: true`), failing deterministically with `MCP-APPROVAL-REQUIRED` if omitted.
 * **Object-Level Tenant Isolation & Anti-Enumeration**: Strict anti-BOLA/IDOR boundaries prevent foreign resource access, while normalizing foreign and non-existent IDs to `MCP-NOTFOUND-001` to eliminate enumeration oracles. Public blueprints (`Scope == Public`) remain safely executable cross-tenant with caller-isolated runtime state.
 

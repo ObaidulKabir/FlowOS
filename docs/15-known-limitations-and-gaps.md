@@ -59,3 +59,5 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 ## How to keep this chapter honest
 
 If you fix one of the gaps above, please also delete (or move to a "Resolved" section) the corresponding entry here, and update the cross-references in the other chapters that mention it — search for the exception/gap name across `docs/`.
+
+The product-level scoreboard for "engine vs OS" is [Chapter 19 — OS-1 Honesty Gate](19-os-release-gate.md). Must-pass identity, dual-kernel fail-closed Law, admin-only promote-to-Public, role-filtered inbox, and hosted agent runtime are closed; remaining items here are later (`L-*`) polish, not GREEN blockers.

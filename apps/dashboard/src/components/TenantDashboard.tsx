@@ -5,6 +5,7 @@ import { WorkflowTable } from './WorkflowTable';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { TenantApiKeyManager } from './TenantApiKeyManager';
+import { AgentPromptManager } from './AgentPromptManager';
 import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
@@ -13,7 +14,7 @@ import { ContextBindingsView } from './ContextBindingsView';
 import { ContextSimulationStudio } from './ContextSimulationStudio';
 import { 
   Building2, Plus, Play, RefreshCw, Key, Activity, FileText, 
-  Cpu, Copy, Check, Filter, Sparkles, Scale, Link2
+  Cpu, Copy, Check, Filter, Sparkles, Scale, Link2, MessageSquarePlus
 } from 'lucide-react';
 
 interface Props {
@@ -23,7 +24,7 @@ interface Props {
 }
 
 export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
-  const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Bindings' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Instances');
+  const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Bindings' | 'Prompts' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Instances');
   const [blueprintSubTab, setBlueprintSubTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared'>('All');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
@@ -313,6 +314,15 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               <span>Context Bindings</span>
             </button>
             <button
+              onClick={() => setActiveTab('Prompts')}
+              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'Prompts' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <MessageSquarePlus size={15} />
+              <span>Agent Prompts</span>
+            </button>
+            <button
               onClick={() => setActiveTab('Events')}
               className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
                 activeTab === 'Events' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
@@ -470,6 +480,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
 
           {activeTab === 'Keys' && (
             <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
+          )}
+
+          {activeTab === 'Prompts' && (
+            <AgentPromptManager tenantName={session.tenantName} />
           )}
 
           {activeTab === 'Simulator' && (

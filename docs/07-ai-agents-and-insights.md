@@ -1,17 +1,84 @@
 # 7. AI Agents & Insights
 
-In FlowOS, agents act as intelligent advisors, **never** autonomous executors. They analyze workflow state and business data, then produce **Insights** and **Suggested Actions**, which a human (or a validated policy) must confirm before anything actually changes.
+In FlowOS, agents **always suggest**. FlowOS **auto-commits** a `SuggestedAction` only when an explicit step `autoCommit` policy says the case is in-bounds. Otherwise the instance stays a HumanTask and the suggestion is parked as a Smart Action. Dual-kernel law does not change: the state machine decides what is legal; the workflow graph decides where the instance sits. AI must not invent transitions.
+
+## Bounded autonomy
+
+Per waiting step:
+
+* `actor`: `Human` (default, no behavior change) | `Agent` | `Either`
+* `decisionGuideline`: template markdown — how to decide
+* Binding `policyGuideline` + canonical context — the case and tenant overlay
+* `autoCommit.minConfidence` and `autoCommit.allowedEvents` (subset of `nextSteps`)
+* `agentPrompt`: alias of a tenant plugin binding with `bindingType: prompt` (create/edit `title`, `system`, `instructions`)
+* `agentProvider`: alias of a tenant plugin binding with `bindingType: agent` (provider, model, endpoint, API key)
+* `agentTools`: resource plugins (`LookupRecord:<capability>`, …), notify plugins, and `capability:*` writes; legal `nextSteps` events are always included. Read tools are prefetched into Agent Context.
+
+When an `Agent`/`Either` waiting step becomes current, FlowOS builds a **DecisionPacket** (Prompt + Data + Tools + redacted Provider), runs `IWorkflowAgent`, records `AgentInsightGenerated`, then either calls the same `PublishEventCommand` path humans use (`ActorId` = `Agent:{agentId}`) or parks the insight. TimeoutEvent stays SLA/timer-owned. External MCP chat agents must not free-form `publish_event`; they call `get_agent_context` / `preview_agent_context` (inspect), `suggest_agent_action` (run agent, no publish), or `run_agent_task` (hosted loop). Design-time prompt: `design_agent_handled_step`. Resource: `flowos://guides/bounded-autonomy-tasks`.
+
+## Tenant-owned model and declarative tools
+
+Businesses bring their own LLM. Register it with MCP `register_plugin_binding`:
+
+```json
+{
+  "bindingType": "agent",
+  "sourceName": "quote-llm",
+  "providerName": "openai",
+  "configuration": { "model": "gpt-4o-mini", "endpoint": "https://api.openai.com/v1", "apiKey": "<tenant-key>" }
+}
+```
+
+Known `providerName` values: `openai`, `anthropic`, `azure-openai`, `google`, `custom`, `flowos-risk`. The API key is write-only: omit it on update to keep the stored secret; `list_plugin_bindings` / `resolve_plugin_binding` return `{model,endpoint,hasApiKey}` and never the key. Step `agentProvider` is only the alias. The key is never copied into DecisionPacket / Agent Context.
+
+Tooling is declarative, not free-form HTTP from the model. Tenants expose resources as **capability bindings** (their URL/auth). FlowOS hosts these resource plugins and prefetches read results into `DecisionPacket.Data.ToolResults` before the agent decides:
+
+| Plugin | `agentTools` | Tenant capability example | When it runs |
+|---|---|---|---|
+| `LookupRecord` | `LookupRecord:crm.customer.get.v1` | Customer/job/entity GET | Prefetch (read) |
+| `QueryRecords` | `QueryRecords:inventory.parts.query.v1` | Search/list | Prefetch (read) |
+| `FetchDocument` | `FetchDocument:docs.quote.get.v1` | Quote PDF / attachment | Prefetch (read) |
+| `SearchKnowledge` | `SearchKnowledge:kb.policy.search.v1` | KB / policy corpus | Prefetch (read) |
+| `CheckPolicy` | `CheckPolicy:policy.approval-limit.v1` | Approval limits / rules | Prefetch (read) |
+| `InvokeCapability` | `capability:payment.refund.v1` | Any write API | Declared only — not prefetched |
+| Email / Slack / WhatsApp / Webhook / Notification | `Webhook`, `plugin:Email` | Notify | Declared only — not prefetched |
+
+Register each capability with `register_capability_binding`. The agent never receives the endpoint URL. Remote calls require `FlowOS:Capabilities:EnableRemoteInvoke=true`. DecisionProvider plugins stay deterministic expression routers — they are not LLMs.
+
+Until an LLM HTTP client is wired, FlowOS still hosts `RiskAnalysisAgent` as the fixture runtime while storing the tenant provider settings on the packet.
+
+## Tenant-owned prompts (create / edit)
+
+Users create and edit prompts independently of the workflow JSON. Dashboard: **Agent Prompts**. MCP: `upsert_agent_prompt` / `list_agent_prompts` / `get_agent_prompt` (also `register_plugin_binding` with `bindingType: prompt`).
+
+```json
+{
+  "bindingType": "prompt",
+  "sourceName": "quote-approval",
+  "providerName": "markdown",
+  "configuration": {
+    "title": "Quote approval",
+    "system": "You are a service advisor assistant. Only suggest legal nextSteps events.",
+    "instructions": "Approve if the quote is within 15% of estimate; otherwise request revision."
+  }
+}
+```
+
+Point the waiting step at it with `agentPrompt: "quote-approval"`. FlowOS loads title/system/instructions into `DecisionPacket.Prompt`. Template `decisionGuideline` remains an optional fallback. REST: `GET/PUT /api/plugin-bindings`.
+
+Do **not** replace a waiting HumanTask with a Decision `Default` skip so the AI "advances" the graph. That reopens dual-kernel drift.
 
 ## Agent contract
 
-1. **Input**: `AgentContext` — a read-only snapshot of the tenant, entity, and workflow state.
-2. **Output**: `AgentResult` — an insight string, optional structured data, and optional `SuggestedAction`s.
-3. **Side effects**: none. An agent cannot call `PublishEventCommand` or `StartWorkflowCommand` directly.
+1. **Input**: `DecisionPacket` (also projected as `AgentContext`) — Prompt / Data / Tools / redacted Provider. Never a raw tenant dump and never the API key.
+2. **Output**: `AgentResult` — an insight string, optional structured data, and optional `SuggestedAction`s. Only legal `nextSteps` events are kept.
+3. **Side effects during reasoning**: none. Auto-commit is hosted by FlowOS after the agent returns.
 
 ```csharp
 public interface IWorkflowAgent
 {
     Task<AgentResult> ExecuteAsync(AgentContext context);
+    Task<AgentResult> ExecuteAsync(DecisionPacket packet, CancellationToken cancellationToken = default);
 }
 ```
 
@@ -58,8 +125,8 @@ public class RiskAnalysisAgent : IWorkflowAgent
 }
 ```
 
-* **Correct**: "Agent suggests Escalation (95% confidence)." A human reads this and clicks "Confirm", which publishes the actual `EVT-ESCALATE` event through the normal API.
-* **Incorrect** (impossible in FlowOS): the agent directly calling something equivalent to `Approve()`.
+* **Correct**: "Agent suggests Escalation (95% confidence)." If `autoCommit` allows `EVT-ESCALATE` at that confidence, FlowOS publishes it; otherwise a human clicks the Smart Action, which publishes the actual event through the normal API.
+* **Incorrect**: the agent directly calling something equivalent to `Approve()`, or an MCP chat agent inventing `publish_event` from free text.
 
 These suggestions appear in the UI as **Smart Actions** — buttons the user must explicitly click to execute.
 
@@ -74,9 +141,9 @@ These suggestions appear in the UI as **Smart Actions** — buttons the user mus
 
 ## Governance guarantees
 
-* **Read-only context** — agents receive a snapshot; they cannot cause side effects during reasoning.
-* **Explicit intent** — agents output structured events, never free-form commands.
-* **State Machine enforcement still applies** — even if an agent suggests an action and a human confirms it, the `WorkflowEngine` validates the resulting event against defined transitions exactly as it would for a human-originated event. An agent's suggestion carries no special authority.
+* **Read-only context** — agents receive a DecisionPacket; they cannot cause side effects during reasoning.
+* **Explicit intent** — agents output structured events from legal `nextSteps`, never free-form commands.
+* **State Machine enforcement still applies** — auto-commit still goes through `PublishEventCommand` and `WorkflowEngine`. An agent's suggestion carries no extra authority beyond the auto-commit policy.
 
 ## Verification: seeing human + AI events merged in one timeline
 

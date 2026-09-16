@@ -67,6 +67,10 @@ public class RiskAnalysisAgent : IWorkflowAgent
             insight += $" Resubmitted {resubmissionCount} times – elevated risk.";
         }
 
-        return Task.FromResult(AgentResult.WithActions(insight, actions));
+        var result = AgentResult.WithActions(insight, actions);
+        if (context.RestrictToLegalEvents)
+            result = AgentSuggestionContract.RestrictToLegalEvents(result, context.LegalEvents);
+
+        return Task.FromResult(result);
     }
 }

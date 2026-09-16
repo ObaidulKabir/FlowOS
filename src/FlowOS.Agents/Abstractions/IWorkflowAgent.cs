@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FlowOS.Agents.Abstractions;
@@ -7,6 +8,6 @@ namespace FlowOS.Agents.Abstractions;
 /// </summary>
 public interface IWorkflowAgent : IAgent
 {
-    // A workflow agent might have specific methods to access definition metadata
-    // For now, it just marks the capability to reason about workflows.
+    Task<AgentResult> ExecuteAsync(DecisionPacket packet, CancellationToken cancellationToken = default) =>
+        ExecuteAsync(AgentContext.FromPacket(packet));
 }

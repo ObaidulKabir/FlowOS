@@ -596,7 +596,66 @@ export const api = {
     const headers = getHeaders();
     const response = await fetch('/api/auth/me', { headers });
     return handleResponse(response, 'Failed to get current user profile');
+  },
+
+  listPluginBindings: async (
+    bindingType?: string,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<{ totalCount: number; bindings: PluginBindingDto[] }> => {
+    const headers = getHeaders(role);
+    const params = new URLSearchParams();
+    if (bindingType) params.append('bindingType', bindingType);
+    const response = await fetch(`/api/plugin-bindings?${params.toString()}`, { headers });
+    const data = await handleResponse(response, 'Failed to list plugin bindings');
+    const raw = data.bindings ?? data.Bindings ?? [];
+    return {
+      totalCount: data.totalCount ?? data.TotalCount ?? raw.length,
+      bindings: raw.map((item: Record<string, unknown>) => ({
+        id: String(item.id ?? item.Id ?? ''),
+        tenantId: String(item.tenantId ?? item.TenantId ?? ''),
+        bindingType: String(item.bindingType ?? item.BindingType ?? ''),
+        sourceName: String(item.sourceName ?? item.SourceName ?? ''),
+        providerName: String(item.providerName ?? item.ProviderName ?? ''),
+        isEnabled: Boolean(item.isEnabled ?? item.IsEnabled ?? true),
+        configuration: (item.configuration ?? item.Configuration ?? null) as Record<string, unknown> | null,
+        createdAtUtc: String(item.createdAtUtc ?? item.CreatedAtUtc ?? ''),
+        updatedAtUtc: String(item.updatedAtUtc ?? item.UpdatedAtUtc ?? '')
+      }))
+    };
+  },
+
+  upsertPluginBinding: async (
+    req: UpsertPluginBindingRequest,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<PluginBindingDto> => {
+    const headers = getHeaders(role);
+    const response = await fetch('/api/plugin-bindings', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Failed to save plugin binding');
   }
 };
+
+export interface PluginBindingDto {
+  id: string;
+  tenantId: string;
+  bindingType: string;
+  sourceName: string;
+  providerName: string;
+  isEnabled: boolean;
+  configuration?: Record<string, unknown> | null;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface UpsertPluginBindingRequest {
+  bindingType: string;
+  sourceName: string;
+  providerName?: string;
+  isEnabled?: boolean;
+  configuration?: Record<string, unknown>;
+}
 
 

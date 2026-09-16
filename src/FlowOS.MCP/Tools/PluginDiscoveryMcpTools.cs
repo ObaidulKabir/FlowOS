@@ -201,6 +201,23 @@ public class PluginDiscoveryMcpTools
         }
     }
 
+    private static ActionPluginCapabilityMetadata ResourcePluginMetadata(
+        string category,
+        string description,
+        string exampleCapability) =>
+        new(
+            Category: category,
+            Description: description,
+            SupportedParameters: new[]
+            {
+                new ActionPluginParameter("capability", "string", true, "Tenant capability binding name. Declare as Plugin:capability on step.agentTools."),
+                new ActionPluginParameter("input", "object", false, "Filled from canonical context and event payloads at prefetch time.")
+            },
+            ExamplePayloadMapping: new Dictionary<string, object>
+            {
+                ["capability"] = exampleCapability
+            });
+
     private static ActionPluginCapabilityMetadata GetActionPluginMetadata(string? actionType)
     {
         return (actionType?.Trim().ToLowerInvariant()) switch
@@ -319,6 +336,27 @@ public class PluginDiscoveryMcpTools
                     ["capabilityName"] = "CreditCheckService",
                     ["input"] = new Dictionary<string, object> { ["minScore"] = 700 }
                 }),
+
+            "lookuprecord" => ResourcePluginMetadata(
+                "records",
+                "Reads one tenant record through a capability binding. Declare as LookupRecord:<capability>. Prefetched into Agent Context.",
+                "crm.customer.get.v1"),
+            "queryrecords" => ResourcePluginMetadata(
+                "records",
+                "Queries tenant record lists through a capability binding. Declare as QueryRecords:<capability>.",
+                "inventory.parts.query.v1"),
+            "fetchdocument" => ResourcePluginMetadata(
+                "documents",
+                "Fetches a tenant document or attachment through a capability binding. Declare as FetchDocument:<capability>.",
+                "docs.quote.get.v1"),
+            "searchknowledge" => ResourcePluginMetadata(
+                "knowledge",
+                "Searches a tenant knowledge base through a capability binding. Declare as SearchKnowledge:<capability>.",
+                "kb.policy.search.v1"),
+            "checkpolicy" => ResourcePluginMetadata(
+                "policy",
+                "Reads tenant policy limits/rules through a capability binding. Declare as CheckPolicy:<capability>.",
+                "policy.approval-limit.v1"),
 
             "*" => new ActionPluginCapabilityMetadata(
                 Category: "fallback",
@@ -462,6 +500,11 @@ public class PluginDiscoveryMcpTools
             || string.Equals(actionType, "Slack", StringComparison.OrdinalIgnoreCase)
             || string.Equals(actionType, "Email", StringComparison.OrdinalIgnoreCase)
             || string.Equals(actionType, "WhatsApp", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "LookupRecord", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "QueryRecords", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "FetchDocument", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "SearchKnowledge", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actionType, "CheckPolicy", StringComparison.OrdinalIgnoreCase)
             || string.Equals(actionType, "*", StringComparison.Ordinal);
     }
 }

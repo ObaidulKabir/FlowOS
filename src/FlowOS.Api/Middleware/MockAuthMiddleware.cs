@@ -1,6 +1,10 @@
 using System.Security.Claims;
 using System.Threading.Tasks;
+using FlowOS.Core.Security;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace FlowOS.Api.Middleware;
 
@@ -15,26 +19,14 @@ public class MockAuthMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        string role = "Admin";
-        if (context.Request.Headers.TryGetValue("X-Mock-Role", out var r) && !string.IsNullOrWhiteSpace(r))
-        {
-            role = r.ToString();
-        }
+        var env = context.RequestServices.GetRequiredService<IHostEnvironment>();
+        var config = context.RequestServices.GetRequiredService<IConfiguration>();
+        var allowMock = TenantIdentityRules.AllowMockAuth(
+            env.EnvironmentName,
+            config[TenantIdentityRules.AllowMockAuthKey]);
 
-        var userId = context.Request.Headers.TryGetValue("X-Mock-UserId", out var uid) && !string.IsNullOrWhiteSpace(uid)
-            ? uid.ToString()
-            : "mock-user";
+        var headerTenant = ReadRequestedTenant(context);
 
-        var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Name, "Mock User"),
-            new Claim(ClaimTypes.Role, role)
-        };
-
-        string? resolvedTenantId = null;
-
-        // Extract API Key from headers or query
         string? suppliedApiKey = null;
         if (context.Request.Headers.TryGetValue("X-API-Key", out var h1) && !string.IsNullOrWhiteSpace(h1))
             suppliedApiKey = h1.ToString();
@@ -52,6 +44,8 @@ public class MockAuthMiddleware
                 var principal = jwtService?.ValidateToken(bearerToken);
                 if (principal != null)
                 {
+                    if (!await EnsureTenantMatchAsync(context, TenantIdentityRules.CredentialTenant(principal.FindFirst("tenant_id")?.Value), headerTenant))
+                        return;
                     context.User = principal;
                     await _next(context);
                     return;
@@ -63,14 +57,14 @@ public class MockAuthMiddleware
         else if (context.Request.Query.TryGetValue("apiKey", out var qKey) && !string.IsNullOrWhiteSpace(qKey))
             suppliedApiKey = qKey.ToString();
 
+        Guid? credentialTenant = null;
+        var extraClaims = new List<Claim>();
+
         if (!string.IsNullOrWhiteSpace(suppliedApiKey))
         {
-            // Check well-known demo keys first
-            if (suppliedApiKey == "flowos_prod_secret_key_32_chars_min" ||
-                suppliedApiKey == "local-development-key-change-me" ||
-                suppliedApiKey == "YOUR_PRODUCTION_API_KEY")
+            if (TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
             {
-                resolvedTenantId = "22222222-2222-2222-2222-222222222222";
+                credentialTenant = TenantIdentityRules.DemoTenantId;
             }
             else
             {
@@ -86,12 +80,12 @@ public class MockAuthMiddleware
 
                         if (apiKeyRecord != null)
                         {
-                            resolvedTenantId = apiKeyRecord.TenantId.ToString();
-                            claims.Add(new Claim("app_name", apiKeyRecord.ApplicationName));
-                            claims.Add(new Claim("environment", apiKeyRecord.Environment));
+                            credentialTenant = apiKeyRecord.TenantId;
+                            extraClaims.Add(new Claim("app_name", apiKeyRecord.ApplicationName));
+                            extraClaims.Add(new Claim("environment", apiKeyRecord.Environment));
                             foreach (var scope in apiKeyRecord.Scopes)
                             {
-                                claims.Add(new Claim("scope", scope));
+                                extraClaims.Add(new Claim("scope", scope));
                             }
                             apiKeyRecord.RecordUsage();
                             await db.SaveChangesAsync();
@@ -100,28 +94,89 @@ public class MockAuthMiddleware
                 }
                 catch
                 {
-                    // Ignore DB lookup errors in mock auth fallback
+                    // Ignore DB lookup errors; unauthenticated callers fail closed outside Development.
                 }
             }
         }
 
-        // Add Tenant ID claim if provided in header, query string, or resolved via API key
-        if (context.Request.Headers.TryGetValue("x-tenant-id", out var tenantId) && !string.IsNullOrWhiteSpace(tenantId))
+        if (credentialTenant.HasValue)
         {
-            claims.Add(new Claim("tenant_id", tenantId.ToString()));
-        }
-        else if (context.Request.Query.TryGetValue("tenantId", out var queryTenant) && !string.IsNullOrWhiteSpace(queryTenant))
-        {
-            claims.Add(new Claim("tenant_id", queryTenant.ToString()));
-        }
-        else if (!string.IsNullOrWhiteSpace(resolvedTenantId))
-        {
-            claims.Add(new Claim("tenant_id", resolvedTenantId));
+            if (!await EnsureTenantMatchAsync(context, credentialTenant, headerTenant))
+                return;
+
+            var role = allowMock ? ReadMockRole(context) : "ApiKey";
+            var userId = allowMock ? ReadMockUserId(context) : "api-key";
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, userId),
+                new Claim(ClaimTypes.Name, allowMock ? "Mock User" : "API Key"),
+                new Claim(ClaimTypes.Role, role),
+                new Claim("tenant_id", credentialTenant.Value.ToString())
+            };
+            claims.AddRange(extraClaims);
+            context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "ApiKey"));
+            await _next(context);
+            return;
         }
 
-        var identity = new ClaimsIdentity(claims, "Mock");
-        context.User = new ClaimsPrincipal(identity);
+        if (!allowMock)
+        {
+            await _next(context);
+            return;
+        }
 
+        var mockClaims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, ReadMockUserId(context)),
+            new Claim(ClaimTypes.Name, "Mock User"),
+            new Claim(ClaimTypes.Role, ReadMockRole(context))
+        };
+
+        if (headerTenant != Guid.Empty)
+            mockClaims.Add(new Claim("tenant_id", headerTenant.ToString()));
+
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(mockClaims, "Mock"));
         await _next(context);
+    }
+
+    private static async Task<bool> EnsureTenantMatchAsync(HttpContext context, Guid? credentialTenant, Guid headerTenant)
+    {
+        if (!credentialTenant.HasValue || headerTenant == Guid.Empty || headerTenant == credentialTenant.Value)
+            return true;
+
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsync("Cross-tenant access forbidden.");
+        return false;
+    }
+
+    private static Guid ReadRequestedTenant(HttpContext context)
+    {
+        if (context.Request.Headers.TryGetValue("x-tenant-id", out var header) &&
+            TenantIdentityRules.TryParseTenant(header.ToString(), out var fromHeader))
+        {
+            return fromHeader;
+        }
+
+        if (context.Request.Query.TryGetValue("tenantId", out var query) &&
+            TenantIdentityRules.TryParseTenant(query.ToString(), out var fromQuery))
+        {
+            return fromQuery;
+        }
+
+        return Guid.Empty;
+    }
+
+    private static string ReadMockRole(HttpContext context)
+    {
+        if (context.Request.Headers.TryGetValue("X-Mock-Role", out var role) && !string.IsNullOrWhiteSpace(role))
+            return role.ToString();
+        return "Admin";
+    }
+
+    private static string ReadMockUserId(HttpContext context)
+    {
+        if (context.Request.Headers.TryGetValue("X-Mock-UserId", out var uid) && !string.IsNullOrWhiteSpace(uid))
+            return uid.ToString();
+        return "mock-user";
     }
 }

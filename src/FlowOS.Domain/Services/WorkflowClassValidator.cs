@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text.Json; // Added for JSON validation
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
+using FlowOS.Domain.Enums;
 using FlowOS.Domain.Validation;
 
 namespace FlowOS.Domain.Services;
@@ -343,6 +344,8 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 }
             }
 
+            ValidateAgentHandledStep(step, declaredEvents, result);
+
             if (string.Equals(step.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase))
             {
                 ValidateSubWorkflowReference(step, result);
@@ -485,6 +488,92 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 "StepValidation",
                 $"SubWorkflow step '{step.StepId}' must set one target reference: workflowDefinitionId, workflowClassId, or workflowName.",
                 "Steps");
+        }
+    }
+
+    private static void ValidateAgentHandledStep(StepBlueprint step, HashSet<string> declaredEvents, ValidationResult result)
+    {
+        var actor = StepActor.Normalize(step.Actor);
+        if (!StepActor.IsKnown(step.Actor))
+        {
+            result.AddError(
+                "WF-AGENT-001",
+                "AgentTask",
+                $"Step '{step.StepId}' has invalid actor '{step.Actor}'. Allowed values: Human, Agent, Either.",
+                "Workflow");
+        }
+
+        var nextStepKeys = step.NextSteps?.Keys ?? Enumerable.Empty<string>();
+        var hasDefaultRoute = nextStepKeys.Any(key =>
+            string.Equals(key, "Default", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(key, "true", StringComparison.OrdinalIgnoreCase));
+
+        if (StepActor.IsAgentHandled(actor) && hasDefaultRoute)
+        {
+            result.AddError(
+                "WF-AGENT-005",
+                "AgentTask",
+                $"Step '{step.StepId}' assigns actor '{actor}' but also auto-routes via nextSteps Default/true. Agent-handled steps must wait; do not skip the gate.",
+                "Workflow");
+        }
+
+        if (StepActor.IsAgentHandled(actor) &&
+            string.IsNullOrWhiteSpace(step.DecisionGuideline) &&
+            string.IsNullOrWhiteSpace(step.AgentPrompt))
+        {
+            result.AddError(
+                "WF-AGENT-004",
+                "AgentTask",
+                $"Step '{step.StepId}' has actor '{actor}' but no decisionGuideline or agentPrompt. Provide template markdown or point agentPrompt at a tenant prompt binding.",
+                "Workflow");
+        }
+
+        if (step.AutoCommit == null) return;
+
+        foreach (var allowedEvent in step.AutoCommit.AllowedEvents ?? Enumerable.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(allowedEvent)) continue;
+
+            if (!nextStepKeys.Contains(allowedEvent, StringComparer.OrdinalIgnoreCase))
+            {
+                result.AddError(
+                    "WF-AGENT-002",
+                    "AgentTask",
+                    $"Step '{step.StepId}' autoCommit.allowedEvents includes '{allowedEvent}' which is not a nextSteps key.",
+                    "Workflow");
+            }
+
+            if (!string.IsNullOrWhiteSpace(step.Sla?.TimeoutEvent) &&
+                string.Equals(allowedEvent, step.Sla.TimeoutEvent, StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError(
+                    "WF-AGENT-003",
+                    "AgentTask",
+                    $"Step '{step.StepId}' cannot auto-commit TimeoutEvent '{allowedEvent}'. Overdue stays SLA/timer-owned.",
+                    "Workflow");
+            }
+
+            if (step.Sla?.Reminders != null &&
+                step.Sla.Reminders.Any(reminder =>
+                    string.Equals(reminder.TriggerEvent, allowedEvent, StringComparison.OrdinalIgnoreCase)))
+            {
+                result.AddError(
+                    "WF-AGENT-003",
+                    "AgentTask",
+                    $"Step '{step.StepId}' cannot auto-commit SLA reminder event '{allowedEvent}'.",
+                    "Workflow");
+            }
+
+            if (!declaredEvents.Contains(allowedEvent) &&
+                !string.Equals(allowedEvent, "Default", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(allowedEvent, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError(
+                    "CON-005",
+                    "Consistency",
+                    $"Step '{step.StepId}' autoCommit references undeclared event '{allowedEvent}'",
+                    "Workflow");
+            }
         }
     }
 

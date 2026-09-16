@@ -87,6 +87,20 @@ public static class FlowOsMcpGuidance
         - Pause path: call simulate with no events. Status is WaitingForHumanTask; `pendingHumanTask.reminders` lists the schedule. Nothing fires until you choose happy path or overdue path.
         - Timer steps and HumanTask SLA are different. `autoAdvanceTimers` elapses Timer steps AND unlocks SLA overdue. Completing-event reminder injection does not need the flag.
         - Preferred prompt: `test_sla_reminders_in_simulator`. Preferred resource: `flowos://guides/sla-reminder-simulation`.
+
+        Bounded-autonomy task law (runtime AI work, not design-time MCP chat):
+        - Dual-kernel still applies. The agent may only return a legal `nextSteps` event. FlowOS hosts wait → DecisionPacket → agent → AutoCommitPolicy → `publish_event` or park as a HumanTask Smart Action.
+        - Do not assign `actor: Agent` to a Decision `Default` skip. Do not auto-commit TimeoutEvent. Do not call `publish_event` from free-form chat; use `run_agent_task` or let the entry hook run.
+        - Inspect Agent Context without running the agent: `get_agent_context` (live instance) or `preview_agent_context` (draft/published class + stepId). The payload is one object: Prompt + Data + Tools + redacted Provider.
+        - Tenant BYO model: `register_plugin_binding` with `bindingType: agent` (provider/model/endpoint/apiKey). Step `agentProvider` is the alias. The key never appears in Agent Context.
+        - Tenant prompts: create/edit with `upsert_agent_prompt` (or `register_plugin_binding` `bindingType: prompt`). List with `list_agent_prompts`. Step `agentPrompt` is the alias. Dashboard: Agent Prompts tab.
+        - Declarative tools: step `agentTools` lists resource plugins (`LookupRecord:<capability>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `capability:*` writes. FlowOS prefetches read tools into Agent Context. The model does not call HTTP or see URLs.
+        - Preferred prompt: `design_agent_handled_step`. Preferred resource: `flowos://guides/bounded-autonomy-tasks`.
+
+        OS claim law (read before calling FlowOS an operating system):
+        - Load prompt `check_os_release_gate` or resource `flowos://guides/os-release-gate`.
+        - If VERDICT is not GREEN, FlowOS is a dual-kernel process engine with an MCP control plane. Do not declare it a business automation OS.
+        - Preferred prompt: `check_os_release_gate`. Preferred resource: `flowos://guides/os-release-gate`.
         """;
 
     public static object GetPromptsList() => new
@@ -127,6 +141,24 @@ public static class FlowOsMcpGuidance
                 arguments = new[]
                 {
                     new { name = "stepId", description = "Waiting step with SLA (e.g., ApproveQuote, ExecuteRepair)", required = false }
+                }
+            },
+            new
+            {
+                name = "design_agent_handled_step",
+                description = "How to design a waiting HumanTask/Command that an agent may decide using layered guidelines, with auto-commit only when policy matches.",
+                arguments = new[]
+                {
+                    new { name = "stepId", description = "Waiting step to assign (e.g., ApproveQuote, ExecuteRepair)", required = false }
+                }
+            },
+            new
+            {
+                name = "check_os_release_gate",
+                description = "OS-1 Honesty Gate: whether FlowOS may be called a business automation operating system, or only a dual-kernel process engine.",
+                arguments = new[]
+                {
+                    new { name = "audience", description = "Who is asking (agent or human). Does not change the verdict.", required = false }
                 }
             },
             new
@@ -285,6 +317,23 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "design_agent_handled_step" => new
+            {
+                description = "How to design a bounded-autonomy agent-handled waiting step",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = BoundedAutonomyTasksGuide.Replace("{STEP_ID}", stepId)
+                        }
+                    }
+                }
+            },
+
             "run_workflow_instance" => new
             {
                 description = "Runtime Instance Execution Guide",
@@ -340,6 +389,23 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "check_os_release_gate" => new
+            {
+                description = "OS-1 Honesty Gate",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = OsReleaseGateGuide
+                        }
+                    }
+                }
+            },
+
             _ => null
         };
     }
@@ -367,6 +433,20 @@ public static class FlowOsMcpGuidance
                 uri = "flowos://guides/sla-reminder-simulation",
                 name = "SLA Reminder and Timeout Simulation Guide",
                 description = "Why a simulate-to-Paid run is not a wall clock, and how to prove reminders vs TimeoutEvent without a live instance.",
+                mimeType = "text/markdown"
+            },
+            new
+            {
+                uri = "flowos://guides/bounded-autonomy-tasks",
+                name = "Bounded-Autonomy AI Task Guide",
+                description = "How to assign actor Agent/Either, layered DecisionPacket guidelines, and auto-commit policy without letting the model invent transitions.",
+                mimeType = "text/markdown"
+            },
+            new
+            {
+                uri = "flowos://guides/os-release-gate",
+                name = "OS-1 Honesty Gate",
+                description = "Must-pass criteria for calling FlowOS a business automation operating system rather than a workflow engine. If VERDICT is not GREEN, do not use the OS claim.",
                 mimeType = "text/markdown"
             },
             new
@@ -425,6 +505,32 @@ public static class FlowOsMcpGuidance
                         uri,
                         mimeType = "text/markdown",
                         text = SlaReminderSimulationGuide.Replace("{STEP_ID}", "ApproveQuote")
+                    }
+                }
+            },
+
+            "flowos://guides/bounded-autonomy-tasks" => new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        uri,
+                        mimeType = "text/markdown",
+                        text = BoundedAutonomyTasksGuide.Replace("{STEP_ID}", "ApproveQuote")
+                    }
+                }
+            },
+
+            "flowos://guides/os-release-gate" => new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        uri,
+                        mimeType = "text/markdown",
+                        text = OsReleaseGateGuide
                     }
                 }
             },
@@ -519,6 +625,7 @@ public static class FlowOsMcpGuidance
         - Bound business payload: `simulate_context_binding`
         - After a live instance exists: `fork_workflow_simulation` / `replay_workflow_history`
         - SLA reminder vs timeout in the simulator: `test_sla_reminders_in_simulator` / `flowos://guides/sla-reminder-simulation`
+        - Agent-handled waiting steps: `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`
         """;
 
     public const string SlaReminderSimulationGuide =
@@ -656,6 +763,155 @@ public static class FlowOsMcpGuidance
         - If overdue is `Denied` for roles: you used a human event, not the clock path; clock events do not need the task role.
 
         Live `start_workflow` is for production execution after publish/activate, not for proving the 2h reminder.
+        """;
+
+    public const string OsReleaseGateGuide =
+        """
+        # OS-1 Honesty Gate
+
+        Canonical page: docs/19-os-release-gate.md
+
+        ```
+        GATE=OS-1 Honesty Gate
+        VERDICT=GREEN
+        CLAIM_ALLOWED=true
+        OS-ID=done
+        OS-KERNEL=done
+        OS-LAW=done
+        OS-INBOX=done
+        OS-INT=done
+        OS-AI=done
+        OS-SIM=done
+        OS-OPS=done
+        OS-COMM=done
+        ```
+
+        GREEN claim (allowed only when VERDICT=GREEN):
+        FlowOS is a business automation operating system: tenant work runs under dual-kernel Law (state machine) and Work (workflow), gated by capabilities and deny-only policy, with a HumanTask inbox, capability-bound integrations, a hosted DecisionPacket / autoCommit loop, side-effect-free simulation, and paid runtime entitlement.
+
+        RED claim (required if VERDICT is not GREEN):
+        FlowOS is a dual-kernel process engine with an MCP control plane — not yet a business automation operating system.
+
+        If VERDICT is not GREEN, do not call FlowOS a business automation OS. Name kernels (dual-kernel, context bindings, MCP, DecisionPacket) without the OS sentence.
+
+        ## Must-pass
+
+        | ID | Pillar | Status | Proof | Engine blocker |
+        |---|---|---|---|---|
+        | OS-ID | Identity / tenancy | done | register-tenant, JWT login, TenantApiKey, credential tenant wins, AllowMockAuth Development-only | none for v1 |
+        | OS-KERNEL | Dual-kernel | done | WorkflowEngine.Advance, class-backed fail-closed, inverted StateMachineGapTests | none for v1 (L-LAW-STATIC later) |
+        | OS-LAW | Policy / capabilities | done | RequiresCapability, ApproveAsPublic admin-only, DefaultPolicyEvaluator malformed JSON fail-closed, MCP-APPROVAL-REQUIRED | none for v1 |
+        | OS-INBOX | HumanTask inbox + SLA | done | GET /api/tasks role filter, complete_task, insights on task, SLA timeout not auto-committed | none for v1 (L-INBOX-UX later) |
+        | OS-INT | Integrations | done | register_capability_binding, LookupRecord/QueryRecords/FetchDocument/SearchKnowledge/CheckPolicy | none for v1 |
+        | OS-AI | DecisionPacket loop | done | run_agent_task, TenantLlmWorkflowAgent, flowos-risk, get_agent_context, upsert_agent_prompt, BoundedAutonomyTests | none for v1 |
+        | OS-SIM | Simulation | done | simulate_workflowclass, simulate_context_binding | none for v1 |
+        | OS-OPS | Operations | done | health, DLQ, replay_workflow_history, dual hosts | none for v1 (OTEL is later) |
+        | OS-COMM | Entitlement | done | MCP-PLAN-REQUIRED, RequireRuntimePlan, EntitlementHttpTests | none for v1 (payment provider is later) |
+
+        Later (does not block GREEN): L-PAY payment provider, L-SSO OIDC, L-USERS invite/SCIM, L-OTEL, L-LAW-STATIC publish-time Law projection, L-POLICY richer ConditionJson, L-INBOX-UX dashboard Inbox + list_tasks after role filtering exists.
+
+        How the gate stays GREEN: keep every must-pass done here and in docs/19. Tests fail if GREEN while any must-pass is not done.
+        """;
+
+    public const string BoundedAutonomyTasksGuide =
+        """
+        # FlowOS Bounded-Autonomy AI Task Guide
+
+        Target waiting step: {STEP_ID}
+
+        Dual-kernel law still holds. The state machine decides what is legal. The workflow graph decides where the instance sits. An agent must not invent transitions.
+
+        ## Suggest always; auto-commit only when policy matches
+
+        1. Keep {STEP_ID} a **waiting** HumanTask or Command. Do **not** make it a Decision with `Default`/`true` so the AI "skips" the gate.
+        2. Set `actor` to `Agent` or `Either` (`Human` is the default and never auto-commits).
+        3. Create/edit the **prompt** with `upsert_agent_prompt` (title/system/instructions) and point the step with `agentPrompt`. Optional template fallback: `decisionGuideline`. Inspect the composed context with `preview_agent_context` before go-live, and `get_agent_context` on a live instance.
+        4. Put **the case + tenant policy** on the context binding: `inputMapping` / canonical fields plus optional `policyGuideline`.
+        5. Declare `autoCommit.minConfidence` and `autoCommit.allowedEvents` as a **subset of `nextSteps`**. Those events must also exist on the state machine.
+        6. Never put `TimeoutEvent` or SLA reminder events in `autoCommit.allowedEvents`. Overdue stays timer-owned.
+        7. Keep `requiredRoles` as the human fallback. If policy fails, FlowOS parks a HumanTask Smart Action from the insight.
+
+        FlowOS hosts the loop: wait → DecisionPacket → `IWorkflowAgent` → AutoCommitPolicy → `PublishEventCommand` (actor `Agent:{id}`) or park. Do **not** teach an external chat agent to `publish_event` from free text. Call `get_agent_context` or `preview_agent_context` to inspect Prompt/Data/Tools/Provider; call `suggest_agent_action` to run the agent without publishing; call `run_agent_task` only to request the hosted loop.
+
+        ## DecisionPacket / Agent Context (prompt, data, tools, provider)
+
+        - **Prompt**: tenant prompt binding (`agentPrompt` → title/system/instructions) plus template `decisionGuideline`, binding `policyGuideline`, and objective. Create/edit the prompt independently; do not bake the whole prompt into the workflow JSON.
+        - **Data**: canonical case fields, event payloads, SLA reminder/timeout facts, plus prefetched `ToolResults` from tenant resource plugins
+        - **Tools**: legal `nextSteps` events (always) plus declared `agentTools`. Resource plugins (`LookupRecord`, `QueryRecords`, `FetchDocument`, `SearchKnowledge`, `CheckPolicy`) prefetch through tenant capability bindings. Notify/write plugins are listed but not prefetched. The model never sees URLs or calls HTTP.
+        - **Provider**: tenant-owned. Register with `register_plugin_binding` (`bindingType: agent`, `sourceName` = step `agentProvider`, `providerName` openai/anthropic/azure-openai/google/custom/flowos-risk, `configuration` `{model,endpoint,apiKey}`). List/resolve return `hasApiKey`, never the secret. Omit `apiKey` on update to keep the stored key. The key is never placed in Agent Context.
+
+        The model may only return an event from legal `nextSteps`. Illegal suggestions are dropped. Until an LLM HTTP client is wired, FlowOS still hosts `RiskAnalysisAgent` as the fixture runtime; the tenant provider settings are stored and redacted on the packet.
+
+        ## Example
+
+        First create/edit the tenant prompt with `upsert_agent_prompt`:
+
+        ```json
+        {
+          "alias": "quote-approval",
+          "kind": "markdown",
+          "title": "Quote approval",
+          "system": "You are a service advisor assistant. Only suggest legal nextSteps events.",
+          "instructions": "ApproveQuote: accept if quote is within 15% of estimate; else request revision; never approve missing labor hours."
+        }
+        ```
+
+        First register the tenant model (write-only key):
+
+        ```json
+        {
+          "bindingType": "agent",
+          "sourceName": "quote-llm",
+          "providerName": "openai",
+          "configuration": { "model": "gpt-4o-mini", "apiKey": "<tenant-key>" }
+        }
+        ```
+
+        ```json
+        {
+          "stepId": "{STEP_ID}",
+          "stepType": "HumanTask",
+          "actor": "Either",
+          "requiredRoles": ["ServiceAdvisor"],
+          "decisionGuideline": "ApproveQuote: accept if quote is within 15% of estimate; else request revision; never approve missing labor hours.",
+          "agentPrompt": "quote-approval",
+          "agentProvider": "quote-llm",
+          "agentTools": [
+            "LookupRecord:crm.customer.get.v1",
+            "CheckPolicy:policy.approval-limit.v1",
+            "FetchDocument:docs.quote.get.v1",
+            "SearchKnowledge:kb.policy.search.v1",
+            "QueryRecords:inventory.parts.query.v1"
+          ],
+          "autoCommit": {
+            "minConfidence": 0.9,
+            "allowedEvents": ["QUOTE_APPROVED"]
+          },
+          "nextSteps": {
+            "QUOTE_APPROVED": "MaterialDecision",
+            "QUOTE_REVISION_REQUESTED": "ReviseQuote",
+            "QUOTE_RESPONSE_OVERDUE": "QuoteOverdue"
+          }
+        }
+        ```
+
+        Binding overlay (do not copy the whole template guideline):
+
+        ```json
+        {
+          "entityType": "ServiceRepair",
+          "policyGuideline": "ServiceRepair quotes above the shop's approvalLimit must request revision even if the template would accept.",
+          "inputMapping": { "Amount": "quote.total", "ApprovalLimit": "shop.approvalLimit" }
+        }
+        ```
+
+        ## What not to do
+
+        - Do not use DecisionProvider plugins as LLM judgment. They stay deterministic expression routers.
+        - Do not put the API key on the step, in `decisionGuideline`, or in MCP chat. It lives only on the `agent` plugin binding.
+        - Do not let the model invent URLs or free-form HTTP. Declare tools from existing plugins/capabilities.
+        - Do not auto-commit `QUOTE_VOIDED` unless it is explicitly in `allowedEvents`.
+        - Do not start a live instance just to "let the AI think." Design-time still uses simulate tools.
         """;
 
     public const string ReferenceExpenseApprovalJson =

@@ -83,6 +83,12 @@ public sealed class DispatcherTests
         Assert.Contains("flowos://guides/dual-kernel-design", initResult["instructions"]!.ToString());
         Assert.Contains("test_sla_reminders_in_simulator", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/sla-reminder-simulation", initResult["instructions"]!.ToString());
+        Assert.Contains("design_agent_handled_step", initResult["instructions"]!.ToString());
+        Assert.Contains("flowos://guides/bounded-autonomy-tasks", initResult["instructions"]!.ToString());
+        Assert.Contains("check_os_release_gate", initResult["instructions"]!.ToString());
+        Assert.Contains("flowos://guides/os-release-gate", initResult["instructions"]!.ToString());
+        Assert.Contains("get_agent_context", initResult["instructions"]!.ToString());
+        Assert.Contains("upsert_agent_prompt", initResult["instructions"]!.ToString());
         Assert.Contains("state-only catch-up", initResult["instructions"]!.ToString());
         Assert.Contains("autoAdvanceTimers", initResult["instructions"]!.ToString());
         Assert.NotNull(initResult["capabilities"]?["prompts"]);
@@ -112,6 +118,20 @@ public sealed class DispatcherTests
         Assert.Contains("autoAdvanceTimers", slaText);
         Assert.Contains("Do not call `start_workflow`", slaText);
 
+        var agentPrompt = await dispatcher.DispatchAsync(Request(33, "prompts/get", new { name = "design_agent_handled_step", arguments = new { stepId = "ExecuteRepair" } }));
+        var agentPromptResult = JObject.FromObject(((JsonRpcResponse)agentPrompt.Response!).Result!);
+        var agentText = agentPromptResult["messages"]![0]!["content"]!["text"]!.ToString();
+        Assert.Contains("ExecuteRepair", agentText);
+        Assert.Contains("autoCommit", agentText);
+        Assert.Contains("DecisionPacket", agentText);
+        Assert.Contains("run_agent_task", agentText);
+        Assert.Contains("agentPrompt", agentText);
+        Assert.Contains("agentTools", agentText);
+        Assert.Contains("LookupRecord", agentText);
+        Assert.Contains("get_agent_context", agentText);
+        Assert.Contains("preview_agent_context", agentText);
+        Assert.Contains("upsert_agent_prompt", agentText);
+
         // 3. Resources list & read
         var resourcesList = await dispatcher.DispatchAsync(Request(4, "resources/list"));
         var resourcesResult = JObject.FromObject(((JsonRpcResponse)resourcesList.Response!).Result!);
@@ -136,6 +156,30 @@ public sealed class DispatcherTests
         Assert.Contains("QUOTE_RESPONSE_OVERDUE", slaGuideText);
         Assert.Contains("[SLA Timeout Fired]", slaGuideText);
         Assert.Contains("wall-clock", slaGuideText);
+
+        var autonomyRead = await dispatcher.DispatchAsync(Request(8, "resources/read", new { uri = "flowos://guides/bounded-autonomy-tasks" }));
+        var autonomyResult = JObject.FromObject(((JsonRpcResponse)autonomyRead.Response!).Result!);
+        var autonomyText = autonomyResult["contents"]![0]!["text"]!.ToString();
+        Assert.Contains("autoCommit", autonomyText);
+        Assert.Contains("DecisionPacket", autonomyText);
+        Assert.Contains("TimeoutEvent", autonomyText);
+        Assert.Contains("agentProvider", autonomyText);
+        Assert.Contains("agentPrompt", autonomyText);
+        Assert.Contains("register_plugin_binding", autonomyText);
+        Assert.Contains("get_agent_context", autonomyText);
+        Assert.Contains("upsert_agent_prompt", autonomyText);
+
+        var osGateRead = await dispatcher.DispatchAsync(Request(9, "resources/read", new { uri = "flowos://guides/os-release-gate" }));
+        var osGateText = JObject.FromObject(((JsonRpcResponse)osGateRead.Response!).Result!)["contents"]![0]!["text"]!.ToString();
+        Assert.Contains("OS-1 Honesty Gate", osGateText);
+        Assert.Contains("VERDICT=GREEN", osGateText);
+        Assert.Contains("CLAIM_ALLOWED=true", osGateText);
+        Assert.Contains("DecisionPacket", osGateText);
+        Assert.Contains("autoCommit", osGateText);
+
+        var osGatePrompt = await dispatcher.DispatchAsync(Request(34, "prompts/get", new { name = "check_os_release_gate" }));
+        var osGatePromptText = JObject.FromObject(((JsonRpcResponse)osGatePrompt.Response!).Result!)["messages"]![0]!["content"]!["text"]!.ToString();
+        Assert.Equal(osGateText, osGatePromptText);
     }
 
     [Fact]

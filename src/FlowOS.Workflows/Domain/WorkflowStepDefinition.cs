@@ -29,6 +29,13 @@ public class WorkflowStepDefinition
     // Declarative Step SLA / Boundary Timer & Escalation
     public StepSlaDefinition? Sla { get; set; }
 
+    public string Actor { get; set; } = "Human";
+    public string? DecisionGuideline { get; set; }
+    public StepAutoCommitDefinition? AutoCommit { get; set; }
+    public string? AgentProvider { get; set; }
+    public string? AgentPrompt { get; set; }
+    public List<string> AgentTools { get; set; } = new();
+
     // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks, Saga Rollback)
     public List<StepActionDefinition> OnEntry { get; set; } = new();
     public List<StepActionDefinition> OnExit { get; set; } = new();

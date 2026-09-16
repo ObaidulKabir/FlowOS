@@ -29,6 +29,7 @@ public class TenantEntitlementServiceTests
     [InlineData("update_context_binding", true, "reversible", false)]
     [InlineData("start_workflow", true, "irreversible", true)]
     [InlineData("publish_event", true, "irreversible", true)]
+    [InlineData("run_agent_task", true, "irreversible", true)]
     [InlineData("complete_task", true, "irreversible", true)]
     [InlineData("publish_workflowclass", true, "irreversible", true)]
     [InlineData("activate_context_binding", true, "irreversible", true)]

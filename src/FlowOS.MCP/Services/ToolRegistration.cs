@@ -26,6 +26,24 @@ public static class ToolRegistration
         registry.Register("suggest_agent_action", McpToolDescriptions.For("suggest_agent_action"), McpToolSchemas.SuggestAgentAction(),
             async (args) => await ExecuteScopedAsync<AgentTools>(serviceProvider, t => t.SuggestAgentAction(args)));
 
+        registry.Register("run_agent_task", McpToolDescriptions.For("run_agent_task"), McpToolSchemas.RunAgentTask(),
+            async (args) => await ExecuteScopedAsync<AgentTools>(serviceProvider, t => t.RunAgentTask(args)));
+
+        registry.Register("get_agent_context", McpToolDescriptions.For("get_agent_context"), McpToolSchemas.GetAgentContext(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.GetAgentContext(args)));
+
+        registry.Register("preview_agent_context", McpToolDescriptions.For("preview_agent_context"), McpToolSchemas.PreviewAgentContext(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.PreviewAgentContext(args)));
+
+        registry.Register("upsert_agent_prompt", McpToolDescriptions.For("upsert_agent_prompt"), McpToolSchemas.UpsertAgentPrompt(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.UpsertAgentPrompt(args)));
+
+        registry.Register("list_agent_prompts", McpToolDescriptions.For("list_agent_prompts"), McpToolSchemas.ListAgentPrompts(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.ListAgentPrompts(args)));
+
+        registry.Register("get_agent_prompt", McpToolDescriptions.For("get_agent_prompt"), McpToolSchemas.GetAgentPrompt(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.GetAgentPrompt(args)));
+
         registry.Register("explain_validation_violation", McpToolDescriptions.For("explain_validation_violation"), McpToolSchemas.ExplainValidationViolation(),
             async (args) => await ExecuteScopedAsync<AnalysisTools>(serviceProvider, t => t.ExplainValidationViolation(args)));
 

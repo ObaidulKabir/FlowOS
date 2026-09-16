@@ -76,6 +76,20 @@ public record StepBlueprint
     public List<StepActionBlueprint> OnEntry { get; set; } = new();
     public List<StepActionBlueprint> OnExit { get; set; } = new();
     public List<StepActionBlueprint> OnFailure { get; set; } = new();
+
+    // Bounded-autonomy AI task handling (default Human = no behavior change)
+    public string Actor { get; set; } = "Human";
+    public string? DecisionGuideline { get; set; }
+    public StepAutoCommitBlueprint? AutoCommit { get; set; }
+    public string? AgentProvider { get; set; }
+    public string? AgentPrompt { get; set; }
+    public List<string> AgentTools { get; set; } = new();
+}
+
+public record StepAutoCommitBlueprint
+{
+    public double MinConfidence { get; init; } = 0.9;
+    public List<string> AllowedEvents { get; init; } = new();
 }
 
 public record StepActionBlueprint

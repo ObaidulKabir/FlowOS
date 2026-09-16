@@ -1,5 +1,5 @@
 using FlowOS.Agents.Abstractions;
-using FlowOS.Agents.Implementations;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
@@ -10,10 +10,12 @@ namespace FlowOS.MCP.Tools;
 public class AgentTools
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAgentTaskRunner _agentTaskRunner;
 
-    public AgentTools(IUnitOfWork unitOfWork)
+    public AgentTools(IUnitOfWork unitOfWork, IAgentTaskRunner agentTaskRunner)
     {
         _unitOfWork = unitOfWork;
+        _agentTaskRunner = agentTaskRunner;
     }
 
     public Task<CallToolResult> ListAvailableAgents(JObject args)
@@ -24,7 +26,7 @@ public class AgentTools
             {
                 id = "RiskAnalysisAgent",
                 name = "Risk Analyzer",
-                description = "Analyzes expense data for high-value risks and fraud patterns.",
+                description = "Analyzes expense data for high-value risks and fraud patterns using the DecisionPacket (template guideline, binding policy, legal nextSteps).",
                 capabilities = new[] { "EVT-ESCALATE", "EVT-APPROVE" }
             }
         };
@@ -46,52 +48,30 @@ public class AgentTools
                 return McpToolResults.Fail("MCP-ARG-001", "agentId is required.");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
-            var instance = await _unitOfWork.WorkflowInstances.GetByIdAsNoTrackingAsync(instanceId, tenantId);
-            if (instance == null) return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowInstance not found.");
+            var run = await _agentTaskRunner.SuggestAsync(
+                tenantId,
+                instanceId,
+                agentId,
+                args["objective"]?.ToString(),
+                CancellationToken.None);
 
-            IWorkflowAgent? agent = agentId == "RiskAnalysisAgent" ? new RiskAnalysisAgent() : null;
-            if (agent == null) return McpToolResults.Fail("MCP-NOTFOUND-001", $"Agent '{agentId}' not found.");
-
-            // ---- New: optional objective ----
-            var objective = args["objective"]?.ToString() ?? "Analyze workflow instance";
-
-            // ---- New: fetch and order events ----
-            var events = await _unitOfWork.Events.ListByCorrelationIdAsync(instanceId);
-            var orderedEvents = events.OrderBy(e => e.Timestamp).ToList();
-
-            // ---- New: aggregate payload from all events (last-write-wins) ----
-            var payload = new Dictionary<string, object>();
-            foreach (var ev in orderedEvents)
+            if (!run.Ran)
             {
-                if (!ev.Metadata.ContainsKey("Payload")) continue;
-                try
-                {
-                    var dict = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(ev.Metadata["Payload"]?.ToString() ?? "");
-                    if (dict != null)
-                    {
-                        foreach (var kv in dict)
-                            payload[kv.Key] = kv.Value; // overwrite with later values
-                    }
-                }
-                catch { /* ignore malformed payloads */ }
+                var code = string.Equals(run.SkipReason, "Workflow instance was not found.", StringComparison.Ordinal)
+                    ? "MCP-NOTFOUND-001"
+                    : string.Equals(run.SkipReason, $"Agent '{agentId}' was not found.", StringComparison.Ordinal)
+                        ? "MCP-NOTFOUND-001"
+                        : "MCP-INTERNAL";
+                return McpToolResults.Fail(code, run.SkipReason ?? "Agent suggestion failed.");
             }
 
-            if (payload.Count == 0)
+            return McpToolResults.Success(new
             {
-                return McpToolResults.Fail("MCP-NODATA-001", "No payload data found in the event history for this workflow instance.");
-            }
-
-            var context = new AgentContext(
-                instance.TenantId,
-                payload,
-                instance.CurrentStepId,
-                orderedEvents,
-                objective
-            );
-
-            var result = await agent.ExecuteAsync(context);
-
-            return McpToolResults.Success(result);
+                autoCommitted = false,
+                parkReason = run.ParkReason,
+                packet = SummarizePacket(run.Packet),
+                result = run.AgentResult
+            });
         }
         catch (McpToolException ex)
         {
@@ -101,5 +81,100 @@ public class AgentTools
         {
             return McpToolResults.Fail("MCP-INTERNAL", "Agent execution failed.");
         }
+    }
+
+    public async Task<CallToolResult> RunAgentTask(JObject args)
+    {
+        try
+        {
+            var instanceIdStr = args["workflowInstanceId"]?.ToString();
+            var agentId = args["agentId"]?.ToString() ?? "RiskAnalysisAgent";
+
+            if (string.IsNullOrEmpty(instanceIdStr) || !Guid.TryParse(instanceIdStr, out var instanceId))
+                return McpToolResults.Fail("MCP-ARG-002", "workflowInstanceId must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var instance = await _unitOfWork.WorkflowInstances.GetByIdAsNoTrackingAsync(instanceId, tenantId);
+            if (instance == null)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowInstance not found.");
+
+            var run = await _agentTaskRunner.TryRunForCurrentStepAsync(
+                tenantId,
+                instanceId,
+                agentId,
+                CancellationToken.None);
+
+            if (!run.Ran)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", run.SkipReason ?? "Agent task was not run.");
+
+            return McpToolResults.Success(new
+            {
+                autoCommitted = run.AutoCommitted,
+                parkReason = run.ParkReason,
+                packet = SummarizePacket(run.Packet),
+                result = run.AgentResult
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Agent task failed.");
+        }
+    }
+
+    private static object? SummarizePacket(DecisionPacket? packet)
+    {
+        if (packet == null) return null;
+            return new
+            {
+                packet.CurrentStepId,
+                packet.CurrentState,
+                packet.Actor,
+                prompt = new
+                {
+                    packet.Prompt.Alias,
+                    packet.Prompt.Title,
+                    packet.Prompt.System,
+                    packet.Prompt.Instructions,
+                    packet.Prompt.TemplateGuideline,
+                    packet.Prompt.PolicyGuideline,
+                    packet.Prompt.Objective
+                },
+                data = new
+                {
+                    canonicalKeys = packet.Data.CanonicalContext.Keys,
+                    packet.Data.SlaReminders,
+                    packet.Data.TimeoutEvent
+                },
+                provider = packet.Provider == null
+                    ? null
+                    : new
+                    {
+                        packet.Provider.Alias,
+                        packet.Provider.ProviderName,
+                        packet.Provider.Model,
+                        packet.Provider.Endpoint,
+                        packet.Provider.HasApiKey
+                    },
+                tools = packet.DeclaredTools.Select(tool => new
+                {
+                    tool.Name,
+                    tool.Kind,
+                    tool.Provider,
+                    tool.Capability,
+                    tool.SideEffect,
+                    tool.Prefetch,
+                    tool.Description
+                }),
+                toolResults = packet.ToolResults,
+                packet.LegalNextStepEvents,
+                packet.LegalStateMachineEvents,
+                autoCommit = packet.AutoCommit == null
+                    ? null
+                    : new { packet.AutoCommit.MinConfidence, packet.AutoCommit.AllowedEvents }
+            };
     }
 }

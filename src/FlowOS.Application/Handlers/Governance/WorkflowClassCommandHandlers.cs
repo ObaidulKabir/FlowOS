@@ -7,6 +7,8 @@ using FlowOS.Application.Commands.Governance;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Services;
+using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.Services;
@@ -35,17 +37,20 @@ public class WorkflowClassCommandHandlers :
     private readonly IWorkflowClassManager _manager;
     private readonly IWorkflowClassVersionManager _versionManager;
     private readonly IWorkflowJsonLinter _linter;
+    private readonly ICurrentUser _currentUser;
 
     public WorkflowClassCommandHandlers(
         IUnitOfWork unitOfWork,
         IWorkflowClassManager manager,
         IWorkflowClassVersionManager versionManager,
-        IWorkflowJsonLinter linter)
+        IWorkflowJsonLinter linter,
+        ICurrentUser currentUser)
     {
         _unitOfWork = unitOfWork;
         _manager = manager;
         _versionManager = versionManager;
         _linter = linter;
+        _currentUser = currentUser;
     }
 
     public async Task<WorkflowClassResponseDto> Handle(CreateWorkflowClassCommand request, CancellationToken cancellationToken)
@@ -171,6 +176,9 @@ public class WorkflowClassCommandHandlers :
 
     public async Task<WorkflowClassResponseDto> Handle(ApproveWorkflowClassCommand request, CancellationToken cancellationToken)
     {
+        if (!_currentUser.Roles.Any(TenantIdentityRules.IsPrivilegedRole))
+            throw new UnauthorizedAccessException("Promote-to-Public is admin-only.");
+
         var wc = await _unitOfWork.WorkflowClasses.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new KeyNotFoundException($"WorkflowClass {request.Id} not found.");
 

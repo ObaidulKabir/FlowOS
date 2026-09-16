@@ -51,6 +51,111 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject RunAgentTask() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "agentId":{"type":"string","enum":["RiskAnalysisAgent"],"default":"RiskAnalysisAgent"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+            "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetAgentContext() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Live workflow instance whose current step is composed into Agent Context."},
+            "objective":{"type":"string","maxLength":500},
+            "prefetch":{"type":"boolean","default":true,"description":"When true, FlowOS runs declared read resource plugins into Data.ToolResults. Default true."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject PreviewAgentContext() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowClassId","stepId"],
+          "properties":{
+            "workflowClassId":{"type":"string","format":"uuid","description":"Draft or published workflow class to preview. Does not start an instance."},
+            "stepId":{"type":"string","minLength":1,"description":"Waiting step whose agentPrompt/agentProvider/agentTools are composed."},
+            "contextBindingId":{"type":"string","format":"uuid","description":"Optional binding that supplies policyGuideline."},
+            "canonicalContext":{"type":"object","additionalProperties":true,"description":"Optional sample canonical case fields. The model never sees tenant URLs."},
+            "currentState":{"type":"string","description":"Optional state-machine state for legal SM events."},
+            "objective":{"type":"string","maxLength":500},
+            "prefetch":{"type":"boolean","default":false,"description":"Design-time default is false so preview does not call tenant APIs unless asked."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject UpsertAgentPrompt() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1,"description":"Prompt name. Point the waiting step at it with agentPrompt."},
+            "sourceName":{"type":"string","description":"Alias synonym for alias."},
+            "kind":{"type":"string","enum":["markdown","flowos-prompt"],"default":"markdown"},
+            "title":{"type":"string"},
+            "system":{"type":"string"},
+            "instructions":{"type":"string","description":"Prompt body the agent sees. Required on create."},
+            "text":{"type":"string","description":"Alias for instructions."},
+            "configuration":{
+              "type":"object",
+              "properties":{
+                "title":{"type":"string"},
+                "system":{"type":"string"},
+                "instructions":{"type":"string"},
+                "text":{"type":"string"}
+              },
+              "additionalProperties":false
+            },
+            "isEnabled":{"type":"boolean","default":true},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListAgentPrompts() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "alias":{"type":"string"},
+            "enabledOnly":{"type":"boolean"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetAgentPrompt() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1},
+            "sourceName":{"type":"string"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject ExplainValidationViolation() => JObject.Parse(
         """
         {
@@ -217,6 +322,19 @@ public static class McpToolSchemas
                       "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
                       "requiredRoles":{"type":"array","items":{"type":"string"}},
                       "allowedRoles":{"type":"array","items":{"type":"string"}},
+                      "actor":{"type":"string","enum":["Human","Agent","Either"],"default":"Human","description":"Who may act on a waiting step. Human is the default. Agent/Either host a DecisionPacket and may auto-commit only when autoCommit matches."},
+                      "decisionGuideline":{"type":"string","description":"Template markdown: how to decide among legal nextSteps (allowed outcomes, examples, escalate-if)."},
+                      "autoCommit":{
+                        "type":"object",
+                        "properties":{
+                          "minConfidence":{"type":"number","minimum":0,"maximum":1,"default":0.9},
+                          "allowedEvents":{"type":"array","items":{"type":"string"},"description":"Subset of nextSteps keys that FlowOS may publish when confidence is in bounds. Never include TimeoutEvent."}
+                        },
+                        "additionalProperties":false
+                      },
+                      "agentProvider":{"type":"string","description":"Alias resolved against a tenant plugin binding of type agent. The binding holds provider/model/endpoint/apiKey. The key never appears in Agent Context."},
+                      "agentPrompt":{"type":"string","description":"Alias of a tenant prompt binding (bindingType prompt). Create/edit the prompt independently; FlowOS loads title/system/instructions into Agent Context.Prompt."},
+                      "agentTools":{"type":"array","items":{"type":"string"},"description":"Declared tools: resource plugins (LookupRecord:<capability>, QueryRecords:, FetchDocument:, SearchKnowledge:, CheckPolicy:), notify plugins (Webhook/Email/Slack/WhatsApp), and write capabilities (capability:payment.refund.v1). Reads are prefetched; writes are not. Legal nextSteps events are always included."},
                       "conditions":{"type":"object","additionalProperties":{"type":"string"}},
                       "branches":{"type":"array","items":{"type":"string"}},
                       "joinPolicy":{"type":"string"},
@@ -486,7 +604,8 @@ public static class McpToolSchemas
             "decisionProviderOverrides":{"type":"object","additionalProperties":{"type":"string"}},
             "sourcePayloadSchema":{"type":["string","null"]},
             "eventSourcePayloadSchemas":{"type":"object","additionalProperties":{"type":"string"}},
-            "metadata":{"type":"object","additionalProperties":{"type":"string"}}
+            "metadata":{"type":"object","additionalProperties":{"type":"string"}},
+            "policyGuideline":{"type":["string","null"],"description":"Tenant overlay for how to decide in this binding without copying the template guideline."}
           },
           "additionalProperties":false
         }
@@ -842,12 +961,26 @@ public static class McpToolSchemas
         """
         {
           "type":"object",
-          "required":["bindingType","sourceName","providerName"],
+          "required":["bindingType","sourceName"],
           "properties":{
-            "bindingType":{"type":"string","enum":["action","decision"],"description":"Binding category."},
-            "sourceName":{"type":"string","minLength":1,"description":"Blueprint-side actionType or decisionProvider name."},
-            "providerName":{"type":"string","minLength":1,"description":"Concrete server-side plugin provider name to invoke."},
+            "bindingType":{"type":"string","enum":["action","decision","agent","prompt"],"description":"Binding category. Use agent for a tenant-owned model. Use prompt to create/edit named prompt text."},
+            "sourceName":{"type":"string","minLength":1,"description":"Blueprint alias: actionType, decisionProvider, step.agentProvider, or step.agentPrompt."},
+            "providerName":{"type":"string","minLength":1,"description":"Concrete provider. Agent: openai, anthropic, azure-openai, google, custom, flowos-risk. Prompt: markdown or flowos-prompt."},
             "isEnabled":{"type":"boolean","default":true},
+            "configuration":{
+              "type":"object",
+              "description":"Agent: {model,endpoint,apiKey} (apiKey write-only). Prompt: {title,system,instructions} — create and edit the prompt the agent sees.",
+              "properties":{
+                "model":{"type":"string"},
+                "endpoint":{"type":"string"},
+                "apiKey":{"type":"string"},
+                "title":{"type":"string"},
+                "system":{"type":"string"},
+                "instructions":{"type":"string"},
+                "text":{"type":"string","description":"Alias for instructions."}
+              },
+              "additionalProperties":false
+            },
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false
@@ -859,7 +992,7 @@ public static class McpToolSchemas
         {
           "type":"object",
           "properties":{
-            "bindingType":{"type":"string","enum":["action","decision"],"description":"Optional binding category filter."},
+            "bindingType":{"type":"string","enum":["action","decision","agent","prompt"],"description":"Optional binding category filter."},
             "sourceName":{"type":"string","description":"Optional source key filter."},
             "enabledOnly":{"type":"boolean","description":"Optional filter to list only enabled bindings."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
@@ -874,8 +1007,8 @@ public static class McpToolSchemas
           "type":"object",
           "required":["bindingType","sourceName"],
           "properties":{
-            "bindingType":{"type":"string","enum":["action","decision"],"description":"Binding category."},
-            "sourceName":{"type":"string","minLength":1,"description":"Blueprint-side actionType or decisionProvider name."},
+            "bindingType":{"type":"string","enum":["action","decision","agent","prompt"],"description":"Binding category."},
+            "sourceName":{"type":"string","minLength":1,"description":"Blueprint alias: actionType, decisionProvider, step.agentProvider, or step.agentPrompt."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false

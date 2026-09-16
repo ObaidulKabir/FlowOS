@@ -15,4 +15,5 @@ public record WorkflowContextBindingDefinition
     public string? SourcePayloadSchema { get; init; }
     public Dictionary<string, string> EventSourcePayloadSchemas { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public string? PolicyGuideline { get; init; }
 }

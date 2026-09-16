@@ -1,19 +1,28 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Security.Claims;
-using FlowOS.Core.Interfaces; // Changed namespace
+using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace FlowOS.API.Services;
 
 public class CurrentUserService : ICurrentUser
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IHostEnvironment? _environment;
+    private readonly IConfiguration? _configuration;
 
-    public CurrentUserService(IHttpContextAccessor httpContextAccessor)
+    public CurrentUserService(
+        IHttpContextAccessor httpContextAccessor,
+        IHostEnvironment? environment = null,
+        IConfiguration? configuration = null)
     {
         _httpContextAccessor = httpContextAccessor;
+        _environment = environment;
+        _configuration = configuration;
     }
 
     public string? Id => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -25,38 +34,40 @@ public class CurrentUserService : ICurrentUser
             var context = _httpContextAccessor.HttpContext;
             if (context == null) return Guid.Empty;
 
-            // Try header
-            if (context.Request.Headers.TryGetValue("x-tenant-id", out var headerValue) && 
-                Guid.TryParse(headerValue, out var tenantId) && tenantId != Guid.Empty)
+            var claimTenant = TenantIdentityRules.CredentialTenant(context.User?.FindFirst("tenant_id")?.Value);
+            if (claimTenant.HasValue)
+                return claimTenant.Value;
+
+            if (!TenantIdentityRules.AllowMockAuth(
+                    _environment?.EnvironmentName,
+                    _configuration?[TenantIdentityRules.AllowMockAuthKey]))
             {
-                return tenantId;
+                return Guid.Empty;
             }
 
-            // Try claim
-            var claim = context.User?.FindFirst("tenant_id")?.Value;
-            if (Guid.TryParse(claim, out var claimId) && claimId != Guid.Empty)
+            if (context.Request.Headers.TryGetValue("x-tenant-id", out var headerValue) &&
+                TenantIdentityRules.TryParseTenant(headerValue.ToString(), out var headerTenant))
             {
-                return claimId;
+                return headerTenant;
             }
 
-            // Try query parameter
             if (context.Request.Query.TryGetValue("tenantId", out var queryValue) &&
-                Guid.TryParse(queryValue, out var qTenantId) && qTenantId != Guid.Empty)
+                TenantIdentityRules.TryParseTenant(queryValue.ToString(), out var queryTenant))
             {
-                return qTenantId;
+                return queryTenant;
             }
 
-            return Guid.Empty; // Or throw
+            return Guid.Empty;
         }
     }
 
-    public List<string> Roles 
+    public List<string> Roles
     {
         get
         {
             var roles = new List<string>();
             if (_httpContextAccessor.HttpContext?.User == null) return roles;
-            
+
             foreach (var claim in _httpContextAccessor.HttpContext.User.Claims)
             {
                 if (claim.Type == ClaimTypes.Role)

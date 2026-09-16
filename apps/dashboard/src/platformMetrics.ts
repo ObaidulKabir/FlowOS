@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { mcpRpcPath } from './mcpUrl';
 
 export const VERIFIED_PLATFORM_METRICS = {
-  mcpTools: 60,
+  mcpTools: 66,
   tests: {
     total: 369,
     unit: 303,

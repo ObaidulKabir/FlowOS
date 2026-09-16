@@ -266,4 +266,52 @@ public class PluginDiscoveryMcpToolsTests
         Assert.NotEmpty(diagnostics!);
         Assert.Contains(diagnostics!, d => d.ToString().Contains("'@'"));
     }
+
+    [Fact]
+    public async Task ListRegisteredPlugins_ReturnsResourcePluginMetadata()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var invoker = new StubCapabilityInvoker();
+        var tool = new PluginDiscoveryMcpTools(
+            new IWorkflowActionPlugin[]
+            {
+                new LookupRecordResourcePlugin(invoker),
+                new QueryRecordsResourcePlugin(invoker),
+                new FetchDocumentResourcePlugin(invoker),
+                new SearchKnowledgeResourcePlugin(invoker),
+                new CheckPolicyResourcePlugin(invoker)
+            },
+            Enumerable.Empty<IPolicyDecisionPlugin>(),
+            configuration);
+
+        var result = await tool.ListRegisteredPlugins(new JObject());
+
+        Assert.False(result.IsError);
+        var payload = JObject.Parse(result.Content.Single().Text);
+        var plugins = payload["data"]!["actionPlugins"] as JArray;
+        Assert.NotNull(plugins);
+
+        var lookup = plugins!.FirstOrDefault(p =>
+            string.Equals(p["actionType"]?.ToString(), "LookupRecord", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(lookup);
+        Assert.Equal("built-in", lookup!["kind"]?.ToString());
+        Assert.Equal("records", lookup["category"]?.ToString());
+        Assert.Contains("Prefetched", lookup["description"]?.ToString() ?? string.Empty);
+
+        Assert.Contains(plugins, p => string.Equals(p["actionType"]?.ToString(), "CheckPolicy", StringComparison.OrdinalIgnoreCase)
+            && p["category"]?.ToString() == "policy");
+    }
+
+    private sealed class StubCapabilityInvoker : ICapabilityInvoker
+    {
+        public Task<CapabilityInvokeResult> InvokeAsync(
+            Guid tenantId,
+            string capabilityName,
+            string operation,
+            object? payload,
+            Guid? workflowInstanceId = null,
+            string? stepId = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new CapabilityInvokeResult(true, 200, "{}", null, null));
+    }
 }

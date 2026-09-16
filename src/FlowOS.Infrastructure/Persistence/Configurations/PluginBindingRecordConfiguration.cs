@@ -16,6 +16,7 @@ public class PluginBindingRecordConfiguration : IEntityTypeConfiguration<PluginB
         builder.Property(x => x.SourceName).IsRequired().HasMaxLength(200);
         builder.Property(x => x.ProviderName).IsRequired().HasMaxLength(200);
         builder.Property(x => x.IsEnabled).IsRequired();
+        builder.Property(x => x.ConfigurationJson).HasColumnType("jsonb");
         builder.Property(x => x.CreatedAtUtc).IsRequired();
         builder.Property(x => x.UpdatedAtUtc).IsRequired();
 

@@ -142,4 +142,20 @@ public class PolicyEvaluatorGapTests
         Assert.False(result.IsAllowed);
         Assert.Contains("Deletion is restricted", result.Reason);
     }
+
+    [Theory]
+    [InlineData("{ not-json")]
+    [InlineData("{ \"action\": ")]
+    public void DefaultPolicyEvaluator_MalformedJson_FailsClosed(string conditionJson)
+    {
+        var evaluator = new DefaultPolicyEvaluator();
+        var context = new PolicyContext { TenantId = Guid.NewGuid().ToString(), ActorId = "user-1" };
+
+        var result = evaluator.Evaluate(
+            new Policy("BrokenDeny", "Global", "Malformed", conditionJson),
+            context);
+
+        Assert.False(result.IsAllowed);
+        Assert.Contains("invalid ConditionJson", result.Reason);
+    }
 }

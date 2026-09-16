@@ -77,6 +77,60 @@ public class TaskApiTests
     }
 
     [Fact]
+    public async Task GetTasks_FiltersByCallerRoles_AndKeepsInsightsOnVisibleTask()
+    {
+        var context = GetInMemoryContext();
+        var tenantId = Guid.NewGuid();
+
+        var definition = new WorkflowDefinition(tenantId, "InboxFlow", 1, "ReviewStep");
+        var review = new WorkflowStepDefinition("ReviewStep", WorkflowStepType.HumanTask)
+        {
+            AllowedRoles = new List<string> { "Approver" }
+        };
+        definition.AddStep(review);
+        definition.Publish();
+        context.WorkflowDefinitions.Add(definition);
+
+        var visible = new WorkflowInstance(tenantId, definition.Id, Guid.Empty, 1, "ReviewStep");
+        visible.Wait();
+        var hiddenDef = new WorkflowDefinition(tenantId, "FinanceFlow", 1, "FinanceReview");
+        hiddenDef.AddStep(new WorkflowStepDefinition("FinanceReview", WorkflowStepType.HumanTask)
+        {
+            AllowedRoles = new List<string> { "Finance" }
+        });
+        hiddenDef.Publish();
+        context.WorkflowDefinitions.Add(hiddenDef);
+        var hidden = new WorkflowInstance(tenantId, hiddenDef.Id, Guid.Empty, 1, "FinanceReview");
+        hidden.Wait();
+        context.WorkflowInstances.AddRange(visible, hidden);
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var projector = new AgentInsightProjector(unitOfWork);
+        var insightEvent = new AgentInsightGenerated(tenantId, "agent-001", "Parked suggestion", "Decide quote");
+        insightEvent.SetCorrelationId(visible.Id);
+        await projector.Handle(new DomainEventNotification<AgentInsightGenerated>(insightEvent), CancellationToken.None);
+
+        var handler = new TaskQueryHandlers(unitOfWork);
+        var result = await handler.Handle(new GetTasksQuery
+        {
+            TenantId = tenantId,
+            CallerRoles = new List<string> { "Approver" }
+        }, CancellationToken.None);
+
+        var task = Assert.Single(result);
+        Assert.Equal(visible.Id, task.TaskId);
+        Assert.Contains("Approver", task.RequiredRoles);
+        Assert.Single(task.AgentInsights);
+        Assert.Equal("Parked suggestion", task.AgentInsights[0].Insight);
+
+        var hiddenLookup = await handler.Handle(
+            new GetTaskByIdQuery(hidden.Id, tenantId, new List<string> { "Approver" }),
+            CancellationToken.None);
+        Assert.Null(hiddenLookup);
+    }
+
+    [Fact]
     public async Task CompleteTask_Should_Emit_Event_And_Not_Advance_Directly()
     {
         // Arrange

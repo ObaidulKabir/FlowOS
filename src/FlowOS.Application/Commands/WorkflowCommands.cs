@@ -29,7 +29,8 @@ public record PublishEventCommand(
     string EventType, // Can be legacy string or Event ID
     Guid? CorrelationId = null,
     object? Payload = null, // Added Payload support
-    string? IdempotencyKey = null
+    string? IdempotencyKey = null,
+    string? ActorId = null
 ) : IRequest<bool>, IPolicySecuredCommand;
 
 public record CompleteTaskCommand(

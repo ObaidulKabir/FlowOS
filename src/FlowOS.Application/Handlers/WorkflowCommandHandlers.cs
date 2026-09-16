@@ -40,6 +40,7 @@ public class WorkflowCommandHandlers :
     private readonly IIdempotencyService? _idempotencyService;
     private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
     private readonly IWorkflowExecutionContextService? _workflowContextService;
+    private readonly IAgentTaskRunner? _agentTaskRunner;
 
     public WorkflowCommandHandlers(
         IUnitOfWork unitOfWork, 
@@ -51,7 +52,8 @@ public class WorkflowCommandHandlers :
         FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? actionDispatcher = null,
         IIdempotencyService? idempotencyService = null,
         IPluginBindingRegistryService? pluginBindingRegistry = null,
-        IWorkflowExecutionContextService? workflowContextService = null)
+        IWorkflowExecutionContextService? workflowContextService = null,
+        IAgentTaskRunner? agentTaskRunner = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
@@ -63,6 +65,7 @@ public class WorkflowCommandHandlers :
         _idempotencyService = idempotencyService;
         _pluginBindingRegistry = pluginBindingRegistry;
         _workflowContextService = workflowContextService;
+        _agentTaskRunner = agentTaskRunner;
     }
 
     public async Task<Guid> Handle(StartWorkflowCommand request, CancellationToken cancellationToken)
@@ -355,6 +358,7 @@ public class WorkflowCommandHandlers :
         }
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await TryRunBoundedAutonomyAsync(request.TenantId, instance.Id, cancellationToken);
 
         if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
@@ -403,9 +407,11 @@ public class WorkflowCommandHandlers :
             .GetByIdAsync(request.WorkflowInstanceId, request.TenantId, cancellationToken);
 
         var userRoles = _currentUser.Roles ?? new List<string>();
+        var isAgentCommit = !string.IsNullOrWhiteSpace(request.ActorId) &&
+            request.ActorId.StartsWith("Agent:", StringComparison.OrdinalIgnoreCase);
         if (instance == null)
         {
-            if (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id))
+            if (!isAgentCommit && (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id)))
             {
                 var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
                 var requiredCapability = $"event.publish.{request.EventType}";
@@ -436,7 +442,7 @@ public class WorkflowCommandHandlers :
                 .GetRevisionByIdAsNoTrackingAsync(definition.ContextBindingRevisionId.Value, cancellationToken);
         }
 
-        if (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id))
+        if (!isAgentCommit && (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id)))
         {
             var requiredCapability = ResolveEventCapability(
                 request.EventType,
@@ -524,6 +530,7 @@ public class WorkflowCommandHandlers :
             definition.Name,
             cancellationToken,
             definition.StateMachineDefinitionId);
+        EnsureClassBackedLaw(instance, smDef);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
         var previousStepId = instance.CurrentStepId;
@@ -591,10 +598,7 @@ public class WorkflowCommandHandlers :
             domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
             domainEvent.AddMetadata("FromState", previousState ?? "Draft");
             domainEvent.AddMetadata("ToState", instance.CurrentState ?? "Draft");
-            if (!string.IsNullOrEmpty(_currentUser.Id))
-            {
-                domainEvent.AddMetadata("ActorId", _currentUser.Id);
-            }
+            AssignActorMetadata(domainEvent, request.ActorId);
 
             _unitOfWork.Events.Add(domainEvent);
 
@@ -627,6 +631,7 @@ public class WorkflowCommandHandlers :
                 await _idempotencyService.CompleteAsync(
                     request.TenantId, PublishEventOperation, request.IdempotencyKey, true, cancellationToken);
             }
+            await TryRunBoundedAutonomyAsync(request.TenantId, instance.Id, cancellationToken);
             return true;
         }
         else 
@@ -757,6 +762,7 @@ public class WorkflowCommandHandlers :
             definition.Name,
             cancellationToken,
             definition.StateMachineDefinitionId);
+        EnsureClassBackedLaw(instance, smDef);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
         var previousStepId = instance.CurrentStepId;
@@ -822,10 +828,7 @@ public class WorkflowCommandHandlers :
             domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
             domainEvent.AddMetadata("FromState", previousState ?? "Draft");
             domainEvent.AddMetadata("ToState", instance.CurrentState ?? "Draft");
-            if (!string.IsNullOrEmpty(_currentUser.Id))
-            {
-                domainEvent.AddMetadata("ActorId", _currentUser.Id);
-            }
+            AssignActorMetadata(domainEvent);
 
             _unitOfWork.Events.Add(domainEvent);
 
@@ -858,6 +861,7 @@ public class WorkflowCommandHandlers :
                 await _idempotencyService.CompleteAsync(
                     request.TenantId, CompleteTaskOperation, request.IdempotencyKey, true, cancellationToken);
             }
+            await TryRunBoundedAutonomyAsync(request.TenantId, instance.Id, cancellationToken);
             return true;
         }
         else
@@ -920,37 +924,37 @@ public class WorkflowCommandHandlers :
         if (workflowClassId != Guid.Empty)
         {
             var wc = await _unitOfWork.WorkflowClasses.GetByIdAsNoTrackingAsync(workflowClassId, cancellationToken);
-            if (wc?.Definition.StateMachine != null)
+            if (!HasUsableLaw(wc?.Definition.StateMachine))
+                return null;
+
+            var smBp = wc!.Definition.StateMachine;
+            var smDef = new FlowOS.Domain.Entities.StateMachineDefinition(
+                tenantId,
+                string.IsNullOrWhiteSpace(smBp.EntityType) ? wc.Name : smBp.EntityType,
+                smBp.InitialState
+            );
+            foreach (var state in smBp.States)
             {
-                var smBp = wc.Definition.StateMachine;
-                var smDef = new FlowOS.Domain.Entities.StateMachineDefinition(
-                    tenantId,
-                    smBp.EntityType ?? wc.Name,
-                    smBp.InitialState ?? "Start"
-                );
-                foreach (var state in smBp.States)
-                {
-                    if (state != smDef.InitialState) smDef.AddState(state);
-                }
-                foreach (var tr in smBp.Transitions)
-                {
-                    var constraints = tr.Constraints != null
-                        ? new Dictionary<string, string>(tr.Constraints, StringComparer.OrdinalIgnoreCase)
-                        : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    if (!string.IsNullOrWhiteSpace(tr.Condition))
-                    {
-                        constraints["Expression"] = tr.Condition;
-                    }
-                    smDef.AddTransition(new FlowOS.Domain.ValueObjects.StateTransition
-                    {
-                        FromState = tr.FromState,
-                        ToState = tr.ToState,
-                        EventId = tr.EventId,
-                        Constraints = constraints
-                    });
-                }
-                return smDef;
+                if (state != smDef.InitialState) smDef.AddState(state);
             }
+            foreach (var tr in smBp.Transitions)
+            {
+                var constraints = tr.Constraints != null
+                    ? new Dictionary<string, string>(tr.Constraints, StringComparer.OrdinalIgnoreCase)
+                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (!string.IsNullOrWhiteSpace(tr.Condition))
+                {
+                    constraints["Expression"] = tr.Condition;
+                }
+                smDef.AddTransition(new FlowOS.Domain.ValueObjects.StateTransition
+                {
+                    FromState = tr.FromState,
+                    ToState = tr.ToState,
+                    EventId = tr.EventId,
+                    Constraints = constraints
+                });
+            }
+            return smDef;
         }
         else if (!string.IsNullOrEmpty(workflowName))
         {
@@ -960,6 +964,25 @@ public class WorkflowCommandHandlers :
 
         return null;
     }
+
+    private static void EnsureClassBackedLaw(
+        WorkflowInstance instance,
+        FlowOS.Domain.Entities.StateMachineDefinition? smDef)
+    {
+        if (instance.WorkflowClassId == Guid.Empty)
+            return;
+
+        if (smDef == null || smDef.Transitions.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Class-backed instances require a resolvable state machine. Dual-kernel Law is fail-closed.");
+        }
+    }
+
+    private static bool HasUsableLaw(FlowOS.Domain.Blueprints.StateMachineBlueprint? sm) =>
+        sm != null &&
+        !string.IsNullOrWhiteSpace(sm.InitialState) &&
+        sm.Transitions.Count > 0;
 
     private void RunAutoAdvance(
         WorkflowInstance instance,
@@ -1628,10 +1651,7 @@ public class WorkflowCommandHandlers :
         domainEvent.AddMetadata("ToStep", parentInstance.CurrentStepId);
         domainEvent.AddMetadata("FromState", previousState ?? "Draft");
         domainEvent.AddMetadata("ToState", parentInstance.CurrentState ?? "Draft");
-        if (!string.IsNullOrEmpty(_currentUser.Id))
-        {
-            domainEvent.AddMetadata("ActorId", _currentUser.Id);
-        }
+        AssignActorMetadata(domainEvent);
 
         _unitOfWork.Events.Add(domainEvent);
 
@@ -1786,5 +1806,31 @@ public class WorkflowCommandHandlers :
         }
 
         return isNegative ? -parsed : parsed;
+    }
+
+    private void AssignActorMetadata(DomainEvent domainEvent, string? actorId = null)
+    {
+        var id = !string.IsNullOrWhiteSpace(actorId) ? actorId : _currentUser.Id;
+        if (!string.IsNullOrEmpty(id))
+        {
+            domainEvent.AddMetadata("ActorId", id);
+        }
+    }
+
+    private async Task TryRunBoundedAutonomyAsync(Guid tenantId, Guid instanceId, CancellationToken cancellationToken)
+    {
+        if (_agentTaskRunner == null) return;
+
+        await _agentTaskRunner.TryRunForCurrentStepAsync(tenantId, instanceId, cancellationToken: cancellationToken);
+
+        var children = await _unitOfWork.WorkflowInstances.GetSummariesByTenantAsync(
+            tenantId,
+            WorkflowInstanceStatus.Running,
+            instanceId,
+            cancellationToken);
+        foreach (var child in children)
+        {
+            await _agentTaskRunner.TryRunForCurrentStepAsync(tenantId, child.Id, cancellationToken: cancellationToken);
+        }
     }
 }

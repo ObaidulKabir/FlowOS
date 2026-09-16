@@ -1,6 +1,6 @@
 # FlowOS Documentation
 
-Welcome to the FlowOS user guide. FlowOS is a kernel-style **Process Operating System**: it strictly separates **State Authority** (State Machines), **Process Orchestration** (Workflows), and **Business Logic** (Policies & AI Agents) so that every state change in your business is legal, auditable, and reproducible.
+Welcome to the FlowOS user guide. FlowOS is a **business automation operating system**: tenant work runs under dual-kernel Law (state machines) and Work (workflows), gated by capabilities and deny-only policy, with a HumanTask inbox, capability-bound integrations, a hosted DecisionPacket / autoCommit loop, side-effect-free simulation, and paid runtime entitlement. The claim is gated by [Chapter 19](19-os-release-gate.md).
 
 This guide is organized as a linear path — read it in order if you are new, or jump directly to the chapter you need. Examples are maintained alongside the current codebase and automated test suite.
 
@@ -26,6 +26,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 16 | [Sample Applications](16-sample-applications.md) | ExpenseApp, the Tenant Dashboard, and the Node.js demo client |
 | 17 | [Workflow Context Bindings](17-workflow-context-bindings.md) | Reuse and simulate one process template across tenant business contexts |
 | 18 | [Commercial Policy & MCP Entitlements](18-commercial-and-mcp-entitlements.md) | Subscription plans, trial vs paid runtime, and how MCP is included |
+| 19 | [OS-1 Honesty Gate](19-os-release-gate.md) | When FlowOS may be called a business automation OS vs a workflow engine |
 
 ## Reading paths
 
@@ -35,6 +36,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 * **"I am integrating an AI agent"** → [AI Agents & Insights](07-ai-agents-and-insights.md) → [MCP & AI Agent Automation](13-mcp-and-ai-agent-integration.md) → [Commercial Policy](18-commercial-and-mcp-entitlements.md).
 * **"I want one workflow template for many business domains"** → [WorkflowClass Governance](09-workflow-class-governance.md) → [Workflow Context Bindings](17-workflow-context-bindings.md).
 * **"I need to know exactly what is and isn't enforced today"** → [Known Limitations & Gaps](15-known-limitations-and-gaps.md).
+* **"Can we call this a business automation OS?"** → [OS-1 Honesty Gate](19-os-release-gate.md) (MCP: `flowos://guides/os-release-gate`).
 
 ## Documentation conventions
 

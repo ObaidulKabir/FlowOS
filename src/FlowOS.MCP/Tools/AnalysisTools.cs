@@ -145,6 +145,26 @@ public class AnalysisTools
                 humanExplanation = "A step SLA definition is missing a TimeoutEvent.";
                 designHint = $"Specify a declared TimeoutEvent (e.g. 'EVT-TIMEOUT', 'EVT-ESCALATE') on step '{context?["stepId"]}'.";
                 break;
+            case "WF-AGENT-001":
+                humanExplanation = "A step actor is not Human, Agent, or Either.";
+                designHint = $"Set step.actor on '{context?["stepId"]}' to Human, Agent, or Either. Human is the default.";
+                break;
+            case "WF-AGENT-002":
+                humanExplanation = "autoCommit.allowedEvents includes an event that is not a nextSteps key.";
+                designHint = $"Every auto-commit event on '{context?["stepId"]}' must exist on nextSteps and on the state machine.";
+                break;
+            case "WF-AGENT-003":
+                humanExplanation = "TimeoutEvent and SLA reminder events cannot be auto-committed.";
+                designHint = $"Remove the timeout/reminder event from autoCommit.allowedEvents on '{context?["stepId"]}'. Overdue stays timer-owned.";
+                break;
+            case "WF-AGENT-004":
+                humanExplanation = "An Agent/Either step is missing both decisionGuideline and agentPrompt.";
+                designHint = $"Add markdown on '{context?["stepId"]}' (decisionGuideline) or point agentPrompt at a tenant prompt binding. Create/edit prompts with register_plugin_binding bindingType prompt.";
+                break;
+            case "WF-AGENT-005":
+                humanExplanation = "An Agent/Either step also auto-routes via nextSteps Default/true, so it never waits.";
+                designHint = $"Remove Default/true from '{context?["stepId"]}' nextSteps. Keep it a waiting HumanTask/Command. Do not use a Decision skip as an AI gate.";
+                break;
 
             // Events / governance
             case "EVT-SCHEMA-001":
@@ -161,6 +181,7 @@ public class AnalysisTools
                 {
                     _ when code.StartsWith("CON-", StringComparison.Ordinal) => "Consistency violation between Events, StateMachine, and Workflow.",
                     _ when code.StartsWith("WF-COMP-", StringComparison.Ordinal) => "Workflow completeness violation.",
+                    _ when code.StartsWith("WF-AGENT-", StringComparison.Ordinal) => "Bounded-autonomy agent-task design violation.",
                     _ when code.StartsWith("WF-ACT-", StringComparison.Ordinal) => "Lifecycle action validation violation.",
                     _ when code.StartsWith("WF-SUB-", StringComparison.Ordinal) => "SubWorkflow reference validation violation.",
                     _ when code.StartsWith("WF-STR", StringComparison.Ordinal) || code.StartsWith("WF-STRUCT", StringComparison.Ordinal)

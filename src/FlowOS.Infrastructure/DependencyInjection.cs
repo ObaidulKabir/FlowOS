@@ -24,6 +24,18 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowActionPlugin, EmailWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, WhatsAppWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, GenericWorkflowActionPlugin>();
+        services.AddScoped<IWorkflowActionPlugin, LookupRecordResourcePlugin>();
+        services.AddScoped<IWorkflowActionPlugin, QueryRecordsResourcePlugin>();
+        services.AddScoped<IWorkflowActionPlugin, FetchDocumentResourcePlugin>();
+        services.AddScoped<IWorkflowActionPlugin, SearchKnowledgeResourcePlugin>();
+        services.AddScoped<IWorkflowActionPlugin, CheckPolicyResourcePlugin>();
+        services.AddScoped<IAgentResourcePlugin, LookupRecordResourcePlugin>();
+        services.AddScoped<IAgentResourcePlugin, QueryRecordsResourcePlugin>();
+        services.AddScoped<IAgentResourcePlugin, FetchDocumentResourcePlugin>();
+        services.AddScoped<IAgentResourcePlugin, SearchKnowledgeResourcePlugin>();
+        services.AddScoped<IAgentResourcePlugin, CheckPolicyResourcePlugin>();
+        services.AddScoped<ICapabilityInvoker, CapabilityInvoker>();
+        services.AddScoped<IAgentToolHost, FlowOS.Application.Services.AgentToolHost>();
         services.AddScoped<IWorkflowActionPluginRegistry, WorkflowActionPluginRegistry>();
         services.AddScoped<FlowOS.Infrastructure.Services.Communication.ISlackSender, FlowOS.Infrastructure.Services.Communication.DefaultSlackSender>();
         services.AddScoped<FlowOS.Infrastructure.Services.Communication.IEmailSender, FlowOS.Infrastructure.Services.Communication.DefaultEmailSender>();
@@ -43,6 +55,9 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowContextMaterializer, FlowOS.Application.Services.WorkflowContextMaterializer>();
         services.AddScoped<IWorkflowExecutionContextService, FlowOS.Application.Services.WorkflowExecutionContextService>();
         services.AddScoped<IWorkflowContextSimulationService, FlowOS.Application.Services.WorkflowContextSimulationService>();
+        services.AddScoped<IDecisionPacketBuilder, FlowOS.Application.Services.DecisionPacketBuilder>();
+        services.AddScoped<IAgentTaskRunner, FlowOS.Application.Services.AgentTaskRunner>();
+        services.AddScoped<IWorkflowAgentFactory, FlowOS.Application.Services.WorkflowAgentFactory>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IWebhookSignatureService, FlowOS.Core.Common.Services.WebhookSignatureService>();
         services.AddSingleton<FlowOS.Security.Interfaces.IPasswordHasher, FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher>();
         services.AddSingleton<FlowOS.Security.Interfaces.IJwtTokenService, FlowOS.Infrastructure.Services.Security.JwtTokenService>();

@@ -30,7 +30,7 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> GetTasks()
     {
         var tenantId = _currentUser.TenantId;
-        var query = new GetTasksQuery { TenantId = tenantId };
+        var query = new GetTasksQuery { TenantId = tenantId, CallerRoles = _currentUser.Roles };
         var result = await _mediator.Send(query);
         return Ok(result);
     }
@@ -38,7 +38,7 @@ public class TasksController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetTask(Guid id)
     {
-        var query = new GetTaskByIdQuery(id, _currentUser.TenantId);
+        var query = new GetTaskByIdQuery(id, _currentUser.TenantId, _currentUser.Roles);
         var result = await _mediator.Send(query);
         if (result == null) return NotFound();
         return Ok(result);

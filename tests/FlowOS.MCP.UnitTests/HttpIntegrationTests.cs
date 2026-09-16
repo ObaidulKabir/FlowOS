@@ -32,7 +32,8 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
                 ["ConnectionStrings:DefaultConnection"] = "Host=",
                 ["MCP_API_KEY"] = ApiKey,
                 ["MCP_ROLE"] = "Admin",
-                ["MCP_ALLOWED_ORIGINS"] = "https://allowed.example"
+                ["MCP_ALLOWED_ORIGINS"] = "https://allowed.example",
+                ["FLOWOS_BILLING_ENFORCE"] = "false"
             });
         });
         await _app.StartAsync();
@@ -269,7 +270,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(60, httpNames.Length);
+        Assert.Equal(66, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);
@@ -332,7 +333,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var json = JObject.Parse(await response.Content.ReadAsStringAsync());
         var tools = Assert.IsType<JArray>(json["tools"]);
-        Assert.Equal(60, tools.Count);
+        Assert.Equal(66, tools.Count);
 
         foreach (var tool in tools)
         {

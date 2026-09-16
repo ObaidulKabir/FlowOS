@@ -25,6 +25,7 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         string sourceName,
         string providerName,
         bool isEnabled = true,
+        string? configurationJson = null,
         CancellationToken ct = default)
     {
         var normalizedType = NormalizeBindingType(bindingType);
@@ -33,8 +34,11 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
 
         if (string.IsNullOrWhiteSpace(normalizedType))
             throw new ArgumentException("bindingType is required.");
-        if (normalizedType != PluginBindingTypes.Action && normalizedType != PluginBindingTypes.Decision)
-            throw new ArgumentException($"Unsupported bindingType '{bindingType}'. Use '{PluginBindingTypes.Action}' or '{PluginBindingTypes.Decision}'.");
+        if (normalizedType != PluginBindingTypes.Action &&
+            normalizedType != PluginBindingTypes.Decision &&
+            normalizedType != PluginBindingTypes.Agent &&
+            normalizedType != PluginBindingTypes.Prompt)
+            throw new ArgumentException($"Unsupported bindingType '{bindingType}'. Use '{PluginBindingTypes.Action}', '{PluginBindingTypes.Decision}', '{PluginBindingTypes.Agent}', or '{PluginBindingTypes.Prompt}'.");
         if (string.IsNullOrWhiteSpace(normalizedSource))
             throw new ArgumentException("sourceName is required.");
         if (string.IsNullOrWhiteSpace(normalizedProvider))
@@ -55,10 +59,12 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 normalizedProvider,
                 isEnabled);
             _dbContext.PluginBindings.Add(existing);
+            if (configurationJson != null)
+                existing.Update(normalizedProvider, isEnabled, MergeConfiguration(normalizedType, null, configurationJson));
         }
         else
         {
-            existing.Update(normalizedProvider, isEnabled);
+            existing.Update(normalizedProvider, isEnabled, MergeConfiguration(normalizedType, existing.ConfigurationJson, configurationJson));
         }
 
         await _dbContext.SaveChangesAsync(ct);
@@ -152,6 +158,48 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         return map;
     }
 
+    public async Task<PluginBindingDto?> GetEnabledAsync(
+        Guid tenantId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default)
+    {
+        var normalizedType = NormalizeBindingType(bindingType);
+        var normalizedSource = NormalizeKey(sourceName);
+        if (string.IsNullOrWhiteSpace(normalizedType) || string.IsNullOrWhiteSpace(normalizedSource))
+            return null;
+
+        var record = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == normalizedType &&
+                x.SourceName == normalizedSource &&
+                x.IsEnabled, ct);
+
+        return record == null ? null : ToDto(record);
+    }
+
+    public async Task<AgentProviderConfiguration?> GetAgentSecretsAsync(
+        Guid tenantId,
+        string sourceName,
+        CancellationToken ct = default)
+    {
+        var normalizedSource = NormalizeKey(sourceName);
+        if (string.IsNullOrWhiteSpace(normalizedSource))
+            return null;
+
+        var record = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == PluginBindingTypes.Agent &&
+                x.SourceName == normalizedSource &&
+                x.IsEnabled, ct);
+
+        return record == null ? null : AgentProviderConfiguration.Parse(record.ConfigurationJson);
+    }
+
     private static PluginBindingDto ToDto(PluginBindingRecord x) =>
         new(
             x.Id,
@@ -161,7 +209,22 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             x.ProviderName,
             x.IsEnabled,
             x.CreatedAtUtc,
-            x.UpdatedAtUtc);
+            x.UpdatedAtUtc,
+            x.BindingType == PluginBindingTypes.Agent
+                ? AgentProviderConfiguration.Redact(x.ConfigurationJson)
+                : x.BindingType == PluginBindingTypes.Prompt
+                    ? AgentPromptConfiguration.Public(x.ConfigurationJson)
+                    : null);
+
+    private static string? MergeConfiguration(string bindingType, string? existing, string? incoming)
+    {
+        if (incoming == null) return existing;
+        if (bindingType == PluginBindingTypes.Agent)
+            return AgentProviderConfiguration.Merge(existing, incoming);
+        if (bindingType == PluginBindingTypes.Prompt)
+            return AgentPromptConfiguration.Merge(existing, incoming);
+        return incoming;
+    }
 
     private static string NormalizeBindingType(string? bindingType) =>
         bindingType?.Trim().ToLowerInvariant() ?? string.Empty;

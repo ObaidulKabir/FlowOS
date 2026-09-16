@@ -36,12 +36,57 @@ public static class McpToolDescriptions
                 "Returns: {ok:true,data:{agents:[...]}}. Errors: MCP-INTERNAL. Input example: {}",
 
             ["suggest_agent_action"] =
-                "Runs the selected advisory agent against an existing workflow instance without mutating it. " +
-                "Accepts an optional `objective` string that guides the agent's analysis. " +
-                "The instance lookup is tenant-scoped. HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:<SuggestedAction>}. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NODATA-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Builds a DecisionPacket (template guideline + binding canonical context + legal nextSteps) and runs the selected agent without publishing. " +
+                "Suggestions outside legal nextSteps are dropped. Does not auto-commit. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{autoCommitted:false,packet,result}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"agentId\":\"RiskAnalysisAgent\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"objective\":\"Analyze expense\"}",
+
+            ["run_agent_task"] =
+                "Hosts the bounded-autonomy loop for the instance's current waiting step: DecisionPacket → agent → AutoCommitPolicy. " +
+                "If the suggested event is in autoCommit.allowedEvents and confidence is in bounds, FlowOS publishes it via the same PublishEventCommand path as humans (actor Agent:{id}). " +
+                "Otherwise the instance stays a HumanTask and the insight is parked as a Smart Action. Do not invent transitions. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{autoCommitted,parkReason,packet,result}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"agentId\":\"RiskAnalysisAgent\"}",
+
+            ["get_agent_context"] =
+                "Composes Agent Context for a live instance current step (Prompt + Data + Tools + redacted Provider) without running the agent and without publishing. " +
+                "Prefetch (default true) fills Data.ToolResults via hosted resource plugins; the model never sees URLs or API keys. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{agentContext,ranAgent:false}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"prefetch\":true}",
+
+            ["preview_agent_context"] =
+                "Design-time Agent Context preview for a workflow class step. Does not start an instance or run the agent. " +
+                "Loads agentPrompt / agentProvider / agentTools, optional context-binding policyGuideline, and optional sample canonicalContext. Prefetch defaults false. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{agentContext,ranAgent:false}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveQuote\",\"canonicalContext\":{\"Amount\":4800}}",
+
+            ["upsert_agent_prompt"] =
+                "Creates or edits a tenant-owned named prompt (title, system, instructions). Point a waiting step at it with agentPrompt. " +
+                "Does not bake the prompt into the workflow JSON. HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,kind,title,system,instructions,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"quote-approval\",\"title\":\"Quote approval\",\"instructions\":\"Approve if within 15% of estimate.\"}",
+
+            ["list_agent_prompts"] =
+                "Lists tenant-owned agent prompts (bindingType prompt) with title/system/instructions. Does not return LLM API keys. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{totalCount,prompts:[{alias,kind,title,system,instructions,isEnabled}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {}",
+
+            ["get_agent_prompt"] =
+                "Reads one tenant-owned agent prompt by alias. HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,kind,title,system,instructions,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"quote-approval\"}",
 
             ["explain_validation_violation"] =
                 "Explains a FlowOS validator code and gives a design correction hint. The optional context object " +
@@ -263,17 +308,18 @@ public static class McpToolDescriptions
                 "Input example: {\"capabilityName\":\"payment.refund.v1\"}",
 
             ["register_plugin_binding"] =
-                "[Plugin Binding Registry] Creates or updates a tenant-scoped mapping from blueprint actionType/decisionProvider names to server-registered plugin providers. " +
-                "Allows controlled tenant-level behavior customization while preserving server-owned plugin code and global safety flags. " +
-                "Returns: {ok:true,data:{id,tenantId,bindingType,sourceName,providerName,isEnabled,createdAtUtc,updatedAtUtc}}. " +
-                "Errors: MCP-ARG-001, PLUGIN-BIND-001, PLUGIN-BIND-002, PLUGIN-BIND-003, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
-                "Input example: {\"bindingType\":\"action\",\"sourceName\":\"Webhook\",\"providerName\":\"Webhook\",\"isEnabled\":true}",
+                "[Plugin Binding Registry] Creates or updates a tenant-scoped mapping from blueprint aliases to server-owned plugins (action/decision), a tenant-owned LLM (bindingType agent), or a named prompt (bindingType prompt). " +
+                "Agent bindings take configuration {model,endpoint,apiKey} (apiKey write-only). Prompt bindings take {title,system,instructions} so a user can create and edit prompt text independently of the workflow template. " +
+                "Returns: {ok:true,data:{id,tenantId,bindingType,sourceName,providerName,isEnabled,configuration,createdAtUtc,updatedAtUtc}}. " +
+                "Errors: MCP-ARG-001, PLUGIN-BIND-001, PLUGIN-BIND-002, PLUGIN-BIND-003, PLUGIN-BIND-004, PLUGIN-BIND-005, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"bindingType\":\"prompt\",\"sourceName\":\"quote-approval\",\"providerName\":\"markdown\",\"configuration\":{\"title\":\"Quote approval\",\"instructions\":\"Approve if within 15% of estimate.\"}}",
 
             ["list_plugin_bindings"] =
-                "[Plugin Binding Registry] Lists tenant plugin bindings with optional filters for bindingType, sourceName, and enabled state. " +
-                "Returns: {ok:true,data:{totalCount,bindings:[{id,bindingType,sourceName,providerName,isEnabled}]}}. " +
+                "[Plugin Binding Registry] Lists tenant plugin bindings (action, decision, agent, or prompt) with optional filters. " +
+                "Agent rows include redacted configuration {model,endpoint,hasApiKey}. Prompt rows include {title,system,instructions}. " +
+                "Returns: {ok:true,data:{totalCount,bindings:[{id,bindingType,sourceName,providerName,isEnabled,configuration}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
-                "Input example: {\"bindingType\":\"decision\",\"enabledOnly\":true}",
+                "Input example: {\"bindingType\":\"agent\",\"enabledOnly\":true}",
 
             ["resolve_plugin_binding"] =
                 "[Plugin Binding Registry] Resolves the effective provider for one tenant-scoped source key and reports whether the mapped provider is currently registered on the server. " +
@@ -450,6 +496,12 @@ public static class McpToolDescriptions
             ["explain_validation_violation"] = new("analysis", "public", false, false, false, "none", false, "low"),
             ["list_available_agents"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["suggest_agent_action"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["run_agent_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["get_agent_context"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["preview_agent_context"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["upsert_agent_prompt"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["list_agent_prompts"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["get_agent_prompt"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["lint_draft_workflowclass"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_workflowclass"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["simulate_subworkflow"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
