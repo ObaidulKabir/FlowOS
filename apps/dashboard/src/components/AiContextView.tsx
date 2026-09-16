@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Bot, Brain, Database, KeyRound, Plus, RefreshCw, Wrench, MessageSquarePlus } from 'lucide-react';
 import { api, PluginBindingDto } from '../api/client';
 import { AgentPromptManager } from './AgentPromptManager';
+import { WorkflowClass } from '../types';
 
 interface Props {
   tenantName: string;
   onOpenBusinessContext?: () => void;
+  workflowClass?: WorkflowClass;
+  compact?: boolean;
 }
 
 type AiSubTab = 'compose' | 'prompts' | 'providers' | 'tools';
@@ -18,7 +21,34 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 
 const str = (value: unknown) => (typeof value === 'string' ? value : '');
 
-export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessContext }) => {
+const pick = (obj: any, ...keys: string[]) => {
+  if (!obj || typeof obj !== 'object') return undefined;
+  for (const key of keys) {
+    if (obj[key] !== undefined) return obj[key];
+    const match = Object.keys(obj).find(k => k.toLowerCase() === key.toLowerCase());
+    if (match) return obj[match];
+  }
+  return undefined;
+};
+
+const declaredAgentAliases = (workflowClass?: WorkflowClass) => {
+  const steps = pick(pick(workflowClass?.definition, 'Workflow', 'workflow'), 'Steps', 'steps') || [];
+  const prompts = new Set<string>();
+  const providers = new Set<string>();
+  const tools = new Set<string>();
+  if (!Array.isArray(steps)) return { prompts, providers, tools, stepCount: 0 };
+  for (const step of steps) {
+    const prompt = str(pick(step, 'agentPrompt', 'AgentPrompt'));
+    const provider = str(pick(step, 'agentProvider', 'AgentProvider'));
+    const stepTools = pick(step, 'agentTools', 'AgentTools');
+    if (prompt) prompts.add(prompt);
+    if (provider) providers.add(provider);
+    if (Array.isArray(stepTools)) stepTools.forEach((t: unknown) => { if (str(t)) tools.add(str(t)); });
+  }
+  return { prompts, providers, tools, stepCount: steps.length };
+};
+
+export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessContext, workflowClass, compact = false }) => {
   const [subTab, setSubTab] = useState<AiSubTab>('compose');
   const [prompts, setPrompts] = useState<PluginBindingDto[]>([]);
   const [providers, setProviders] = useState<PluginBindingDto[]>([]);
@@ -49,6 +79,14 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
     load();
   }, []);
 
+  const declared = declaredAgentAliases(workflowClass);
+  const usedPrompts = prompts.filter(p => declared.prompts.has(p.sourceName));
+  const usedProviders = providers.filter(p => declared.providers.has(p.sourceName));
+  const usedTools = tools.filter(t =>
+    declared.tools.has(t.sourceName) ||
+    [...declared.tools].some(alias => alias.toLowerCase().includes(t.sourceName.toLowerCase()))
+  );
+
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-950/40 via-slate-900 to-sky-950/30 p-5">
@@ -59,10 +97,13 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
               <h3 className="text-lg font-bold text-white">AI Context</h3>
             </div>
             <p className="text-xs text-slate-400 max-w-3xl">
-              FlowOS composes one Agent Context for deciding steps: <strong className="text-sky-300">Prompt</strong>,
+              {workflowClass
+                ? <>Composed for <strong className="text-white">{workflowClass.name}</strong> v{workflowClass.version}: Prompt + Data (Business Context) + Tools + Provider.</>
+                : <>FlowOS composes one Agent Context for deciding steps: <strong className="text-sky-300">Prompt</strong>,
               <strong className="text-amber-300"> Data</strong>, <strong className="text-emerald-300"> Tools</strong>, and
-              <strong className="text-violet-300"> Provider</strong>. The model never sees API keys or tenant URLs.
-              Owned by <strong>{tenantName}</strong>.
+              <strong className="text-violet-300"> Provider</strong>.</>}
+              {' '}The model never sees API keys or tenant URLs.
+              {compact ? null : <> Owned by <strong>{tenantName}</strong>.</>}
             </p>
           </div>
           <button
@@ -78,7 +119,7 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           <ComposeCard
             icon={<MessageSquarePlus size={14} />}
             label="Prompt"
-            count={prompts.length}
+            count={workflowClass ? `${usedPrompts.length}/${prompts.length}` : prompts.length}
             hint="Named tenant prompts"
             color="sky"
             onClick={() => setSubTab('prompts')}
@@ -94,7 +135,7 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           <ComposeCard
             icon={<Wrench size={14} />}
             label="Tools"
-            count={tools.length}
+            count={workflowClass ? `${usedTools.length}/${tools.length}` : tools.length}
             hint="Tenant resource plugins"
             color="emerald"
             onClick={() => setSubTab('tools')}
@@ -102,7 +143,7 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           <ComposeCard
             icon={<Bot size={14} />}
             label="Provider"
-            count={providers.length}
+            count={workflowClass ? `${usedProviders.length}/${providers.length}` : providers.length}
             hint="BYO model binding"
             color="violet"
             onClick={() => setSubTab('providers')}
@@ -135,6 +176,14 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
 
       {subTab === 'compose' && (
         <div className="space-y-3 text-xs text-slate-400">
+          {workflowClass && (
+            <div className="rounded-lg border border-violet-500/25 bg-violet-950/20 px-3 py-2 text-[11px] text-violet-100">
+              Declared on this workflow’s steps:
+              prompt [{[...declared.prompts].join(', ') || '—'}] ·
+              provider [{[...declared.providers].join(', ') || '—'}] ·
+              tools [{[...declared.tools].join(', ') || '—'}]
+            </div>
+          )}
           <p>
             Point a waiting step (<code className="text-sky-300">actor: Agent</code> or <code className="text-sky-300">Either</code>) at these aliases.
             Design-time inspect with MCP <code className="text-violet-300">preview_agent_context</code>; live inspect with

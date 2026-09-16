@@ -25,9 +25,17 @@ interface Props {
   workflowClasses: WorkflowClass[];
   role?: 'Tenant' | 'Admin';
   onSimulate?: (bindingId: string, revision: 'draft' | 'active') => void;
+  filterSourceWorkflowClassId?: string;
+  compact?: boolean;
 }
 
-export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = 'Tenant', onSimulate }) => {
+export const ContextBindingsView: React.FC<Props> = ({
+  workflowClasses,
+  role = 'Tenant',
+  onSimulate,
+  filterSourceWorkflowClassId,
+  compact = false
+}) => {
   const [bindings, setBindings] = useState<WorkflowContextBinding[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [definitionJson, setDefinitionJson] = useState(JSON.stringify(emptyDefinition, null, 2));
@@ -35,7 +43,7 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [showCreate, setShowCreate] = useState(false);
-  const [sourceWorkflowClassId, setSourceWorkflowClassId] = useState('');
+  const [sourceWorkflowClassId, setSourceWorkflowClassId] = useState(filterSourceWorkflowClassId || '');
   const [contextType, setContextType] = useState('');
   const [name, setName] = useState('');
 
@@ -48,9 +56,9 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
     setBusy(true);
     setError(undefined);
     try {
-      const result = await api.listContextBindings(undefined, role);
+      const result = await api.listContextBindings(filterSourceWorkflowClassId, role);
       setBindings(result);
-      if (!selectedId && result.length) setSelectedId(result[0].id);
+      setSelectedId(current => result.some(item => item.id === current) ? current : result[0]?.id);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -60,7 +68,7 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
 
   useEffect(() => {
     load();
-  }, []);
+  }, [filterSourceWorkflowClassId]);
 
   useEffect(() => {
     const draft = selected?.draftRevision?.definition;
@@ -68,6 +76,10 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
     if (draft || active) setDefinitionJson(JSON.stringify(draft || active, null, 2));
     setValidation(undefined);
   }, [selectedId, selected?.draftRevisionId, selected?.activeRevisionId]);
+
+  useEffect(() => {
+    if (filterSourceWorkflowClassId) setSourceWorkflowClassId(filterSourceWorkflowClassId);
+  }, [filterSourceWorkflowClassId]);
 
   const parseDefinition = (): WorkflowContextBindingDefinition => JSON.parse(definitionJson);
 
@@ -159,12 +171,16 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-5">
-      <section className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
+    <div className={compact ? 'space-y-4' : 'grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-5'}>
+      <section className={compact ? 'overflow-hidden' : 'bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden'}>
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-white flex items-center gap-2"><Link2 size={15} /> Business Context</h3>
-            <p className="text-[11px] text-slate-400 mt-1">Map a workflow template to a business domain (entity, events, payload).</p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {filterSourceWorkflowClassId
+                ? 'Bindings for the selected workflow template.'
+                : 'Map a workflow template to a business domain (entity, events, payload).'}
+            </p>
           </div>
           <div className="flex gap-1">
             <button onClick={load} className="p-2 rounded-lg bg-slate-800 text-slate-300"><RefreshCw size={13} /></button>
@@ -190,7 +206,7 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
         </div>
       </section>
 
-      <section className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-4">
+      <section className={compact ? 'space-y-4' : 'bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-4'}>
         {error && <div className="p-3 rounded-lg bg-rose-900/30 border border-rose-700 text-xs text-rose-300">{error}</div>}
         {!selected ? (
           <div className="text-sm text-slate-400">Select or create a business context.</div>
@@ -219,7 +235,7 @@ export const ContextBindingsView: React.FC<Props> = ({ workflowClasses, role = '
             <textarea
               value={definitionJson}
               onChange={event => setDefinitionJson(event.target.value)}
-              className="w-full min-h-[430px] rounded-xl bg-slate-950 border border-slate-700 p-4 font-mono text-xs text-slate-200"
+              className={`w-full rounded-xl bg-slate-950 border border-slate-700 p-4 font-mono text-xs text-slate-200 ${compact ? 'min-h-[220px]' : 'min-h-[430px]'}`}
               spellCheck={false}
             />
             {validation && (

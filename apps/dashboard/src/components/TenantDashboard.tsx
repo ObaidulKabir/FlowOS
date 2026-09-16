@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult, CreateDraftRequest, TenantDto } from '../types';
 import { api, setActiveTenantId } from '../api/client';
-import { WorkflowTable } from './WorkflowTable';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { TenantApiKeyManager } from './TenantApiKeyManager';
@@ -9,12 +8,11 @@ import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
-import { ContextBindingsView } from './ContextBindingsView';
+import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { ContextSimulationStudio } from './ContextSimulationStudio';
-import { AiContextView } from './AiContextView';
 import { 
-  Building2, Plus, Play, RefreshCw, Key, Activity, FileText, 
-  Cpu, Copy, Check, Filter, Sparkles, Scale, Link2, Brain
+  Building2, Play, Plus, RefreshCw, Key, Activity, 
+  Cpu, Copy, Check, Filter, Sparkles, Scale, Layers
 } from 'lucide-react';
 
 interface Props {
@@ -24,8 +22,7 @@ interface Props {
 }
 
 export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
-  const [activeTab, setActiveTab] = useState<'Instances' | 'Blueprints' | 'Bindings' | 'AiContext' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Instances');
-  const [blueprintSubTab, setBlueprintSubTab] = useState<'All' | 'Published' | 'Drafts' | 'Shared'>('All');
+  const [activeTab, setActiveTab] = useState<'Application' | 'Instances' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Application');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
@@ -77,11 +74,12 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
     setLoading(true);
     setError(null);
     try {
-      if (activeTab === 'Instances') {
-        const instList = await api.listInstances('Tenant');
+      if (activeTab === 'Instances' || activeTab === 'Application') {
+        const [instList, bpList] = await Promise.all([
+          api.listInstances('Tenant'),
+          api.list(undefined, undefined, 'Tenant')
+        ]);
         setInstances(instList);
-      } else if (activeTab === 'Blueprints' || activeTab === 'Bindings') {
-        const bpList = await api.list(undefined, undefined, 'Tenant');
         setBlueprints(bpList);
       }
     } catch (err: any) {
@@ -262,7 +260,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             <div className="text-lg font-bold text-white mt-0.5">{instances.length}</div>
           </div>
           <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-            <div className="text-[11px] text-slate-400">My Blueprints</div>
+            <div className="text-[11px] text-slate-400">Applications</div>
             <div className="text-lg font-bold text-blue-400 mt-0.5">{blueprints.length}</div>
           </div>
           <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
@@ -287,40 +285,22 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
         <div className="border-b border-slate-700 bg-slate-850">
           <nav className="flex flex-wrap text-xs font-semibold">
             <button
+              onClick={() => setActiveTab('Application')}
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
+                activeTab === 'Application' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <Layers size={15} />
+              <span>Application</span>
+            </button>
+            <button
               onClick={() => setActiveTab('Instances')}
               className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Instances' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
               }`}
             >
               <Activity size={15} />
-              <span>⚡ My Live Instances ({instances.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Blueprints')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Blueprints' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <FileText size={15} />
-              <span>📑 My Workflow Blueprints ({blueprints.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Bindings')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Bindings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Link2 size={15} />
-              <span>Business Context</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('AiContext')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'AiContext' ? 'bg-violet-600 text-white' : 'text-violet-300 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Brain size={15} />
-              <span>AI Context</span>
+              <span>⚡ Live Instances ({instances.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('Events')}
@@ -393,91 +373,51 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </div>
           )}
 
-          {activeTab === 'Blueprints' && (
-            <div className="space-y-4">
-              {/* Subtabs for Blueprints */}
-              <div className="flex items-center justify-between">
-                <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs">
-                  {(['All', 'Published', 'Drafts', 'Shared'] as const).map(sub => (
-                    <button
-                      key={sub}
-                      onClick={() => setBlueprintSubTab(sub)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        blueprintSubTab === sub ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {sub === 'Shared' ? 'Under Platform Review' : sub}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setIsCreatingBlueprint(true)}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm"
-                >
-                  <Plus size={14} /> New Workflow Blueprint
-                </button>
-              </div>
-
-              <WorkflowTable
-                items={blueprints}
-                currentTab={blueprintSubTab}
-                isAdmin={false}
-                onView={handleViewBlueprint}
-                onEdit={handleEditBlueprint}
-                onDelete={async (id) => {
-                  if (confirm('Delete this draft?')) {
-                    await api.delete(id, 'Tenant');
-                    await loadData();
-                  }
-                }}
-                onPublish={async (id) => {
-                  await api.publish(id, 'Tenant');
-                  setBlueprintSubTab('Published');
+          {activeTab === 'Application' && (
+            <ApplicationWorkspace
+              tenantName={session.tenantName}
+              blueprints={blueprints}
+              instances={instances}
+              onView={handleViewBlueprint}
+              onEdit={handleEditBlueprint}
+              onCreate={() => setIsCreatingBlueprint(true)}
+              onDelete={async (id) => {
+                if (confirm('Delete this draft?')) {
+                  await api.delete(id, 'Tenant');
                   await loadData();
-                }}
-                onSubmit={async (id) => {
-                  await api.submit(id, 'Tenant');
-                  setBlueprintSubTab('Shared');
-                  await loadData();
-                }}
-                onWithdraw={async (id) => {
-                  await api.withdraw(id, 'Tenant');
-                  setBlueprintSubTab('Drafts');
-                  await loadData();
-                }}
-                onDeprecate={async (id) => {
-                  await api.deprecate(id, 'Tenant');
-                  await loadData();
-                }}
-                onAbandon={async (id) => {
-                  await api.abandon(id, 'Tenant');
-                  await loadData();
-                }}
-                onNewVersion={async (id) => {
-                  const nv = await api.newVersion(id, 'Tenant');
-                  setEditorBlueprint(nv);
-                  await loadData();
-                }}
-              />
-            </div>
-          )}
-
-          {activeTab === 'Bindings' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-xs text-slate-300">
-                <strong className="text-amber-200">Business Context</strong> binds a published workflow template to a domain entity
-                (events, roles, payload mapping). That mapping is the <strong>Data</strong> part of AI Context at runtime.
-              </div>
-              <ContextBindingsView
-              workflowClasses={blueprints.filter(item => item.status === 1 || item.status === 3)}
-              role="Tenant"
+                }
+              }}
+              onPublish={async (id) => {
+                await api.publish(id, 'Tenant');
+                await loadData();
+              }}
+              onSubmit={async (id) => {
+                await api.submit(id, 'Tenant');
+                await loadData();
+              }}
+              onWithdraw={async (id) => {
+                await api.withdraw(id, 'Tenant');
+                await loadData();
+              }}
+              onDeprecate={async (id) => {
+                await api.deprecate(id, 'Tenant');
+                await loadData();
+              }}
+              onAbandon={async (id) => {
+                await api.abandon(id, 'Tenant');
+                await loadData();
+              }}
+              onNewVersion={async (id) => {
+                const nv = await api.newVersion(id, 'Tenant');
+                setEditorBlueprint(nv);
+                await loadData();
+              }}
               onSimulate={(bindingId, revision) => {
                 setSimulationTarget({ bindingId, revision });
                 setActiveTab('Simulator');
               }}
+              onLaunch={() => setShowStartModal(true)}
             />
-            </div>
           )}
 
           {activeTab === 'Events' && (
@@ -486,13 +426,6 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
 
           {activeTab === 'Keys' && (
             <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
-          )}
-
-          {activeTab === 'AiContext' && (
-            <AiContextView
-              tenantName={session.tenantName}
-              onOpenBusinessContext={() => setActiveTab('Bindings')}
-            />
           )}
 
           {activeTab === 'Simulator' && (
