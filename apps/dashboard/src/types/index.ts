@@ -82,6 +82,9 @@ export interface TenantDto {
   tenantId: string;
   name: string;
   status: string;
+  plan?: string;
+  billingStatus?: string;
+  canRunRuntime?: boolean;
   createdAt: string;
   keyCount: number;
   keys: TenantApiKeyDto[];
@@ -125,6 +128,9 @@ export interface AuthSession {
   isSandbox?: boolean;
   email?: string;
   isEmailVerified?: boolean;
+  plan?: string;
+  billingStatus?: string;
+  canRunRuntime?: boolean;
 }
 
 export interface RegisterTenantUserRequest {
@@ -177,6 +183,9 @@ export interface TenantUserDto {
   isEmailVerified: boolean;
   createdAt: string;
   lastLoginAt?: string;
+  plan?: string;
+  billingStatus?: string;
+  canRunRuntime?: boolean;
 }
 
 export interface LoginResponse {

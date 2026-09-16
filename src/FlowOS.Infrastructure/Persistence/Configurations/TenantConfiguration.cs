@@ -1,4 +1,5 @@
 using FlowOS.Domain.Entities;
+using FlowOS.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -18,6 +19,16 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 
         builder.Property(t => t.Status)
             .HasConversion<string>();
+
+        builder.Property(t => t.Plan)
+            .HasConversion<string>()
+            .HasMaxLength(32)
+            .HasDefaultValue(TenantPlan.Managed);
+
+        builder.Property(t => t.BillingStatus)
+            .HasConversion<string>()
+            .HasMaxLength(32)
+            .HasDefaultValue(TenantBillingStatus.Active);
 
         builder.Property(t => t.ConfigurationJson)
             .HasColumnType("jsonb");

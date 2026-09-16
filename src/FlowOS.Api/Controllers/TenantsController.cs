@@ -43,6 +43,9 @@ public class TenantsController : ControllerBase
             TenantId = t.TenantId,
             Name = t.Name,
             Status = t.Status.ToString(),
+            Plan = t.Plan.ToString(),
+            BillingStatus = t.BillingStatus.ToString(),
+            CanRunRuntime = t.CanRunRuntime,
             CreatedAt = t.CreatedAt,
             KeyCount = keyLookup[t.TenantId].Count(),
             Keys = keyLookup[t.TenantId].Select(k => new TenantApiKeyDto
@@ -101,6 +104,9 @@ public class TenantsController : ControllerBase
                 TenantId = tenant.TenantId,
                 Name = tenant.Name,
                 Status = tenant.Status.ToString(),
+                Plan = tenant.Plan.ToString(),
+                BillingStatus = tenant.BillingStatus.ToString(),
+                CanRunRuntime = tenant.CanRunRuntime,
                 CreatedAt = tenant.CreatedAt,
                 KeyCount = 1,
                 Keys = new List<TenantApiKeyDto>
@@ -159,6 +165,9 @@ public class TenantsController : ControllerBase
             TenantId = tenant.TenantId,
             Name = tenant.Name,
             Status = tenant.Status.ToString(),
+            Plan = tenant.Plan.ToString(),
+            BillingStatus = tenant.BillingStatus.ToString(),
+            CanRunRuntime = tenant.CanRunRuntime,
             CreatedAt = tenant.CreatedAt,
             KeyCount = keys.Count,
             Keys = keys
@@ -269,6 +278,9 @@ public class TenantDto
     public Guid TenantId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public string Plan { get; set; } = string.Empty;
+    public string BillingStatus { get; set; } = string.Empty;
+    public bool CanRunRuntime { get; set; }
     public DateTime CreatedAt { get; set; }
     public int KeyCount { get; set; }
     public List<TenantApiKeyDto> Keys { get; set; } = new();

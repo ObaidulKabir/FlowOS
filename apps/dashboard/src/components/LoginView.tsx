@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthSession, TenantDto } from '../types';
-import { api, setAuthSession } from '../api/client';
+import { api, applyTenantEntitlement, setAuthSession } from '../api/client';
 import { Shield, Building2, Key, ArrowRight, Sparkles, Lock, Cpu, Terminal } from 'lucide-react';
 
 interface LoginViewProps {
@@ -50,13 +50,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const matchedTenant = tenants.find(t => t.tenantId === finalTenantId);
     const tenantName = tenantNameToUse || matchedTenant?.name || 'Client Tenant';
 
-    const session: AuthSession = {
+    const session = applyTenantEntitlement({
       role: 'Tenant',
       tenantId: finalTenantId,
       tenantName: tenantName,
       apiKey: apiKey.trim() || undefined,
       username: `user@${tenantName.toLowerCase().replace(/\s+/g, '')}.com`
-    };
+    }, matchedTenant);
 
     setAuthSession(session);
     onLoginSuccess(session);
@@ -67,7 +67,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       role: 'Admin',
       tenantId: '11111111-1111-1111-1111-111111111111',
       tenantName: 'Platform Administrator',
-      username: adminUsername || 'admin@flowos.internal'
+      username: adminUsername || 'admin@flowos.internal',
+      plan: 'Enterprise',
+      billingStatus: 'Active',
+      canRunRuntime: true
     };
 
     setAuthSession(session);

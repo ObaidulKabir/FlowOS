@@ -43,7 +43,10 @@ public record TenantUserDto(
     string TenantName,
     bool IsEmailVerified,
     DateTime CreatedAt,
-    DateTime? LastLoginAt);
+    DateTime? LastLoginAt,
+    string Plan = "Trial",
+    string BillingStatus = "Unpaid",
+    bool CanRunRuntime = false);
 
 public record LoginResult(
     bool Success,

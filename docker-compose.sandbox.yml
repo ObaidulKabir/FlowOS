@@ -27,7 +27,8 @@ services:
       - "8081:8080"
     environment:
       - MCP_TRANSPORT=http
-      - MCP_API_KEY=disabled  # Pre-payment gateway unauthenticated testing mode
+      - MCP_API_KEY=disabled  # Local sandbox: skip API key and billing enforcement
+      - FLOWOS_BILLING_ENFORCE=false
       - MCP_ROLE=Admin
       - ASPNETCORE_ENVIRONMENT=Development
       - UseInMemoryDatabase=true

@@ -412,7 +412,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Simple, Transparent Pricing
           </h2>
           <p className="text-sm text-slate-400 max-w-2xl mx-auto mt-2">
-            From zero-cost sandboxed testing to high-throughput dedicated enterprise clusters.
+            Charge a tenant subscription, not MCP usage. Playground is discovery and simulate. Register starts a design-time Trial. Managed Cloud $299/month includes the full MCP runtime with no per-call fee.
           </p>
         </div>
 
@@ -429,9 +429,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 $0 <span className="text-xs font-normal text-slate-400">/ forever</span>
               </div>
               <ul className="space-y-2.5 text-slate-400 mb-6">
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Zero signup required to test</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Ephemeral FSM & Workflow Engine</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Full {mcpTools}-Tool MCP Server Access</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Guest sandbox dashboard, no signup</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Public GET discovery, initialize, tools/list</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Simulate, lint, and validate (no production keys)</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Time-Travel Fork Simulator</li>
               </ul>
             </div>
@@ -458,9 +458,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 $299 <span className="text-xs font-normal text-slate-400">/ month</span>
               </div>
               <ul className="space-y-2.5 text-slate-300 mb-6">
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Dedicated PostgreSQL Event Outbox</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Verified Tenant Admin & Email Security</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Scoped Tenant API Keys (Rotatable)</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Dashboard, REST API, and tenant API keys</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Full MCP runtime included (start, publish, complete)</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> No per-call or usage fees</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Official Email from admin@flowosbd.com</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 99.9% Uptime SLA & Zombie Recovery</li>
               </ul>
@@ -469,7 +469,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={() => onOpenAuth('register')}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl text-center transition-all shadow-lg shadow-blue-500/25 flex items-center justify-center gap-1.5"
             >
-              <span>Register Managed Tenant</span>
+              <span>Register Trial (design-only until activated)</span>
               <ArrowRight size={14} />
             </button>
           </div>
@@ -483,9 +483,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <h3 className="text-lg font-bold text-white mb-1">Enterprise Dedicated</h3>
               <div className="text-2xl font-extrabold text-white mb-4">Custom</div>
               <ul className="space-y-2.5 text-slate-400 mb-6">
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Same MCP runtime entitlement as Managed Cloud</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Air-Gapped / VPC On-Premise Deployment</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Unlimited Tenants & Step Workflows</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Custom Communication Adapters</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Custom commercial terms via admin@flowosbd.com</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 24/7 Priority SLA & Dedicated Engineering</li>
               </ul>
             </div>

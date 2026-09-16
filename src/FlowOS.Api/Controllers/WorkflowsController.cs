@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using FlowOS.Application.Commands;
 using FlowOS.Application.Queries;
 using FlowOS.Core.Interfaces;
+using FlowOS.API.Filters;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -27,6 +28,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpPost("start")]
+    [RequireRuntimePlan]
     public async Task<IActionResult> Start([FromBody] StartWorkflowCommand command)
     {
         if (_currentUser.TenantId != Guid.Empty && command.TenantId != _currentUser.TenantId)

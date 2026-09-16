@@ -17,6 +17,7 @@ public static class FlowOsMcpGuidance
         - Never strip a trailing slash. Never follow HTTP 301/302 for POST; a slash redirect can switch to http:// and drop the body and API key.
         - Accept: application/json, text/event-stream. Headers: X-MCP-API-Key (or Authorization: Bearer) and x-tenant-id.
         - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com.
+        - Commercial policy: MCP is included in an active Managed Cloud or Enterprise tenant subscription. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, publish_event, complete_task, publish, activate) require a paid plan and return MCP-PLAN-REQUIRED until activated.
 
         FlowOS is a dual-kernel enterprise process operating system that strictly separates:
         1. State Authority (Mathematical State Machine) - Controls what state transitions are legally permitted.
@@ -63,6 +64,16 @@ public static class FlowOsMcpGuidance
           • Call `suggest_agent_action` to run AI risk analysis or decision advisory on active instances.
 
         Tip: Call MCP Prompts (`prompts/list` & `prompts/get`) or read MCP Resources (`resources/list` & `resources/read`) for full templates.
+          Preferred prompt: `design_dual_kernel_workflow`. Preferred resource: `flowos://guides/dual-kernel-design`.
+
+        Dual-kernel design law (read before drafting Decision steps):
+        - The workflow graph moves `currentStep`. The state machine moves `currentState`. They are independent kernels.
+        - A Decision with `conditions.Default` or `conditions.true` auto-routes the workflow WITHOUT consuming a business event.
+        - If the state machine still requires that event (e.g. ApproveQuote auto-routes to MaterialDecision while Assigned → Quoted needs QUOTE_APPROVED), you MUST still send the event in `simulate_workflowclass` / `simulate_context_binding` / `publish_event`.
+        - FlowOS then applies it as a state-only catch-up: step stays put, state advances. Omitting it leaves state behind; the next event is Denied as a state-machine violation.
+        - Preferred design: HumanTask/Command `nextSteps` consume the same event the state machine uses. Do not auto-skip a legal gate unless you still emit that event.
+        - Context bindings do not create tenant roles. Map `roleOverrides` to roles that already exist, or declare no template roles. Never strip roles only to make simulate pass.
+        - Diagnose divergence: if `currentStep` is ahead of `currentState` (e.g. MaterialDecision / Assigned), the missing event is the unused state-machine trigger.
         """;
 
     public static object GetPromptsList() => new
@@ -85,6 +96,15 @@ public static class FlowOsMcpGuidance
                 arguments = new[]
                 {
                     new { name = "domain", description = "Target business domain (e.g., Finance, HR, Logistics, Procurement)", required = false }
+                }
+            },
+            new
+            {
+                name = "design_dual_kernel_workflow",
+                description = "How to design workflow steps and state-machine transitions together, including Decision auto-route vs required business events, context-binding roles, and simulate_context_binding.",
+                arguments = new[]
+                {
+                    new { name = "domain", description = "Business process to design (e.g., ServiceRepair, ExpenseApproval)", required = false }
                 }
             },
             new
@@ -113,6 +133,7 @@ public static class FlowOsMcpGuidance
         var workflowName = arguments?["workflowName"]?.ToString() ?? "ExpenseApprovalV2";
         var workflowClassId = arguments?["workflowClassId"]?.ToString() ?? "<workflowClassId>";
         var instanceId = arguments?["instanceId"]?.ToString() ?? "<instanceId>";
+        var domain = arguments?["domain"]?.ToString() ?? "ServiceRepair";
 
         return name switch
         {
@@ -194,12 +215,31 @@ public static class FlowOsMcpGuidance
                                 1. Call `describe_workflowclass_schema` to see all valid JSON schema properties.
                                 2. Ensure Dual-Kernel Parity:
                                    - Every step in `workflow.steps` must correspond to a legal state in `stateMachine.states`.
-                                   - State transitions must be declared in `stateMachine.transitions` with `fromState`, `toState`, and `triggerEvent`.
-                                   - All `triggerEvent` names must be declared in the `events` array.
+                                   - State transitions must be declared in `stateMachine.transitions` with `fromState`, `toState`, and `triggerEvent`/`eventId`.
+                                   - All trigger event names must be declared in the `events` array.
+                                   - Decision `Default`/`true` auto-routes the workflow graph only. If the state machine still needs a business event, send that event anyway (state-only catch-up). Preferred: HumanTask nextSteps consume the same event.
                                 3. Submit the blueprint via `create_draft_workflowclass`.
-                                4. Verify with `validate_draft_workflowclass`.
+                                4. Verify with `validate_draft_workflowclass` then `simulate_workflowclass` with the full event list including state-machine triggers.
                                 5. Publish with `publish_workflowclass`.
+                                6. For a tenant business payload, `create_context_binding` → `validate_context_binding` → `simulate_context_binding`. Read `flowos://guides/dual-kernel-design`.
                                 """
+                        }
+                    }
+                }
+            },
+
+            "design_dual_kernel_workflow" => new
+            {
+                description = "Dual-kernel design recipe for workflow graph vs state machine",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = DualKernelDesignGuide.Replace("{DOMAIN}", domain)
                         }
                     }
                 }
@@ -251,6 +291,7 @@ public static class FlowOsMcpGuidance
                                    - Is the event declared for this workflow?
                                    - Does a transition exist from `currentState` using this event in the State Machine?
                                    - Does the caller have the required role or capability?
+                                   - If currentStep is ahead of currentState, a Decision auto-route skipped a gate: publish the unused state-machine event (state-only catch-up). Read `flowos://guides/dual-kernel-design`.
                                 4. Call `suggest_agent_action` with `agentId: "RiskAnalysisAgent"` to analyze anomaly conditions.
                                 """
                                 .Replace("{INSTANCE_ID}", instanceId)
@@ -272,6 +313,13 @@ public static class FlowOsMcpGuidance
                 uri = "flowos://guides/lifecycle",
                 name = "FlowOS Workflow Operating Lifecycle Guide",
                 description = "Complete markdown reference manual on drafting, validating, publishing, and executing workflows.",
+                mimeType = "text/markdown"
+            },
+            new
+            {
+                uri = "flowos://guides/dual-kernel-design",
+                name = "Dual-Kernel Design Guide",
+                description = "How agents must design workflow steps and state-machine events together, including Decision auto-route, state-only catch-up, and simulate_context_binding.",
                 mimeType = "text/markdown"
             },
             new
@@ -308,6 +356,19 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "flowos://guides/dual-kernel-design" => new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        uri,
+                        mimeType = "text/markdown",
+                        text = DualKernelDesignGuide.Replace("{DOMAIN}", "ServiceRepair")
+                    }
+                }
+            },
+
             "flowos://templates/expense-approval" => new
             {
                 contents = new[]
@@ -337,6 +398,67 @@ public static class FlowOsMcpGuidance
             _ => null
         };
     }
+
+    public const string DualKernelDesignGuide =
+        """
+        # FlowOS Dual-Kernel Design Guide for AI Agents
+
+        Domain you are designing: {DOMAIN}
+
+        FlowOS has two kernels. Design both, or simulation and runtime will diverge.
+
+        | Kernel | Owns | Moves |
+        |---|---|---|
+        | Workflow graph | `workflow.steps`, `nextSteps`, Decision `conditions` | `currentStep` |
+        | State machine | `stateMachine.transitions` | `currentState` |
+
+        An event may do one of three things:
+        1. Advance both (HumanTask/Command `nextSteps` key matches a state-machine `eventId`).
+        2. Advance workflow only (Decision `Default` / `true` auto-route). The state machine does not move.
+        3. Advance state only (no `nextSteps` on the current step, but a legal transition exists from `currentState`). FlowOS applies this as state-only catch-up.
+
+        ## The ServiceRepair failure mode (canonical)
+
+        Bad pairing:
+        - `ApproveQuote` is a Decision with `conditions: { "Default": "MaterialDecision" }` or `{ "true": "MaterialDecision" }`.
+        - State machine still has `Assigned + QUOTE_APPROVED → Quoted`.
+        - After `JOB_REQUESTED`, step is already `MaterialDecision` while state is still `Assigned`.
+        - `MATERIALS_REQUIRED` is then Denied: "Event is not valid for current state 'Assigned'".
+
+        Correct agent behavior:
+        1. Prefer making `ApproveQuote` a HumanTask whose `nextSteps.QUOTE_APPROVED` points at `MaterialDecision`.
+        2. If you keep the auto-route Decision, still include `QUOTE_APPROVED` in `simulate_workflowclass`, `simulate_context_binding`, and later `publish_event`. FlowOS keeps the step and sets state to `Quoted`.
+        3. Never omit the state-machine event to "match" the auto-skip. The skip is workflow-only.
+
+        Diagnose: if trace shows `currentStep` ahead of `currentState` (MaterialDecision / Assigned), look up the unused transition from that state and send that event next.
+
+        ## Preferred MCP design loop
+
+        1. `describe_workflowclass_schema`
+        2. `create_draft_workflowclass` — declare `events`, `stateMachine.transitions`, and `workflow.steps` together.
+        3. `validate_draft_workflowclass` then `lint_draft_workflowclass`
+        4. `simulate_workflowclass` with the **full** event list, including every state-machine trigger, even after Decision auto-routes.
+        5. `publish_workflowclass` with `confirmHumanApproval: true` when required
+        6. Tenant context (do not strip roles to cheat validation):
+           - Ensure tenant roles exist, or map `definition.roleOverrides` to existing tenant roles, or declare no template `roles`.
+           - `create_context_binding` with `inputMapping` for canonical fields
+           - `validate_context_binding`
+           - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, `roles` that exist, and the same full event list
+        7. `activate_context_binding` only after draft simulation is Allowed through the expected final state
+        8. Runtime: `start_workflow` then `publish_event` for each remaining state-machine trigger
+
+        ## Context-binding rules
+
+        - Bindings never create roles or permissions.
+        - Unknown tenant role names fail `validate_context_binding` (CTX-ROLE-002). Probe existing roles or provision them in the tenant; do not invent Admin/User/Provider mappings.
+        - `simulate_context_binding` never persists instances or snapshots. A Denied trace is a design signal, not a reason to delete the template.
+
+        ## Tool names to use
+
+        - Design sandbox: `simulate_workflowclass`
+        - Bound business payload: `simulate_context_binding`
+        - After a live instance exists: `fork_workflow_simulation` / `replay_workflow_history`
+        """;
 
     public const string ReferenceExpenseApprovalJson =
         """

@@ -1,9 +1,11 @@
 using FlowOS.MCP.Models;
+using FlowOS.Application.Common.Interfaces;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace FlowOS.MCP.Services
@@ -12,10 +14,12 @@ namespace FlowOS.MCP.Services
     {
         private readonly Dictionary<string, (McpTool Tool, Func<JObject, Task<CallToolResult>> Handler)> _tools = new();
         private readonly ILogger<ToolRegistry> _logger;
+        private readonly IServiceScopeFactory? _scopeFactory;
 
-        public ToolRegistry(ILogger<ToolRegistry> logger)
+        public ToolRegistry(ILogger<ToolRegistry> logger, IServiceScopeFactory? scopeFactory = null)
         {
             _logger = logger;
+            _scopeFactory = scopeFactory;
         }
 
         public void Register(string name, string description, object schema, Func<JObject, Task<CallToolResult>> handler)
@@ -48,6 +52,23 @@ namespace FlowOS.MCP.Services
 
             try
             {
+                using var scope = _scopeFactory?.CreateScope();
+                var entitlement = scope?.ServiceProvider.GetService<ITenantEntitlementService>();
+                if (entitlement != null)
+                {
+                    var profile = McpToolDescriptions.ProfileFor(name);
+                    if (entitlement.McpToolRequiresPaidPlan(name, profile.Mutating, profile.SideEffect))
+                    {
+                        var decision = await entitlement.EnsureRuntimeAllowedAsync(McpRequestContext.TenantId);
+                        if (!decision.Allowed)
+                        {
+                            return McpToolResults.Fail(
+                                decision.Code ?? TenantEntitlementPolicy.PlanRequiredCode,
+                                decision.Message ?? TenantEntitlementPolicy.PlanRequiredMessage);
+                        }
+                    }
+                }
+
                 return await entry.Handler(arguments);
             }
             catch (Exception ex)

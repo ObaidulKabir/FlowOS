@@ -30,6 +30,7 @@ public static class DataSeeder
         {
             var tenant = new Tenant("Default Tenant");
             SetPrivateProperty(tenant, "TenantId", DefaultTenantId);
+            tenant.AssignPlan(TenantPlan.Managed, TenantBillingStatus.Active);
             context.Tenants.Add(tenant);
             await context.SaveChangesAsync();
         }
@@ -39,6 +40,7 @@ public static class DataSeeder
         {
             var clientTenant = new Tenant("Demo Client Tenant");
             SetPrivateProperty(clientTenant, "TenantId", demoClientTenantId);
+            clientTenant.AssignPlan(TenantPlan.Managed, TenantBillingStatus.Active);
             context.Tenants.Add(clientTenant);
             await context.SaveChangesAsync();
         }

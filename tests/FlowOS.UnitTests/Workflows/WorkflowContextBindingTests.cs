@@ -507,6 +507,70 @@ public class WorkflowContextBindingTests
     }
 
     [Fact]
+    public async Task ContextSimulation_DecisionAutoRoute_AppliesQuoteApprovedAsStateOnlyThenContinues()
+    {
+        var source = CreateRepairSource();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "ServiceRepairContextSimNoRoles", "ServiceRepairBinding");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id,
+            1,
+            source.Id,
+            source.Version,
+            new WorkflowContextBindingDefinition
+            {
+                EntityType = "ServiceRepairJob",
+                InputMapping = new Dictionary<string, string>
+                {
+                    ["JobId"] = "jobId"
+                }
+            });
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var result = await new WorkflowContextSimulationService(
+                unitOfWork,
+                new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object),
+                new WorkflowExecutionContextService(unitOfWork),
+                new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()))
+            .SimulateAsync(source.TenantId, new WorkflowContextSimulationRequest(
+                ContextBindingId: binding.Id,
+                Revision: "draft",
+                InitialPayload: new { jobId = "CTX-SIM-NOROLES-001" },
+                Roles: Array.Empty<string>(),
+                Events:
+                [
+                    new WorkflowContextSimulationEventRequest("JOB_REQUESTED"),
+                    new WorkflowContextSimulationEventRequest("QUOTE_APPROVED"),
+                    new WorkflowContextSimulationEventRequest("MATERIALS_REQUIRED")
+                ]));
+
+        Assert.NotEqual("Denied", result.Status);
+        Assert.Contains(result.Trace, item =>
+            item.EventType == "QUOTE_APPROVED" &&
+            item.IsAllowed &&
+            item.FromStepId == "MaterialDecision" &&
+            item.ToStepId == "MaterialDecision" &&
+            item.FromState == "Assigned" &&
+            item.ToState == "Quoted");
+        Assert.Contains(result.Trace, item =>
+            item.EventType == "MATERIALS_REQUIRED" &&
+            item.IsAllowed &&
+            item.FromState == "Quoted");
+        Assert.Equal("RepairInProgress", result.CurrentState);
+    }
+
+    [Fact]
     public async Task ContextSimulation_RejectsUnboundedScenarioBeforeRepositoryAccess()
     {
         var options = new DbContextOptionsBuilder<FlowOSDbContext>()
@@ -593,6 +657,68 @@ public class WorkflowContextBindingTests
                     ["Approver"] = "FinanceManager"
                 }
             });
+
+    private static WorkflowClass CreateRepairSource()
+    {
+        var tenantId = Guid.NewGuid();
+        return new WorkflowClass(
+            tenantId,
+            "HomeServiceRepairContextSimulator",
+            "1.0.0",
+            new WorkflowClassBlueprint
+            {
+                ContextSchema = """{"type":"object","properties":{"JobId":{"type":"string"}}}""",
+                Events =
+                [
+                    new EventBlueprint { EventId = "JOB_REQUESTED", Name = "Job requested" },
+                    new EventBlueprint { EventId = "QUOTE_APPROVED", Name = "Quote approved" },
+                    new EventBlueprint { EventId = "MATERIALS_REQUIRED", Name = "Materials required" }
+                ],
+                StateMachine = new StateMachineBlueprint
+                {
+                    EntityType = "ServiceRepairJob",
+                    InitialState = "Requested",
+                    States = ["Requested", "Assigned", "Quoted", "RepairInProgress"],
+                    Transitions =
+                    [
+                        new TransitionBlueprint { FromState = "Requested", ToState = "Assigned", EventId = "JOB_REQUESTED" },
+                        new TransitionBlueprint { FromState = "Assigned", ToState = "Quoted", EventId = "QUOTE_APPROVED" },
+                        new TransitionBlueprint { FromState = "Quoted", ToState = "RepairInProgress", EventId = "MATERIALS_REQUIRED" }
+                    ]
+                },
+                Workflow = new WorkflowBlueprint
+                {
+                    StartStepId = "IntakeRequest",
+                    Steps =
+                    [
+                        new StepBlueprint
+                        {
+                            StepId = "IntakeRequest",
+                            StepType = "HumanTask",
+                            NextSteps = new Dictionary<string, string> { ["JOB_REQUESTED"] = "ApproveQuote" }
+                        },
+                        new StepBlueprint
+                        {
+                            StepId = "ApproveQuote",
+                            StepType = "Decision",
+                            Conditions = new Dictionary<string, string> { ["Default"] = "MaterialDecision" }
+                        },
+                        new StepBlueprint
+                        {
+                            StepId = "MaterialDecision",
+                            StepType = "HumanTask",
+                            NextSteps = new Dictionary<string, string> { ["MATERIALS_REQUIRED"] = "CloseJob" }
+                        },
+                        new StepBlueprint
+                        {
+                            StepId = "CloseJob",
+                            StepType = "Command",
+                            NextSteps = new Dictionary<string, string> { ["Default"] = "END" }
+                        }
+                    ]
+                }
+            });
+    }
 
     private static WorkflowClass CreateSource()
     {

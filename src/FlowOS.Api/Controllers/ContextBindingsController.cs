@@ -4,6 +4,7 @@ using FlowOS.Application.DTOs;
 using FlowOS.Application.Queries;
 using FlowOS.Core.Interfaces;
 using FlowOS.Domain.ValueObjects;
+using FlowOS.API.Filters;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -77,6 +78,7 @@ public class ContextBindingsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/activate")]
+    [RequireRuntimePlan]
     public async Task<IActionResult> Activate(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -94,6 +96,7 @@ public class ContextBindingsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/archive")]
+    [RequireRuntimePlan]
     public async Task<IActionResult> Archive(Guid id, CancellationToken cancellationToken)
     {
         try

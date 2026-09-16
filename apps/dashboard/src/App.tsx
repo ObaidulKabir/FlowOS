@@ -56,7 +56,10 @@ function App() {
       tenantName: 'Platform Administrator',
       username: 'superadmin@flowos.internal',
       isSandbox: false,
-      isEmailVerified: true
+      isEmailVerified: true,
+      plan: 'Enterprise',
+      billingStatus: 'Active',
+      canRunRuntime: true
     };
     setAuthSession(adminSession);
     setSession(adminSession);
@@ -91,6 +94,25 @@ function App() {
         /* DASHBOARD VIEW */
         <div className="min-h-screen flex flex-col">
           
+          {/* Trial / unpaid runtime banner */}
+          {!session.isSandbox && session.role === 'Tenant' && (session.plan === 'Trial' || session.billingStatus === 'Unpaid' || session.canRunRuntime === false) && (
+            <div className="bg-gradient-to-r from-amber-900/90 via-slate-900 to-orange-900/90 border-b border-amber-500/40 px-6 py-2.5 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-3 shadow-md z-50">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="font-bold">Trial / unpaid tenant:</span>
+                <span className="text-slate-200 hidden sm:inline">
+                  Runtime execution is blocked (start, publish, complete). Design-time simulate, lint, and drafts still work. MCP is included once a Managed Cloud or Enterprise plan is activated.
+                </span>
+              </div>
+              <a
+                href="mailto:admin@flowosbd.com?subject=FlowOS%20Managed%20Cloud%20activation"
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-all shadow"
+              >
+                Contact admin@flowosbd.com
+              </a>
+            </div>
+          )}
+
           {/* Guest / Sandbox Banner */}
           {session.isSandbox && (
             <div className="bg-gradient-to-r from-emerald-900/90 via-slate-900 to-blue-900/90 border-b border-emerald-500/40 px-6 py-2.5 text-xs text-emerald-200 flex flex-wrap items-center justify-between gap-3 shadow-md z-50">

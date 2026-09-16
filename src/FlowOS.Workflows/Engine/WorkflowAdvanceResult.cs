@@ -17,6 +17,9 @@ public class WorkflowAdvanceResult
     public static WorkflowAdvanceResult Advanced(string newStepId) => 
         new(true, "Workflow advanced.", newStepId);
 
+    public static WorkflowAdvanceResult StateSynchronized(string stepId, string eventType, string newState) =>
+        new(true, $"Applied state-only event '{eventType}'. State is now '{newState}'.", stepId);
+
     public static WorkflowAdvanceResult Completed() => 
         new(true, "Workflow completed.", null);
 

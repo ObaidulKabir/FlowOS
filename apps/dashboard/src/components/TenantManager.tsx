@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, getActiveTenantId, setActiveTenantId } from '../api/client';
 import { TenantDto } from '../types';
 import { mcpRpcUrl } from '../mcpUrl';
-import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle2, ShieldCheck, Globe, UserCheck } from 'lucide-react';
+import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles } from 'lucide-react';
 
 interface TenantManagerProps {
   onTenantChange?: (newTenantId: string) => void;
@@ -67,6 +67,7 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   // Copy Feedback State
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [codeTab, setCodeTab] = useState<'appsettings' | 'python' | 'curl'>('appsettings');
+  const [activatingId, setActivatingId] = useState<string | null>(null);
 
   const loadTenants = async () => {
     setLoading(true);
@@ -96,6 +97,19 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
     setActiveTenantId(tenantId);
     if (onTenantChange) {
       onTenantChange(tenantId);
+    }
+  };
+
+  const handleActivatePlan = async (tenantId: string, plan: 'Managed' | 'Enterprise' = 'Managed') => {
+    setActivatingId(tenantId);
+    setError(null);
+    try {
+      await api.setTenantPlan(tenantId, plan, 'Active');
+      await loadTenants();
+    } catch (err: any) {
+      setError(err.message || 'Failed to activate tenant plan');
+    } finally {
+      setActivatingId(null);
     }
   };
 
@@ -427,6 +441,15 @@ headers = {
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                         {t.status}
                       </span>
+                      {t.plan && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                          t.canRunRuntime
+                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {t.plan} / {t.billingStatus || 'Unpaid'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
@@ -471,6 +494,16 @@ headers = {
                     >
                       <Plus size={13} /> New Key
                     </button>
+                    {t.canRunRuntime === false && (
+                      <button
+                        onClick={() => handleActivatePlan(t.tenantId, 'Managed')}
+                        disabled={activatingId === t.tenantId}
+                        className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-60"
+                      >
+                        <Sparkles size={13} />
+                        {activatingId === t.tenantId ? 'Activating…' : 'Activate Managed'}
+                      </button>
+                    )}
                   </div>
                 </div>
 

@@ -236,7 +236,10 @@ public class TenantAuthService : ITenantAuthService
             tenant.Name,
             user.IsEmailVerified,
             user.CreatedAt,
-            user.LastLoginAt);
+            user.LastLoginAt,
+            tenant.Plan.ToString(),
+            tenant.BillingStatus.ToString(),
+            tenant.CanRunRuntime);
 
         return new LoginResult(
             Success: true,
@@ -304,7 +307,10 @@ public class TenantAuthService : ITenantAuthService
             tenantName,
             user.IsEmailVerified,
             user.CreatedAt,
-            user.LastLoginAt);
+            user.LastLoginAt,
+            tenant?.Plan.ToString() ?? TenantPlan.Trial.ToString(),
+            tenant?.BillingStatus.ToString() ?? TenantBillingStatus.Unpaid.ToString(),
+            tenant?.CanRunRuntime ?? false);
     }
 
     private string GetOfficialEmail() =>

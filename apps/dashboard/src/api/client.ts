@@ -5,7 +5,7 @@ import {
   RegisterTenantUserRequest, RegisterTenantUserResponse,
   VerifyEmailRequest, VerifyEmailResponse,
   LoginRequest, LoginResponse,
-  ResendVerificationResponse, TenantUserDto,
+  ResendVerificationResponse, TenantUserDto, TenantDto,
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
   WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
   TenantApiKeyDto, CreateKeyResponse
@@ -21,8 +21,24 @@ export const getDefaultSandboxSession = (): AuthSession => ({
   apiKey: 'flowos_prod_secret_key_32_chars_min',
   username: 'demo-tenant-user',
   isSandbox: true,
-  isEmailVerified: true
+  isEmailVerified: true,
+  plan: 'None',
+  billingStatus: 'Unpaid',
+  canRunRuntime: true
 });
+
+export const applyTenantEntitlement = (
+  session: AuthSession,
+  user?: Pick<AuthSession, 'plan' | 'billingStatus' | 'canRunRuntime'> | TenantUserDto | null
+): AuthSession => {
+  if (!user) return session;
+  return {
+    ...session,
+    plan: user.plan ?? session.plan,
+    billingStatus: user.billingStatus ?? session.billingStatus,
+    canRunRuntime: user.canRunRuntime ?? session.canRunRuntime
+  };
+};
 
 export const getDefaultSession = (): AuthSession => getDefaultSandboxSession();
 
@@ -93,7 +109,7 @@ const handleResponse = async (response: Response, errorMessage: string) => {
       if (errorBody) {
         try {
           const errorJson = JSON.parse(errorBody);
-          const detail = errorJson.detail || errorJson.error || errorJson.title || (errorJson.errors ? JSON.stringify(errorJson.errors) : errorBody);
+          const detail = errorJson.detail || errorJson.error || errorJson.message || errorJson.code || errorJson.title || (errorJson.errors ? JSON.stringify(errorJson.errors) : errorBody);
           errorDetails += `: ${detail}`;
         } catch {
           errorDetails += `: ${errorBody}`;
@@ -267,10 +283,24 @@ export const api = {
     return handleResponse(response, 'Failed to get workflow audit history');
   },
 
-  listTenants: async (): Promise<any[]> => {
+  listTenants: async (): Promise<TenantDto[]> => {
     const headers = getHeaders('Admin');
     const response = await fetch('/api/tenants', { headers });
     return handleResponse(response, 'Failed to list tenants');
+  },
+
+  setTenantPlan: async (
+    tenantId: string,
+    plan: 'Managed' | 'Enterprise' = 'Managed',
+    billingStatus: 'Unpaid' | 'Active' | 'PastDue' | 'Canceled' = 'Active'
+  ): Promise<{ tenantId: string; name: string; plan: string; billingStatus: string; canRunRuntime: boolean }> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch(`/api/admin/tenants/${tenantId}/plan`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ plan, billingStatus })
+    });
+    return handleResponse(response, 'Failed to set tenant plan');
   },
 
   registerTenant: async (

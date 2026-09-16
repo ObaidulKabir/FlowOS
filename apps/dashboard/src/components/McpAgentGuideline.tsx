@@ -87,7 +87,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-            FlowOS is an authoritative, multi-tenant workflow control plane. Autonomous AI agents, browser bots, and LLM crawlers can discover schemas, inspect invariants, and orchestrate stateful processes under zero-trust governance. JSON-RPC must be posted to <code className="text-blue-300">{mcpUrl}</code> exactly — {MCP_JSONRPC_RULE}
+            FlowOS is an authoritative, multi-tenant workflow control plane. Autonomous AI agents, browser bots, and LLM crawlers can discover schemas, inspect invariants, and orchestrate stateful processes under zero-trust governance. JSON-RPC must be posted to <code className="text-blue-300">{mcpUrl}</code> exactly — {MCP_JSONRPC_RULE} A paid Managed Cloud or Enterprise tenant includes every MCP tool. Trial keys may discover, lint, validate, and simulate — they cannot start instances until activated.
           </p>
         </div>
 
@@ -217,6 +217,12 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
             </li>
             <li>
               <strong>Execute via POST:</strong> Switch to <code className="text-blue-300">POST {mcpUrl}</code> for JSON-RPC 2.0. Keep a trailing slash if the URL has one. Do not follow 301 redirects for POST. Send tenant header <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">x-tenant-id</code> and <code className="text-slate-200 bg-slate-800 px-1 py-0.5 rounded">X-MCP-API-Key</code>.
+            </li>
+            <li>
+              <strong>Plan entitlement:</strong> MCP is included in the tenant subscription. Trial keys return <code className="text-amber-300 bg-slate-800 px-1 rounded">MCP-PLAN-REQUIRED</code> (HTTP 402) for runtime tools such as <code className="text-blue-300">start_workflow</code>, <code className="text-blue-300">publish_event</code>, and <code className="text-blue-300">complete_task</code>.
+            </li>
+            <li>
+              <strong>Dual-kernel design:</strong> Call MCP prompt <code className="text-blue-300">design_dual_kernel_workflow</code> or read <code className="text-blue-300">flowos://guides/dual-kernel-design</code>. Workflow <code className="text-blue-300">currentStep</code> and state-machine <code className="text-blue-300">currentState</code> are independent. A Decision <code className="text-blue-300">Default</code>/<code className="text-blue-300">true</code> auto-route does not consume a business event — still send <code className="text-blue-300">QUOTE_APPROVED</code> (or the unused SM trigger) in <code className="text-blue-300">simulate_workflowclass</code> / <code className="text-blue-300">simulate_context_binding</code>. If step is ahead of state, that missing event is the next call.
             </li>
             <li>
               <strong>Compensation Safety Loop:</strong> Run <code className="text-blue-300">lint_draft_workflowclass</code>, then fix <code className="text-blue-300">WF-COMP-010</code> / <code className="text-blue-300">LINT-COMP-001</code> by attaching <code className="text-blue-300">OnFailure</code> hooks. Validate with <code className="text-blue-300">simulate_compensation_path</code> (design-time) and <code className="text-blue-300">plan_workflow_compensation_path</code> (runtime instance).

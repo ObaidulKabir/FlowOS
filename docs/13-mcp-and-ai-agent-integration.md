@@ -58,8 +58,9 @@ Endpoints:
 | `OPTIONS`| `/mcp` or `/mcp/` | CORS preflight handling for web/browser agent environments. |
 | `GET` | `/health` | `200` `{ "status": "ok" }` |
 
-> 💡 **Pre-Payment Gateway & Sandbox Mode**:
-> Setting `MCP_API_KEY=disabled` (or leaving `MCP_API_KEY` unconfigured) bypasses the `X-MCP-API-Key` header requirement for easy testing and AI agent evaluation. When set to a secret string, `X-MCP-API-Key` is strictly enforced. Every request still requires a valid `x-tenant-id`.
+> **Commercial policy:** MCP is included in a paid FlowOS tenant subscription (Managed Cloud $299/month or Enterprise). Trial keys may discover, lint, validate, and simulate. Runtime tools (`start_workflow`, `publish_event`, `complete_task`, publish/activate) return `MCP-PLAN-REQUIRED` until a platform Admin sets the tenant plan to Managed/Enterprise with `BillingStatus=Active`. See [Chapter 18](18-commercial-and-mcp-entitlements.md).
+>
+> **Sandbox mode:** Setting `MCP_API_KEY=disabled` (or leaving `MCP_API_KEY` unconfigured in Development) bypasses the `X-MCP-API-Key` header requirement and billing enforcement for local evaluation. Every authenticated request still requires a valid `x-tenant-id` when keys are enabled.
 
 Smoke test (Sandbox Mode):
 
@@ -308,6 +309,8 @@ MCP governance tools (`create`/`update`/`validate`/`fork`/`list_public`) now go 
 ### Reuse a published template through context bindings
 
 The seven binding governance tools are `create_context_binding`, `update_context_binding`, `validate_context_binding`, `activate_context_binding`, `archive_context_binding`, `list_context_bindings`, and `get_context_binding`. `simulate_context_binding` is a separate read-only analysis tool for saved draft and exact active revisions. After activation, call the existing `start_workflow` with `contextBindingId` or `contextType`; no duplicate start-by-context tool exists. Activation and archival require `confirmHumanApproval: true`. Full mapping and simulation examples are in [Chapter 17](17-workflow-context-bindings.md).
+
+Agents should load MCP prompt `design_dual_kernel_workflow` or resource `flowos://guides/dual-kernel-design` before authoring Decision steps. Workflow `currentStep` and state-machine `currentState` move independently. A Decision `Default`/`true` auto-route does not consume a business event; include that event in `simulate_workflowclass` / `simulate_context_binding` so FlowOS can apply it as state-only catch-up. Context bindings never create tenant roles.
 
 ### 5. Fork a public template instead of starting from scratch
 

@@ -58,7 +58,17 @@ public class WorkflowEngine : IWorkflowEngine
         // 2. Check for Transition match (Workflow)
         if (!currentStep.NextSteps.TryGetValue(domainEvent.EventType, out var nextStepId))
         {
-            // Event does not trigger a transition from this step
+            if (TrySynchronizeStateOnly(
+                    instance,
+                    domainEvent,
+                    context,
+                    stateMachineDefinition,
+                    currentEntityState,
+                    out var synchronized))
+            {
+                return synchronized;
+            }
+
             return WorkflowAdvanceResult.Failed($"No transition defined for event '{domainEvent.EventType}' from step '{currentStep.StepId}'.");
         }
 
@@ -334,5 +344,48 @@ public class WorkflowEngine : IWorkflowEngine
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// When a Decision/Default command already auto-advanced the workflow past the step that
+    /// would have consumed an event, still apply that event to the state machine so the two
+    /// kernels cannot diverge (e.g. ApproveQuote auto-routes while QUOTE_APPROVED is required
+    /// to leave Assigned).
+    /// </summary>
+    private bool TrySynchronizeStateOnly(
+        WorkflowInstance instance,
+        IEvent domainEvent,
+        FlowOS.StateMachines.Models.ExecutionContext context,
+        StateMachineDefinition? stateMachineDefinition,
+        string? currentEntityState,
+        out WorkflowAdvanceResult result)
+    {
+        result = WorkflowAdvanceResult.Failed("State-only synchronization is not applicable.");
+        if (stateMachineDefinition == null || string.IsNullOrWhiteSpace(currentEntityState))
+            return false;
+
+        var smResult = _stateMachineEngine.ValidateTransition(
+            stateMachineDefinition,
+            currentEntityState,
+            domainEvent,
+            context);
+
+        if (smResult.ResultType == TransitionResultType.Allowed && smResult.MatchedTransition != null)
+        {
+            instance.SetCurrentState(smResult.MatchedTransition.ToState);
+            result = WorkflowAdvanceResult.StateSynchronized(
+                instance.CurrentStepId,
+                domainEvent.EventType,
+                smResult.MatchedTransition.ToState);
+            return true;
+        }
+
+        if (smResult.ResultType == TransitionResultType.Denied)
+        {
+            result = WorkflowAdvanceResult.Failed($"State Machine violation: {smResult.Reason}");
+            return true;
+        }
+
+        return false;
     }
 }

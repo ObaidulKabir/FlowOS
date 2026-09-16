@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AuthSession, RegisterTenantUserRequest } from '../types';
-import { api, setAuthSession } from '../api/client';
+import { api, applyTenantEntitlement, setAuthSession } from '../api/client';
 import { 
   Building2, Shield, Mail, Lock, User, Key, ArrowRight, 
   Sparkles, CheckCircle2, AlertCircle, X, RefreshCw, Eye, EyeOff
@@ -120,7 +120,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       if (res.user && res.token) {
-        const session: AuthSession = {
+        const session = applyTenantEntitlement({
           role: 'Tenant',
           tenantId: res.user.tenantId,
           tenantName: res.user.tenantName,
@@ -129,7 +129,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           email: res.user.email,
           isSandbox: false,
           isEmailVerified: res.user.isEmailVerified
-        };
+        }, res.user);
         setAuthSession(session);
         onSuccess(session);
         onClose();
@@ -282,7 +282,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
 
       if (loginRes.ok && loginRes.user && loginRes.token) {
-        const session: AuthSession = {
+        const session = applyTenantEntitlement({
           role: 'Tenant',
           tenantId: loginRes.user.tenantId,
           tenantName: loginRes.user.tenantName,
@@ -291,7 +291,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           email: loginRes.user.email,
           isSandbox: false,
           isEmailVerified: true
-        };
+        }, loginRes.user);
         setAuthSession(session);
         setTimeout(() => {
           onSuccess(session);
@@ -319,7 +319,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       tenantName: 'Platform Administrator',
       username: adminUsername || 'admin@flowos.internal',
       isSandbox: false,
-      isEmailVerified: true
+      isEmailVerified: true,
+      plan: 'Enterprise',
+      billingStatus: 'Active',
+      canRunRuntime: true
     };
     setAuthSession(session);
     onSuccess(session);

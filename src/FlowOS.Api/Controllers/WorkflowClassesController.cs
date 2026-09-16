@@ -7,6 +7,7 @@ using FlowOS.Application.Handlers.Governance;
 using FlowOS.Application.Queries.Governance;
 using FlowOS.Core.Interfaces;
 using FlowOS.Domain.Enums;
+using FlowOS.API.Filters;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -81,6 +82,7 @@ public class WorkflowClassesController : ControllerBase
     }
 
     [HttpPost("{id}/publish")]
+    [RequireRuntimePlan]
     public async Task<IActionResult> Publish(Guid id)
     {
         try
@@ -178,6 +180,7 @@ public class WorkflowClassesController : ControllerBase
 
     [HttpPost("{id}/approve")]
     [Authorize(Roles = "Admin,SuperAdmin")]
+    [RequireRuntimePlan]
     public async Task<IActionResult> ApproveAsPublic(Guid id)
         => await Mutate(new ApproveWorkflowClassCommand(_currentUser.TenantId, id));
 

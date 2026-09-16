@@ -25,13 +25,14 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 15 | [Known Limitations & Gaps](15-known-limitations-and-gaps.md) | Honest list of enforcement gaps proven by regression tests |
 | 16 | [Sample Applications](16-sample-applications.md) | ExpenseApp, the Tenant Dashboard, and the Node.js demo client |
 | 17 | [Workflow Context Bindings](17-workflow-context-bindings.md) | Reuse and simulate one process template across tenant business contexts |
+| 18 | [Commercial Policy & MCP Entitlements](18-commercial-and-mcp-entitlements.md) | Subscription plans, trial vs paid runtime, and how MCP is included |
 
 ## Reading paths
 
 * **"I want to run it and try the API"** → Start with [Getting Started](01-getting-started.md), then [API Reference](14-api-reference.md).
 * **"I want to design a business process"** → [Core Concepts](02-core-concepts.md) → [State Machines](03-state-machines.md) → [Events](04-events-and-registry.md) → [Workflows](05-workflows-and-versioning.md) → [WorkflowClass Governance](09-workflow-class-governance.md).
 * **"I'm building a client application"** → [Human Tasks & Decisions](06-human-tasks-and-decisions.md) → [Notifications](10-notifications.md) → [Anti-Patterns](12-anti-patterns.md) → [Sample Applications](16-sample-applications.md).
-* **"I'm integrating an AI agent"** → [AI Agents & Insights](07-ai-agents-and-insights.md) → [MCP & AI Agent Automation](13-mcp-and-ai-agent-integration.md).
+* **"I am integrating an AI agent"** → [AI Agents & Insights](07-ai-agents-and-insights.md) → [MCP & AI Agent Automation](13-mcp-and-ai-agent-integration.md) → [Commercial Policy](18-commercial-and-mcp-entitlements.md).
 * **"I want one workflow template for many business domains"** → [WorkflowClass Governance](09-workflow-class-governance.md) → [Workflow Context Bindings](17-workflow-context-bindings.md).
 * **"I need to know exactly what is and isn't enforced today"** → [Known Limitations & Gaps](15-known-limitations-and-gaps.md).
 

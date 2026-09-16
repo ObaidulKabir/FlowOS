@@ -531,13 +531,24 @@ public partial class Program
         catch { return null; }
     }
 
-    private static int ResponseStatusCode(object? response) =>
-        response is FlowOS.MCP.Models.JsonRpcResponse
+    private static int ResponseStatusCode(object? response)
+    {
+        if (response is FlowOS.MCP.Models.JsonRpcResponse rpc)
         {
-            Error.Code: -32700 or -32600
+            if (rpc.Error?.Code is -32700 or -32600)
+                return StatusCodes.Status400BadRequest;
+
+            if (rpc.Result is FlowOS.MCP.Models.CallToolResult { IsError: true } tool &&
+                tool.Content.Any(c => c.Text.Contains(
+                    FlowOS.Application.Common.Interfaces.TenantEntitlementPolicy.PlanRequiredCode,
+                    StringComparison.Ordinal)))
+            {
+                return StatusCodes.Status402PaymentRequired;
+            }
         }
-            ? StatusCodes.Status400BadRequest
-            : StatusCodes.Status200OK;
+
+        return StatusCodes.Status200OK;
+    }
 
     private static IResult JsonRpcHttpError(int statusCode, int code, string message) =>
         Results.Json(new FlowOS.MCP.Models.JsonRpcResponse

@@ -1,9 +1,12 @@
 using FlowOS.Application.Commands.Admin;
 using FlowOS.Application.Queries.Admin;
 using FlowOS.Core.Interfaces;
+using FlowOS.Domain.Enums;
+using FlowOS.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace FlowOS.API.Controllers;
 
@@ -14,11 +17,13 @@ public class AdminController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
+    private readonly FlowOSDbContext _db;
 
-    public AdminController(IMediator mediator, ICurrentUser currentUser)
+    public AdminController(IMediator mediator, ICurrentUser currentUser, FlowOSDbContext db)
     {
         _mediator = mediator;
         _currentUser = currentUser;
+        _db = db;
     }
 
     [HttpPost("config/publish")]
@@ -81,4 +86,41 @@ public class AdminController : ControllerBase
         var result = await _mediator.Send(new GetAdminEventsQuery { TenantId = _currentUser.TenantId });
         return Ok(result);
     }
+
+    [HttpPost("tenants/{id:guid}/plan")]
+    public async Task<IActionResult> SetTenantPlan(Guid id, [FromBody] SetTenantPlanRequest request)
+    {
+        if (!Enum.TryParse<TenantPlan>(request.Plan, ignoreCase: true, out var plan) ||
+            plan is TenantPlan.None or TenantPlan.Trial)
+        {
+            return BadRequest("Plan must be Managed or Enterprise.");
+        }
+
+        if (!Enum.TryParse<TenantBillingStatus>(request.BillingStatus, ignoreCase: true, out var billingStatus))
+        {
+            return BadRequest("BillingStatus must be Unpaid, Active, PastDue, or Canceled.");
+        }
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.TenantId == id);
+        if (tenant == null)
+            return NotFound();
+
+        tenant.AssignPlan(plan, billingStatus);
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            tenantId = tenant.TenantId,
+            name = tenant.Name,
+            plan = tenant.Plan.ToString(),
+            billingStatus = tenant.BillingStatus.ToString(),
+            canRunRuntime = tenant.CanRunRuntime
+        });
+    }
+}
+
+public sealed class SetTenantPlanRequest
+{
+    public string Plan { get; set; } = "Managed";
+    public string BillingStatus { get; set; } = "Active";
 }

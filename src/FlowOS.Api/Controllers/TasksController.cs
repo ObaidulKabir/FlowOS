@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using FlowOS.Application.Commands;
 using FlowOS.Core.Interfaces;
 using FlowOS.Application.Queries;
+using FlowOS.API.Filters;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost("{id}/complete")]
+    [RequireRuntimePlan]
     public async Task<IActionResult> CompleteTask(Guid id)
     {
         var tenantId = _currentUser.TenantId;

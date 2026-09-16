@@ -89,6 +89,9 @@ public class TenantAuthTests : IDisposable
         var tenant = await _context.Tenants.FindAsync(result.TenantId);
         Assert.NotNull(tenant);
         Assert.Equal(TenantStatus.PendingVerification, tenant.Status);
+        Assert.Equal(TenantPlan.Trial, tenant.Plan);
+        Assert.Equal(TenantBillingStatus.Unpaid, tenant.BillingStatus);
+        Assert.False(tenant.CanRunRuntime);
 
         var user = await _context.TenantUsers.FirstOrDefaultAsync(u => u.Email == "admin@techcorp.com");
         Assert.NotNull(user);

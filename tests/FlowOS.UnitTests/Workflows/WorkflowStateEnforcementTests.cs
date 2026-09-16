@@ -99,6 +99,92 @@ public class WorkflowStateEnforcementTests
         Assert.Equal("Review", wfInstance.CurrentStepId);
     }
 
+    [Fact]
+    public void Advance_DecisionAutoRoute_ThenAppliesQueuedStateEventWithoutWorkflowEdge()
+    {
+        var wfDef = new WorkflowDefinition(_tenantId, "ServiceRepair", 1, "IntakeRequest");
+        wfDef.AddStep(new WorkflowStepDefinition("IntakeRequest", WorkflowStepType.HumanTask)
+        {
+            NextSteps = { { "JOB_REQUESTED", "ApproveQuote" } }
+        });
+        wfDef.AddStep(new WorkflowStepDefinition("ApproveQuote", WorkflowStepType.Decision)
+        {
+            Conditions = { { "Default", "MaterialDecision" } }
+        });
+        wfDef.AddStep(new WorkflowStepDefinition("MaterialDecision", WorkflowStepType.HumanTask)
+        {
+            NextSteps = { { "MATERIALS_REQUIRED", "CloseJob" } }
+        });
+        wfDef.AddStep(new WorkflowStepDefinition("CloseJob", WorkflowStepType.Command)
+        {
+            NextSteps = { { "Default", "END" } }
+        });
+        wfDef.Publish();
+
+        var smDef = new StateMachineDefinition(_tenantId, "ServiceRepairJob", "Requested");
+        smDef.AddState("Assigned");
+        smDef.AddState("Quoted");
+        smDef.AddState("RepairInProgress");
+        smDef.AddTransition(new StateTransition("Requested", "Assigned", "JOB_REQUESTED"));
+        smDef.AddTransition(new StateTransition("Assigned", "Quoted", "QUOTE_APPROVED"));
+        smDef.AddTransition(new StateTransition("Quoted", "RepairInProgress", "MATERIALS_REQUIRED"));
+
+        var instance = new WorkflowInstance(_tenantId, wfDef.Id, Guid.NewGuid(), 1, "IntakeRequest", initialState: "Requested");
+        var context = new FlowOS.StateMachines.Models.ExecutionContext();
+
+        var requested = _engine.Advance(instance, wfDef, new TestDomainEvent(_tenantId, "JOB_REQUESTED"), context, smDef, "Requested");
+        Assert.True(requested.Success);
+        Assert.Equal("MaterialDecision", instance.CurrentStepId);
+        Assert.Equal("Assigned", instance.CurrentState);
+
+        var quoted = _engine.Advance(instance, wfDef, new TestDomainEvent(_tenantId, "QUOTE_APPROVED"), context, smDef, instance.CurrentState);
+        Assert.True(quoted.Success);
+        Assert.Equal("MaterialDecision", instance.CurrentStepId);
+        Assert.Equal("Quoted", instance.CurrentState);
+        Assert.Contains("state-only event 'QUOTE_APPROVED'", quoted.Message);
+
+        var materials = _engine.Advance(instance, wfDef, new TestDomainEvent(_tenantId, "MATERIALS_REQUIRED"), context, smDef, instance.CurrentState);
+        Assert.True(materials.Success);
+        Assert.Equal("CloseJob", instance.CurrentStepId);
+        Assert.Equal("RepairInProgress", instance.CurrentState);
+    }
+
+    [Fact]
+    public void Advance_MaterialsRequiredWhileStillAssigned_IsDeniedByStateMachine()
+    {
+        var wfDef = new WorkflowDefinition(_tenantId, "ServiceRepair", 1, "MaterialDecision");
+        wfDef.AddStep(new WorkflowStepDefinition("MaterialDecision", WorkflowStepType.HumanTask)
+        {
+            NextSteps = { { "MATERIALS_REQUIRED", "CloseJob" } }
+        });
+        wfDef.AddStep(new WorkflowStepDefinition("CloseJob", WorkflowStepType.Command)
+        {
+            NextSteps = { { "Default", "END" } }
+        });
+        wfDef.Publish();
+
+        var smDef = new StateMachineDefinition(_tenantId, "ServiceRepairJob", "Requested");
+        smDef.AddState("Assigned");
+        smDef.AddState("Quoted");
+        smDef.AddState("RepairInProgress");
+        smDef.AddTransition(new StateTransition("Assigned", "Quoted", "QUOTE_APPROVED"));
+        smDef.AddTransition(new StateTransition("Quoted", "RepairInProgress", "MATERIALS_REQUIRED"));
+
+        var instance = new WorkflowInstance(_tenantId, wfDef.Id, Guid.NewGuid(), 1, "MaterialDecision", initialState: "Assigned");
+        var result = _engine.Advance(
+            instance,
+            wfDef,
+            new TestDomainEvent(_tenantId, "MATERIALS_REQUIRED"),
+            new FlowOS.StateMachines.Models.ExecutionContext(),
+            smDef,
+            "Assigned");
+
+        Assert.False(result.Success);
+        Assert.Contains("State Machine violation", result.Message);
+        Assert.Equal("MaterialDecision", instance.CurrentStepId);
+        Assert.Equal("Assigned", instance.CurrentState);
+    }
+
     public class TestDomainEvent : DomainEvent
     {
         public override string EventType { get; }

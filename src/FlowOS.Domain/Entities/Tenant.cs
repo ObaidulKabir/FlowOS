@@ -8,11 +8,17 @@ public class Tenant
     public Guid TenantId { get; private set; }
     public string Name { get; private set; }
     public TenantStatus Status { get; private set; }
+    public TenantPlan Plan { get; private set; }
+    public TenantBillingStatus BillingStatus { get; private set; }
     public string ConfigurationJson { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
     public string? WebhookSigningSecret { get; private set; }
+
+    public bool CanRunRuntime =>
+        (Plan == TenantPlan.Managed || Plan == TenantPlan.Enterprise) &&
+        BillingStatus == TenantBillingStatus.Active;
 
     // Constructor for EF Core
     protected Tenant() 
@@ -34,6 +40,8 @@ public class Tenant
         TenantId = Guid.NewGuid();
         Name = name;
         Status = initialStatus;
+        Plan = TenantPlan.Trial;
+        BillingStatus = TenantBillingStatus.Unpaid;
         ConfigurationJson = configurationJson;
         CreatedAt = DateTime.UtcNow;
 
@@ -83,6 +91,16 @@ public class Tenant
     public void MarkPendingVerification()
     {
         Status = TenantStatus.PendingVerification;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void AssignPlan(TenantPlan plan, TenantBillingStatus billingStatus)
+    {
+        if (plan == TenantPlan.None)
+            throw new ArgumentOutOfRangeException(nameof(plan), "A commercial plan is required.");
+
+        Plan = plan;
+        BillingStatus = billingStatus;
         UpdatedAt = DateTime.UtcNow;
     }
 }

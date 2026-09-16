@@ -114,7 +114,7 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
               Global Platform Administration
             </h1>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-              Cluster-wide control plane: manage multi-tenancy, approve tenant workflow submissions for the public catalog, and audit security telemetry.
+              Cluster-wide control plane: manage multi-tenancy, activate Managed/Enterprise plans, approve tenant workflow submissions for the public catalog, and audit security telemetry.
             </p>
           </div>
 

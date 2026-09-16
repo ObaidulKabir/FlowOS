@@ -77,6 +77,11 @@ public sealed class DispatcherTests
         Assert.Contains("/mcp/", initResult["instructions"]!.ToString());
         Assert.Contains("Never strip a trailing slash", initResult["instructions"]!.ToString());
         Assert.Contains("Never follow HTTP 301/302 for POST", initResult["instructions"]!.ToString());
+        Assert.Contains("MCP-PLAN-REQUIRED", initResult["instructions"]!.ToString());
+        Assert.Contains("Managed Cloud", initResult["instructions"]!.ToString());
+        Assert.Contains("design_dual_kernel_workflow", initResult["instructions"]!.ToString());
+        Assert.Contains("flowos://guides/dual-kernel-design", initResult["instructions"]!.ToString());
+        Assert.Contains("state-only catch-up", initResult["instructions"]!.ToString());
         Assert.NotNull(initResult["capabilities"]?["prompts"]);
         Assert.NotNull(initResult["capabilities"]?["resources"]);
 
@@ -89,6 +94,13 @@ public sealed class DispatcherTests
         var promptGetResult = JObject.FromObject(((JsonRpcResponse)promptGet.Response!).Result!);
         Assert.NotNull(promptGetResult["messages"]);
 
+        var dualPrompt = await dispatcher.DispatchAsync(Request(31, "prompts/get", new { name = "design_dual_kernel_workflow", arguments = new { domain = "ServiceRepair" } }));
+        var dualPromptResult = JObject.FromObject(((JsonRpcResponse)dualPrompt.Response!).Result!);
+        var dualText = dualPromptResult["messages"]![0]!["content"]!["text"]!.ToString();
+        Assert.Contains("QUOTE_APPROVED", dualText);
+        Assert.Contains("simulate_context_binding", dualText);
+        Assert.Contains("ServiceRepair", dualText);
+
         // 3. Resources list & read
         var resourcesList = await dispatcher.DispatchAsync(Request(4, "resources/list"));
         var resourcesResult = JObject.FromObject(((JsonRpcResponse)resourcesList.Response!).Result!);
@@ -97,6 +109,12 @@ public sealed class DispatcherTests
         var resourceRead = await dispatcher.DispatchAsync(Request(5, "resources/read", new { uri = "flowos://guides/lifecycle" }));
         var resourceReadResult = JObject.FromObject(((JsonRpcResponse)resourceRead.Response!).Result!);
         Assert.NotNull(resourceReadResult["contents"]);
+
+        var dualKernelRead = await dispatcher.DispatchAsync(Request(6, "resources/read", new { uri = "flowos://guides/dual-kernel-design" }));
+        var dualKernelResult = JObject.FromObject(((JsonRpcResponse)dualKernelRead.Response!).Result!);
+        var dualKernelText = dualKernelResult["contents"]![0]!["text"]!.ToString();
+        Assert.Contains("state-only", dualKernelText);
+        Assert.Contains("QUOTE_APPROVED", dualKernelText);
     }
 
     [Fact]

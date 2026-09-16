@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using MediatR;
 using FlowOS.Application.Commands;
 using FlowOS.Core.Interfaces;
+using FlowOS.API.Filters;
 
 namespace FlowOS.API.Controllers;
 
@@ -25,6 +26,7 @@ public class EventsController : ControllerBase
     }
 
     [HttpPost("publish")]
+    [RequireRuntimePlan]
     public async Task<IActionResult> PublishEvent([FromBody] PublishEventCommand command)
     {
         if (_currentUser.TenantId == Guid.Empty)
