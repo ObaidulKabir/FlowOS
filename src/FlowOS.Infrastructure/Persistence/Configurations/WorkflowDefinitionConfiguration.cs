@@ -78,6 +78,12 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                     s => JsonSerializer.Deserialize<Dictionary<string, string>>(s, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
                 );
 
+            step.Property(s => s.PathLimits)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => DeserializePathLimits(s)
+                );
+
             // Map Conditions dictionary
             step.Property(s => s.Conditions)
                 .HasConversion(
@@ -132,5 +138,14 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
         // Unique Constraint for Versioning
         builder.HasIndex(w => new { w.TenantId, w.Name, w.Version })
             .IsUnique();
+    }
+
+    private static Dictionary<string, PathTravelLimit> DeserializePathLimits(string? json)
+    {
+        var parsed = string.IsNullOrEmpty(json)
+            ? new Dictionary<string, PathTravelLimit>()
+            : JsonSerializer.Deserialize<Dictionary<string, PathTravelLimit>>(json, (JsonSerializerOptions)null)
+              ?? new Dictionary<string, PathTravelLimit>();
+        return new Dictionary<string, PathTravelLimit>(parsed, StringComparer.OrdinalIgnoreCase);
     }
 }
