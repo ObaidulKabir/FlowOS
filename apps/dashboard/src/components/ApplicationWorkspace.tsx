@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Brain, CheckCircle, FileText, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
+import { Archive, Brain, CheckCircle, FileText, Link2, Play, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import { WorkflowClass, WorkflowClassStatus, WorkflowInstance } from '../types';
 import { ContextBindingsView } from './ContextBindingsView';
 import { AiContextView } from './AiContextView';
@@ -20,6 +20,7 @@ interface Props {
   onNewVersion: (id: string) => Promise<void>;
   onSimulate: (bindingId: string, revision: 'draft' | 'active') => void;
   onLaunch: () => void;
+  onOpenSimulator?: () => void;
 }
 
 const pick = (obj: any, ...keys: string[]) => {
@@ -60,7 +61,8 @@ export const ApplicationWorkspace: React.FC<Props> = ({
   onAbandon,
   onNewVersion,
   onSimulate,
-  onLaunch
+  onLaunch,
+  onOpenSimulator
 }) => {
   const [selectedId, setSelectedId] = useState<string>();
   const [listFilter, setListFilter] = useState<'All' | 'Published' | 'Drafts' | 'Shared'>('All');
@@ -118,8 +120,13 @@ export const ApplicationWorkspace: React.FC<Props> = ({
             <button onClick={onCreate} className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5">
               <Plus size={14} /> New workflow
             </button>
-            <button onClick={onLaunch} className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20">
-              <Sparkles size={14} /> Launch Demo Workflow
+            {onOpenSimulator && (
+              <button onClick={onOpenSimulator} className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20">
+                <Sparkles size={14} /> Visual Demo Simulator
+              </button>
+            )}
+            <button onClick={onLaunch} className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+              <Play size={14} /> Launch Instance
             </button>
           </div>
         </div>
@@ -178,9 +185,13 @@ export const ApplicationWorkspace: React.FC<Props> = ({
           {!selected ? (
             <div className="text-sm text-slate-400 border border-dashed border-slate-700 rounded-2xl p-10 text-center">
               Create or select a workflow to bind Business Context and AI Context.<br />
-              <button onClick={onLaunch} className="mt-4 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 inline-flex items-center gap-2 transition-all">
-                <Sparkles size={16} /> Try a Demo Workflow
+              <button
+                onClick={onOpenSimulator || onLaunch}
+                className="mt-4 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 inline-flex items-center gap-2 transition-all"
+              >
+                <Sparkles size={16} /> Try Visual Demo Simulator
               </button>
+              <p className="mt-2 text-[11px] text-slate-500">In-memory graph walk — no live instance is created.</p>
             </div>
           ) : (
             <>

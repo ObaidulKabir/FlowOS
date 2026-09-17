@@ -9,7 +9,7 @@ import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
-import { ContextSimulationStudio } from './ContextSimulationStudio';
+import { DemoVisualSimulator } from './DemoVisualSimulator';
 import { 
   Building2, Plus, RefreshCw, Key, Activity, 
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical
@@ -228,11 +228,21 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => setShowStartModal(true)}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all animate-pulse hover:animate-none border border-emerald-400/30"
+              onClick={() => {
+                setSimulationTarget({});
+                setActiveTab('Simulator');
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all hover:animate-none border border-emerald-400/30"
             >
-              <Sparkles size={14} className="text-emerald-200" />
-              <span>Launch Demo Workflow</span>
+              <FlaskConical size={14} className="text-emerald-200" />
+              <span>Visual Demo Simulator</span>
+            </button>
+            <button
+              onClick={() => setShowStartModal(true)}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-semibold rounded-xl text-xs flex items-center gap-2 transition-all"
+            >
+              <Sparkles size={14} className="text-emerald-300" />
+              <span>Launch Live Instance</span>
             </button>
             <button
               onClick={() => setIsCreatingBlueprint(true)}
@@ -332,7 +342,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               }`}
             >
               <FlaskConical size={15} />
-              <span>🧪 Try Demo Simulator</span>
+              <span>🧪 Visual Demo Simulator</span>
             </button>
             <button
               onClick={() => setActiveTab('Capabilities')}
@@ -422,6 +432,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                 setActiveTab('Simulator');
               }}
               onLaunch={() => setShowStartModal(true)}
+              onOpenSimulator={() => {
+                setSimulationTarget({});
+                setActiveTab('Simulator');
+              }}
             />
           )}
 
@@ -434,10 +448,11 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           )}
 
           {activeTab === 'Simulator' && (
-            <ContextSimulationStudio
-              role="Tenant"
+            <DemoVisualSimulator
+              blueprints={blueprints}
               initialBindingId={simulationTarget.bindingId}
               initialRevision={simulationTarget.revision}
+              preferContextMode={Boolean(simulationTarget.bindingId)}
             />
           )}
         </div>
