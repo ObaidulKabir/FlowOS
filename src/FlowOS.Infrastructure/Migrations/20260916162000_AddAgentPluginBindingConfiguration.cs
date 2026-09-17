@@ -1,18 +1,20 @@
+using FlowOS.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace FlowOS.Infrastructure.Migrations;
 
+[DbContext(typeof(FlowOSDbContext))]
+[Migration("20260916162000_AddAgentPluginBindingConfiguration")]
 public partial class AddAgentPluginBindingConfiguration : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.AddColumn<string>(
-            name: "ConfigurationJson",
-            table: "PluginBindings",
-            type: "jsonb",
-            nullable: true);
+        migrationBuilder.Sql("""
+            ALTER TABLE "PluginBindings" ADD COLUMN IF NOT EXISTS "ConfigurationJson" jsonb;
+            """);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

@@ -205,7 +205,12 @@ using (var scope = app.Services.CreateScope())
         {
             if (context.Database.IsRelational())
             {
-                logger.LogInformation("Attempting database migration (attempt {Retry}/{Max})...", retry, maxRetries);
+                var pending = context.Database.GetPendingMigrations().ToList();
+                logger.LogInformation(
+                    "Attempting database migration (attempt {Retry}/{Max}). Pending: {Pending}",
+                    retry,
+                    maxRetries,
+                    pending.Count == 0 ? "none" : string.Join(", ", pending));
                 context.Database.Migrate();
             }
             else

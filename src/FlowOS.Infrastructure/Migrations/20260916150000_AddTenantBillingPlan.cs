@@ -1,4 +1,5 @@
-using System;
+using FlowOS.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,26 +7,19 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FlowOS.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(FlowOSDbContext))]
+    [Migration("20260916150000_AddTenantBillingPlan")]
     public partial class AddTenantBillingPlan : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "BillingStatus",
-                table: "Tenants",
-                type: "character varying(32)",
-                maxLength: 32,
-                nullable: false,
-                defaultValue: "Active");
-
-            migrationBuilder.AddColumn<string>(
-                name: "Plan",
-                table: "Tenants",
-                type: "character varying(32)",
-                maxLength: 32,
-                nullable: false,
-                defaultValue: "Managed");
+            // Idempotent: production already had Tenants rows, and a previous
+            // handwritten copy of this migration was not discovered by EF.
+            migrationBuilder.Sql("""
+                ALTER TABLE "Tenants" ADD COLUMN IF NOT EXISTS "BillingStatus" character varying(32) NOT NULL DEFAULT 'Active';
+                ALTER TABLE "Tenants" ADD COLUMN IF NOT EXISTS "Plan" character varying(32) NOT NULL DEFAULT 'Managed';
+                """);
         }
 
         /// <inheritdoc />

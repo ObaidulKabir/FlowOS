@@ -1,5 +1,8 @@
+using System.Reflection;
 using FlowOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 
 namespace FlowOS.UnitTests.Infrastructure;
@@ -41,6 +44,31 @@ public class FlowOsDatabaseTests
 
         Assert.True(FlowOsDatabase.IsInMemory(options));
         Assert.False(FlowOsDatabase.IsNpgsql(options));
+    }
+
+    [Fact]
+    public void Every_ef_migration_class_is_discoverable()
+    {
+        var types = typeof(FlowOSDbContext).Assembly.GetTypes()
+            .Where(t => typeof(Migration).IsAssignableFrom(t) && !t.IsAbstract)
+            .ToList();
+
+        Assert.NotEmpty(types);
+        foreach (var type in types)
+        {
+            var id = type.GetCustomAttribute<MigrationAttribute>()?.Id;
+            var contextType = type.GetCustomAttribute<DbContextAttribute>()?.ContextType;
+            Assert.False(string.IsNullOrWhiteSpace(id), $"{type.Name} is missing [Migration] and will not run in production.");
+            Assert.Equal(typeof(FlowOSDbContext), contextType);
+        }
+
+        var ids = types
+            .Select(t => t.GetCustomAttribute<MigrationAttribute>()!.Id)
+            .ToList();
+
+        Assert.Contains("20260916150000_AddTenantBillingPlan", ids);
+        Assert.Contains("20260916162000_AddAgentPluginBindingConfiguration", ids);
+        Assert.Equal(ids.Distinct().Count(), ids.Count);
     }
 
     [Theory]
