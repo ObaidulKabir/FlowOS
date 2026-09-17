@@ -306,8 +306,9 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
               <Terminal size={13} className="text-blue-400" /> cURL / HTTP
             </div>
             <pre className="text-slate-300 overflow-x-auto text-[11px] leading-relaxed">
-{`curl -X POST https://flowos.internal/api/events/publish \\
+{`curl -X POST ${(typeof window !== 'undefined' ? window.location.origin : 'https://flowosbd.com')}/api/events/publish \\
   -H "X-API-Key: YOUR_API_KEY" \\
+  -H "x-tenant-id: ${tenantId}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "workflowInstanceId": "UUID",

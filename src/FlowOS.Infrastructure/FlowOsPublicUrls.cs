@@ -32,7 +32,13 @@ public static class FlowOsPublicUrls
         var scheme = FirstHeaderValue(forwardedProto) ?? requestScheme ?? "https";
         var hostHeader = FirstHeaderValue(forwardedHost) ?? requestHost;
         if (string.IsNullOrWhiteSpace(hostHeader))
+        {
+            var env = configuration["ASPNETCORE_ENVIRONMENT"];
+            if (string.Equals(env, "Production", StringComparison.OrdinalIgnoreCase))
+                return ProductionOrigin;
+
             return StagingOrigin;
+        }
 
         return $"{scheme}://{hostHeader.Trim().TrimEnd('/')}";
     }

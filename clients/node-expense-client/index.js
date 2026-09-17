@@ -1,9 +1,9 @@
 const axios = require('axios');
 const readline = require('readline');
 
-const API_URL = 'http://localhost:5183/api';
-const TENANT_ID = '22222222-2222-2222-2222-222222222222';
-const MOCK_ROLE = 'Admin';
+const API_URL = process.env.FLOWOS_API_URL || (process.env.NODE_ENV === 'production' ? 'https://flowosbd.com/api' : 'http://localhost:5183/api');
+const TENANT_ID = process.env.FLOWOS_TENANT_ID || '22222222-2222-2222-2222-222222222222';
+const MOCK_ROLE = process.env.FLOWOS_MOCK_ROLE || 'Admin';
 
 const rl = readline.createInterface({
   input: process.stdin,

@@ -54,6 +54,20 @@ public class FlowOsPublicUrlsTests
         Assert.Equal("https://flowos.prospectbdltd.com/mcp", FlowOsPublicUrls.McpEndpoint(origin));
     }
 
+    [Fact]
+    public void Production_environment_defaults_to_production_origin_when_no_headers_present()
+    {
+        var config = NewConfig(new Dictionary<string, string?>
+        {
+            ["ASPNETCORE_ENVIRONMENT"] = "Production"
+        });
+
+        var origin = FlowOsPublicUrls.ResolveOrigin(config);
+
+        Assert.Equal("https://flowosbd.com", origin);
+        Assert.Equal("https://flowosbd.com/mcp/", FlowOsPublicUrls.McpEndpoint(origin));
+    }
+
     [Theory]
     [InlineData("/mcp")]
     [InlineData("/mcp/")]

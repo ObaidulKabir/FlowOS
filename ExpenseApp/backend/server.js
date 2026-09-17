@@ -32,8 +32,8 @@ db.serialize(() => {
 });
 
 // FlowOS Configuration
-const FLOWOS_API_URL = process.env.EXPENSE_APP_FLOWOS_API_URL || 'http://localhost:5005/api';
-const TENANT_ID = '22222222-2222-2222-2222-222222222222'; // Matches DataSeeder Demo Client
+const FLOWOS_API_URL = process.env.EXPENSE_APP_FLOWOS_API_URL || (process.env.NODE_ENV === 'production' ? 'https://flowosbd.com/api' : 'http://localhost:5005/api');
+const TENANT_ID = process.env.FLOWOS_TENANT_ID || '22222222-2222-2222-2222-222222222222'; // Matches DataSeeder Demo Client
 const DEFAULT_MOCK_ROLE = 'Admin';
 
 // Middleware to extract role from header

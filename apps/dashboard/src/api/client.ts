@@ -15,6 +15,7 @@ const API_BASE = '/api/workflow-classes';
 const AUTH_STORAGE_KEY = 'flowos_auth_session';
 
 export const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
+export const PLATFORM_TENANT_ID = '11111111-1111-1111-1111-111111111111';
 export const DEMO_API_KEY = 'flowos_prod_secret_key_32_chars_min';
 
 export const getDefaultSandboxSession = (): AuthSession => ({
@@ -35,17 +36,49 @@ const isDemoApiKey = (key?: string) =>
   key === 'local-development-key-change-me' ||
   key === 'YOUR_PRODUCTION_API_KEY';
 
-/** Playground and stale admin sessions often have no token/key; production rejects those as 401. */
+const isPlaygroundTenant = (tenantId?: string) =>
+  !tenantId || tenantId === DEMO_TENANT_ID || tenantId === PLATFORM_TENANT_ID;
+
+const tokenIsUnusable = (token?: string): boolean => {
+  if (!token) return true;
+  const parts = token.split('.');
+  if (parts.length !== 3) return true;
+  try {
+    const json = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(json);
+    return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+};
+
+const isPlaygroundSession = (session: AuthSession, apiKey?: string, tenantId?: string) =>
+  Boolean(
+    session.isSandbox ||
+    isDemoApiKey(apiKey) ||
+    isPlaygroundTenant(tenantId) ||
+    (session.role === 'Admin' && !apiKey)
+  );
+
+/** Playground/admin leftover JWTs skip the demo key and production then 401s GET /api/workflows. */
 export const withSessionCredentials = (session: AuthSession): AuthSession => {
-  const token = session.token?.trim() || undefined;
+  let token = session.token?.trim() || undefined;
   let apiKey = session.apiKey?.trim() || undefined;
   let tenantId = session.tenantId;
-  if (!token && !apiKey) {
-    apiKey = DEMO_API_KEY;
-    tenantId = DEMO_TENANT_ID;
-  } else if (isDemoApiKey(apiKey) && (!tenantId || tenantId === '11111111-1111-1111-1111-111111111111')) {
-    tenantId = DEMO_TENANT_ID;
+
+  if (token && tokenIsUnusable(token)) {
+    token = undefined;
   }
+
+  if (isPlaygroundSession(session, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
+    apiKey = apiKey || DEMO_API_KEY;
+    tenantId = DEMO_TENANT_ID;
+    token = undefined;
+  } else if (isDemoApiKey(apiKey)) {
+    tenantId = DEMO_TENANT_ID;
+    token = undefined;
+  }
+
   return { ...session, token, apiKey, tenantId };
 };
 
@@ -77,7 +110,21 @@ export const getStoredSession = (): AuthSession | null => {
 };
 
 export const getAuthSession = (): AuthSession => {
-  return withSessionCredentials(getStoredSession() || getDefaultSandboxSession());
+  const stored = getStoredSession();
+  const normalized = withSessionCredentials(stored || getDefaultSandboxSession());
+  if (
+    !stored ||
+    stored.apiKey !== normalized.apiKey ||
+    stored.token !== normalized.token ||
+    stored.tenantId !== normalized.tenantId
+  ) {
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(normalized));
+    } catch {
+      // Ignore quota / private-mode write failures; headers still use the repaired session.
+    }
+  }
+  return normalized;
 };
 
 export const setAuthSession = (session: AuthSession): AuthSession => {
@@ -114,15 +161,40 @@ export const getHeaders = (roleOverride?: 'Tenant' | 'Admin') => {
     'X-Mock-UserId': session.username || (role === 'Admin' ? 'superadmin' : 'tenant-user')
   };
 
-  if (session.token) {
+  if (session.apiKey) {
+    headers['X-API-Key'] = session.apiKey;
+  } else if (session.token) {
     headers['Authorization'] = `Bearer ${session.token}`;
   }
 
-  if (session.apiKey) {
-    headers['X-API-Key'] = session.apiKey;
+  return headers;
+};
+
+const authorizedFetch = async (
+  url: string,
+  init: RequestInit = {},
+  role?: 'Tenant' | 'Admin'
+): Promise<Response> => {
+  const merge = (headers: Record<string, string>) => ({
+    ...headers,
+    ...(init.headers as Record<string, string> | undefined)
+  });
+  let response = await fetch(url, { ...init, headers: merge(getHeaders(role)) });
+  if (response.status !== 401) return response;
+
+  const session = getAuthSession();
+  const alreadyDemo = isDemoApiKey(session.apiKey) && !session.token;
+  if (alreadyDemo || !isPlaygroundSession(session, session.apiKey, session.tenantId)) {
+    return response;
   }
 
-  return headers;
+  setAuthSession({
+    ...session,
+    token: undefined,
+    apiKey: DEMO_API_KEY,
+    tenantId: DEMO_TENANT_ID
+  });
+  return fetch(url, { ...init, headers: merge(getHeaders(role)) });
 };
 
 const handleResponse = async (response: Response, errorMessage: string) => {
@@ -149,7 +221,6 @@ const handleResponse = async (response: Response, errorMessage: string) => {
 
 export const api = {
   list: async (scope?: WorkflowClassScope, status?: WorkflowClassStatus, role?: 'Tenant' | 'Admin'): Promise<WorkflowClass[]> => {
-    const headers = getHeaders(role);
     const tenantId = getActiveTenantId();
     const params = new URLSearchParams();
     params.append('tenantId', tenantId);
@@ -162,7 +233,7 @@ export const api = {
       params.append('status', statusName);
     }
     
-    const response = await fetch(`${API_BASE}?${params.toString()}`, { headers });
+    const response = await authorizedFetch(`${API_BASE}?${params.toString()}`, {}, role);
     return handleResponse(response, 'Failed to list workflow classes');
   },
 
@@ -270,9 +341,8 @@ export const api = {
   },
 
   listInstances: async (role?: 'Tenant' | 'Admin'): Promise<WorkflowInstance[]> => {
-    const headers = getHeaders(role);
     const tenantId = getActiveTenantId();
-    const response = await fetch(`/api/workflows?tenantId=${tenantId}`, { headers });
+    const response = await authorizedFetch(`/api/workflows?tenantId=${tenantId}`, {}, role);
     return handleResponse(response, 'Failed to list workflow instances');
   },
 
@@ -308,8 +378,7 @@ export const api = {
   },
 
   listTenants: async (): Promise<TenantDto[]> => {
-    const headers = getHeaders('Admin');
-    const response = await fetch('/api/tenants', { headers });
+    const response = await authorizedFetch('/api/tenants', {}, 'Admin');
     return handleResponse(response, 'Failed to list tenants');
   },
 

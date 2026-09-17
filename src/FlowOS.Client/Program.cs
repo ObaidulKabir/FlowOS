@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 
 // Configuration
-var baseUrl = "http://localhost:5005";
+var baseUrl = Environment.GetEnvironmentVariable("FLOWOS_BASE_URL") ?? "http://localhost:5005";
 var tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 var workflowDefinitionId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
