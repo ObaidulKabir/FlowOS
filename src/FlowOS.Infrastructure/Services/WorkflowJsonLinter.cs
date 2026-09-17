@@ -242,6 +242,46 @@ namespace FlowOS.Infrastructure.Services
                         }
                     }
 
+                    var pathLimitsToken = step["pathLimits"] as JObject;
+                    if (pathLimitsToken != null)
+                    {
+                        var knownEdgeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        if (nextSteps != null)
+                        {
+                            foreach (var prop in nextSteps.Properties())
+                                knownEdgeKeys.Add(prop.Name);
+                        }
+
+                        var conditionsToken = step["conditions"] as JObject;
+                        if (conditionsToken != null)
+                        {
+                            foreach (var prop in conditionsToken.Properties())
+                                knownEdgeKeys.Add(prop.Name);
+                        }
+
+                        foreach (var limitProp in pathLimitsToken.Properties())
+                        {
+                            if (!knownEdgeKeys.Contains(limitProp.Name))
+                            {
+                                AddError(errors, limitProp, "WF-LOOP-003", $"pathLimits key '{limitProp.Name}' does not match a nextSteps or conditions edge", $"workflow.steps[{stepId}].pathLimits", "Workflow");
+                                continue;
+                            }
+
+                            var limitObj = limitProp.Value as JObject;
+                            var maxTravels = limitObj?["maxTravels"]?.Value<int?>();
+                            if (maxTravels is null or < 1 or > 100)
+                            {
+                                AddError(errors, limitProp.Value, "WF-LOOP-001", $"pathLimits['{limitProp.Name}'].maxTravels must be between 1 and 100", $"workflow.steps[{stepId}].pathLimits", "Workflow");
+                            }
+
+                            var onExceeded = limitObj?["onExceeded"]?.Value<string>();
+                            if (!string.IsNullOrWhiteSpace(onExceeded) && onExceeded != "END" && !stepIds.Contains(onExceeded))
+                            {
+                                AddError(errors, limitObj?["onExceeded"] ?? limitProp.Value, "WF-LOOP-002", $"pathLimits.onExceeded '{onExceeded}' does not exist", $"workflow.steps[{stepId}].pathLimits", "Workflow");
+                            }
+                        }
+                    }
+
                     // SLA Linting
                     var slaToken = step["sla"] as JObject;
                     if (slaToken != null)

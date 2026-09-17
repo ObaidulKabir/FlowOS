@@ -52,6 +52,15 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
                 v => string.IsNullOrEmpty(v) ? new System.Collections.Generic.List<string>() : System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new System.Collections.Generic.List<string>()
             );
 
+        builder.Property(w => w.PathTravelCounts)
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrEmpty(v)
+                    ? new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.Ordinal)
+                    : System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, int>>(v, (System.Text.Json.JsonSerializerOptions?)null)
+                      ?? new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.Ordinal)
+            );
+
         builder.HasIndex(w => w.TenantId);
         builder.HasIndex(w => w.CorrelationId);
         builder.HasIndex(w => w.WorkflowDefinitionId);

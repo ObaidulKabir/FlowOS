@@ -1115,6 +1115,10 @@ namespace FlowOS.Infrastructure.Migrations
                     b.Property<Guid?>("ParentWorkflowInstanceId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PathTravelCounts")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");

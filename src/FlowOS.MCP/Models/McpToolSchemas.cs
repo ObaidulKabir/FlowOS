@@ -320,6 +320,18 @@ public static class McpToolSchemas
                         "additionalProperties":false
                       },
                       "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
+                      "pathLimits":{
+                        "type":"object",
+                        "description":"Per-event travel caps for repeatable paths (retry-password, resubmit). Key matches a nextSteps or Decision conditions key. Cyclic edges without a declaration default to maxTravels=5.",
+                        "additionalProperties":{
+                          "type":"object",
+                          "properties":{
+                            "maxTravels":{"type":"integer","minimum":1,"maximum":100,"default":5,"description":"Maximum times this edge may be traveled, including the first pass."},
+                            "onExceeded":{"type":"string","description":"Step id or END taken when the cap is exceeded. If omitted, the engine fails closed."}
+                          },
+                          "additionalProperties":false
+                        }
+                      },
                       "requiredRoles":{"type":"array","items":{"type":"string"}},
                       "allowedRoles":{"type":"array","items":{"type":"string"}},
                       "actor":{"type":"string","enum":["Human","Agent","Either"],"default":"Human","description":"Who may act on a waiting step. Human is the default. Agent/Either host a DecisionPacket and may auto-commit only when autoCommit matches."},

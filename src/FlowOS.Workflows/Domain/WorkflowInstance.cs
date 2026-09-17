@@ -23,6 +23,12 @@ public class WorkflowInstance : IWorkflowInstance
     public List<string> ActiveStepIds { get; private set; } = new();
     public List<string> CompletedParallelStepIds { get; private set; } = new();
 
+    /// <summary>
+    /// Travel counts keyed by <c>fromStep|event|toStep</c> for repeatable paths.
+    /// Orchestration state only — not business data.
+    /// </summary>
+    public Dictionary<string, int> PathTravelCounts { get; private set; } = new(StringComparer.Ordinal);
+
     // Orchestration state only - not business data
 
     protected WorkflowInstance()
@@ -30,6 +36,7 @@ public class WorkflowInstance : IWorkflowInstance
         CurrentStepId = null!;
         ActiveStepIds = new List<string>();
         CompletedParallelStepIds = new List<string>();
+        PathTravelCounts = new Dictionary<string, int>(StringComparer.Ordinal);
     }
 
     public WorkflowInstance(
@@ -60,6 +67,7 @@ public class WorkflowInstance : IWorkflowInstance
         CreatedAt = DateTime.UtcNow;
         ActiveStepIds = new List<string> { initialStepId };
         CompletedParallelStepIds = new List<string>();
+        PathTravelCounts = new Dictionary<string, int>(StringComparer.Ordinal);
     }
 
     public DateTime CreatedAt { get; private set; }
@@ -124,6 +132,22 @@ public class WorkflowInstance : IWorkflowInstance
         CurrentState = state;
     }
 
+    public int GetPathTravelCount(string edgeKey)
+    {
+        return PathTravelCounts.TryGetValue(edgeKey, out var count) ? count : 0;
+    }
+
+    public int RecordPathTravel(string edgeKey)
+    {
+        if (string.IsNullOrWhiteSpace(edgeKey))
+            return 0;
+
+        PathTravelCounts.TryGetValue(edgeKey, out var count);
+        count++;
+        PathTravelCounts[edgeKey] = count;
+        return count;
+    }
+
     public void Complete()
     {
         Status = WorkflowInstanceStatus.Completed;
@@ -153,7 +177,8 @@ public class WorkflowInstance : IWorkflowInstance
             CreatedAt = CreatedAt,
             CompletedAt = CompletedAt,
             ActiveStepIds = new List<string>(ActiveStepIds),
-            CompletedParallelStepIds = new List<string>(CompletedParallelStepIds)
+            CompletedParallelStepIds = new List<string>(CompletedParallelStepIds),
+            PathTravelCounts = new Dictionary<string, int>(PathTravelCounts, StringComparer.Ordinal)
         };
 
         return copy;

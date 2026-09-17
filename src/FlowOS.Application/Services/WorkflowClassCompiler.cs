@@ -52,6 +52,7 @@ public static class WorkflowClassCompiler
                     },
                 AllowedRoles = stepBp.RequiredRoles,
                 NextSteps = stepBp.NextSteps,
+                PathLimits = MapPathLimits(stepBp.PathLimits),
                 Conditions = stepBp.Conditions,
                 Branches = (stepBp.Branches != null && stepBp.Branches.Any())
                     ? stepBp.Branches
@@ -227,6 +228,7 @@ public static class WorkflowClassCompiler
                     item => MapValue(item.Key, mapping.EventAliases),
                     item => item.Value,
                     StringComparer.OrdinalIgnoreCase),
+                PathLimits = MapPathLimits(step.PathLimits, mapping.EventAliases),
                 Conditions = new Dictionary<string, string>(step.Conditions),
                 Branches = step.Branches != null && step.Branches.Count > 0
                     ? new List<string>(step.Branches)
@@ -306,6 +308,26 @@ public static class WorkflowClassCompiler
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)));
 
         return new WorkflowContextCompilationPackage(workflow, stateMachine, eventDefinitions, contentHash);
+    }
+
+    private static Dictionary<string, PathTravelLimit> MapPathLimits(
+        IReadOnlyDictionary<string, PathTravelLimitBlueprint>? source,
+        IReadOnlyDictionary<string, string>? eventAliases = null)
+    {
+        var result = new Dictionary<string, PathTravelLimit>(StringComparer.OrdinalIgnoreCase);
+        if (source == null)
+            return result;
+
+        foreach (var pair in source)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value == null)
+                continue;
+
+            var key = eventAliases != null ? MapValue(pair.Key, eventAliases) : pair.Key;
+            result[key] = new PathTravelLimit(pair.Value.MaxTravels, pair.Value.OnExceeded);
+        }
+
+        return result;
     }
 
     private static StepAutoCommitDefinition? MapAutoCommit(

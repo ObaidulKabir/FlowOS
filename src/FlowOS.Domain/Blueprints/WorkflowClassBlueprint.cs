@@ -58,6 +58,11 @@ public record StepBlueprint
     public string? DecisionProvider { get; init; } // Optional provider name for pluggable decision evaluation
     public SubWorkflowReferenceBlueprint? SubWorkflow { get; init; } // Optional child workflow reference for SubWorkflow steps
     public Dictionary<string, string> NextSteps { get; init; } = new();
+    /// <summary>
+    /// Per-event travel caps for repeatable paths (retry-password, resubmit).
+    /// Key matches a <see cref="NextSteps"/> or Decision <see cref="Conditions"/> event/condition key.
+    /// </summary>
+    public Dictionary<string, PathTravelLimitBlueprint> PathLimits { get; init; } = new();
     public List<string> RequiredRoles { get; init; } = new();
     public List<string>? AllowedRoles { get; init; }
     
@@ -121,6 +126,14 @@ public record StepReminderBlueprint
 {
     public string Duration { get; init; } = string.Empty;
     public string TriggerEvent { get; init; } = string.Empty;
+}
+
+public record PathTravelLimitBlueprint
+{
+    /// <summary>Maximum times this event/condition edge may be traveled, including the first pass.</summary>
+    public int MaxTravels { get; init; } = 5;
+    /// <summary>Step id or END taken when the cap is exceeded. If omitted, the engine fails closed.</summary>
+    public string? OnExceeded { get; init; }
 }
 
 public record SubWorkflowReferenceBlueprint

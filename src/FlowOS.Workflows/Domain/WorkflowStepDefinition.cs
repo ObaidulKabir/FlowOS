@@ -16,6 +16,11 @@ public class WorkflowStepDefinition
     // In Phase 1: Keys can be either legacy string events or new EventIds
     public Dictionary<string, string> NextSteps { get; set; } = new();
 
+    /// <summary>
+    /// Per-event travel caps for repeatable paths. Key matches a NextSteps or Decision Conditions key.
+    /// </summary>
+    public Dictionary<string, PathTravelLimit> PathLimits { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     // Conditional Logic (For Decision Steps)
     // Key: Condition Expression (e.g., "Payload.Amount > 100")
     // Value: NextStepId
@@ -47,6 +52,20 @@ public class WorkflowStepDefinition
     {
         StepId = stepId;
         StepType = type;
+    }
+}
+
+public class PathTravelLimit
+{
+    public int MaxTravels { get; set; } = 5;
+    public string? OnExceeded { get; set; }
+
+    public PathTravelLimit() { }
+
+    public PathTravelLimit(int maxTravels, string? onExceeded = null)
+    {
+        MaxTravels = maxTravels;
+        OnExceeded = onExceeded;
     }
 }
 

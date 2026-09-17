@@ -77,6 +77,15 @@ public class WorkflowEngine : IWorkflowEngine
             return WorkflowAdvanceResult.Failed($"No transition defined for event '{domainEvent.EventType}' from step '{currentStep.StepId}'.");
         }
 
+        var travel = PathTravelGuard.Evaluate(instance, definition, currentStep, domainEvent.EventType, nextStepId);
+        if (!travel.Proceed)
+            return WorkflowAdvanceResult.Failed(travel.FailureReason ?? "Path travel limit exceeded.");
+
+        if (travel.NextCount > 0)
+            instance.RecordPathTravel(travel.EdgeKey);
+
+        nextStepId = travel.NextStepId;
+
         // 3. State Machine Enforcement (The Law)
         if (stateMachineDefinition != null && currentEntityState != null)
         {
@@ -257,6 +266,7 @@ public class WorkflowEngine : IWorkflowEngine
         else if (nextStep.StepType == WorkflowStepType.Decision)
         {
             string? decisionTarget = null;
+            string decisionEventKey = "Decision";
             var providerName = nextStep.DecisionProvider?.Trim();
             if (!string.IsNullOrWhiteSpace(providerName) &&
                 context.DecisionProviderBindings != null &&
@@ -280,19 +290,35 @@ public class WorkflowEngine : IWorkflowEngine
                 if (pluginResult.IsMatched)
                 {
                     decisionTarget = pluginResult.NextStepId;
+                    decisionEventKey = domainEvent.EventType;
                 }
             }
             else
             {
-                decisionTarget = EvaluateDecisionConditions(nextStep.Conditions, context.Payload);
+                decisionTarget = EvaluateDecisionConditions(nextStep.Conditions, context.Payload, out var matchedConditionKey);
+                decisionEventKey = matchedConditionKey ?? "Decision";
             }
 
             if (decisionTarget != null)
             {
+                var decisionTravel = PathTravelGuard.Evaluate(
+                    instance,
+                    definition,
+                    nextStep,
+                    decisionEventKey,
+                    decisionTarget);
+                if (!decisionTravel.Proceed)
+                    return WorkflowAdvanceResult.Failed(decisionTravel.FailureReason ?? "Path travel limit exceeded.");
+
+                if (decisionTravel.NextCount > 0)
+                    instance.RecordPathTravel(decisionTravel.EdgeKey);
+
+                decisionTarget = decisionTravel.NextStepId;
+
                 instance.AdvanceTo(nextStepId);
 
                 var targetStep = definition.Steps.FirstOrDefault(s => s.StepId == decisionTarget);
-                if (targetStep == null)
+                if (targetStep == null && !string.Equals(decisionTarget, "END", StringComparison.OrdinalIgnoreCase))
                     return WorkflowAdvanceResult.Failed($"Decision target '{decisionTarget}' not found.");
 
                 if (decisionTarget == "END")
@@ -323,8 +349,10 @@ public class WorkflowEngine : IWorkflowEngine
 
     private string? EvaluateDecisionConditions(
         Dictionary<string, string> conditions,
-        Dictionary<string, object>? payload)
+        Dictionary<string, object>? payload,
+        out string? matchedKey)
     {
+        matchedKey = null;
         foreach (var condition in conditions)
         {
             var expression = condition.Key;
@@ -334,6 +362,7 @@ public class WorkflowEngine : IWorkflowEngine
             {
                 if (payload != null && EvaluateCondition(expression, payload))
                 {
+                    matchedKey = expression;
                     return target;
                 }
             }
@@ -345,6 +374,7 @@ public class WorkflowEngine : IWorkflowEngine
 
         if (conditions.TryGetValue("Default", out var defaultTarget))
         {
+            matchedKey = "Default";
             return defaultTarget;
         }
 

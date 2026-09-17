@@ -16,6 +16,7 @@ namespace FlowOS.Workflows.Domain
         Guid WorkflowDefinitionId { get; }
         int WorkflowVersion { get; }
         List<string> ActiveStepIds { get; }
+        Dictionary<string, int> PathTravelCounts { get; }
 
         void AdvanceTo(string nextStepId);
         void ForkTo(IEnumerable<string> branchStepIds);

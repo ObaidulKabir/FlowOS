@@ -165,6 +165,18 @@ public class AnalysisTools
                 humanExplanation = "An Agent/Either step also auto-routes via nextSteps Default/true, so it never waits.";
                 designHint = $"Remove Default/true from '{context?["stepId"]}' nextSteps. Keep it a waiting HumanTask/Command. Do not use a Decision skip as an AI gate.";
                 break;
+            case "WF-LOOP-001":
+                humanExplanation = "A pathLimits.maxTravels value is outside 1–100.";
+                designHint = "Set maxTravels to the number of allowed retries (for example 3 for retry-password) plus the first attempt.";
+                break;
+            case "WF-LOOP-002":
+                humanExplanation = "pathLimits.onExceeded points at a step that does not exist.";
+                designHint = "Point onExceeded at a real step such as LockedOut, or END.";
+                break;
+            case "WF-LOOP-003":
+                humanExplanation = "A pathLimits key does not match a nextSteps or conditions edge on that step.";
+                designHint = "Use the same event/condition key as the repeatable nextSteps edge (for example PASSWORD_FAIL).";
+                break;
 
             // Events / governance
             case "EVT-SCHEMA-001":
@@ -180,6 +192,7 @@ public class AnalysisTools
                 humanExplanation = code switch
                 {
                     _ when code.StartsWith("CON-", StringComparison.Ordinal) => "Consistency violation between Events, StateMachine, and Workflow.",
+                    _ when code.StartsWith("WF-LOOP-", StringComparison.Ordinal) => "Repeatable-path travel-limit violation.",
                     _ when code.StartsWith("WF-COMP-", StringComparison.Ordinal) => "Workflow completeness violation.",
                     _ when code.StartsWith("WF-AGENT-", StringComparison.Ordinal) => "Bounded-autonomy agent-task design violation.",
                     _ when code.StartsWith("WF-ACT-", StringComparison.Ordinal) => "Lifecycle action validation violation.",

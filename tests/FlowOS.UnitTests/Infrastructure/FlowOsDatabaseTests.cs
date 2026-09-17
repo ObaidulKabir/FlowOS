@@ -68,6 +68,7 @@ public class FlowOsDatabaseTests
 
         Assert.Contains("20260916150000_AddTenantBillingPlan", ids);
         Assert.Contains("20260916162000_AddAgentPluginBindingConfiguration", ids);
+        Assert.Contains("20260917120000_AddWorkflowInstancePathTravelCounts", ids);
         Assert.Equal(ids.Distinct().Count(), ids.Count);
     }
 

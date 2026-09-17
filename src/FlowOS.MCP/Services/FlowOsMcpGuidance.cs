@@ -75,6 +75,7 @@ public static class FlowOsMcpGuidance
         - If the state machine still requires that event (e.g. ApproveQuote auto-routes to MaterialDecision while Assigned → Quoted needs QUOTE_APPROVED), you MUST still send the event in `simulate_workflowclass` / `simulate_context_binding` / `publish_event`.
         - FlowOS then applies it as a state-only catch-up: step stays put, state advances. Omitting it leaves state behind; the next event is Denied as a state-machine violation.
         - Preferred design: HumanTask/Command `nextSteps` consume the same event the state machine uses. Do not auto-skip a legal gate unless you still emit that event.
+        - Repeatable paths (retry-password, resubmit, pin re-entry) MUST declare `pathLimits` on the looping nextSteps key: `{ "maxTravels": 3, "onExceeded": "LockedOut" }`. The engine counts each travel and fails closed or routes to onExceeded. Cyclic edges without a declaration still cap at 5.
         - Context bindings do not create tenant roles. `simulate_context_binding` may use a Draft template and does not require tenant roles to exist. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source and real tenant roles (CTX-ROLE-002).
         - Diagnose divergence: if `currentStep` is ahead of `currentState` (e.g. MaterialDecision / Assigned), the missing event is the unused state-machine trigger.
 
@@ -597,6 +598,24 @@ public static class FlowOsMcpGuidance
         3. Never omit the state-machine event to "match" the auto-skip. The skip is workflow-only.
 
         Diagnose: if trace shows `currentStep` ahead of `currentState` (MaterialDecision / Assigned), look up the unused transition from that state and send that event next.
+
+        ## Repeatable paths (retry-password)
+
+        If Work can travel the same edge more than once (`EnterPassword --PASSWORD_FAIL--> EnterPassword`), that is a cycle. Infinite loops are forbidden.
+
+        Declare the cap on the looping step:
+
+        ```json
+        "nextSteps": {
+          "PASSWORD_OK": "Unlocked",
+          "PASSWORD_FAIL": "EnterPassword"
+        },
+        "pathLimits": {
+          "PASSWORD_FAIL": { "maxTravels": 3, "onExceeded": "LockedOut" }
+        }
+        ```
+
+        Runtime counts `from|event|to`. Travel 1–3 stay on EnterPassword. Travel 4 routes to `LockedOut` (or fails closed if `onExceeded` is omitted). Cyclic edges without `pathLimits` still cap at 5. Align Law: add a state-machine overflow transition such as `Authenticating + LOCKED_OUT → Locked`.
 
         ## Preferred MCP design loop
 

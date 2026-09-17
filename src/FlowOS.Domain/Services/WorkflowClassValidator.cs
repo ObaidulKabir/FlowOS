@@ -464,7 +464,68 @@ public class WorkflowClassValidator : IWorkflowClassValidator
             }
         }
 
+        ValidatePathTravelLimits(bp, stepIds, result);
+
         return result;
+    }
+
+    private static void ValidatePathTravelLimits(
+        WorkflowClassBlueprint bp,
+        HashSet<string> stepIds,
+        ValidationResult result)
+    {
+        foreach (var step in bp.Workflow.Steps)
+        {
+            if (step.PathLimits == null || step.PathLimits.Count == 0)
+                continue;
+
+            var knownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (step.NextSteps != null)
+            {
+                foreach (var key in step.NextSteps.Keys)
+                    knownKeys.Add(key);
+            }
+
+            if (step.Conditions != null)
+            {
+                foreach (var key in step.Conditions.Keys)
+                    knownKeys.Add(key);
+            }
+
+            foreach (var pair in step.PathLimits)
+            {
+                if (!knownKeys.Contains(pair.Key))
+                {
+                    result.AddError(
+                        "WF-LOOP-003",
+                        "PathTravel",
+                        $"Step '{step.StepId}' pathLimits key '{pair.Key}' does not match a nextSteps or conditions edge.",
+                        "Workflow");
+                    continue;
+                }
+
+                var limit = pair.Value;
+                if (limit.MaxTravels < 1 || limit.MaxTravels > PathTravelRules.AbsoluteMaxTravels)
+                {
+                    result.AddError(
+                        "WF-LOOP-001",
+                        "PathTravel",
+                        $"Step '{step.StepId}' pathLimits['{pair.Key}'].maxTravels must be between 1 and {PathTravelRules.AbsoluteMaxTravels}.",
+                        "Workflow");
+                }
+
+                if (!string.IsNullOrWhiteSpace(limit.OnExceeded)
+                    && !string.Equals(limit.OnExceeded, "END", StringComparison.OrdinalIgnoreCase)
+                    && !stepIds.Contains(limit.OnExceeded))
+                {
+                    result.AddError(
+                        "WF-LOOP-002",
+                        "PathTravel",
+                        $"Step '{step.StepId}' pathLimits['{pair.Key}'].onExceeded '{limit.OnExceeded}' is not a known step.",
+                        "Workflow");
+                }
+            }
+        }
     }
 
     private static void ValidateSubWorkflowReference(StepBlueprint step, ValidationResult result)
