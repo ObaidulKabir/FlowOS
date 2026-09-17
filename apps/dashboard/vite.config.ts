@@ -10,7 +10,7 @@ export default defineConfig({
     host: true, // Needed for Docker
     proxy: {
       "/api": {
-        target: process.env.VITE_API_TARGET || "http://flowos-api:8080",
+        target: process.env.VITE_API_TARGET || "http://localhost:5183",
         changeOrigin: true,
         secure: false,
       },
