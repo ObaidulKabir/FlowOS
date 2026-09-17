@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Brain, CheckCircle, FileText, Link2, Play, Plus, Send, Trash2 } from 'lucide-react';
+import { Archive, Brain, CheckCircle, FileText, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import { WorkflowClass, WorkflowClassStatus, WorkflowInstance } from '../types';
 import { ContextBindingsView } from './ContextBindingsView';
 import { AiContextView } from './AiContextView';

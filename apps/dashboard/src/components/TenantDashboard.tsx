@@ -11,8 +11,8 @@ import { CompetitiveComparison } from './CompetitiveComparison';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { ContextSimulationStudio } from './ContextSimulationStudio';
 import { 
-  Building2, Play, Plus, RefreshCw, Key, Activity, 
-  Cpu, Copy, Check, Filter, Sparkles, Scale, Layers
+  Building2, Plus, RefreshCw, Key, Activity, 
+  Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical
 } from 'lucide-react';
 
 interface Props {
