@@ -41,23 +41,34 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
   const loadData = async () => {
     setLoading(true);
     setError(null);
+    const notices: string[] = [];
     try {
-      // Load Tenants count
       const tList = await api.listTenants();
       setTenantsCount(tList.length);
+    } catch (err: any) {
+      notices.push(err.message || 'Failed to load tenants');
+    }
 
-      // Load Blueprints
+    try {
       const bpList = await api.list(undefined, undefined, 'Admin');
       setBlueprints(bpList);
+    } catch (err: any) {
+      setBlueprints([]);
+      const message = err.message || 'Failed to list workflow classes';
+      if (!/HTTP 401|HTTP 403/.test(message)) notices.push(message);
+    }
 
-      // Load Fleet Instances
+    try {
       const instList = await api.listInstances('Admin');
       setInstances(instList);
     } catch (err: any) {
-      setError(err.message || 'Failed to load platform data');
-    } finally {
-      setLoading(false);
+      setInstances([]);
+      const message = err.message || 'Failed to list workflow instances';
+      if (!/HTTP 401|HTTP 403/.test(message)) notices.push(message);
     }
+
+    setError(notices[0] || null);
+    setLoading(false);
   };
 
   useEffect(() => {

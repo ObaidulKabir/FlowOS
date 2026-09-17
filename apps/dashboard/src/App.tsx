@@ -50,12 +50,16 @@ function App() {
   };
 
   const handleSwitchToAdmin = () => {
+    const sandbox = getDefaultSandboxSession();
+    const hasCredential = Boolean(session.apiKey || session.token);
     const adminSession: AuthSession = {
       role: 'Admin',
-      tenantId: '11111111-1111-1111-1111-111111111111',
+      tenantId: hasCredential ? session.tenantId : sandbox.tenantId,
       tenantName: 'Platform Administrator',
       username: 'superadmin@flowos.internal',
-      isSandbox: false,
+      apiKey: session.apiKey || (session.token ? undefined : sandbox.apiKey),
+      token: session.token,
+      isSandbox: hasCredential ? session.isSandbox : true,
       isEmailVerified: true,
       plan: 'Enterprise',
       billingStatus: 'Active',

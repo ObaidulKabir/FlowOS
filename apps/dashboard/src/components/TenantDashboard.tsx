@@ -75,12 +75,17 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
     setError(null);
     try {
       if (activeTab === 'Instances' || activeTab === 'Application') {
-        const [instList, bpList] = await Promise.all([
+        const [instResult, bpResult] = await Promise.allSettled([
           api.listInstances('Tenant'),
           api.list(undefined, undefined, 'Tenant')
         ]);
-        setInstances(instList);
-        setBlueprints(bpList);
+        if (instResult.status === 'fulfilled') setInstances(instResult.value);
+        if (bpResult.status === 'fulfilled') setBlueprints(bpResult.value);
+        const failed = [instResult, bpResult].find(result => result.status === 'rejected') as PromiseRejectedResult | undefined;
+        if (failed && instResult.status === 'rejected' && bpResult.status === 'rejected') {
+          throw failed.reason;
+        }
+        if (failed) setError(failed.reason?.message || 'Failed to load workspace data');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load workspace data');
