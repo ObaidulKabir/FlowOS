@@ -229,10 +229,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => setShowStartModal(true)}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/25 transition-all"
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all animate-pulse hover:animate-none border border-emerald-400/30"
             >
-              <Play size={14} />
-              <span>Launch Instance</span>
+              <Sparkles size={14} className="text-emerald-200" />
+              <span>Launch Demo Workflow</span>
             </button>
             <button
               onClick={() => setIsCreatingBlueprint(true)}
@@ -328,11 +328,11 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             <button
               onClick={() => setActiveTab('Simulator')}
               className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Simulator' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
+                activeTab === 'Simulator' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-inner' : 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-750 font-bold'
               }`}
             >
-              <Cpu size={15} />
-              <span>🧪 Context Simulator</span>
+              <FlaskConical size={15} />
+              <span>🧪 Try Demo Simulator</span>
             </button>
             <button
               onClick={() => setActiveTab('Capabilities')}
@@ -369,9 +369,9 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                 <span>Showing workflow executions owned by <strong>{session.tenantName}</strong></span>
                 <button
                   onClick={() => setShowStartModal(true)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
                 >
-                  <Play size={13} /> Launch Workflow
+                  <Sparkles size={13} /> Launch Demo Workflow
                 </button>
               </div>
               <WorkflowInstanceTable items={instances} blueprints={blueprints} />
@@ -449,8 +449,8 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Play className="text-emerald-400" size={18} />
-                Launch Workflow Instance
+                <Sparkles className="text-emerald-400" size={18} />
+                Launch Demo Workflow Instance
               </h3>
               <button onClick={() => setShowStartModal(false)} className="text-slate-400 hover:text-white text-lg">
                 &times;
@@ -459,7 +459,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-300 font-semibold block mb-2">Select Flagship Enterprise Preset</label>
+                <label className="text-slate-300 font-bold block mb-2 text-sm text-emerald-400 flex items-center gap-1.5"><Sparkles size={14}/> Select Example Demo Workflow</label>
                 <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
                   {[
                     {
