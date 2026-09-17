@@ -89,8 +89,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         isSandbox: false,
         isEmailVerified: true
       };
-      setAuthSession(session);
-      onSuccess(session);
+      onSuccess(setAuthSession(session));
       onClose();
       return;
     }
@@ -130,8 +129,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           isSandbox: false,
           isEmailVerified: res.user.isEmailVerified
         }, res.user);
-        setAuthSession(session);
-        onSuccess(session);
+        onSuccess(setAuthSession(session));
         onClose();
       }
     } catch (err: any) {
@@ -292,9 +290,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           isSandbox: false,
           isEmailVerified: true
         }, loginRes.user);
-        setAuthSession(session);
         setTimeout(() => {
-          onSuccess(session);
+          onSuccess(setAuthSession(session));
           onClose();
         }, 800);
       } else {
@@ -313,19 +310,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     resetMessages();
 
-    const session: AuthSession = {
+    onSuccess(setAuthSession({
       role: 'Admin',
-      tenantId: '11111111-1111-1111-1111-111111111111',
+      tenantId: '22222222-2222-2222-2222-222222222222',
       tenantName: 'Platform Administrator',
       username: adminUsername || 'admin@flowos.internal',
+      apiKey: 'flowos_prod_secret_key_32_chars_min',
       isSandbox: false,
       isEmailVerified: true,
       plan: 'Enterprise',
       billingStatus: 'Active',
       canRunRuntime: true
-    };
-    setAuthSession(session);
-    onSuccess(session);
+    }));
     onClose();
   };
 

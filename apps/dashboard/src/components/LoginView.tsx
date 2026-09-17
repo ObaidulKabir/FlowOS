@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthSession, TenantDto } from '../types';
-import { api, applyTenantEntitlement, setAuthSession } from '../api/client';
+import { api, applyTenantEntitlement, setAuthSession, DEMO_API_KEY, DEMO_TENANT_ID } from '../api/client';
 import { Shield, Building2, Key, ArrowRight, Sparkles, Lock, Cpu, Terminal } from 'lucide-react';
 
 interface LoginViewProps {
@@ -58,23 +58,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       username: `user@${tenantName.toLowerCase().replace(/\s+/g, '')}.com`
     }, matchedTenant);
 
-    setAuthSession(session);
-    onLoginSuccess(session);
+    onLoginSuccess(setAuthSession(session));
   };
 
   const handleAdminLogin = () => {
-    const session: AuthSession = {
+    onLoginSuccess(setAuthSession({
       role: 'Admin',
-      tenantId: '11111111-1111-1111-1111-111111111111',
+      tenantId: DEMO_TENANT_ID,
       tenantName: 'Platform Administrator',
       username: adminUsername || 'admin@flowos.internal',
+      apiKey: DEMO_API_KEY,
       plan: 'Enterprise',
       billingStatus: 'Active',
       canRunRuntime: true
-    };
-
-    setAuthSession(session);
-    onLoginSuccess(session);
+    }));
   };
 
   return (

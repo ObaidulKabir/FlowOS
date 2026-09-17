@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AuthSession } from './types';
-import { getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession } from './api/client';
+import { getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession, getAuthSession } from './api/client';
 import { LandingPage } from './components/LandingPage';
 import { AuthModal, AuthModalMode } from './components/AuthModal';
 import { TenantDashboard } from './components/TenantDashboard';
@@ -14,9 +14,7 @@ import {
 
 function App() {
   const mcpPath = mcpRpcPath();
-  const [session, setSession] = useState<AuthSession>(() => {
-    return getStoredSession() || getDefaultSandboxSession();
-  });
+  const [session, setSession] = useState<AuthSession>(() => setAuthSession(getAuthSession()));
 
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard'>(() => {
     const stored = getStoredSession();
@@ -32,14 +30,13 @@ function App() {
   };
 
   const handleLaunchSandbox = () => {
-    const sandboxSession = getDefaultSandboxSession();
-    setSession(sandboxSession);
+    setSession(setAuthSession(getDefaultSandboxSession()));
     setCurrentView('dashboard');
   };
 
   const handleAuthSuccess = (newSession: AuthSession) => {
-    setAuthSession(newSession);
-    setSession(newSession);
+    const stored = setAuthSession(newSession);
+    setSession(stored);
     setCurrentView('dashboard');
   };
 
@@ -65,8 +62,7 @@ function App() {
       billingStatus: 'Active',
       canRunRuntime: true
     };
-    setAuthSession(adminSession);
-    setSession(adminSession);
+    setSession(setAuthSession(adminSession));
     setCurrentView('dashboard');
   };
 
@@ -80,8 +76,7 @@ function App() {
       isSandbox: true,
       isEmailVerified: true
     };
-    setAuthSession(tenantSession);
-    setSession(tenantSession);
+    setSession(setAuthSession(tenantSession));
     setCurrentView('dashboard');
   };
 
@@ -259,13 +254,11 @@ function App() {
                 session={session} 
                 onSwitchWorkspace={() => openAuth('login')} 
                 onTenantChange={(newTenantId, newTenantName) => {
-                  const updated: AuthSession = {
+                  setSession(setAuthSession({
                     ...session,
                     tenantId: newTenantId,
                     tenantName: newTenantName
-                  };
-                  setAuthSession(updated);
-                  setSession(updated);
+                  }));
                 }}
               />
             )}

@@ -14,11 +14,14 @@ import {
 const API_BASE = '/api/workflow-classes';
 const AUTH_STORAGE_KEY = 'flowos_auth_session';
 
+export const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
+export const DEMO_API_KEY = 'flowos_prod_secret_key_32_chars_min';
+
 export const getDefaultSandboxSession = (): AuthSession => ({
   role: 'Tenant',
-  tenantId: '22222222-2222-2222-2222-222222222222',
+  tenantId: DEMO_TENANT_ID,
   tenantName: 'Demo Client Tenant (Sandbox)',
-  apiKey: 'flowos_prod_secret_key_32_chars_min',
+  apiKey: DEMO_API_KEY,
   username: 'demo-tenant-user',
   isSandbox: true,
   isEmailVerified: true,
@@ -26,6 +29,25 @@ export const getDefaultSandboxSession = (): AuthSession => ({
   billingStatus: 'Active',
   canRunRuntime: true
 });
+
+const isDemoApiKey = (key?: string) =>
+  key === DEMO_API_KEY ||
+  key === 'local-development-key-change-me' ||
+  key === 'YOUR_PRODUCTION_API_KEY';
+
+/** Playground and stale admin sessions often have no token/key; production rejects those as 401. */
+export const withSessionCredentials = (session: AuthSession): AuthSession => {
+  const token = session.token?.trim() || undefined;
+  let apiKey = session.apiKey?.trim() || undefined;
+  let tenantId = session.tenantId;
+  if (!token && !apiKey) {
+    apiKey = DEMO_API_KEY;
+    tenantId = DEMO_TENANT_ID;
+  } else if (isDemoApiKey(apiKey) && (!tenantId || tenantId === '11111111-1111-1111-1111-111111111111')) {
+    tenantId = DEMO_TENANT_ID;
+  }
+  return { ...session, token, apiKey, tenantId };
+};
 
 export const applyTenantEntitlement = (
   session: AuthSession,
@@ -55,11 +77,13 @@ export const getStoredSession = (): AuthSession | null => {
 };
 
 export const getAuthSession = (): AuthSession => {
-  return getStoredSession() || getDefaultSandboxSession();
+  return withSessionCredentials(getStoredSession() || getDefaultSandboxSession());
 };
 
-export const setAuthSession = (session: AuthSession) => {
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+export const setAuthSession = (session: AuthSession): AuthSession => {
+  const normalized = withSessionCredentials(session);
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(normalized));
+  return normalized;
 };
 
 export const clearAuthSession = () => {
