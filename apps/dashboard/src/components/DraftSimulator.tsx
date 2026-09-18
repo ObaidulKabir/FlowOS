@@ -199,9 +199,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     if (!step) return [];
     const raw = getProp(step, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles', 'roles', 'Roles');
     if (!raw) {
-      const type = (getProp(step, 'stepType', 'StepType') || '').toString().toLowerCase();
-      if (type.includes('command') || type.includes('event')) return ['System'];
-      return ['Anyone'];
+      return [];
     }
     if (Array.isArray(raw)) return raw.map((r: any) => r.toString().trim()).filter(Boolean);
     if (typeof raw === 'string') return raw.split(',').map((r: string) => r.trim()).filter(Boolean);
@@ -384,6 +382,21 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   useEffect(() => {
     resetSimulation();
   }, [definition]);
+
+  // Auto-select required role when entering a new step
+  useEffect(() => {
+    if (currentStepRoles.length > 0) {
+      const lowerRoles = currentStepRoles.map(r => r.toLowerCase());
+      if (
+        !lowerRoles.includes(simulatedRole.toLowerCase()) && 
+        !lowerRoles.includes('anyone') && 
+        !lowerRoles.includes('unassigned')
+      ) {
+        setSimulatedRole(currentStepRoles[0]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStepId]);
 
   const resetSimulation = () => {
     setCurrentStepId(startStepId);
