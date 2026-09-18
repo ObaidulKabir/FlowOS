@@ -630,15 +630,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
   const guardUnauthorizedAction = (actionLabel: string): boolean => {
     if (!currentStep) return false;
-    if (eventViewMode === 'asRole' && !roleCanActOnStep(currentStep, simulatedRole)) {
+    if (!isRoleAuthorized) {
       alert(
-        `Role filter is on.\n\n"${simulatedRole}" cannot run "${actionLabel}" at step [${currentStepId}].\nRequired / active role: ${activeRoleDisplay}.`
-      );
-      return true;
-    }
-    if (eventViewMode === 'current' && isHumanTask && !isRoleAuthorized) {
-      alert(
-        `Simulating as "${simulatedRole}", but this HumanTask requires: ${activeRoleDisplay}.\n\nSwitch role, or use "As role (filter events)" after selecting the required role.`
+        `Your current role "${simulatedRole}" cannot perform "${actionLabel}" at step [${currentStepId}].\n\nRequired role: ${activeRoleDisplay}.\n\nSwitch your role in the right panel to match the required role.`
       );
       return true;
     }
@@ -744,12 +738,28 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             <span className="text-slate-500">Active role: {activeRoleDisplay}</span>
           </div>
         )}
-        {eventViewMode === 'current' && (
-          <div className="text-[10px] text-slate-400 bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
-            <span>
-              Current step events · Active role: <strong className="text-indigo-300">{activeRoleDisplay}</strong>
-            </span>
-            <span className="text-slate-500">Acting as: {simulatedRole}</span>
+        {/* Role Authorization Status Banner */}
+        {!isRoleAuthorized && (
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-[11px] text-rose-300">
+              <span className="w-5 h-5 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-[10px] font-bold shrink-0">✕</span>
+              <span>Events <strong>disabled</strong> — your role <strong className="text-white">{simulatedRole}</strong> does not match required role <strong className="text-amber-300">{activeRoleDisplay}</strong></span>
+            </div>
+            <button 
+              onClick={() => {
+                const firstRole = currentStepRoles.find(r => !['unassigned', 'anyone'].includes(r.toLowerCase()));
+                if (firstRole) setSimulatedRole(firstRole);
+              }}
+              className="shrink-0 px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 text-[10px] font-bold rounded-lg transition-colors"
+            >
+              Switch to {currentStepRoles.find(r => !['unassigned', 'anyone'].includes(r.toLowerCase())) || 'required role'}
+            </button>
+          </div>
+        )}
+        {isRoleAuthorized && (
+          <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2 text-[11px] text-emerald-300">
+            <span className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+            <span>Role <strong className="text-white">{simulatedRole}</strong> authorized — events <strong>enabled</strong></span>
           </div>
         )}
         {/* CASE 1: Decision Step / Step with Evaluated Conditions */}
@@ -806,7 +816,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             {evaluatedConditions.winningTarget ? (
               <button 
                 onClick={() => handleDecisionAdvanceGuarded(evaluatedConditions.winningTarget!, evaluatedConditions.winningExpr!)}
-                disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                disabled={!isRoleAuthorized}
                 className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-purple-600 disabled:hover:to-indigo-600"
               >
                 <span>Take Branch: <strong>{evaluatedConditions.winningTarget}</strong></span>
@@ -833,7 +843,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               </div>
               <button 
                 onClick={() => fireEventGuarded(autoRoute.outcome, autoRoute.target)}
-                disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                disabled={!isRoleAuthorized}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                 title={`Fire "${autoRoute.outcome}" → ${autoRoute.target}`}
               >
@@ -851,7 +861,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                     <button
                       key={`${route.outcome}:${route.target}`}
                       onClick={() => fireEventGuarded(route.outcome, route.target)}
-                      disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                      disabled={!isRoleAuthorized}
                       className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-800"
                     >
                       Fire: <span className="text-amber-300 font-mono font-bold">{route.outcome}</span>
@@ -945,7 +955,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 <button
                   key={outcome}
                   onClick={() => fireEventGuarded(outcome, target as string)}
-                  disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                  disabled={!isRoleAuthorized}
                   className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg shadow-md shadow-cyan-600/20 transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-600"
                 >
                   <span>Elapse Timer: <strong className="font-mono">{outcome}</strong></span>
@@ -967,9 +977,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 </span>
               </div>
 
-              {!isRoleAuthorized && eventViewMode === 'current' && (
+              {!isRoleAuthorized && (
                 <div className="mb-2 p-2 bg-rose-500/15 border border-rose-500/30 rounded-lg text-rose-300 text-[11px] flex items-center justify-between gap-2">
-                  <span>Role mismatch: requires <strong>{activeRoleDisplay}</strong> (simulating as <strong>{simulatedRole}</strong>). Events stay visible but blocked until you switch role.</span>
+                  <span>Your role <strong>{simulatedRole}</strong> cannot handle this step. Required: <strong>{activeRoleDisplay}</strong></span>
                   <button 
                     onClick={() => setSimulatedRole(currentStepRoles[0] || 'Manager')} 
                     className="underline text-[10px] font-bold text-rose-200 hover:text-white shrink-0"
@@ -980,9 +990,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               )}
 
               <p className="text-[11px] text-slate-300">
-                {eventViewMode === 'asRole'
-                  ? <>Filtered for <strong className="text-amber-300 font-semibold">{simulatedRole}</strong> — select an outcome:</>
-                  : <>Current step outcomes (active role <strong className="text-amber-300">{activeRoleDisplay}</strong>):</>}
+                Select an outcome (required role: <strong className="text-amber-300">{activeRoleDisplay}</strong>):
               </p>
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
@@ -990,7 +998,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 <button 
                   key={outcome}
                   onClick={() => fireEventGuarded(outcome, target as string)}
-                  disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                  disabled={!isRoleAuthorized}
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 hover:border-amber-500/50 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-slate-600"
                 >
                   Fire: <span className="text-amber-400 font-mono font-bold">{outcome}</span>
@@ -1018,7 +1026,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                    const tgt = getProp(sla, 'escalationStepId', 'EscalationStepId') || 'END';
                    fireEventGuarded(evt, tgt);
                  }}
-                 disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                 disabled={!isRoleAuthorized}
                  className="px-3 py-1.5 bg-rose-900/50 hover:bg-rose-800/80 text-rose-200 border border-rose-700 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-900/50"
                >
                  Force Timeout
@@ -1045,7 +1053,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                          <button
                            key={rIdx}
                            onClick={() => fireEventGuarded(evt, target as string)}
-                           disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                           disabled={!isRoleAuthorized}
                            className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[10px] font-semibold rounded flex items-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-500/20"
                            title={`Trigger reminder event '${evt}' (${dur})`}
                          >
@@ -1073,11 +1081,13 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             <Play size={16} className="text-emerald-400" /> Template Draft Simulator
           </h3>
           {currentStep && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-xs">
-              <span className="text-slate-400 text-[11px]">Active Role:</span>
-              <span className="text-indigo-300 font-semibold font-mono flex items-center gap-1 text-[11px]">
-                {isHumanTask ? <UserCheck size={12} className="text-indigo-400" /> : <Cpu size={12} className="text-blue-400" />}
-                {activeRoleDisplay}
+            <div className="hidden sm:flex items-center gap-2 text-[11px]">
+              <span className={`px-2 py-0.5 rounded-full border flex items-center gap-1 font-semibold ${
+                isRoleAuthorized 
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' 
+                  : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+              }`}>
+                {isRoleAuthorized ? '✓' : '✕'} {simulatedRole} → {activeRoleDisplay}
               </span>
             </div>
           )}
@@ -1164,72 +1174,37 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                       {currentStepId || 'END'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400 text-[11px]">Event view:</span>
-                    <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800 text-[10px] font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => setEventViewMode('current')}
-                        className={`px-2 py-1 rounded-md transition-all ${
-                          eventViewMode === 'current' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'
-                        }`}
-                        title="Show this step's events and the active/required role"
-                      >
-                        Current step
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEventViewMode('asRole')}
-                        className={`px-2 py-1 rounded-md transition-all ${
-                          eventViewMode === 'asRole' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
-                        }`}
-                        title="Filter visible events to the selected simulated role"
-                      >
-                        As role (filter)
-                      </button>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-[11px]">Required Role:</span>
+                    <span className="font-mono text-amber-300 font-bold px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                      {activeRoleDisplay}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">
-                      {eventViewMode === 'asRole' ? 'Simulating As Role:' : 'Active role:'}
-                    </span>
-                    {eventViewMode === 'asRole' ? (
+                    <span className="text-slate-400 text-[11px]">Your Role:</span>
+                    <div className="flex items-center gap-1.5">
                       <select 
                         value={simulatedRole} 
                         onChange={e => setSimulatedRole(e.target.value)}
-                        className="bg-slate-950 border border-indigo-500/40 text-indigo-300 font-bold text-[11px] rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                        className={`bg-slate-950 border font-bold text-[11px] rounded px-2 py-0.5 focus:outline-none ${
+                          isRoleAuthorized 
+                            ? 'border-emerald-500/40 text-emerald-300 focus:border-emerald-400'
+                            : 'border-rose-500/40 text-rose-300 focus:border-rose-400'
+                        }`}
                       >
                         {allKnownRoles.map(r => (
                           <option key={r} value={r}>{r}</option>
                         ))}
                       </select>
-                    ) : (
-                      <span className="font-mono text-indigo-300 font-bold px-2 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30">
-                        {activeRoleDisplay}
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border ${
+                        isRoleAuthorized
+                          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                          : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                      }`}>
+                        {isRoleAuthorized ? '✓' : '✕'}
                       </span>
-                    )}
+                    </div>
                   </div>
-                  {eventViewMode === 'current' && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400 text-[11px]">Acting as (auth):</span>
-                      <select 
-                        value={simulatedRole} 
-                        onChange={e => setSimulatedRole(e.target.value)}
-                        className="bg-slate-950 border border-slate-700 text-slate-300 font-bold text-[11px] rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
-                      >
-                        {allKnownRoles.map(r => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  {eventViewMode === 'asRole' && (
-                    <div className="text-[10px] text-slate-500 leading-relaxed">
-                      Filter shows only steps/events <strong className="text-indigo-300">{simulatedRole}</strong> may run.
-                      Active role at this step remains <strong className="text-slate-300">{activeRoleDisplay}</strong>
-                      {roleEventCatalog.length > 0 ? ` · ${roleEventCatalog.length} matching step(s) in workflow` : ''}.
-                    </div>
-                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 text-[11px]">Legal State:</span>
                     <span className="font-mono text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30">
@@ -1384,20 +1359,32 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 </div>
               </div>
 
-              {/* Simulated Role Setting */}
+              {/* Role Setting */}
               <div>
-                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Simulated User Role</label>
-                <div className="flex gap-2">
+                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Your Role</label>
+                <div className="flex gap-2 items-center">
                   <select 
                     value={simulatedRole} 
                     onChange={e => setSimulatedRole(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500 font-medium"
+                    className={`w-full bg-slate-950 border rounded-lg p-2 text-xs text-white focus:outline-none font-medium ${
+                      isRoleAuthorized ? 'border-emerald-500/40 focus:border-emerald-500' : 'border-rose-500/40 focus:border-rose-500'
+                    }`}
                   >
                     {allKnownRoles.map(r => (
                       <option key={r} value={r}>{r}</option>
                     ))}
                   </select>
+                  <span className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                    isRoleAuthorized
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                      : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                  }`}>
+                    {isRoleAuthorized ? '✓' : '✕'}
+                  </span>
                 </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Step requires: <strong className="text-amber-300">{activeRoleDisplay}</strong>
+                </p>
               </div>
 
               {/* Live JSON Editor */}
