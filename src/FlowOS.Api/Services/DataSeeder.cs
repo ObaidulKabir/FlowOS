@@ -478,12 +478,12 @@ public static class DataSeeder
         {
             Events = new() 
             { 
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request" },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-APPROVE", Name = "Director Approve" },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-REJECT", Name = "Director Reject" },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to Director" }
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request", AllowedRoles = new() { "Employee", "User" } },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request", AllowedRoles = new() { "Manager" } },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request", AllowedRoles = new() { "Manager" } },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-APPROVE", Name = "Director Approve", AllowedRoles = new() { "Director" } },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-REJECT", Name = "Director Reject", AllowedRoles = new() { "Director" } },
+                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to Director", AllowedRoles = new() { "Manager" } }
             },
             StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
             {
@@ -897,11 +897,11 @@ public static class DataSeeder
             {
                 Events = new()
                 {
-                    new() { EventId = "EVT-APPLY", Name = "Application Submitted" },
-                    new() { EventId = "EVT-AUTO-APPROVE", Name = "Fast-Track Auto Approved" },
-                    new() { EventId = "EVT-MANUAL-REVIEW", Name = "Requires Underwriter Review" },
-                    new() { EventId = "EVT-FINAL-APPROVE", Name = "Underwriter Approved" },
-                    new() { EventId = "EVT-DECLINE", Name = "Application Declined" }
+                    new() { EventId = "EVT-APPLY", Name = "Application Submitted", AllowedRoles = new() { "User", "Employee" } },
+                    new() { EventId = "EVT-AUTO-APPROVE", Name = "Fast-Track Auto Approved", AllowedRoles = new() { "System" } },
+                    new() { EventId = "EVT-MANUAL-REVIEW", Name = "Requires Underwriter Review", AllowedRoles = new() { "System" } },
+                    new() { EventId = "EVT-FINAL-APPROVE", Name = "Underwriter Approved", AllowedRoles = new() { "Manager", "Director" } },
+                    new() { EventId = "EVT-DECLINE", Name = "Application Declined", AllowedRoles = new() { "Manager", "Director" } }
                 },
                 StateMachine = new StateMachineBlueprint
                 {

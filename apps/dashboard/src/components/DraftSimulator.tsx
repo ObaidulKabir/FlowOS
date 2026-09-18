@@ -216,8 +216,28 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
         if (r && r !== 'Anyone' && r !== 'Unassigned') roleSet.add(r);
       });
     });
+    catalogEvents.forEach((e: any) => {
+      const allowed = getProp(e, 'allowedRoles', 'AllowedRoles') || [];
+      if (Array.isArray(allowed)) {
+        allowed.forEach((r: any) => {
+          if (r && r !== 'Anyone' && r !== 'Unassigned') roleSet.add(String(r));
+        });
+      }
+    });
     return Array.from(roleSet);
-  }, [rawSteps]);
+  }, [rawSteps, catalogEvents]);
+
+  const getEventAllowedRoles = (eventId: string): string[] => {
+    if (!eventId) return [];
+    const eventIdKey = eventId.trim().toLowerCase();
+    const found = catalogEvents.find((e: any) => {
+      const id = (getProp(e, 'eventId', 'EventId') || getProp(e, 'name', 'Name') || '').toString().toLowerCase();
+      return id === eventIdKey;
+    });
+    if (!found) return [];
+    const roles = getProp(found, 'allowedRoles', 'AllowedRoles') || [];
+    return Array.isArray(roles) ? roles.map((r: any) => String(r)) : [];
+  };
 
   const roleCanActOnStep = (step: any, role: string): boolean => {
     if (!step) return false;
@@ -243,6 +263,20 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       return roles.some(r => ['system', 'admin'].includes(r.toLowerCase())) || roles.length === 0;
     }
     return false;
+  };
+
+  const isEventAuthorized = (eventId: string, step: any, role: string): boolean => {
+    const eventRoles = getEventAllowedRoles(eventId);
+    const roleKey = (role || '').trim().toLowerCase();
+    if (!roleKey) return false;
+    if (eventRoles.length > 0) {
+      if (eventRoles.some(r => ['anyone', 'unassigned'].includes(r.toLowerCase()))) return true;
+      if (eventRoles.map(r => r.toLowerCase()).includes(roleKey)) return true;
+      if ((roleKey === 'system' || roleKey === 'admin') && eventRoles.some(r => ['system', 'admin'].includes(r.toLowerCase()))) return true;
+      return false;
+    }
+    // Fall back to step-level roles
+    return roleCanActOnStep(step, role);
   };
 
   const roleEventCatalog = useMemo(() => {
@@ -628,11 +662,16 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return roleCanActOnStep(currentStep, simulatedRole);
   }, [currentStep, simulatedRole]);
 
-  const guardUnauthorizedAction = (actionLabel: string): boolean => {
+  const guardUnauthorizedAction = (actionLabel: string, eventId?: string): boolean => {
     if (!currentStep) return false;
-    if (!isRoleAuthorized) {
+    const isAuthorized = eventId 
+      ? isEventAuthorized(eventId, currentStep, simulatedRole) 
+      : isRoleAuthorized;
+    if (!isAuthorized) {
+      const eventRoles = eventId ? getEventAllowedRoles(eventId) : [];
+      const reqRolesDisplay = eventRoles.length > 0 ? eventRoles.join(', ') : activeRoleDisplay;
       alert(
-        `Your current role "${simulatedRole}" cannot perform "${actionLabel}" at step [${currentStepId}].\n\nRequired role: ${activeRoleDisplay}.\n\nSwitch your role in the right panel to match the required role.`
+        `Your current role "${simulatedRole}" cannot perform "${actionLabel}" at step [${currentStepId}].\n\nRequired role: ${reqRolesDisplay}.\n\nSwitch your role in the right panel to match the required role.`
       );
       return true;
     }
@@ -640,7 +679,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   };
 
   const fireEventGuarded = (eventId: string, targetStepId: string) => {
-    if (guardUnauthorizedAction(eventId)) return;
+    if (guardUnauthorizedAction(eventId, eventId)) return;
     fireEvent(eventId, targetStepId);
   };
 
@@ -990,20 +1029,46 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               )}
 
               <p className="text-[11px] text-slate-300">
-                Select an outcome (required role: <strong className="text-amber-300">{activeRoleDisplay}</strong>):
+                Select an outcome below. Each event displays its required role and enables/disables based on your selected role:
               </p>
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {Object.entries(nextSteps).map(([outcome, target]) => (
-                <button 
-                  key={outcome}
-                  onClick={() => fireEventGuarded(outcome, target as string)}
-                  disabled={!isRoleAuthorized}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 hover:border-amber-500/50 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-slate-600"
-                >
-                  Fire: <span className="text-amber-400 font-mono font-bold">{outcome}</span>
-                </button>
-              ))}
+            <div className="flex flex-col gap-2 pt-1">
+              {Object.entries(nextSteps).map(([outcome, target]) => {
+                const eventAuth = isEventAuthorized(outcome, currentStep, simulatedRole);
+                const eventReqRoles = getEventAllowedRoles(outcome);
+                const reqRolesDisplay = eventReqRoles.length > 0 ? eventReqRoles.join(', ') : activeRoleDisplay;
+
+                return (
+                  <div key={outcome} className="flex flex-wrap items-center gap-2">
+                    <button 
+                      onClick={() => fireEventGuarded(outcome, target as string)}
+                      disabled={!eventAuth}
+                      className={`px-3 py-1.5 border text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-sm ${
+                        eventAuth
+                          ? 'bg-slate-800 hover:bg-slate-700 border-amber-500/50 text-white'
+                          : 'bg-slate-900 border-slate-800 text-slate-500 opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      Fire: <span className="text-amber-400 font-mono font-bold">{outcome}</span>
+                    </button>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono ${
+                      eventAuth
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    }`}>
+                      Role: <strong>{reqRolesDisplay}</strong>
+                    </span>
+                    {!eventAuth && eventReqRoles.length > 0 && (
+                      <button
+                        onClick={() => setSimulatedRole(eventReqRoles[0])}
+                        className="text-[10px] text-amber-300 hover:text-white underline font-semibold shrink-0"
+                      >
+                        Switch to {eventReqRoles[0]}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
