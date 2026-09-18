@@ -209,7 +209,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             var result = _engine.Advance(
                 candidate,
                 runtime.WorkflowDefinition,
-                new StandardEvent(tenantId, prepared.CanonicalEventType),
+                new StandardEvent(tenantId, eventType),
                 executionContext,
                 runtime.StateMachineDefinition,
                 fromState);
