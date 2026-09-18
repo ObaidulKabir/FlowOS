@@ -199,7 +199,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     if (!step) return [];
     const raw = getProp(step, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles', 'roles', 'Roles');
     if (!raw) {
-      return [];
+      const type = (getProp(step, 'stepType', 'StepType') || '').toString().toLowerCase();
+      if (type.includes('command') || type.includes('event') || type.includes('timer')) return ['System'];
+      return ['Unassigned'];
     }
     if (Array.isArray(raw)) return raw.map((r: any) => r.toString().trim()).filter(Boolean);
     if (typeof raw === 'string') return raw.split(',').map((r: string) => r.trim()).filter(Boolean);
@@ -804,7 +806,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             {evaluatedConditions.winningTarget ? (
               <button 
                 onClick={() => handleDecisionAdvanceGuarded(evaluatedConditions.winningTarget!, evaluatedConditions.winningExpr!)}
-                className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-1.5"
+                disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-purple-600 disabled:hover:to-indigo-600"
               >
                 <span>Take Branch: <strong>{evaluatedConditions.winningTarget}</strong></span>
                 <ArrowRight size={14} />
@@ -830,7 +833,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               </div>
               <button 
                 onClick={() => fireEventGuarded(autoRoute.outcome, autoRoute.target)}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-1.5 shrink-0"
+                disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                 title={`Fire "${autoRoute.outcome}" → ${autoRoute.target}`}
               >
                 Auto-Step <span className="font-mono opacity-90">{autoRoute.outcome}</span> <ArrowRight size={14} />
@@ -847,7 +851,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                     <button
                       key={`${route.outcome}:${route.target}`}
                       onClick={() => fireEventGuarded(route.outcome, route.target)}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1"
+                      disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-800"
                     >
                       Fire: <span className="text-amber-300 font-mono font-bold">{route.outcome}</span>
                       <span className="text-slate-500">→ {route.target}</span>
@@ -940,7 +945,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 <button
                   key={outcome}
                   onClick={() => fireEventGuarded(outcome, target as string)}
-                  className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg shadow-md shadow-cyan-600/20 transition-all flex items-center gap-1.5"
+                  disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                  className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg shadow-md shadow-cyan-600/20 transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-600"
                 >
                   <span>Elapse Timer: <strong className="font-mono">{outcome}</strong></span>
                   <ArrowRight size={14} />
@@ -1012,7 +1018,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                    const tgt = getProp(sla, 'escalationStepId', 'EscalationStepId') || 'END';
                    fireEventGuarded(evt, tgt);
                  }}
-                 className="px-3 py-1.5 bg-rose-900/50 hover:bg-rose-800/80 text-rose-200 border border-rose-700 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 shrink-0"
+                 disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                 className="px-3 py-1.5 bg-rose-900/50 hover:bg-rose-800/80 text-rose-200 border border-rose-700 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-900/50"
                >
                  Force Timeout
                </button>
@@ -1038,7 +1045,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                          <button
                            key={rIdx}
                            onClick={() => fireEventGuarded(evt, target as string)}
-                           className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[10px] font-semibold rounded flex items-center gap-1 transition-colors"
+                           disabled={eventViewMode === 'current' && !isRoleAuthorized}
+                           className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[10px] font-semibold rounded flex items-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-500/20"
                            title={`Trigger reminder event '${evt}' (${dur})`}
                          >
                            <Bell size={10} />
