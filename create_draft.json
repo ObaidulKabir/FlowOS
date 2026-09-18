@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "definition": {
     "events": [
-      { "eventId": "EVT-SUBMIT", "name": "Submit Expense", "category": 1 },
-      { "eventId": "EVT-APPROVE", "name": "Approve Expense", "category": 1 }
+      { "eventId": "EVT-SUBMIT", "name": "Submit Expense", "category": "Human", "requiredCapabilities": ["event.publish.EVT-SUBMIT"], "allowedRoles": ["User", "Employee"] },
+      { "eventId": "EVT-APPROVE", "name": "Approve Expense", "category": "Human", "requiredCapabilities": ["event.publish.EVT-APPROVE"], "allowedRoles": ["Manager"] }
     ],
     "stateMachine": {
       "entityType": "Expense",
@@ -21,12 +21,14 @@
         {
           "stepId": "Submit",
           "stepType": "Command",
+          "requiredRoles": ["User"],
           "nextSteps": { "EVT-SUBMIT": "ManagerReview" }
         },
         {
           "stepId": "ManagerReview",
           "stepType": "HumanTask",
           "requiredRoles": ["Manager"],
+          "requiredCapabilities": ["event.publish.EVT-APPROVE"],
           "nextSteps": { "EVT-APPROVE": "End" }
         },
         {
@@ -37,8 +39,13 @@
       ]
     },
     "roles": [
-        { "name": "Manager", "description": "Approver", "grantedCapabilities": [] }
+      { "name": "User", "description": "Submits expense claims", "grantedCapabilities": ["event.publish.EVT-SUBMIT"] },
+      { "name": "Manager", "description": "Approver inbox", "grantedCapabilities": ["event.publish.EVT-APPROVE"] },
+      { "name": "Director", "description": "Can execute Manager-gated approve without being the inbox role", "grantedCapabilities": ["event.publish.EVT-APPROVE"] }
     ],
-    "capabilities": []
+    "capabilities": [
+      { "code": "event.publish.EVT-SUBMIT", "description": "Publish the submit event" },
+      { "code": "event.publish.EVT-APPROVE", "description": "Publish the approve event" }
+    ]
   }
 }

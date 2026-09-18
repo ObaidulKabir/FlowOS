@@ -176,49 +176,7 @@ public static class DataSeeder
         
         if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId))
         {
-            var demoBp = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
-            {
-                Events = new() 
-                { 
-                    new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
-                    new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" }
-                },
-                StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
-                {
-                    InitialState = "Draft",
-                    States = new() { "Draft", "Pending", "Approved" },
-                    Transitions = new() 
-                    {
-                        new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "Pending", EventId = "EVT-SUBMIT" },
-                        new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Approved", EventId = "EVT-APPROVE" }
-                    }
-                },
-                Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
-                {
-                    StartStepId = "Draft",
-                    Steps = new() 
-                    {
-                        new FlowOS.Domain.Blueprints.StepBlueprint 
-                        { 
-                            StepId = "Draft", 
-                            StepType = "Command",
-                            NextSteps = new() { { "EVT-SUBMIT", "Pending" } }
-                        },
-                        new FlowOS.Domain.Blueprints.StepBlueprint 
-                        { 
-                            StepId = "Pending", 
-                            StepType = "HumanTask",
-                            NextSteps = new() { { "EVT-APPROVE", "Approved" } }
-                        },
-                        new FlowOS.Domain.Blueprints.StepBlueprint 
-                        { 
-                            StepId = "Approved", 
-                            StepType = "Command",
-                            NextSteps = new() { { "Default", "END" } }
-                        }
-                    }
-                }
-            };
+            var demoBp = CreateExpenseApprovalBlueprint();
 
             var manager = new WorkflowClassManager();
 
@@ -269,58 +227,7 @@ public static class DataSeeder
             if (wc != null)
             {
                 Console.WriteLine($"[DataSeeder] Found WorkflowClass: {wc.Id}. Creating definition.");
-                // Force update blueprint to ensure validity (in case DB has stale invalid JSON)
-                var demoBpFix = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
-                {
-                    Events = new() 
-                    { 
-                        new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
-                        new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" },
-                        new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request" }
-                    },
-                    StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
-                    {
-                        InitialState = "Draft",
-                        States = new() { "Draft", "Pending", "Approved", "Rejected" },
-                        Transitions = new() 
-                        {
-                            new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "Pending", EventId = "EVT-SUBMIT" },
-                            new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Approved", EventId = "EVT-APPROVE" },
-                            new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Rejected", EventId = "EVT-REJECT" }
-                        }
-                    },
-                    Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
-                    {
-                        StartStepId = "Draft",
-                        Steps = new() 
-                        {
-                            new FlowOS.Domain.Blueprints.StepBlueprint 
-                            { 
-                                StepId = "Draft", 
-                                StepType = "Command",
-                                NextSteps = new() { { "EVT-SUBMIT", "Pending" } }
-                            },
-                            new FlowOS.Domain.Blueprints.StepBlueprint 
-                            { 
-                                StepId = "Pending", 
-                                StepType = "HumanTask",
-                                NextSteps = new() { { "EVT-APPROVE", "Approved" }, { "EVT-REJECT", "Rejected" } }
-                            },
-                            new FlowOS.Domain.Blueprints.StepBlueprint 
-                            { 
-                                StepId = "Approved", 
-                                StepType = "Command",
-                                NextSteps = new() { { "Default", "END" } }
-                            },
-                            new FlowOS.Domain.Blueprints.StepBlueprint 
-                            { 
-                                StepId = "Rejected", 
-                                StepType = "Command",
-                                NextSteps = new() { { "Default", "END" } }
-                            }
-                        }
-                    }
-                };
+                var demoBpFix = CreateExpenseApprovalBlueprint();
                 
                 SetPrivateProperty(wc, "Definition", demoBpFix);
                 if (wc.Status != WorkflowClassStatus.Published)
@@ -373,59 +280,7 @@ public static class DataSeeder
                     // Clear existing steps (EF Core will track deletion)
                     existingDef.Steps.Clear();
                     
-                    // Re-add steps
-                    // Force update blueprint to ensure validity (in case DB has stale invalid JSON)
-                    var demoBpFix = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
-                    {
-                        Events = new() 
-                        { 
-                            new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
-                            new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" },
-                            new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request" }
-                        },
-                        StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
-                        {
-                            InitialState = "Draft",
-                            States = new() { "Draft", "Pending", "Approved", "Rejected" },
-                            Transitions = new() 
-                            {
-                                new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "Pending", EventId = "EVT-SUBMIT" },
-                                new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Approved", EventId = "EVT-APPROVE" },
-                                new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Pending", ToState = "Rejected", EventId = "EVT-REJECT" }
-                            }
-                        },
-                        Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
-                        {
-                            StartStepId = "Draft",
-                            Steps = new() 
-                            {
-                                new FlowOS.Domain.Blueprints.StepBlueprint 
-                                { 
-                                    StepId = "Draft", 
-                                    StepType = "Command",
-                                    NextSteps = new() { { "EVT-SUBMIT", "Pending" } }
-                                },
-                                new FlowOS.Domain.Blueprints.StepBlueprint 
-                                { 
-                                    StepId = "Pending", 
-                                    StepType = "HumanTask",
-                                    NextSteps = new() { { "EVT-APPROVE", "Approved" }, { "EVT-REJECT", "Rejected" } }
-                                },
-                                new FlowOS.Domain.Blueprints.StepBlueprint 
-                                { 
-                                    StepId = "Approved", 
-                                    StepType = "Command",
-                                    NextSteps = new() { { "Default", "END" } }
-                                },
-                                new FlowOS.Domain.Blueprints.StepBlueprint 
-                                { 
-                                    StepId = "Rejected", 
-                                    StepType = "Command",
-                                    NextSteps = new() { { "Default", "END" } }
-                                }
-                            }
-                        }
-                    };
+                    var demoBpFix = CreateExpenseApprovalBlueprint();
 
                     foreach (var stepBp in demoBpFix.Workflow.Steps)
                     {
@@ -550,6 +405,7 @@ public static class DataSeeder
                     { 
                         StepId = "PendingManager", 
                         StepType = "HumanTask",
+                        RequiredRoles = new() { "Manager" },
                         NextSteps = new() 
                         { 
                             { "EVT-APPROVE", "Approved" }, // < 100
@@ -561,6 +417,7 @@ public static class DataSeeder
                     { 
                         StepId = "PendingDirector", 
                         StepType = "HumanTask",
+                        RequiredRoles = new() { "Director" },
                         NextSteps = new() 
                         { 
                             { "EVT-DIRECTOR-APPROVE", "Approved" }, 
@@ -572,6 +429,7 @@ public static class DataSeeder
                 }
             }
         };
+        WorkflowSimulationGovernance.Apply(v2Bp);
 
         var v2Wc = new WorkflowClass(clientTenantId, v2Name, "1.0.0", v2Bp);
         SetPrivateProperty(v2Wc, "Id", Guid.Parse("e912ab44-2222-2222-2222-222222222222"));
@@ -631,67 +489,33 @@ public static class DataSeeder
         "ApiKey",
         "workflow.start", "workflow.create", "workflow.read", "event.publish", "task.complete");
     
-    // 5.1. Seed Employee Role
-    if (!await context.Roles.AnyAsync(r => r.Name == "Employee" && r.TenantId == clientTenantId))
-    {
-        var empRole = new Role(clientTenantId, "Employee");
-        empRole.AddPermission("workflow.start"); // Can start workflow
-        empRole.AddPermission("workflow.read"); // Can view their workflows
-        empRole.AddPermission("event.publish.EVT-SUBMIT"); // Can only submit
-        context.Roles.Add(empRole);
-    }
-
-    // 5.2. Seed Manager Role
-    if (!await context.Roles.AnyAsync(r => r.Name == "Manager" && r.TenantId == clientTenantId))
-    {
-        var mgrRole = new Role(clientTenantId, "Manager");
-        mgrRole.AddPermission("workflow.read");
-        mgrRole.AddPermission("event.publish.EVT-APPROVE"); // Can approve standard
-        mgrRole.AddPermission("event.publish.EVT-REJECT"); // Can reject
-        mgrRole.AddPermission("event.publish.EVT-ESCALATE"); // Can escalate
-        context.Roles.Add(mgrRole);
-    }
-    else
-    {
-        // Update existing Manager role if it's missing EVT-ESCALATE
-        // Note: Permissions is loaded as a Value Object/Owned Type in EF, or simple collection depending on config.
-        // But Role.Permissions is HashSet<string>.
-        // EF Core loading of owned types/collections might need explicit Include if it's a separate table.
-        // Assuming simple string collection for now.
-        
-        var existingMgr = await context.Roles
-            .FirstOrDefaultAsync(r => r.Name == "Manager" && r.TenantId == clientTenantId);
-            
-        if (existingMgr != null)
-        {
-            // Force load permissions if they are not loaded (though usually they are with the entity if configured as owned)
-            // But if it's a separate table, we might need to load it.
-            // context.Entry(existingMgr).Collection(r => r.Permissions).Load(); 
-            // However, Role.Permissions is a HashSet<string> which EF maps to a table usually.
-            
-            // Re-fetch with explicit include if needed, but above we used Include(r => r.Permissions) which failed because string doesn't have properties.
-            // Role.Permissions is ICollection<string>? No, it's HashSet<string>.
-            
-            // Let's just try to add. The AddPermission method checks for duplicates internally.
-            
-            existingMgr.AddPermission("event.publish.EVT-ESCALATE");
-            existingMgr.AddPermission("event.publish.EVT-APPROVE");
-            existingMgr.AddPermission("event.publish.EVT-REJECT");
-            existingMgr.AddPermission("workflow.read");
-            
-            context.Roles.Update(existingMgr);
-        }
-    }
-
-    // 5.3. Seed Director Role
-    if (!await context.Roles.AnyAsync(r => r.Name == "Director" && r.TenantId == clientTenantId))
-    {
-        var dirRole = new Role(clientTenantId, "Director");
-        dirRole.AddPermission("workflow.read");
-        dirRole.AddPermission("event.publish.EVT-DIRECTOR-APPROVE"); // Can approve escalated
-        dirRole.AddPermission("event.publish.EVT-DIRECTOR-REJECT"); // Can reject escalated
-        context.Roles.Add(dirRole);
-    }
+    await EnsureRoleWithPermissionsAsync(
+        context,
+        clientTenantId,
+        "User",
+        "workflow.start", "workflow.read",
+        "event.publish.EVT-SUBMIT", "event.publish.EVT-APPLY", "event.publish.EVT-REQUEST-ACCESS");
+    await EnsureRoleWithPermissionsAsync(
+        context,
+        clientTenantId,
+        "Employee",
+        "workflow.start", "workflow.read",
+        "event.publish.EVT-SUBMIT", "event.publish.EVT-APPLY", "event.publish.EVT-REQUEST-ACCESS");
+    await EnsureRoleWithPermissionsAsync(
+        context,
+        clientTenantId,
+        "Manager",
+        "workflow.read",
+        "event.publish.EVT-APPROVE", "event.publish.EVT-REJECT", "event.publish.EVT-ESCALATE",
+        "event.publish.EVT-FINAL-APPROVE", "event.publish.EVT-DECLINE");
+    await EnsureRoleWithPermissionsAsync(
+        context,
+        clientTenantId,
+        "Director",
+        "workflow.read",
+        "event.publish.EVT-DIRECTOR-APPROVE", "event.publish.EVT-DIRECTOR-REJECT",
+        "event.publish.EVT-APPROVE", "event.publish.EVT-REJECT",
+        "event.publish.EVT-FINAL-APPROVE", "event.publish.EVT-DECLINE");
     
     await context.SaveChangesAsync();
 
@@ -875,6 +699,7 @@ public static class DataSeeder
                     }
                 }
             };
+            WorkflowSimulationGovernance.Apply(sagaBp);
 
             var sagaWc = new WorkflowClass(clientTenantId, sagaName, "1.0.0", sagaBp);
             manager.Publish(sagaWc);
@@ -1043,6 +868,7 @@ public static class DataSeeder
                     }
                 }
             };
+            WorkflowSimulationGovernance.Apply(loanBp);
 
             var loanWc = new WorkflowClass(clientTenantId, loanName, "1.0.0", loanBp);
             manager.Publish(loanWc);
@@ -1236,6 +1062,7 @@ public static class DataSeeder
                     }
                 }
             };
+            WorkflowSimulationGovernance.Apply(secOpsBp);
 
             var secOpsWc = new WorkflowClass(clientTenantId, secOpsName, "1.0.0", secOpsBp);
             manager.Publish(secOpsWc);
@@ -1313,6 +1140,56 @@ public static class DataSeeder
                 Console.WriteLine($"[DataSeeder] Skipping runtime definition for '{name}': {ex.Message}");
             }
         }
+    }
+
+    private static WorkflowClassBlueprint CreateExpenseApprovalBlueprint()
+    {
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new()
+            {
+                new EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request", AllowedRoles = new() { "User", "Employee" } },
+                new EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request", AllowedRoles = new() { "Manager" } },
+                new EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request", AllowedRoles = new() { "Manager" } }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = new() { "Draft", "Pending", "Approved", "Rejected" },
+                Transitions = new()
+                {
+                    new TransitionBlueprint { FromState = "Draft", ToState = "Pending", EventId = "EVT-SUBMIT" },
+                    new TransitionBlueprint { FromState = "Pending", ToState = "Approved", EventId = "EVT-APPROVE" },
+                    new TransitionBlueprint { FromState = "Pending", ToState = "Rejected", EventId = "EVT-REJECT" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Draft",
+                Steps = new()
+                {
+                    new StepBlueprint
+                    {
+                        StepId = "Draft",
+                        StepType = "Command",
+                        RequiredRoles = new() { "User" },
+                        NextSteps = new() { { "EVT-SUBMIT", "Pending" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "Pending",
+                        StepType = "HumanTask",
+                        RequiredRoles = new() { "Manager" },
+                        NextSteps = new() { { "EVT-APPROVE", "Approved" }, { "EVT-REJECT", "Rejected" } }
+                    },
+                    new StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { { "Default", "END" } } },
+                    new StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
+                }
+            }
+        };
+
+        WorkflowSimulationGovernance.Apply(blueprint);
+        return blueprint;
     }
 
     private static void SetPrivateProperty(object obj, string propName, object value)

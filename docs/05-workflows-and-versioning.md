@@ -22,9 +22,10 @@ FlowOS supports creating workflows via **Configuration** (JSON) or **Code** (C# 
       "stepId": "ManagerReview",
       "stepType": "HumanTask",
       "allowedRoles": ["Manager"],
+      "requiredCapabilities": ["event.publish.Approved", "event.publish.Rejected"],
       "nextSteps": { "Approved": "FinanceReview", "Rejected": "End" }
     },
-    { "stepId": "FinanceReview", "stepType": "HumanTask", "allowedRoles": ["Finance"], "nextSteps": { "Paid": "End" } }
+    { "stepId": "FinanceReview", "stepType": "HumanTask", "allowedRoles": ["Finance"], "requiredCapabilities": ["event.publish.Paid"], "nextSteps": { "Paid": "End" } }
   ]
 }
 ```

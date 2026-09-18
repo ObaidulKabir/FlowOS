@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.Services;
 using FlowOS.MCP.Tools;
 using MediatR;
 using Moq;
@@ -23,7 +24,7 @@ public class SimulationToolsTests
 
     private JObject CreateExpenseApprovalBlueprint()
     {
-        return JObject.FromObject(new WorkflowClassBlueprint
+        var blueprint = new WorkflowClassBlueprint
         {
             Events = new List<EventBlueprint>
             {
@@ -83,7 +84,9 @@ public class SimulationToolsTests
                     }
                 }
             }
-        });
+        };
+        WorkflowSimulationGovernance.Apply(blueprint);
+        return JObject.FromObject(blueprint);
     }
 
     [Fact]

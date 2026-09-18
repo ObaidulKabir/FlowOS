@@ -140,9 +140,9 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
   "version": "1.0.0",
   "blueprint": {
     "events": [
-      { "eventId": "EVT-BOOK", "name": "Appointment Booked", "category": "Human" },
+      { "eventId": "EVT-BOOK", "name": "Appointment Booked", "category": "Human", "requiredCapabilities": ["event.publish.EVT-BOOK"] },
       { "eventId": "EVT-REMIND-24H", "name": "24h Pre-Event Reminder", "category": "System" },
-      { "eventId": "EVT-CHECKIN", "name": "Patient Checked In", "category": "Human" },
+      { "eventId": "EVT-CHECKIN", "name": "Patient Checked In", "category": "Human", "requiredCapabilities": ["event.publish.EVT-CHECKIN"] },
       { "eventId": "EVT-NOSHOW", "name": "Patient No-Show", "category": "System" }
     ],
     "stateMachine": {
@@ -190,6 +190,8 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
         {
           "stepId": "AwaitCheckIn",
           "stepType": "HumanTask",
+          "requiredRoles": ["Doctor"],
+          "requiredCapabilities": ["event.publish.EVT-CHECKIN"],
           "sla": {
             "duration": "26h",
             "timeoutEvent": "EVT-NOSHOW",
@@ -203,10 +205,13 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
       ]
     },
     "roles": [
-      { "name": "Patient", "description": "Receives appointment countdown notifications." },
-      { "name": "Doctor", "description": "Conducts consultations." }
+      { "name": "Patient", "description": "Receives appointment countdown notifications.", "grantedCapabilities": ["event.publish.EVT-BOOK"] },
+      { "name": "Doctor", "description": "Conducts consultations.", "grantedCapabilities": ["event.publish.EVT-CHECKIN"] }
     ],
-    "capabilities": []
+    "capabilities": [
+      { "code": "event.publish.EVT-BOOK", "description": "Book the appointment" },
+      { "code": "event.publish.EVT-CHECKIN", "description": "Check the patient in" }
+    ]
   }
 }
 ```
@@ -221,11 +226,11 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
   "version": "1.0.0",
   "blueprint": {
     "events": [
-      { "eventId": "EVT-SUBMIT", "name": "Purchase Order Submitted", "category": "Human" },
+      { "eventId": "EVT-SUBMIT", "name": "Purchase Order Submitted", "category": "Human", "requiredCapabilities": ["event.publish.EVT-SUBMIT"] },
       { "eventId": "EVT-WARN-24H", "name": "24h Remaining Warning", "category": "System" },
       { "eventId": "EVT-WARN-2H", "name": "Critical 2h Warning", "category": "System" },
       { "eventId": "EVT-ESCALATE", "name": "SLA Breached Escalate", "category": "System" },
-      { "eventId": "EVT-APPROVE", "name": "PO Approved", "category": "Human" }
+      { "eventId": "EVT-APPROVE", "name": "PO Approved", "category": "Human", "requiredCapabilities": ["event.publish.EVT-APPROVE"] }
     ],
     "stateMachine": {
       "initialState": "PendingApproval",
@@ -244,6 +249,7 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
           "stepId": "ManagerReview",
           "stepType": "HumanTask",
           "requiredRoles": ["FinanceManager"],
+          "requiredCapabilities": ["event.publish.EVT-APPROVE"],
           "sla": {
             "duration": "48h",
             "timeoutEvent": "EVT-ESCALATE",
@@ -278,10 +284,13 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
       ]
     },
     "roles": [
-      { "name": "FinanceManager", "description": "First-line PO approver." },
-      { "name": "FinanceDirector", "description": "Escalation authority." }
+      { "name": "FinanceManager", "description": "First-line PO approver.", "grantedCapabilities": ["event.publish.EVT-APPROVE"] },
+      { "name": "FinanceDirector", "description": "Escalation authority.", "grantedCapabilities": ["event.publish.EVT-APPROVE"] }
     ],
-    "capabilities": []
+    "capabilities": [
+      { "code": "event.publish.EVT-SUBMIT", "description": "Submit a purchase order" },
+      { "code": "event.publish.EVT-APPROVE", "description": "Approve a purchase order" }
+    ]
   }
 }
 ```
@@ -298,7 +307,7 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
     "events": [
       { "eventId": "EVT-SIGNUP", "name": "Account Created", "category": "System" },
       { "eventId": "EVT-NUDGE", "name": "Send Onboarding Nudge", "category": "System" },
-      { "eventId": "EVT-ACTIVATED", "name": "Profile Completed", "category": "Human" }
+      { "eventId": "EVT-ACTIVATED", "name": "Profile Completed", "category": "Human", "requiredCapabilities": ["event.publish.EVT-ACTIVATED"] }
     ],
     "stateMachine": {
       "initialState": "Registered",
@@ -340,9 +349,11 @@ Dispatches authenticated POST requests to external systems with non-repudiation 
       ]
     },
     "roles": [
-      { "name": "Customer", "description": "New platform user." }
+      { "name": "Customer", "description": "New platform user.", "grantedCapabilities": ["event.publish.EVT-ACTIVATED"] }
     ],
-    "capabilities": []
+    "capabilities": [
+      { "code": "event.publish.EVT-ACTIVATED", "description": "Complete the onboarding profile" }
+    ]
   }
 }
 ```

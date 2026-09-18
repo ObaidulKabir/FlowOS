@@ -12,6 +12,8 @@
     {
       "stepId": "ReviewStep",
       "stepType": "HumanTask",
+      "requiredRoles": ["Manager"],
+      "requiredCapabilities": ["event.publish.EVT-ORDER-APPROVED", "event.publish.EVT-ORDER-REJECTED"],
       "nextSteps": {
         "EVT-ORDER-APPROVED": "FinanceStep",
         "EVT-ORDER-REJECTED": "EndStep"

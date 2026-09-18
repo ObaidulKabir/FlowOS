@@ -3,6 +3,7 @@ import { FlaskConical, Link2, Sparkles } from 'lucide-react';
 import { WorkflowClass } from '../types';
 import { DraftSimulator } from './DraftSimulator';
 import { ContextSimulationStudio } from './ContextSimulationStudio';
+import { DEMO_FALLBACKS, DEMO_NAMES } from '../lib/demoWorkflows';
 
 interface Props {
   blueprints: WorkflowClass[];
@@ -10,87 +11,6 @@ interface Props {
   initialRevision?: 'draft' | 'active';
   preferContextMode?: boolean;
 }
-
-const DEMO_NAMES = [
-  'ExpenseApprovalV2',
-  'OrderSagaFulfillment',
-  'LoanUnderwritingFlow',
-  'SecOpsAccessGovernance',
-  'ExpenseApproval'
-];
-
-/** Always-available fallback so the visual sandbox works with zero blueprints / no API seed. */
-const FALLBACK_EXPENSE_V2 = {
-  Events: [
-    { EventId: 'EVT-SUBMIT', Name: 'Submit' },
-    { EventId: 'EVT-APPROVE', Name: 'Approve' },
-    { EventId: 'EVT-REJECT', Name: 'Reject' },
-    { EventId: 'EVT-ESCALATE', Name: 'Escalate' }
-  ],
-  StateMachine: {
-    InitialState: 'Draft',
-    States: ['Draft', 'Pending', 'Approved', 'Rejected'],
-    Transitions: [
-      { FromState: 'Draft', ToState: 'Pending', EventId: 'EVT-SUBMIT' },
-      { FromState: 'Pending', ToState: 'Approved', EventId: 'EVT-APPROVE' },
-      { FromState: 'Pending', ToState: 'Rejected', EventId: 'EVT-REJECT' }
-    ]
-  },
-  Workflow: {
-    StartStepId: 'ValidateInput',
-    Steps: [
-      {
-        StepId: 'ValidateInput',
-        StepType: 'Command',
-        NextSteps: { Default: 'Draft' },
-        RequiredRoles: ['System']
-      },
-      {
-        StepId: 'Draft',
-        StepType: 'HumanTask',
-        NextSteps: { 'EVT-SUBMIT': 'FraudCheck' },
-        RequiredRoles: ['User']
-      },
-      {
-        StepId: 'FraudCheck',
-        StepType: 'Command',
-        NextSteps: { Default: 'Pending' },
-        RequiredRoles: ['System']
-      },
-      {
-        StepId: 'Pending',
-        StepType: 'HumanTask',
-        NextSteps: { 'EVT-APPROVE': 'NotifyApproval', 'EVT-REJECT': 'NotifyRejection' },
-        RequiredRoles: ['Manager'],
-        Sla: { Duration: '7d', TimeoutEvent: 'EVT-ESCALATE', EscalationStepId: 'NotifyRejection' }
-      },
-      {
-        StepId: 'NotifyApproval',
-        StepType: 'Event',
-        NextSteps: { Default: 'Approved' },
-        RequiredRoles: ['System']
-      },
-      {
-        StepId: 'NotifyRejection',
-        StepType: 'Event',
-        NextSteps: { Default: 'Rejected' },
-        RequiredRoles: ['System']
-      },
-      {
-        StepId: 'Approved',
-        StepType: 'Command',
-        NextSteps: { Default: 'END' },
-        RequiredRoles: []
-      },
-      {
-        StepId: 'Rejected',
-        StepType: 'Command',
-        NextSteps: { Default: 'END' },
-        RequiredRoles: []
-      }
-    ]
-  }
-};
 
 type Mode = 'visual' | 'context';
 
@@ -118,15 +38,24 @@ export const DemoVisualSimulator: React.FC<Props> = ({
       source: 'catalog' as const
     }));
 
-    if (!items.some(item => item.name === 'ExpenseApprovalV2')) {
-      items.unshift({
-        id: 'fallback-expense-v2',
-        name: 'ExpenseApprovalV2',
-        version: 'demo',
-        definition: FALLBACK_EXPENSE_V2,
+    DEMO_NAMES.forEach(name => {
+      if (items.some(item => item.name === name)) return;
+      const fallback = DEMO_FALLBACKS[name];
+      if (!fallback) return;
+      items.push({
+        id: fallback.id,
+        name: fallback.name,
+        version: fallback.version,
+        definition: fallback.definition,
         source: 'catalog'
       });
-    }
+    });
+
+    items.sort((a, b) => {
+      const ai = DEMO_NAMES.indexOf(a.name);
+      const bi = DEMO_NAMES.indexOf(b.name);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
 
     return items;
   }, [blueprints]);

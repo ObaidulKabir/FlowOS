@@ -26,6 +26,8 @@
     {
       "stepId": "ApproveOrder",
       "stepType": "HumanTask",
+      "requiredRoles": ["Manager"],
+      "requiredCapabilities": ["event.publish.EVT-ORDER-APPROVED", "event.publish.EVT-ORDER-REJECTED"],
       "nextSteps": {
         "EVT-ORDER-APPROVED": "FulfillOrder",
         "EVT-ORDER-REJECTED": "Rejected"

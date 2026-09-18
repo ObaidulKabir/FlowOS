@@ -60,6 +60,7 @@ public class WorkflowCopilotService : IWorkflowCopilotService
                 EntityType = "ApprovalSubject"
             }
         };
+        WorkflowSimulationGovernance.Apply(blueprint);
 
         return generated with
         {
@@ -103,9 +104,9 @@ public class WorkflowCopilotService : IWorkflowCopilotService
         // 3. Synthesize Events
         var events = new List<EventBlueprint>
         {
-            new() { EventId = "EVT-SUBMIT", Name = "Submit For Processing" },
-            new() { EventId = "EVT-APPROVE", Name = "Approve Request" },
-            new() { EventId = "EVT-REJECT", Name = "Reject Request" }
+            new() { EventId = "EVT-SUBMIT", Name = "Submit For Processing", AllowedRoles = new List<string> { "User", "Employee" } },
+            new() { EventId = "EVT-APPROVE", Name = "Approve Request", AllowedRoles = new List<string> { "Manager" } },
+            new() { EventId = "EVT-REJECT", Name = "Reject Request", AllowedRoles = new List<string> { "Manager" } }
         };
 
         if (hasSla)
@@ -399,6 +400,7 @@ public class WorkflowCopilotService : IWorkflowCopilotService
                 Steps = steps
             }
         };
+        WorkflowSimulationGovernance.Apply(blueprint);
 
         // Validate Generated Blueprint
         var validation = _validator.Validate(blueprint);
@@ -416,6 +418,7 @@ public class WorkflowCopilotService : IWorkflowCopilotService
         if (hasSla) explanationParts.Add($"• **SLA Governance**: Strict {slaDuration} countdown timer with automatic escalation.");
         if (hasReminder) explanationParts.Add($"• **Reminders & Alerts**: Pre/post-event countdown reminders configured on step SLA with 'EVT-REMINDER'.");
         if (hasCompensation) explanationParts.Add($"• **Saga Rollback**: OnFailure compensation hooks dispatch rollback side-effects upon failure.");
+        explanationParts.Add("• **Capability Gates**: HumanTask exits declare requiredCapabilities; roles are grant bags plus inbox labels.");
 
         return new GenerateBlueprintCopilotResponse
         {
@@ -564,6 +567,7 @@ public class WorkflowCopilotService : IWorkflowCopilotService
             explanationParts.Add("• Analyzed prompt and verified existing blueprint structural consistency.");
         }
 
+        WorkflowSimulationGovernance.Apply(refined);
         var validation = _validator.Validate(refined);
 
         return new GenerateBlueprintCopilotResponse

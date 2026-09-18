@@ -33,7 +33,7 @@ public static class FlowOsMcpGuidance
           • Call `create_draft_workflowclass` with `name`, `version`, and `blueprint`.
             The blueprint MUST define:
             - `stateMachine`: `initialState`, `states`, and `transitions` (fromState, toState, triggerEvent).
-            - `workflow`: `startStepId` and `steps` (stepId, stepType, requiredRoles, nextSteps).
+            - `workflow`: `startStepId` and `steps` (stepId, stepType, requiredRoles, requiredCapabilities, nextSteps). Capability is the execution gate; requiredRoles is inbox only.
             - `events`: List of event identifiers (e.g. EVT-SUBMIT, EVT-APPROVE, EVT-REJECT).
             - `roles`: Role definitions governing step permissions.
 
@@ -676,6 +676,8 @@ public static class FlowOsMcpGuidance
         {
           "stepId": "{STEP_ID}",
           "stepType": "HumanTask",
+          "requiredRoles": ["ServiceAdvisor"],
+          "requiredCapabilities": ["event.publish.QUOTE_APPROVED"],
           "sla": {
             "duration": "24h",
             "timeoutEvent": "QUOTE_RESPONSE_OVERDUE",
@@ -892,6 +894,7 @@ public static class FlowOsMcpGuidance
           "stepType": "HumanTask",
           "actor": "Either",
           "requiredRoles": ["ServiceAdvisor"],
+          "requiredCapabilities": ["event.publish.QUOTE_APPROVED"],
           "decisionGuideline": "ApproveQuote: accept if quote is within 15% of estimate; else request revision; never approve missing labor hours.",
           "agentPrompt": "quote-approval",
           "agentProvider": "quote-llm",
@@ -937,17 +940,17 @@ public static class FlowOsMcpGuidance
         """
         {
           "events": [
-            { "id": "EVT-SUBMIT", "name": "Submit Expense", "category": "Human", "description": "Employee submits expense claim" },
-            { "id": "EVT-APPROVE-MANAGER", "name": "Manager Approval", "category": "Decision", "description": "Department manager approves claim" },
-            { "id": "EVT-REJECT", "name": "Reject Claim", "category": "Decision", "description": "Claim rejected" }
+            { "eventId": "EVT-SUBMIT", "name": "Submit Expense", "category": "Human", "requiredCapabilities": ["event.publish.EVT-SUBMIT"], "allowedRoles": ["Employee"] },
+            { "eventId": "EVT-APPROVE-MANAGER", "name": "Manager Approval", "category": "Human", "requiredCapabilities": ["event.publish.EVT-APPROVE-MANAGER"], "allowedRoles": ["Manager"] },
+            { "eventId": "EVT-REJECT", "name": "Reject Claim", "category": "Human", "requiredCapabilities": ["event.publish.EVT-REJECT"], "allowedRoles": ["Manager"] }
           ],
           "stateMachine": {
             "initialState": "Draft",
             "states": ["Draft", "Submitted", "Approved", "Rejected"],
             "transitions": [
-              { "fromState": "Draft", "toState": "Submitted", "triggerEvent": "EVT-SUBMIT" },
-              { "fromState": "Submitted", "toState": "Approved", "triggerEvent": "EVT-APPROVE-MANAGER" },
-              { "fromState": "Submitted", "toState": "Rejected", "triggerEvent": "EVT-REJECT" }
+              { "fromState": "Draft", "toState": "Submitted", "eventId": "EVT-SUBMIT" },
+              { "fromState": "Submitted", "toState": "Approved", "eventId": "EVT-APPROVE-MANAGER" },
+              { "fromState": "Submitted", "toState": "Rejected", "eventId": "EVT-REJECT" }
             ]
           },
           "workflow": {
@@ -957,12 +960,14 @@ public static class FlowOsMcpGuidance
                 "stepId": "DraftStep",
                 "stepType": "HumanTask",
                 "requiredRoles": ["Employee"],
+                "requiredCapabilities": ["event.publish.EVT-SUBMIT"],
                 "nextSteps": { "EVT-SUBMIT": "ManagerReviewStep" }
               },
               {
                 "stepId": "ManagerReviewStep",
-                "stepType": "Decision",
+                "stepType": "HumanTask",
                 "requiredRoles": ["Manager"],
+                "requiredCapabilities": ["event.publish.EVT-APPROVE-MANAGER", "event.publish.EVT-REJECT"],
                 "nextSteps": {
                   "EVT-APPROVE-MANAGER": "ApprovedEndStep",
                   "EVT-REJECT": "RejectedEndStep"
@@ -979,12 +984,14 @@ public static class FlowOsMcpGuidance
             ]
           },
           "roles": [
-            { "name": "Employee", "description": "Submits expense claims", "grantedCapabilities": ["workflow.create"] },
-            { "name": "Manager", "description": "Reviews and approves claims", "grantedCapabilities": ["event.publish"] }
+            { "name": "Employee", "description": "Submits expense claims", "grantedCapabilities": ["event.publish.EVT-SUBMIT"] },
+            { "name": "Manager", "description": "Reviews and approves claims", "grantedCapabilities": ["event.publish.EVT-APPROVE-MANAGER", "event.publish.EVT-REJECT"] },
+            { "name": "Director", "description": "Can execute Manager-gated events without being the inbox role", "grantedCapabilities": ["event.publish.EVT-APPROVE-MANAGER", "event.publish.EVT-REJECT"] }
           ],
           "capabilities": [
-            { "code": "workflow.create", "description": "Can create workflow drafts" },
-            { "code": "event.publish", "description": "Can publish events" }
+            { "code": "event.publish.EVT-SUBMIT", "description": "Publish the submit event" },
+            { "code": "event.publish.EVT-APPROVE-MANAGER", "description": "Publish the manager approve event" },
+            { "code": "event.publish.EVT-REJECT", "description": "Publish the reject event" }
           ]
         }
         """;

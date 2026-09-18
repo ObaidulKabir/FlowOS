@@ -108,9 +108,12 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
     ]
   },
   "roles": [
-    { "name": "Manager", "grantedCapabilities": ["event.publish.EVT-APPROVE"] }
+    { "name": "User", "grantedCapabilities": ["event.publish.EVT-SUBMIT"] },
+    { "name": "Manager", "grantedCapabilities": ["event.publish.EVT-APPROVE"] },
+    { "name": "Director", "grantedCapabilities": ["event.publish.EVT-APPROVE"] }
   ],
   "capabilities": [
+    { "code": "event.publish.EVT-SUBMIT", "description": "Publish the submit event" },
     { "code": "event.publish.EVT-APPROVE", "description": "Publish the approve event" }
   ]
 }

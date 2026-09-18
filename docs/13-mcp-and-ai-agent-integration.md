@@ -253,8 +253,8 @@ Note the **verified field names**: `eventId` (not `eventType`), and no `label`/`
       "version": "1.0.0",
       "blueprint": {
         "events": [
-          { "eventId": "EVT-SUBMIT", "category": "Human" },
-          { "eventId": "EVT-APPROVE", "category": "Human" }
+          { "eventId": "EVT-SUBMIT", "category": "Human", "requiredCapabilities": ["event.publish.EVT-SUBMIT"] },
+          { "eventId": "EVT-APPROVE", "category": "Human", "requiredCapabilities": ["event.publish.EVT-APPROVE"] }
         ],
         "stateMachine": {
           "initialState": "Draft",
@@ -267,8 +267,8 @@ Note the **verified field names**: `eventId` (not `eventType`), and no `label`/`
         "workflow": {
           "startStepId": "SubmitStep",
           "steps": [
-            { "stepId": "SubmitStep", "stepType": "HumanTask", "nextSteps": { "EVT-SUBMIT": "ApprovalStep" }, "requiredRoles": ["Employee"] },
-            { "stepId": "ApprovalStep", "stepType": "HumanTask", "nextSteps": { "EVT-APPROVE": "END" }, "requiredRoles": ["Manager"] }
+            { "stepId": "SubmitStep", "stepType": "HumanTask", "nextSteps": { "EVT-SUBMIT": "ApprovalStep" }, "requiredRoles": ["Employee"], "requiredCapabilities": ["event.publish.EVT-SUBMIT"] },
+            { "stepId": "ApprovalStep", "stepType": "HumanTask", "nextSteps": { "EVT-APPROVE": "END" }, "requiredRoles": ["Manager"], "requiredCapabilities": ["event.publish.EVT-APPROVE"] }
           ]
         },
         "roles": [{ "name": "Manager", "grantedCapabilities": ["event.publish.EVT-APPROVE"] }]
@@ -286,7 +286,7 @@ Note the **verified field names**: `eventId` (not `eventType`), and no `label`/`
 
 ### 3. Fix it, retry, then confirm with `validate_draft_workflowclass`
 
-Add the missing `capabilities` array to the same `arguments.blueprint` (`"capabilities": [{ "code": "event.publish.EVT-APPROVE" }]`) and resend the same `create_draft_workflowclass` call. This time it saves:
+Add the missing `capabilities` array to the same `arguments.blueprint` (`"capabilities": [{ "code": "event.publish.EVT-SUBMIT" }, { "code": "event.publish.EVT-APPROVE" }]`) and grant `event.publish.EVT-SUBMIT` on Employee. Resend the same `create_draft_workflowclass` call. This time it saves:
 
 ```json
 { "jsonrpc": "2.0", "id": 2, "result": { "content": [{ "type": "json", "text": "{ \"id\": \"<GUID>\", \"status\": \"Draft\", \"message\": \"Draft created successfully\" }" }], "isError": false } }

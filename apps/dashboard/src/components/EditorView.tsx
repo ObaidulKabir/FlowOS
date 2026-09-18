@@ -5,6 +5,7 @@ import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { DraftSimulator } from './DraftSimulator';
 import { StepActionBuilder, StepAction } from './StepActionBuilder';
 import { CopilotDrawer } from './CopilotDrawer';
+import { applySimulationGovernance } from '../lib/simulationGovernance';
 
 interface Props {
   item?: WorkflowClass; // If null, creating new
@@ -195,6 +196,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 })
             }
         };
+        applySimulationGovernance(def);
         setRawJson(JSON.stringify(def, null, 2));
     }
   }, [events, states, initialState, transitions, steps, startStepId, jsonMode]);

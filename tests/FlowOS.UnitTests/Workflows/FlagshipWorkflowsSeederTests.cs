@@ -139,6 +139,11 @@ public class FlagshipWorkflowsSeederTests
         Assert.Equal("HumanTask", reviewStep.StepType);
         Assert.Equal("48h", reviewStep.Sla?.Duration);
         Assert.Equal("EVT-DECLINE", reviewStep.Sla?.TimeoutEvent);
+        Assert.Contains("event.publish.EVT-FINAL-APPROVE", reviewStep.RequiredCapabilities);
+        Assert.Contains("event.publish.EVT-DECLINE", reviewStep.RequiredCapabilities);
+        Assert.Contains(bp.Roles, role =>
+            role.Name == "Director" &&
+            role.GrantedCapabilities.Contains("event.publish.EVT-FINAL-APPROVE"));
 
         var disburseStep = bp.Workflow.Steps.First(s => s.StepId == "DisburseFunds");
         var webhookAction = disburseStep.OnEntry.First(a => a.ActionType == "Webhook");
@@ -159,6 +164,10 @@ public class FlagshipWorkflowsSeederTests
         // Act & Assert
         var managerStep = bp.Workflow.Steps.First(s => s.StepId == "ManagerApproval");
         Assert.Equal("HumanTask", managerStep.StepType);
+        Assert.Contains("event.publish.EVT-APPROVE", managerStep.RequiredCapabilities);
+        Assert.Contains(bp.Roles, role =>
+            role.Name == "Director" &&
+            role.GrantedCapabilities.Contains("event.publish.EVT-APPROVE"));
         Assert.Equal("24h", managerStep.Sla?.Duration);
         Assert.Equal("EVT-ESCALATE", managerStep.Sla?.TimeoutEvent);
         Assert.Equal("DirectorEscalation", managerStep.Sla?.EscalationStepId);

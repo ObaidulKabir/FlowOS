@@ -20,9 +20,9 @@ Use a non-empty canonical state-machine entity type:
 {
   "contextSchema": "{\"type\":\"object\",\"required\":[\"Amount\",\"Description\",\"ApprovalLimit\"],\"properties\":{\"Amount\":{\"type\":\"number\"},\"Description\":{\"type\":\"string\"},\"ApprovalLimit\":{\"type\":\"number\"}}}",
   "events": [
-    { "eventId": "EVT-SUBMIT", "name": "Submit" },
-    { "eventId": "EVT-APPROVE", "name": "Approve" },
-    { "eventId": "EVT-REJECT", "name": "Reject" }
+    { "eventId": "EVT-SUBMIT", "name": "Submit", "category": "Human", "requiredCapabilities": ["event.publish.EVT-SUBMIT"], "allowedRoles": ["Requester"] },
+    { "eventId": "EVT-APPROVE", "name": "Approve", "category": "Human", "requiredCapabilities": ["event.publish.EVT-APPROVE"], "allowedRoles": ["Approver"] },
+    { "eventId": "EVT-REJECT", "name": "Reject", "category": "Human", "requiredCapabilities": ["event.publish.EVT-REJECT"], "allowedRoles": ["Approver"] }
   ],
   "stateMachine": {
     "entityType": "ApprovalSubject",
@@ -52,18 +52,19 @@ Use a non-empty canonical state-machine entity type:
         "stepId": "Review",
         "stepType": "HumanTask",
         "requiredRoles": ["Approver"],
+        "requiredCapabilities": ["event.publish.EVT-APPROVE", "event.publish.EVT-REJECT"],
         "nextSteps": { "EVT-APPROVE": "END", "EVT-REJECT": "END" }
       }
     ]
   },
   "roles": [
-    { "name": "Requester" },
-    { "name": "Approver" }
+    { "name": "Requester", "grantedCapabilities": ["event.publish.EVT-SUBMIT"] },
+    { "name": "Approver", "grantedCapabilities": ["event.publish.EVT-APPROVE", "event.publish.EVT-REJECT"] }
   ],
   "capabilities": [
-    { "code": "event.publish.EVT-SUBMIT" },
-    { "code": "event.publish.EVT-APPROVE" },
-    { "code": "event.publish.EVT-REJECT" }
+    { "code": "event.publish.EVT-SUBMIT", "description": "Publish the submit event" },
+    { "code": "event.publish.EVT-APPROVE", "description": "Publish the approve event" },
+    { "code": "event.publish.EVT-REJECT", "description": "Publish the reject event" }
   ]
 }
 ```
@@ -87,6 +88,10 @@ Expense:
       "EVT-REJECT": "EVT-EXPENSE-REJECT"
     },
     "roleOverrides": { "Approver": "FinanceManager" },
+    "capabilityOverrides": {
+      "event.publish.EVT-APPROVE": "finance.approve.expense",
+      "event.publish.EVT-REJECT": "finance.reject.expense"
+    },
     "inputMapping": {
       "Amount": "expense.amount",
       "Description": "expense.justification"

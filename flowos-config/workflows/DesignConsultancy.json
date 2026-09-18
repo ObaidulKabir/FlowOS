@@ -12,6 +12,8 @@
     {
       "stepId": "DesignTask",
       "stepType": "HumanTask",
+      "requiredRoles": ["Designer"],
+      "requiredCapabilities": ["event.publish.TaskCompleted"],
       "nextSteps": {
         "TaskCompleted": "Review"
       }
@@ -19,6 +21,8 @@
     {
       "stepId": "Review",
       "stepType": "HumanTask",
+      "requiredRoles": ["Manager"],
+      "requiredCapabilities": ["event.publish.EVT-DESIGN-APPROVED", "event.publish.EVT-DESIGN-REJECTED"],
       "nextSteps": {
         "EVT-DESIGN-APPROVED": "END",
         "EVT-DESIGN-REJECTED": "Rejected"
