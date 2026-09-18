@@ -20,6 +20,9 @@ public class RoleRepository : IRoleRepository
     public Task<bool> ExistsByNameAsync(Guid tenantId, string roleName, CancellationToken cancellationToken = default)
         => _context.Roles.AnyAsync(r => r.TenantId == tenantId && r.Name == roleName, cancellationToken);
 
+    public Task<Role?> GetByNameAsync(Guid tenantId, string roleName, CancellationToken cancellationToken = default)
+        => _context.Roles.FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Name == roleName, cancellationToken);
+
     public Task<Role?> GetByIdAsync(Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
         => _context.Roles.FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, cancellationToken);
 

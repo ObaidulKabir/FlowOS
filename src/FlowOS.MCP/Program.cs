@@ -1,4 +1,6 @@
 using FlowOS.Application.Behaviors;
+using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Services;
 using FlowOS.Application.Commands.Governance;
 using FlowOS.Core.Interfaces;
 using FlowOS.Domain.Services;
@@ -594,6 +596,7 @@ public partial class Program
         services.AddMemoryCache();
         services.AddScoped<ICurrentUser, McpCurrentUser>();
         services.AddScoped<ICapabilityService, CapabilityService>();
+        services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
         services.AddScoped<IPolicyProvider, EfCorePolicyProvider>();
         services.AddScoped<IPolicyEvaluator, DefaultPolicyEvaluator>();
         services.AddScoped<WorkflowClassValidator>();

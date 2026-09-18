@@ -60,16 +60,21 @@ public record WorkflowClassBlueprint
 | `stepId` | string | Unique within the workflow |
 | `stepType` | enum | `Command`, `SystemTask`, `HumanTask`, `Timer`, `Decision`, `End` |
 | `nextSteps` | Dictionary<string,string> | `EventId` → `NextStepId` (or `"END"`) |
-| `requiredRoles` | string[] | Roles allowed to perform this step |
+| `requiredRoles` | string[] | Inbox / “waiting for” labels only (not the execution gate) |
+| `requiredCapabilities` | string[] | Capabilities required to complete this HumanTask or fire its human events |
 | `conditions` | Dictionary<string,string> | Decision-step routing expressions → `NextStepId` |
 
 ### 4. Roles & Capabilities (governance)
+
+The pack `roles` / `capabilities` arrays are a **suggested catalog** (`GOV-001`). They are not live RBAC — tenant Role.Permissions is.
 
 | Property | Type | Description |
 |---|---|---|
 | `name` | string | Role name (e.g. `Manager`) |
 | `description` | string | Role responsibility |
-| `grantedCapabilities` | string[] | e.g. `event.publish.EVT-APPROVE` |
+| `grantedCapabilities` | string[] | Suggested grants, e.g. `event.publish.EVT-APPROVE` |
+
+Human events should also declare `requiredCapabilities`. Capability is the execution gate; `requiredRoles` only routes the inbox.
 
 ### Advanced behaviors
 
@@ -84,8 +89,8 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
 ```json
 {
   "events": [
-    { "eventId": "EVT-SUBMIT", "name": "Submit", "category": "Human" },
-    { "eventId": "EVT-APPROVE", "name": "Approve", "category": "Human", "payloadSchema": "{ \"type\": \"object\", \"properties\": { \"comment\": { \"type\": \"string\" } } }" }
+    { "eventId": "EVT-SUBMIT", "name": "Submit", "category": "Human", "requiredCapabilities": ["event.publish.EVT-SUBMIT"] },
+    { "eventId": "EVT-APPROVE", "name": "Approve", "category": "Human", "requiredCapabilities": ["event.publish.EVT-APPROVE"], "payloadSchema": "{ \"type\": \"object\", \"properties\": { \"comment\": { \"type\": \"string\" } } }" }
   ],
   "stateMachine": {
     "initialState": "Draft",
@@ -99,7 +104,7 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
     "startStepId": "SubmitStep",
     "steps": [
       { "stepId": "SubmitStep", "stepType": "Command", "nextSteps": { "EVT-SUBMIT": "ApproveStep" } },
-      { "stepId": "ApproveStep", "stepType": "HumanTask", "requiredRoles": ["Manager"], "nextSteps": { "EVT-APPROVE": "END" } }
+      { "stepId": "ApproveStep", "stepType": "HumanTask", "requiredRoles": ["Manager"], "requiredCapabilities": ["event.publish.EVT-APPROVE"], "nextSteps": { "EVT-APPROVE": "END" } }
     ]
   },
   "roles": [
@@ -126,6 +131,8 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
 | `CON-004`, `CON-005` | Consistency | Every `nextSteps`/`conditions` target must resolve to a defined `StepId` (or `"END"`); every `nextSteps` key must be a declared event (or the literal `"Default"`). |
 | `WF-VAL-001`, `WF-VAL-002` | StepValidation | `Decision` steps need ≥1 condition; `HumanTask` steps need ≥1 exit path. |
 | `GOV-001` | Governance | A role's `grantedCapabilities` must all appear in the top-level `capabilities` array. |
+| `GOV-002` | Governance | A HumanTask (with a human exit event) and each `category: Human` event must declare at least one `requiredCapabilities` entry. |
+| `GOV-003` | Governance | Every `requiredCapabilities` code on a step or event must appear in the top-level `capabilities` array. |
 
 *Example error:* `CON-004: Step 'Working' references unknown NextStep 'Finished'`.
 

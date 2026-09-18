@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MediatR;
 using FlowOS.Application.Commands;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Services;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
@@ -57,14 +58,14 @@ public partial class WorkflowCommandHandlers
         {
             if (!isAgentCommit && (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id)))
             {
-                var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
-                var requiredCapability = $"event.publish.{request.EventType}";
-                if (!capabilities.Contains(requiredCapability) && !capabilities.Contains("event.publish"))
-                {
-                    throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
-                        "EventPermission",
-                        $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
-                }
+                await _activityAuthorization.AuthorizeAsync(
+                    request.TenantId,
+                    userRoles,
+                    new[] { $"event.publish.{request.EventType}" },
+                    failClosed: true,
+                    "EventPermission",
+                    $"publish '{request.EventType}'",
+                    cancellationToken);
             }
             Console.WriteLine($"[Handler] Instance {request.WorkflowInstanceId} not found.");
             return false;
@@ -88,20 +89,28 @@ public partial class WorkflowCommandHandlers
 
         if (!isAgentCommit && (userRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id)))
         {
-            var requiredCapability = ResolveEventCapability(
-                request.EventType,
-                contextRevisionForAuthorization);
-            var capabilities = await _capabilityService.GetCapabilitiesAsync(request.TenantId, userRoles);
-            var hasSpecific = capabilities.Contains(requiredCapability);
-            var hasRoot = capabilities.Contains("event.publish");
-
-            if (!hasSpecific && !hasRoot)
+            var currentStep = definition.Steps.FirstOrDefault(step =>
+                string.Equals(step.StepId, instance.CurrentStepId, StringComparison.OrdinalIgnoreCase));
+            var requiredCapabilities = ActivityAuthorization.ResolveRequiredCapabilities(
+                currentStep,
+                request.EventType);
+            if (requiredCapabilities.Count == 0)
             {
-                Console.WriteLine($"[WorkflowHandler] Access Denied. User {_currentUser.Id} (Roles: {string.Join(",", userRoles)}) lacks {requiredCapability}");
-                throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
-                    "EventPermission",
-                    $"User lacks permission to publish '{request.EventType}'. Required: {requiredCapability}");
+                requiredCapabilities = new List<string>
+                {
+                    ResolveEventCapability(request.EventType, contextRevisionForAuthorization)
+                };
             }
+
+            var failClosed = ActivityAuthorization.IsHumanActivity(currentStep, request.EventType);
+            await _activityAuthorization.AuthorizeAsync(
+                request.TenantId,
+                userRoles,
+                requiredCapabilities,
+                failClosed,
+                "EventPermission",
+                $"publish '{request.EventType}'",
+                cancellationToken);
         }
 
         var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);

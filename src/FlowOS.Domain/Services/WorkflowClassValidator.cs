@@ -431,13 +431,103 @@ public class WorkflowClassValidator : IWorkflowClassValidator
 
         // 4. Role & Capability Validation
         // Capabilities declared?
-        var declaredCaps = bp.Capabilities.Select(c => c.Code).ToHashSet();
+        var declaredCaps = bp.Capabilities
+            .Select(c => c.Code)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var role in bp.Roles)
         {
             foreach (var cap in role.GrantedCapabilities)
             {
                 if (!declaredCaps.Contains(cap))
                     result.AddError("GOV-001", "Governance", $"Role '{role.Name}' grants undeclared capability '{cap}'", "Roles");
+            }
+        }
+
+        var packDeclaresGovernance =
+            declaredCaps.Count > 0 ||
+            bp.Roles.Any(role => role.GrantedCapabilities != null && role.GrantedCapabilities.Count > 0);
+
+        foreach (var evt in bp.Events)
+        {
+            var eventCaps = (evt.RequiredCapabilities ?? new List<string>())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim())
+                .ToList();
+
+            if (evt.Category == EventCategory.Human && eventCaps.Count == 0 && packDeclaresGovernance)
+            {
+                result.AddError(
+                    "GOV-002",
+                    "Governance",
+                    $"Human event '{evt.EventId}' must declare at least one requiredCapabilities entry.",
+                    "Events");
+            }
+
+            foreach (var cap in eventCaps)
+            {
+                if (!declaredCaps.Contains(cap))
+                {
+                    result.AddError(
+                        "GOV-003",
+                        "Governance",
+                        $"Event '{evt.EventId}' requires undeclared capability '{cap}'.",
+                        "Events");
+                }
+            }
+        }
+
+        foreach (var step in bp.Workflow.Steps)
+        {
+            var stepCaps = (step.RequiredCapabilities ?? new List<string>())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim())
+                .ToList();
+
+            foreach (var cap in stepCaps)
+            {
+                if (!declaredCaps.Contains(cap))
+                {
+                    result.AddError(
+                        "GOV-003",
+                        "Governance",
+                        $"Step '{step.StepId}' requires undeclared capability '{cap}'.",
+                        "Steps");
+                }
+            }
+
+            if (!string.Equals(step.StepType, "HumanTask", StringComparison.OrdinalIgnoreCase) ||
+                !packDeclaresGovernance)
+            {
+                continue;
+            }
+
+            var humanExits = (step.NextSteps ?? new Dictionary<string, string>())
+                .Keys
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Where(key =>
+                    !string.Equals(key, "Default", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(key, "true", StringComparison.OrdinalIgnoreCase))
+                .Select(key => key.Trim())
+                .ToList();
+            if (humanExits.Count == 0)
+                continue;
+
+            var eventSatisfies = humanExits.All(eventId =>
+            {
+                var match = bp.Events.FirstOrDefault(e =>
+                    string.Equals(e.EventId, eventId, StringComparison.OrdinalIgnoreCase));
+                return (match?.RequiredCapabilities ?? new List<string>())
+                    .Any(c => !string.IsNullOrWhiteSpace(c));
+            });
+
+            if (stepCaps.Count == 0 && !eventSatisfies)
+            {
+                result.AddError(
+                    "GOV-002",
+                    "Governance",
+                    $"HumanTask '{step.StepId}' must declare requiredCapabilities on the step or on each human exit event.",
+                    "Steps");
             }
         }
 

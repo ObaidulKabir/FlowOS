@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MediatR;
 using FlowOS.Application.Commands;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Services;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
@@ -55,21 +56,23 @@ public partial class WorkflowCommandHandlers
 
         if (definition == null) return false;
 
-        if (definition.ContextBindingRevisionId.HasValue)
+        var currentRoles = _currentUser.Roles ?? new List<string>();
+        var hasCaller = currentRoles.Any() || !string.IsNullOrEmpty(_currentUser.Id);
+        if (hasCaller)
         {
             var currentStep = definition.Steps.FirstOrDefault(x => x.StepId == instance.CurrentStepId);
-            var requiredRoles = currentStep?.AllowedRoles ?? new List<string>();
-            var currentRoles = _currentUser.Roles ?? new List<string>();
-            var isAdmin = currentRoles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
-            var hasRequiredRole = requiredRoles.Count == 0 ||
-                                  requiredRoles.Any(required =>
-                                      currentRoles.Contains(required, StringComparer.OrdinalIgnoreCase));
-            if (!isAdmin && !hasRequiredRole)
-            {
-                throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
-                    "ContextTaskRole",
-                    $"Current step requires one of these roles: {string.Join(", ", requiredRoles)}.");
-            }
+            var requiredCapabilities = ActivityAuthorization.ResolveRequiredCapabilities(currentStep);
+            var failClosed = currentStep?.StepType == WorkflowStepType.HumanTask &&
+                             (requiredCapabilities.Count > 0 ||
+                              (currentStep.EventRequiredCapabilities?.Count > 0));
+            await _activityAuthorization.AuthorizeAsync(
+                request.TenantId,
+                currentRoles,
+                requiredCapabilities,
+                failClosed,
+                "ActivityAuthorization",
+                $"complete task on step '{instance.CurrentStepId}'",
+                cancellationToken);
         }
 
         PreparedWorkflowContext? preparedContext = null;

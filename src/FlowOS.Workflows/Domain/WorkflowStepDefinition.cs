@@ -9,8 +9,12 @@ public class WorkflowStepDefinition
     public WorkflowStepType StepType { get; set; }
     public string? DecisionProvider { get; set; }
     public SubWorkflowReferenceDefinition? SubWorkflow { get; set; }
-    // Optional: Roles allowed to execute this step (for Command/UserTask steps)
+    // Inbox / assignment labels (not the execution gate)
     public List<string> AllowedRoles { get; set; } = new();
+    /// <summary>Capabilities required to complete this step.</summary>
+    public List<string> RequiredCapabilities { get; set; } = new();
+    /// <summary>Per-event capability gates for human/agent publish_event on this step.</summary>
+    public Dictionary<string, List<string>> EventRequiredCapabilities { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     
     // Maps EventType (or EventId) -> NextStepId
     // In Phase 1: Keys can be either legacy string events or new EventIds

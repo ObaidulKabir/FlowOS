@@ -127,6 +127,18 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
                     d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
                     s => JsonSerializer.Deserialize<List<string>>(s, (JsonSerializerOptions)null) ?? new List<string>()
                 );
+
+            step.Property(s => s.RequiredCapabilities)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => JsonSerializer.Deserialize<List<string>>(s, (JsonSerializerOptions)null) ?? new List<string>()
+                );
+
+            step.Property(s => s.EventRequiredCapabilities)
+                .HasConversion(
+                    d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                    s => DeserializeEventCapabilities(s)
+                );
         });
 
         // Current Index (Non-Unique)
@@ -138,6 +150,15 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
         // Unique Constraint for Versioning
         builder.HasIndex(w => new { w.TenantId, w.Name, w.Version })
             .IsUnique();
+    }
+
+    private static Dictionary<string, List<string>> DeserializeEventCapabilities(string? json)
+    {
+        var parsed = string.IsNullOrEmpty(json)
+            ? new Dictionary<string, List<string>>()
+            : JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json, (JsonSerializerOptions)null)
+              ?? new Dictionary<string, List<string>>();
+        return new Dictionary<string, List<string>>(parsed, StringComparer.OrdinalIgnoreCase);
     }
 
     private static Dictionary<string, PathTravelLimit> DeserializePathLimits(string? json)

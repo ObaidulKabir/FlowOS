@@ -227,6 +227,49 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return Array.from(roleSet);
   }, [rawSteps, catalogEvents]);
 
+  const catalogRoles: any[] = getProp(definition, 'roles', 'Roles') || [];
+
+  const getRoleGrantedCapabilities = (role: string): string[] => {
+    const roleKey = (role || '').trim().toLowerCase();
+    if (!roleKey) return [];
+    const match = catalogRoles.find((item: any) => {
+      const name = String(getProp(item, 'name', 'Name') || '').trim().toLowerCase();
+      return name === roleKey;
+    });
+    const granted = getProp(match, 'grantedCapabilities', 'GrantedCapabilities') || [];
+    return Array.isArray(granted) ? granted.map((cap: any) => String(cap)).filter(Boolean) : [];
+  };
+
+  const getRequiredCapabilities = (source: any): string[] => {
+    const raw = getProp(source, 'requiredCapabilities', 'RequiredCapabilities');
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map((cap: any) => String(cap).trim()).filter(Boolean);
+    return [String(raw)];
+  };
+
+  const getEventRequiredCapabilities = (eventId: string): string[] => {
+    if (!eventId) return [];
+    const eventIdKey = eventId.trim().toLowerCase();
+    const found = catalogEvents.find((e: any) => {
+      const id = (getProp(e, 'eventId', 'EventId') || getProp(e, 'name', 'Name') || '').toString().toLowerCase();
+      return id === eventIdKey;
+    });
+    return found ? getRequiredCapabilities(found) : [];
+  };
+
+  const capabilitiesAllow = (role: string, required: string[]): boolean => {
+    const roleKey = (role || '').trim().toLowerCase();
+    if (!roleKey) return false;
+    if (roleKey === 'admin') return true;
+    if (required.length === 0) return false;
+    const granted = getRoleGrantedCapabilities(role).map(cap => cap.toLowerCase());
+    return required.some(cap => {
+      const key = cap.toLowerCase();
+      if (granted.includes(key)) return true;
+      return granted.includes('event.publish') && key.startsWith('event.publish.');
+    });
+  };
+
   const getEventAllowedRoles = (eventId: string): string[] => {
     if (!eventId) return [];
     const eventIdKey = eventId.trim().toLowerCase();
@@ -241,9 +284,16 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
   const roleCanActOnStep = (step: any, role: string): boolean => {
     if (!step) return false;
-    const roles = getStepRoles(step);
     const roleKey = (role || '').trim().toLowerCase();
     if (!roleKey) return false;
+    if (roleKey === 'admin') return true;
+
+    const required = getRequiredCapabilities(step);
+    if (required.length > 0) {
+      return capabilitiesAllow(role, required);
+    }
+
+    const roles = getStepRoles(step);
     if (roles.length === 0 || roles.some(r => ['anyone', 'unassigned'].includes(r.toLowerCase()))) {
       return true;
     }
@@ -266,16 +316,25 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   };
 
   const isEventAuthorized = (eventId: string, step: any, role: string): boolean => {
-    const eventRoles = getEventAllowedRoles(eventId);
     const roleKey = (role || '').trim().toLowerCase();
     if (!roleKey) return false;
+    if (roleKey === 'admin') return true;
+
+    const eventCaps = getEventRequiredCapabilities(eventId);
+    const stepCaps = getRequiredCapabilities(step);
+    const required = eventCaps.length > 0 ? eventCaps : stepCaps;
+    if (required.length > 0) {
+      return capabilitiesAllow(role, required);
+    }
+
+    const eventRoles = getEventAllowedRoles(eventId);
     if (eventRoles.length > 0) {
       if (eventRoles.some(r => ['anyone', 'unassigned'].includes(r.toLowerCase()))) return true;
       if (eventRoles.map(r => r.toLowerCase()).includes(roleKey)) return true;
       if ((roleKey === 'system' || roleKey === 'admin') && eventRoles.some(r => ['system', 'admin'].includes(r.toLowerCase()))) return true;
       return false;
     }
-    // Fall back to step-level roles
+    // Fall back to step-level roles when the pack has not declared capabilities yet
     return roleCanActOnStep(step, role);
   };
 

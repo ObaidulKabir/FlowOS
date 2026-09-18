@@ -8,6 +8,7 @@ using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.ValueObjects;
 using FlowOS.Events.Models;
+using FlowOS.Security.Interfaces;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Engine;
 using FlowOS.Workflows.Enums;
@@ -23,19 +24,22 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
     private readonly IWorkflowExecutionContextService _contextService;
     private readonly WorkflowEngine _engine;
     private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
+    private readonly ICapabilityService? _capabilityService;
 
     public WorkflowContextSimulationService(
         IUnitOfWork unitOfWork,
         IWorkflowContextBindingValidator validator,
         IWorkflowExecutionContextService contextService,
         WorkflowEngine engine,
-        IPluginBindingRegistryService? pluginBindingRegistry = null)
+        IPluginBindingRegistryService? pluginBindingRegistry = null,
+        ICapabilityService? capabilityService = null)
     {
         _unitOfWork = unitOfWork;
         _validator = validator;
         _contextService = contextService;
         _engine = engine;
         _pluginBindingRegistry = pluginBindingRegistry;
+        _capabilityService = capabilityService;
     }
 
     public async Task<WorkflowContextSimulationResultDto> SimulateAsync(
@@ -180,7 +184,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
 
             var roleFailure = IsSlaClockEvent(beforeStep, eventType)
                 ? null
-                : ValidateHumanTaskRole(beforeStep, eventRoles);
+                : await ValidateHumanActivityAsync(runtime, beforeStep, eventType, eventRoles, tenantId, cancellationToken);
             if (roleFailure != null)
             {
                 trace.Add(DeniedTrace(
@@ -514,18 +518,78 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         SlaSimulationClock.IsReminderEvent(step?.Sla, eventType) ||
         SlaSimulationClock.IsTimeoutEvent(step?.Sla, eventType);
 
-    private static string? ValidateHumanTaskRole(
+    private async Task<string?> ValidateHumanActivityAsync(
+        ResolvedSimulationRuntime runtime,
         WorkflowStepDefinition? step,
-        IReadOnlyList<string> roles)
+        string eventType,
+        IReadOnlyList<string> roles,
+        Guid tenantId,
+        CancellationToken cancellationToken)
     {
-        if (step?.StepType != WorkflowStepType.HumanTask || step.AllowedRoles.Count == 0)
+        if (ActivityAuthorization.IsAdmin(roles))
             return null;
-        var hasRole = step.AllowedRoles.Any(required =>
-            roles.Contains(required, StringComparer.OrdinalIgnoreCase) ||
-            roles.Contains("Admin", StringComparer.OrdinalIgnoreCase));
-        return hasRole
+
+        var required = ActivityAuthorization.ResolveRequiredCapabilities(step, eventType);
+        if (required.Count == 0)
+            return null;
+
+        var callerCaps = await ResolveSimulatedCapabilitiesAsync(runtime, roles, tenantId, cancellationToken);
+        return ActivityAuthorization.HasGrant(callerCaps, required)
             ? null
-            : $"Current human task requires one of these roles: {string.Join(", ", step.AllowedRoles)}.";
+            : $"Simulated role lacks a required capability for '{eventType}'. Required one of: {string.Join(", ", required)}.";
+    }
+
+    private async Task<HashSet<string>> ResolveSimulatedCapabilitiesAsync(
+        ResolvedSimulationRuntime runtime,
+        IReadOnlyList<string> roles,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        var caps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_capabilityService != null && roles.Count > 0)
+        {
+            var tenantCaps = await _capabilityService.GetCapabilitiesAsync(tenantId, roles);
+            foreach (var cap in tenantCaps)
+                caps.Add(cap);
+        }
+
+        foreach (var roleName in roles)
+        {
+            foreach (var cap in CatalogCapabilitiesForRole(runtime, roleName))
+                caps.Add(cap);
+        }
+
+        return caps;
+    }
+
+    private static IEnumerable<string> CatalogCapabilitiesForRole(
+        ResolvedSimulationRuntime runtime,
+        string roleName)
+    {
+        foreach (var templateRole in runtime.SourceWorkflowClass.Definition.Roles)
+        {
+            var effective = TryGetValue(
+                runtime.Revision.Definition.RoleOverrides,
+                templateRole.Name,
+                out var mapped)
+                ? mapped
+                : templateRole.Name;
+            if (!string.Equals(effective, roleName, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(templateRole.Name, roleName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var cap in templateRole.GrantedCapabilities ?? new List<string>())
+            {
+                if (string.IsNullOrWhiteSpace(cap))
+                    continue;
+                yield return ActivityAuthorization.MapCapability(
+                    cap.Trim(),
+                    runtime.Revision.Definition.CapabilityOverrides,
+                    runtime.Revision.Definition.EventAliases);
+            }
+        }
     }
 
     private static IReadOnlyList<WorkflowContextSimulationProjectionItemDto> BuildInitialProjection(

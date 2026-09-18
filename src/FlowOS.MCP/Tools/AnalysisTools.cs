@@ -187,6 +187,14 @@ public class AnalysisTools
                 humanExplanation = "A role grants a capability that is not declared in Capabilities.";
                 designHint = $"Declare capability '{context?["capability"]}' under Capabilities, or remove it from the role.";
                 break;
+            case "GOV-002":
+                humanExplanation = "A HumanTask or Human event is missing requiredCapabilities.";
+                designHint = "Declare at least one requiredCapabilities entry on the HumanTask or on each human exit event. Capability is the execution gate; requiredRoles is inbox only.";
+                break;
+            case "GOV-003":
+                humanExplanation = "A step or event requires a capability that is not declared in the pack catalog.";
+                designHint = $"Add '{context?["capability"]}' to Capabilities, or remove it from requiredCapabilities.";
+                break;
 
             default:
                 humanExplanation = code switch

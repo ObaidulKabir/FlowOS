@@ -4,9 +4,14 @@ Governance is a first-class citizen in FlowOS: a Policy can block an action even
 
 ## Concepts
 
-* **Role** — a named collection of capabilities, scoped to a tenant (e.g. `"Manager"`).
-* **Capability** — a granular permission string (e.g. `task.approve`, `workflow.start`).
+* **Capability** — the **execution gate**. A granular permission string (e.g. `expense.approve`, `event.publish.EVT-APPROVE`, `workflow.start`). If the caller holds the remapped required capability, they may perform the activity even when their role name is not listed on the step.
+* **Role** — a tenant-scoped **bag of capabilities** plus an **inbox / assignment label** (e.g. `"Manager"`). Roles do not authorize by name at runtime; they grant capabilities and route waiting HumanTasks.
+* **Business context** — remaps names only (`roleOverrides`, `capabilityOverrides`). It never creates tenant roles or grants permissions.
 * **Policy** — dynamic, tenant-specific access control logic layered on top of capability checks.
+
+Workflow activities declare `requiredCapabilities` on the HumanTask / human event in the workflow definition. Inbox still uses remapped `requiredRoles`. Tenant `POST /api/roles` + capabilities remains the live grant store.
+
+Runtime `publish_event` and `complete_task` share one `AuthorizeActivity` gate: after context remaps, the caller may act if their tenant-role permissions intersect the compiled required capabilities. Role names on the step are not the execution gate. Empty compiled capabilities fail closed for HumanTask / human events once the pack declared them; System/Default auto-routes stay internal. Admin still bypasses. `event.publish` remains a wildcard for `event.publish.*`. Policies run after this gate.
 
 ## Managing roles
 

@@ -163,13 +163,14 @@ public class WorkflowCommandHandlersTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_CompleteTaskCommand_ContextBoundStepRequiresMappedRole()
+    public async Task Handle_CompleteTaskCommand_RequiresCapability_NotInboxRoleName()
     {
         var tenantId = Guid.NewGuid();
         var definition = new WorkflowDefinition(tenantId, "ExpenseApproval", 1, "Review");
         definition.AddStep(new WorkflowStepDefinition("Review", WorkflowStepType.HumanTask)
         {
             AllowedRoles = ["FinanceManager"],
+            RequiredCapabilities = ["expense.approve"],
             NextSteps = new Dictionary<string, string> { ["TaskCompleted"] = "END" }
         });
         definition.SetContextLineage(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
@@ -181,13 +182,49 @@ public class WorkflowCommandHandlersTests : IDisposable
         await _context.SaveChangesAsync();
 
         _mockCurrentUser.Setup(x => x.Roles).Returns(["Requester"]);
+        _mockCurrentUser.Setup(x => x.Id).Returns("requester-1");
+        _mockCapabilityService
+            .Setup(x => x.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new HashSet<string>());
 
         var exception = await Assert.ThrowsAsync<FlowOS.Application.Common.Exceptions.PolicyViolationException>(
             () => _handler.Handle(
                 new CompleteTaskCommand(tenantId, instance.Id, Guid.NewGuid()),
                 CancellationToken.None));
 
-        Assert.Contains("ContextTaskRole", exception.Message);
+        Assert.Contains("ActivityAuthorization", exception.Message);
+        Assert.Contains("expense.approve", exception.Message);
+    }
+
+    [Fact]
+    public async Task Handle_CompleteTaskCommand_DirectorWithCapability_MayCompleteApproverTask()
+    {
+        var tenantId = Guid.NewGuid();
+        var definition = new WorkflowDefinition(tenantId, "ExpenseApproval", 1, "Review");
+        definition.AddStep(new WorkflowStepDefinition("Review", WorkflowStepType.HumanTask)
+        {
+            AllowedRoles = ["Approver"],
+            RequiredCapabilities = ["expense.approve"],
+            NextSteps = new Dictionary<string, string> { ["TaskCompleted"] = "END" }
+        });
+        definition.Publish();
+
+        var instance = new WorkflowInstance(tenantId, definition.Id, Guid.Empty, 1, "Review");
+        _context.WorkflowDefinitions.Add(definition);
+        _context.WorkflowInstances.Add(instance);
+        await _context.SaveChangesAsync();
+
+        _mockCurrentUser.Setup(x => x.Roles).Returns(["Director"]);
+        _mockCurrentUser.Setup(x => x.Id).Returns("director-1");
+        _mockCapabilityService
+            .Setup(x => x.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "expense.approve" });
+
+        var success = await _handler.Handle(
+            new CompleteTaskCommand(tenantId, instance.Id, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.True(success);
     }
 
     [Fact]

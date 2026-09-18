@@ -366,6 +366,7 @@ namespace FlowOS.Infrastructure.Services
             }
 
             var rolesToken = root["roles"];
+            var packDeclaresGovernance = declaredCaps.Count > 0;
             if (rolesToken is JArray rolesArray)
             {
                 foreach (var role in rolesArray)
@@ -384,10 +385,78 @@ namespace FlowOS.Infrastructure.Services
                                 // Optional warning: Undeclared capability usage
                                 AddError(errors, g, "GOV-001", $"Role '{roleName}' uses undeclared capability '{capCode}'", "roles", "Governance");
                             }
+                            if (!string.IsNullOrWhiteSpace(capCode))
+                                packDeclaresGovernance = true;
                         }
                     }
                 }
             }
+
+            if (!packDeclaresGovernance)
+                return;
+
+            if (root["events"] is JArray events)
+            {
+                foreach (var evt in events)
+                {
+                    var eventId = evt["eventId"]?.Value<string>() ?? evt["EventId"]?.Value<string>();
+                    var category = evt["category"]?.Value<string>() ?? evt["Category"]?.Value<string>();
+                    var required = ReadStringArray(evt["requiredCapabilities"] ?? evt["RequiredCapabilities"]);
+                    if (string.Equals(category, "Human", StringComparison.OrdinalIgnoreCase) && required.Count == 0)
+                    {
+                        AddError(errors, evt, "GOV-002", $"Human event '{eventId}' must declare at least one requiredCapabilities entry.", "events", "Governance");
+                    }
+
+                    foreach (var cap in required)
+                    {
+                        if (!declaredCaps.Contains(cap))
+                            AddError(errors, evt, "GOV-003", $"Event '{eventId}' requires undeclared capability '{cap}'.", "events", "Governance");
+                    }
+                }
+            }
+
+            if (root["workflow"]?["steps"] is JArray steps)
+            {
+                foreach (var step in steps)
+                {
+                    var stepId = step["stepId"]?.Value<string>() ?? step["StepId"]?.Value<string>();
+                    var stepType = step["stepType"]?.Value<string>() ?? step["StepType"]?.Value<string>();
+                    var required = ReadStringArray(step["requiredCapabilities"] ?? step["RequiredCapabilities"]);
+                    foreach (var cap in required)
+                    {
+                        if (!declaredCaps.Contains(cap))
+                            AddError(errors, step, "GOV-003", $"Step '{stepId}' requires undeclared capability '{cap}'.", "steps", "Governance");
+                    }
+
+                    if (!string.Equals(stepType, "HumanTask", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var nextSteps = step["nextSteps"] as JObject ?? step["NextSteps"] as JObject;
+                    var humanExits = nextSteps?.Properties()
+                        .Select(p => p.Name)
+                        .Where(name => !string.Equals(name, "Default", StringComparison.OrdinalIgnoreCase) &&
+                                       !string.Equals(name, "true", StringComparison.OrdinalIgnoreCase))
+                        .ToList() ?? new List<string>();
+                    if (humanExits.Count == 0)
+                        continue;
+
+                    if (required.Count == 0)
+                    {
+                        AddError(errors, step, "GOV-002", $"HumanTask '{stepId}' must declare requiredCapabilities on the step or on each human exit event.", "steps", "Governance");
+                    }
+                }
+            }
+        }
+
+        private static List<string> ReadStringArray(JToken? token)
+        {
+            if (token is not JArray array)
+                return new List<string>();
+            return array
+                .Select(item => item.Value<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value!.Trim())
+                .ToList();
         }
 
         private void ValidateReference(JToken parent, string propertyName, HashSet<string> validSet, string errorCode, string errorMsg, List<LintError> errors)

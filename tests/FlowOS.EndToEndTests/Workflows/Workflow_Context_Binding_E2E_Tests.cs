@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
+using FlowOS.Domain.Enums;
 using FlowOS.Domain.Services;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.Security.Models;
@@ -59,8 +60,11 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
             admin.AddPermission("workflow.start");
             db.Roles.Add(admin);
             var financeManager = new Role(_tenantId, "FinanceManager");
+            financeManager.AddPermission("event.publish.EVT-APPROVE");
+            financeManager.AddPermission("event.publish.EVT-EXP-APPROVE");
             db.Roles.Add(financeManager);
             var hrManager = new Role(_tenantId, "HRManager");
+            hrManager.AddPermission("event.publish.EVT-APPROVE");
             db.Roles.Add(hrManager);
             await db.SaveChangesAsync();
             sourceId = source.Id;
@@ -396,7 +400,16 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
             new WorkflowClassBlueprint
             {
                 ContextSchema = """{"type":"object","required":["Amount","ApprovalLimit"],"properties":{"Amount":{"type":"number"},"ApprovalLimit":{"type":"number"}}}""",
-                Events = [new EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve" }],
+                Events =
+                [
+                    new EventBlueprint
+                    {
+                        EventId = "EVT-APPROVE",
+                        Name = "Approve",
+                        Category = EventCategory.Human,
+                        RequiredCapabilities = ["event.publish.EVT-APPROVE"]
+                    }
+                ],
                 StateMachine = new StateMachineBlueprint
                 {
                     EntityType = "ApprovalSubject",
@@ -423,11 +436,19 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
                             StepId = "Review",
                             StepType = "HumanTask",
                             RequiredRoles = ["Approver"],
+                            RequiredCapabilities = ["event.publish.EVT-APPROVE"],
                             NextSteps = new Dictionary<string, string> { ["EVT-APPROVE"] = "END" }
                         }
                     ]
                 },
-                Roles = [new RoleBlueprint { Name = "Approver" }],
+                Roles =
+                [
+                    new RoleBlueprint
+                    {
+                        Name = "Approver",
+                        GrantedCapabilities = ["event.publish.EVT-APPROVE"]
+                    }
+                ],
                 Capabilities = [new CapabilityBlueprint { Code = "event.publish.EVT-APPROVE" }]
             });
 }

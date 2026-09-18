@@ -25,6 +25,8 @@ public record EventBlueprint
     public bool IsTerminal { get; init; }
     public string? PayloadSchema { get; init; } // Added: JSON Schema for validation
     public List<string> AllowedRoles { get; init; } = new();
+    /// <summary>Capabilities required to publish this event. Execution gate; roles are inbox only.</summary>
+    public List<string> RequiredCapabilities { get; init; } = new();
 }
 
 // Law
@@ -66,6 +68,8 @@ public record StepBlueprint
     public Dictionary<string, PathTravelLimitBlueprint> PathLimits { get; init; } = new();
     public List<string> RequiredRoles { get; init; } = new();
     public List<string>? AllowedRoles { get; init; }
+    /// <summary>Capabilities required to complete this step. Execution gate; <see cref="RequiredRoles"/> is inbox only.</summary>
+    public List<string> RequiredCapabilities { get; init; } = new();
     
     // For Decision steps: Condition -> NextStepId
     public Dictionary<string, string> Conditions { get; init; } = new();

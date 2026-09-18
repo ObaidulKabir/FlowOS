@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
+using FlowOS.Domain.Enums;
 using FlowOS.Domain.ValueObjects;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
@@ -51,6 +52,8 @@ public static class WorkflowClassCompiler
                         OutputMapping = stepBp.SubWorkflow.OutputMapping ?? new Dictionary<string, string>()
                     },
                 AllowedRoles = stepBp.RequiredRoles,
+                RequiredCapabilities = ResolveStepCapabilities(stepBp, wc.Definition.Events),
+                EventRequiredCapabilities = ResolveEventCapabilities(stepBp, wc.Definition.Events),
                 NextSteps = stepBp.NextSteps,
                 PathLimits = MapPathLimits(stepBp.PathLimits),
                 Conditions = stepBp.Conditions,
@@ -224,6 +227,13 @@ public static class WorkflowClassCompiler
                             step.SubWorkflow.OutputMapping ?? new Dictionary<string, string>())
                     },
                 AllowedRoles = declaredRoles,
+                RequiredCapabilities = ResolveStepCapabilities(step, source.Definition.Events)
+                    .Select(cap => MapCapability(cap, mapping))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                EventRequiredCapabilities = RemapEventCapabilities(
+                    ResolveEventCapabilities(step, source.Definition.Events),
+                    mapping),
                 NextSteps = step.NextSteps.ToDictionary(
                     item => MapValue(item.Key, mapping.EventAliases),
                     item => item.Value,
@@ -308,6 +318,92 @@ public static class WorkflowClassCompiler
         var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)));
 
         return new WorkflowContextCompilationPackage(workflow, stateMachine, eventDefinitions, contentHash);
+    }
+
+    internal static List<string> ResolveStepCapabilities(
+        StepBlueprint step,
+        IEnumerable<EventBlueprint> events)
+    {
+        var caps = (step.RequiredCapabilities ?? new List<string>())
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (caps.Count > 0)
+            return caps;
+
+        if (!string.Equals(step.StepType, "HumanTask", StringComparison.OrdinalIgnoreCase))
+            return caps;
+
+        foreach (var eventId in HumanExitEvents(step))
+        {
+            caps.AddRange(ResolveEventCapabilitiesForId(eventId, events));
+        }
+
+        return caps.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    internal static Dictionary<string, List<string>> ResolveEventCapabilities(
+        StepBlueprint step,
+        IEnumerable<EventBlueprint> events)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var eventId in HumanExitEvents(step))
+        {
+            result[eventId] = ResolveEventCapabilitiesForId(eventId, events);
+        }
+
+        return result;
+    }
+
+    private static List<string> ResolveEventCapabilitiesForId(string eventId, IEnumerable<EventBlueprint> events)
+    {
+        var match = events.FirstOrDefault(e =>
+            string.Equals(e.EventId, eventId, StringComparison.OrdinalIgnoreCase));
+        var declared = (match?.RequiredCapabilities ?? new List<string>())
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .ToList();
+        if (declared.Count > 0)
+            return declared;
+
+        var isHumanEvent = match != null && match.Category == EventCategory.Human;
+        if (isHumanEvent || eventId.StartsWith("EVT-", StringComparison.OrdinalIgnoreCase))
+            return new List<string> { $"event.publish.{eventId}" };
+
+        return new List<string>();
+    }
+
+    private static IEnumerable<string> HumanExitEvents(StepBlueprint step)
+    {
+        if (step.NextSteps == null)
+            yield break;
+        foreach (var key in step.NextSteps.Keys)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+            if (string.Equals(key, "Default", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "true", StringComparison.OrdinalIgnoreCase))
+                continue;
+            yield return key.Trim();
+        }
+    }
+
+    private static Dictionary<string, List<string>> RemapEventCapabilities(
+        Dictionary<string, List<string>> source,
+        WorkflowContextBindingDefinition mapping)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in source)
+        {
+            var eventId = MapValue(pair.Key, mapping.EventAliases);
+            result[eventId] = pair.Value
+                .Select(cap => MapCapability(cap, mapping))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return result;
     }
 
     private static Dictionary<string, PathTravelLimit> MapPathLimits(

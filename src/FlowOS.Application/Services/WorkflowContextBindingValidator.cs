@@ -88,6 +88,13 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
             options.RequireExistingTenantRoles,
             cancellationToken);
         ValidateCapabilities(source, revision, result);
+        await ValidateRoleCapabilityGrantsAsync(
+            source,
+            binding.TenantId,
+            revision,
+            result,
+            options.RequireExistingTenantRoles,
+            cancellationToken);
         ValidateMappings(source, revision, result);
         ValidateDecisionProviders(source, revision, result);
         ValidateSchemas(source, revision, result);
@@ -280,6 +287,118 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
                     $"Mapped capability for '{capability.Key}' is required.",
                     $"Definition.CapabilityOverrides.{capability.Key}");
             }
+        }
+    }
+
+    private async Task ValidateRoleCapabilityGrantsAsync(
+        WorkflowClass source,
+        Guid tenantId,
+        WorkflowContextBindingRevision revision,
+        ValidationResult result,
+        bool requireExistingTenantRoles,
+        CancellationToken cancellationToken)
+    {
+        if (!requireExistingTenantRoles)
+            return;
+
+        var expectedByRole = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        void AddExpected(string tenantRole, IEnumerable<string> capabilities)
+        {
+            if (string.IsNullOrWhiteSpace(tenantRole))
+                return;
+            if (!expectedByRole.TryGetValue(tenantRole, out var set))
+            {
+                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                expectedByRole[tenantRole] = set;
+            }
+
+            foreach (var cap in capabilities.Where(c => !string.IsNullOrWhiteSpace(c)))
+            {
+                set.Add(ActivityAuthorization.MapCapability(
+                    cap.Trim(),
+                    revision.Definition.CapabilityOverrides,
+                    revision.Definition.EventAliases));
+            }
+        }
+
+        foreach (var role in source.Definition.Roles)
+        {
+            var tenantRole = TryGetValue(revision.Definition.RoleOverrides, role.Name, out var mapped)
+                ? mapped
+                : role.Name;
+            AddExpected(tenantRole, role.GrantedCapabilities ?? new List<string>());
+        }
+
+        foreach (var step in source.Definition.Workflow.Steps)
+        {
+            var remappedCaps = ActivityAuthorization.NormalizeCapabilities(step.RequiredCapabilities)
+                .Select(cap => ActivityAuthorization.MapCapability(
+                    cap,
+                    revision.Definition.CapabilityOverrides,
+                    revision.Definition.EventAliases));
+
+            var inboxRoles = (step.RequiredRoles ?? new List<string>())
+                .Concat(step.AllowedRoles ?? Enumerable.Empty<string>())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var templateRole in inboxRoles)
+            {
+                var tenantRole = TryGetValue(revision.Definition.RoleOverrides, templateRole, out var mapped)
+                    ? mapped
+                    : templateRole;
+                AddExpected(tenantRole, remappedCaps);
+            }
+
+            foreach (var eventId in (step.NextSteps ?? new Dictionary<string, string>()).Keys)
+            {
+                if (string.IsNullOrWhiteSpace(eventId) ||
+                    string.Equals(eventId, "Default", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(eventId, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var match = source.Definition.Events.FirstOrDefault(evt =>
+                    string.Equals(evt.EventId, eventId, StringComparison.OrdinalIgnoreCase));
+                var eventCaps = ActivityAuthorization.NormalizeCapabilities(match?.RequiredCapabilities)
+                    .Select(cap => ActivityAuthorization.MapCapability(
+                        cap,
+                        revision.Definition.CapabilityOverrides,
+                        revision.Definition.EventAliases));
+                foreach (var templateRole in inboxRoles)
+                {
+                    var tenantRole = TryGetValue(revision.Definition.RoleOverrides, templateRole, out var mapped)
+                        ? mapped
+                        : templateRole;
+                    AddExpected(tenantRole, eventCaps);
+                }
+            }
+        }
+
+        foreach (var pair in expectedByRole)
+        {
+            if (pair.Value.Count == 0)
+                continue;
+
+            var tenantRole = await _unitOfWork.Roles.GetByNameAsync(tenantId, pair.Key, cancellationToken);
+            if (tenantRole == null)
+                continue;
+
+            var granted = new HashSet<string>(tenantRole.Permissions, StringComparer.OrdinalIgnoreCase);
+            var missing = pair.Value
+                .Where(cap => !granted.Contains(cap))
+                .OrderBy(cap => cap, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (missing.Count == 0)
+                continue;
+
+            result.AddError(
+                "CTX-CAP-003",
+                "Capabilities",
+                $"Mapped tenant role '{pair.Key}' does not grant remapped capabilities: {string.Join(", ", missing)}.",
+                $"Definition.RoleOverrides.{pair.Key}");
         }
     }
 

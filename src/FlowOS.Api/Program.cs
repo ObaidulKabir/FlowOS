@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MediatR;
 using FlowOS.Core.Interfaces;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Services;
 using FlowOS.API.Services;
 using FlowOS.Security.Policies;
 using FlowOS.Application.Behaviors;
@@ -59,6 +60,7 @@ builder.Services.AddFlowOSPersistence();
 builder.Services.AddScoped<IEventRegistry, EventRegistry>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ICapabilityService, CapabilityService>();
+builder.Services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
 
 // Domain engines (stateless) — register once for DI/testability
 builder.Services.AddSingleton<WorkflowEngine>();

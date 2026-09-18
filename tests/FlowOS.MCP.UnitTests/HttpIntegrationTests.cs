@@ -989,7 +989,16 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             var blueprint = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
             {
                 ContextSchema = """{"type":"object","required":["Amount","ApprovalLimit"],"properties":{"Amount":{"type":"number"},"ApprovalLimit":{"type":"number"}}}""",
-                Events = [new() { EventId = "EVT-APPROVE", Name = "Approve" }],
+                Events =
+                [
+                    new()
+                    {
+                        EventId = "EVT-APPROVE",
+                        Name = "Approve",
+                        Category = FlowOS.Domain.Enums.EventCategory.Human,
+                        RequiredCapabilities = ["event.publish.EVT-APPROVE"]
+                    }
+                ],
                 StateMachine = new()
                 {
                     EntityType = "ApprovalSubject",
@@ -1016,11 +1025,12 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
                             StepId = "Review",
                             StepType = "HumanTask",
                             RequiredRoles = ["Approver"],
+                            RequiredCapabilities = ["event.publish.EVT-APPROVE"],
                             NextSteps = new() { ["EVT-APPROVE"] = "END" }
                         }
                     ]
                 },
-                Roles = [new() { Name = "Approver" }],
+                Roles = [new() { Name = "Approver", GrantedCapabilities = ["event.publish.EVT-APPROVE"] }],
                 Capabilities = [new() { Code = "event.publish.EVT-APPROVE" }]
             };
             var source = new FlowOS.Domain.Entities.WorkflowClass(
@@ -1039,7 +1049,10 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             }
             admin.AddPermission("workflow.start");
             admin.AddPermission("event.publish");
-            db.Roles.Add(new FlowOS.Security.Models.Role(TenantId, $"FinanceManager{suffix}"));
+            var financeManager = new FlowOS.Security.Models.Role(TenantId, $"FinanceManager{suffix}");
+            financeManager.AddPermission("event.publish.EVT-APPROVE");
+            financeManager.AddPermission($"event.publish.EVT-MCP-APPROVE-{suffix}");
+            db.Roles.Add(financeManager);
             await db.SaveChangesAsync();
             sourceId = source.Id;
         }

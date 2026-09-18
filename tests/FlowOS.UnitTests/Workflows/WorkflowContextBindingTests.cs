@@ -89,6 +89,8 @@ public class WorkflowContextBindingTests
         Assert.Equal("Amount <= ApprovalLimit", transition.Constraints["Expression"]);
         Assert.Equal("FinanceManager", transition.Constraints["Role"]);
         Assert.Contains("FinanceManager", review.AllowedRoles);
+        Assert.Contains("event.publish.EVT-EXP-APPROVE", review.RequiredCapabilities);
+        Assert.Contains("event.publish.EVT-EXP-APPROVE", review.EventRequiredCapabilities["EVT-EXP-APPROVE"]);
         Assert.Equal("EVT-EXP-APPROVE", review.Sla!.TimeoutEvent);
         Assert.Equal("FinanceManager", review.Sla.EscalationRole);
         Assert.Equal("EVT-EXP-APPROVE", review.OnEntry.Single().Target);
@@ -234,7 +236,7 @@ public class WorkflowContextBindingTests
         await context.SaveChangesAsync();
 
         var binding = new WorkflowContextBinding(Guid.NewGuid(), "Expense", "ExpenseApproval");
-        context.Roles.Add(new FlowOS.Security.Models.Role(binding.TenantId, "Approver"));
+        context.Roles.Add(CreateTenantRole(binding.TenantId, "Approver"));
         await context.SaveChangesAsync();
         var revision = new WorkflowContextBindingRevision(
             binding.Id,
@@ -382,7 +384,7 @@ public class WorkflowContextBindingTests
         context.WorkflowContextBindings.Add(binding);
         context.WorkflowContextBindingRevisions.Add(revision);
         context.EventDefinitions.Add(conflictingEvent);
-        context.Roles.Add(new FlowOS.Security.Models.Role(source.TenantId, "FinanceManager"));
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
         await context.SaveChangesAsync();
 
         var unitOfWork = new UnitOfWork(context);
@@ -413,7 +415,7 @@ public class WorkflowContextBindingTests
         context.WorkflowClasses.Add(source);
         context.WorkflowContextBindings.Add(binding);
         context.WorkflowContextBindingRevisions.Add(revision);
-        context.Roles.Add(new FlowOS.Security.Models.Role(source.TenantId, "FinanceManager"));
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
         await context.SaveChangesAsync();
 
         var unitOfWork = new UnitOfWork(context);
@@ -469,7 +471,7 @@ public class WorkflowContextBindingTests
         context.WorkflowClasses.Add(source);
         context.WorkflowContextBindings.Add(binding);
         context.WorkflowContextBindingRevisions.Add(revision);
-        context.Roles.Add(new FlowOS.Security.Models.Role(source.TenantId, "FinanceManager"));
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
         await context.SaveChangesAsync();
 
         var unitOfWork = new UnitOfWork(context);
@@ -596,6 +598,33 @@ public class WorkflowContextBindingTests
         Assert.All(package.EventDefinitions, item => Assert.False(string.IsNullOrWhiteSpace(item.Name)));
         Assert.Contains(package.EventDefinitions, item => item.EventId == "JOB_REQUESTED" && item.Name == "JOB_REQUESTED");
         Assert.Equal("RepairJobContext", package.StateMachineDefinition.EntityType);
+    }
+
+    [Fact]
+    public async Task Validator_RejectsTenantRoleMissingRemappedCapabilities()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.Roles.Add(new FlowOS.Security.Models.Role(source.TenantId, "FinanceManager"));
+        await context.SaveChangesAsync();
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateRevision(binding, sourceId: source.Id);
+        var validator = new WorkflowContextBindingValidator(
+            new UnitOfWork(context),
+            new Mock<IPolicyDecisionPluginRegistry>().Object);
+
+        var result = await validator.ValidateAsync(binding, revision);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, item => item.Code == "CTX-CAP-003");
     }
 
     [Fact]
@@ -1017,6 +1046,14 @@ public class WorkflowContextBindingTests
             });
     }
 
+    private static FlowOS.Security.Models.Role CreateTenantRole(Guid tenantId, string name)
+    {
+        var role = new FlowOS.Security.Models.Role(tenantId, name);
+        role.AddPermission("event.publish.EVT-APPROVE");
+        role.AddPermission("event.publish.EVT-EXP-APPROVE");
+        return role;
+    }
+
     private static WorkflowClass CreateSource()
     {
         var tenantId = Guid.NewGuid();
@@ -1033,7 +1070,9 @@ public class WorkflowContextBindingTests
                     {
                         EventId = "EVT-APPROVE",
                         Name = "Approve",
-                        PayloadSchema = """{"type":"object"}"""
+                        Category = EventCategory.Human,
+                        PayloadSchema = """{"type":"object"}""",
+                        RequiredCapabilities = ["event.publish.EVT-APPROVE"]
                     }
                 ],
                 StateMachine = new StateMachineBlueprint
@@ -1063,6 +1102,7 @@ public class WorkflowContextBindingTests
                             StepId = "Review",
                             StepType = "HumanTask",
                             RequiredRoles = ["Approver"],
+                            RequiredCapabilities = ["event.publish.EVT-APPROVE"],
                             NextSteps = new Dictionary<string, string> { ["EVT-APPROVE"] = "END" },
                             Sla = new StepSlaBlueprint
                             {
@@ -1082,7 +1122,11 @@ public class WorkflowContextBindingTests
                         }
                     ]
                 },
-                Roles = [new RoleBlueprint { Name = "Approver" }],
+                Roles = [new RoleBlueprint
+                {
+                    Name = "Approver",
+                    GrantedCapabilities = ["event.publish.EVT-APPROVE"]
+                }],
                 Capabilities = [new CapabilityBlueprint { Code = "event.publish.EVT-APPROVE" }]
             });
     }

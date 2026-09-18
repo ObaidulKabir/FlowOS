@@ -9,6 +9,7 @@ using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Engine;
 using System.Linq;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Services;
 using FlowOS.Core.Interfaces;
 using FlowOS.Security.Interfaces;
 using FlowOS.Domain.Enums;
@@ -35,6 +36,7 @@ public partial class WorkflowCommandHandlers :
     private readonly IEventRegistry _eventRegistry;
     private readonly ICurrentUser _currentUser;
     private readonly ICapabilityService _capabilityService;
+    private readonly IActivityAuthorizationService _activityAuthorization;
     private readonly FlowOS.Application.Common.Interfaces.IWorkflowTimerService? _timerService;
     private readonly FlowOS.Application.Common.Interfaces.IWorkflowActionDispatcher? _actionDispatcher;
     private readonly IIdempotencyService? _idempotencyService;
@@ -53,13 +55,15 @@ public partial class WorkflowCommandHandlers :
         IIdempotencyService? idempotencyService = null,
         IPluginBindingRegistryService? pluginBindingRegistry = null,
         IWorkflowExecutionContextService? workflowContextService = null,
-        IAgentTaskRunner? agentTaskRunner = null)
+        IAgentTaskRunner? agentTaskRunner = null,
+        IActivityAuthorizationService? activityAuthorization = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
         _engine = engine;
         _currentUser = currentUser;
         _capabilityService = capabilityService;
+        _activityAuthorization = activityAuthorization ?? new ActivityAuthorizationService(capabilityService);
         _timerService = timerService;
         _actionDispatcher = actionDispatcher;
         _idempotencyService = idempotencyService;
