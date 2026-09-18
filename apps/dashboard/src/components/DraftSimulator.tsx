@@ -47,6 +47,63 @@ const PRESET_PAYLOADS: Record<string, { label: string; data: Record<string, any>
   }
 };
 
+/** Prefer business-facing payload keys when summarizing context for the execution log. */
+const BUSINESS_CONTEXT_PRIORITY = [
+  'OrderId', 'orderId', 'ApplicantName', 'Requester', 'CustomerId', 'Amount', 'Currency',
+  'Category', 'Department', 'ItemSku', 'Quantity', 'CreditScore', 'DebtToIncome',
+  'Destination', 'Urgent', 'Description', 'ApprovalLimit', 'Principal', 'LoanId'
+];
+
+const formatPayloadValue = (value: unknown): string => {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string') return value.length > 48 ? `${value.slice(0, 45)}…` : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    const json = JSON.stringify(value);
+    return json.length > 48 ? `${json.slice(0, 45)}…` : json;
+  } catch {
+    return String(value);
+  }
+};
+
+const buildBusinessContextSnapshot = (
+  currentPayload: Record<string, any> | null | undefined,
+  options?: {
+    maxFields?: number;
+    eventId?: string;
+    eventLabel?: string;
+    entityType?: string;
+  }
+): string | null => {
+  if (!currentPayload || typeof currentPayload !== 'object') return null;
+
+  const maxFields = options?.maxFields ?? 6;
+  const used = new Set<string>();
+  const fields: string[] = [];
+
+  const pushField = (key: string) => {
+    if (used.has(key) || !(key in currentPayload) || fields.length >= maxFields) return;
+    used.add(key);
+    fields.push(`${key}=${formatPayloadValue(currentPayload[key])}`);
+  };
+
+  for (const key of BUSINESS_CONTEXT_PRIORITY) pushField(key);
+  for (const key of Object.keys(currentPayload)) pushField(key);
+
+  if (fields.length === 0 && !options?.eventLabel && !options?.entityType) return null;
+
+  const parts: string[] = [];
+  if (options?.entityType) parts.push(`entity=${options.entityType}`);
+  if (options?.eventLabel && options.eventLabel !== options.eventId) {
+    parts.push(`event="${options.eventLabel}"`);
+  } else if (options?.eventId && options.eventId.toLowerCase() !== 'default') {
+    parts.push(`event=${options.eventId}`);
+  }
+  if (fields.length > 0) parts.push(fields.join(', '));
+
+  return parts.length > 0 ? `Business context: ${parts.join(' · ')}` : null;
+};
+
 export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const [currentStepId, setCurrentStepId] = useState<string>('');
   const [currentState, setCurrentState] = useState<string>('');
@@ -72,6 +129,33 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return undefined;
   };
 
+  /** Normalize NextSteps dict or [{outcome,target}] arrays into stable routes. */
+  const getNextStepRoutes = (step: any): { outcome: string; target: string }[] => {
+    const raw = getProp(step, 'nextSteps', 'NextSteps');
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw
+        .map((item: any) => ({
+          outcome: String(getProp(item, 'outcome', 'Outcome', 'eventId', 'EventId') || 'Default'),
+          target: String(getProp(item, 'target', 'Target', 'stepId', 'StepId') || 'END')
+        }))
+        .filter(route => route.outcome);
+    }
+    if (typeof raw === 'object') {
+      return Object.entries(raw).map(([outcome, target]) => ({
+        outcome: String(outcome),
+        target: String(target ?? 'END')
+      }));
+    }
+    return [];
+  };
+
+  const pickAutoStepRoute = (routes: { outcome: string; target: string }[]) => {
+    if (routes.length === 0) return { outcome: 'Default', target: 'END' };
+    const defaultRoute = routes.find(route => route.outcome.trim().toLowerCase() === 'default');
+    return defaultRoute || routes[0];
+  };
+
   const wfObj = getProp(definition, 'workflow', 'Workflow') || definition;
   const rawSteps: any[] = getProp(wfObj, 'steps', 'Steps') || [];
   const startStepId = getProp(wfObj, 'startStepId', 'StartStepId') || 'Start';
@@ -79,6 +163,35 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const smObj = getProp(definition, 'stateMachine', 'StateMachine') || {};
   const initialState = getProp(smObj, 'initialState', 'InitialState') || '';
   const transitions: any[] = getProp(smObj, 'transitions', 'Transitions') || [];
+  const entityType =
+    getProp(smObj, 'entityType', 'EntityType') ||
+    getProp(definition, 'entityType', 'EntityType') ||
+    '';
+  const catalogEvents: any[] = getProp(definition, 'events', 'Events') || [];
+
+  const resolveEventLabel = (eventId: string): string | undefined => {
+    if (!eventId) return undefined;
+    const match = catalogEvents.find((event: any) => {
+      const id = String(getProp(event, 'eventId', 'EventId') || '');
+      return id.trim().toLowerCase() === eventId.trim().toLowerCase();
+    });
+    const name = match ? getProp(match, 'name', 'Name') : undefined;
+    return name ? String(name) : undefined;
+  };
+
+  const appendBusinessContext = (
+    logs: string[],
+    currentPayload: Record<string, any>,
+    options?: { eventId?: string; maxFields?: number }
+  ) => {
+    const snapshot = buildBusinessContextSnapshot(currentPayload, {
+      maxFields: options?.maxFields,
+      eventId: options?.eventId,
+      eventLabel: options?.eventId ? resolveEventLabel(options.eventId) : undefined,
+      entityType: entityType || undefined
+    });
+    if (snapshot) logs.push(snapshot);
+  };
 
   const getStepRoles = (step: any): string[] => {
     if (!step) return [];
@@ -229,6 +342,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (startStepId || '').toLowerCase()
     );
     const initialLogs: string[] = [];
+    appendBusinessContext(initialLogs, payload, { maxFields: 8 });
     if (startStep) {
       const entryActions = getStepActions(startStep, 'onEntry');
       if (entryActions.length > 0) {
@@ -326,8 +440,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
   // Execute a decision route
   const handleDecisionAdvance = (targetStepId: string, winningExpr: string) => {
-    const payloadSummary = Object.entries(payload).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(', ');
-    const logMsg = `[Decision: ${currentStepId}] Condition "${winningExpr}" -> TRUE (${payloadSummary}) => Advanced to [${targetStepId}]`;
+    const logMsg = `[Decision: ${currentStepId}] Condition "${winningExpr}" -> TRUE => Advanced to [${targetStepId}]`;
     const newLogs: string[] = [];
 
     // OnExit hooks for departed step
@@ -339,6 +452,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     }
 
     newLogs.push(logMsg);
+    appendBusinessContext(newLogs, payload, { maxFields: 8 });
 
     // OnEntry hooks for entered step
     const targetStep = rawSteps.find((s: any) => 
@@ -356,17 +470,27 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   };
 
   const fireEvent = (eventId: string, targetStepId: string) => {
-    // 1. Check State Machine Transition
+    // 1. Check State Machine Transition (case-insensitive; Default/true auto-routes do not consume Law)
     let nextState = currentState;
     let guardBlocked = false;
     let guardReason = '';
+    let matchedTransition = false;
 
-    const matching = transitions.filter(t => 
-        (getProp(t, 'fromState', 'FromState') === currentState || getProp(t, 'fromState', 'FromState') === '*') &&
-        (getProp(t, 'eventId', 'EventId', 'eventName', 'EventName') === eventId)
-    );
+    const eventKey = (eventId || '').trim().toLowerCase();
+    const isNonConsumingAutoRoute = eventKey === 'default' || eventKey === 'true' || eventKey === '';
+
+    const matching = transitions.filter(t => {
+      const from = String(getProp(t, 'fromState', 'FromState') ?? '');
+      const evt = String(getProp(t, 'eventId', 'EventId', 'eventName', 'EventName') ?? '');
+      const fromOk =
+        from === '*' ||
+        from.trim().toLowerCase() === String(currentState || '').trim().toLowerCase();
+      const evtOk = evt.trim().toLowerCase() === eventKey;
+      return fromOk && evtOk;
+    });
 
     if (matching.length > 0) {
+      matchedTransition = true;
       const transition = matching[0];
       const targetState = getProp(transition, 'toState', 'ToState');
       
@@ -386,7 +510,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     }
 
     if (guardBlocked) {
-      setHistory(prev => [...prev, `[GUARD BLOCKED] ${guardReason} (State: ${currentState})`]);
+      const blockedLogs = [`[GUARD BLOCKED] ${guardReason} (State: ${currentState})`];
+      appendBusinessContext(blockedLogs, payload, { eventId, maxFields: 8 });
+      setHistory(prev => [...prev, ...blockedLogs]);
       alert(`⚠️ State Machine Guard Violation:\n\n${guardReason}\n\nState remains [${currentState}]. Update payload in "Context & Payload" tab to satisfy the guard.`);
       return;
     }
@@ -394,6 +520,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     // 2. Advance
     const actingRole = simulatedRole || activeRoleDisplay;
     const newLogs: string[] = [];
+    const eventLabel = resolveEventLabel(eventId);
+    const eventDisplay = eventLabel && eventLabel !== eventId ? `${eventId} (${eventLabel})` : eventId;
 
     // OnExit hooks for departed step
     if (currentStep) {
@@ -403,7 +531,16 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
-    newLogs.push(`[Role: ${actingRole}] Fired "${eventId}" -> Step: ${targetStepId} (State: ${nextState})`);
+    if (!isNonConsumingAutoRoute && !matchedTransition) {
+      newLogs.push(
+        `[SM WARN] No state-machine transition for event "${eventId}" from state "${currentState || 'None'}". Workflow step advances; Law state unchanged.`
+      );
+    }
+
+    newLogs.push(
+      `[Role: ${actingRole}] Fired "${eventDisplay}" -> Step: ${targetStepId} (State: ${currentState || 'None'} → ${nextState || 'None'})`
+    );
+    appendBusinessContext(newLogs, payload, { eventId, maxFields: 8 });
 
     // OnEntry hooks for entered step
     const targetStep = rawSteps.find((s: any) => 
@@ -449,9 +586,14 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       </div>
     );
 
-    const nextSteps = getProp(currentStep, 'nextSteps', 'NextSteps') || {};
+    const nextStepRoutes = getNextStepRoutes(currentStep);
+    const nextSteps = Object.fromEntries(nextStepRoutes.map(route => [route.outcome, route.target]));
     const sla = getProp(currentStep, 'sla', 'Sla', 'SLA');
     const hasConditions = Object.keys(rawConditions).length > 0;
+    const autoRoute = pickAutoStepRoute(nextStepRoutes);
+    const alternateRoutes = nextStepRoutes.filter(
+      route => route.outcome.trim().toLowerCase() !== autoRoute.outcome.trim().toLowerCase()
+    );
 
     return (
       <div className="space-y-4">
@@ -523,7 +665,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
         ) : stepTypeLower.includes('command') || stepTypeLower.includes('event') ? (
           /* CASE 2: Command / Automated Action Step */
           <div className="bg-blue-500/10 border border-blue-500/30 p-3.5 rounded-xl space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-xs text-blue-300 font-semibold mb-0.5 flex items-center gap-1.5">
                   <Cpu size={14} className="text-blue-400" /> System Action ({stepType || 'Command'})
@@ -534,18 +676,33 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 </div>
               </div>
               <button 
-                onClick={() => {
-                  const defaultTarget = nextSteps['Default'] || Object.values(nextSteps)[0] || 'END';
-                  fireEvent('Default', defaultTarget as string);
-                }}
+                onClick={() => fireEvent(autoRoute.outcome, autoRoute.target)}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-1.5 shrink-0"
+                title={`Fire "${autoRoute.outcome}" → ${autoRoute.target}`}
               >
-                Auto-Step <ArrowRight size={14} />
+                Auto-Step <span className="font-mono opacity-90">{autoRoute.outcome}</span> <ArrowRight size={14} />
               </button>
             </div>
             <p className="text-[10px] text-slate-500 italic">
-              Automated step executes directly under {activeRoleDisplay} system credentials.
+              Fires the step outcome as the dual-kernel event (not a hard-coded Default), so Law state advances when a matching transition exists.
             </p>
+            {alternateRoutes.length > 0 && (
+              <div className="pt-1 border-t border-blue-500/20 space-y-1.5">
+                <p className="text-[10px] text-slate-400 font-semibold">Alternate outcomes:</p>
+                <div className="flex flex-wrap gap-2">
+                  {alternateRoutes.map(route => (
+                    <button
+                      key={`${route.outcome}:${route.target}`}
+                      onClick={() => fireEvent(route.outcome, route.target)}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1"
+                    >
+                      Fire: <span className="text-amber-300 font-mono font-bold">{route.outcome}</span>
+                      <span className="text-slate-500">→ {route.target}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : stepTypeLower.includes('timer') ? (
           /* CASE 3: Timer Step (Relative Pre/Post-Event or Static Duration) */
@@ -1062,13 +1219,24 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             <div className="space-y-2">
               <div className="text-[10px] text-emerald-400 font-mono pb-2 border-b border-slate-800/50">
                 [SYSTEM] Simulator started. Initial Step: {startStepId} (State: {initialState || 'None'})
+                {entityType ? ` · Entity: ${entityType}` : ''}
               </div>
-              {history.map((log, idx) => (
-                <div key={idx} className="text-[10px] text-slate-300 font-mono pb-2 border-b border-slate-800/50 last:border-0 flex items-start gap-1.5">
-                  <span className="text-slate-600">❯</span>
-                  <span>{log}</span>
-                </div>
-              ))}
+              {history.map((log, idx) => {
+                const isBusinessContext = log.startsWith('Business context:');
+                return (
+                  <div
+                    key={idx}
+                    className={`text-[10px] font-mono pb-2 border-b border-slate-800/50 last:border-0 flex items-start gap-1.5 ${
+                      isBusinessContext ? 'text-amber-200/90' : 'text-slate-300'
+                    }`}
+                  >
+                    <span className={isBusinessContext ? 'text-amber-500' : 'text-slate-600'}>
+                      {isBusinessContext ? '◎' : '❯'}
+                    </span>
+                    <span className={isBusinessContext ? 'leading-relaxed' : undefined}>{log}</span>
+                  </div>
+                );
+              })}
               {isSimulationComplete && (
                 <div className="text-[10px] text-blue-400 font-mono pt-1 flex items-center justify-between gap-2">
                   <span>[SYSTEM] Reached End of Workflow.</span>
