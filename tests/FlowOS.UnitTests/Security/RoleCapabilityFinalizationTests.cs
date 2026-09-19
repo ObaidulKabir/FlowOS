@@ -341,11 +341,9 @@ public class RoleCapabilityFinalizationTests
         ]
     };
 
-    private static WorkflowClass Source() => new(
-        Guid.NewGuid(),
-        "ReusableApproval",
-        "1.0.0",
-        new WorkflowClassBlueprint
+    private static WorkflowClass Source()
+    {
+        var blueprint = new WorkflowClassBlueprint
         {
             Events = [new EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve" }],
             StateMachine = new StateMachineBlueprint
@@ -382,5 +380,8 @@ public class RoleCapabilityFinalizationTests
                 new RoleBlueprint { Name = "Approver", GrantedCapabilities = ["event.publish.EVT-APPROVE"] }
             ],
             Capabilities = [new CapabilityBlueprint { Code = "event.publish.EVT-APPROVE" }]
-        });
+        };
+        WorkflowSimulationGovernance.Apply(blueprint);
+        return new WorkflowClass(Guid.NewGuid(), "ReusableApproval", "1.0.0", blueprint);
+    }
 }

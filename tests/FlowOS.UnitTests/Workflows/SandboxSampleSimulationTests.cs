@@ -190,7 +190,7 @@ public class SandboxSampleSimulationTests
     {
         var manager = new WorkflowClassManager();
 
-        var expense = new WorkflowClass(tenantId, "ExpenseApproval", "1.0.0", new WorkflowClassBlueprint
+        var expenseBp = new WorkflowClassBlueprint
         {
             Events =
             [
@@ -232,11 +232,13 @@ public class SandboxSampleSimulationTests
                 new CapabilityBlueprint { Code = "event.publish.EVT-APPROVE" },
                 new CapabilityBlueprint { Code = "event.publish.EVT-REJECT" }
             ]
-        });
+        };
+        WorkflowSimulationGovernance.Apply(expenseBp);
+        var expense = new WorkflowClass(tenantId, "ExpenseApproval", "1.0.0", expenseBp);
         Assert.True(manager.Publish(expense).IsValid);
         db.WorkflowClasses.Add(expense);
 
-        var expenseV2 = new WorkflowClass(tenantId, "ExpenseApprovalV2", "1.0.0", new WorkflowClassBlueprint
+        var expenseV2Bp = new WorkflowClassBlueprint
         {
             Events =
             [
@@ -310,7 +312,9 @@ public class SandboxSampleSimulationTests
                 new CapabilityBlueprint { Code = "event.publish.EVT-DIRECTOR-APPROVE" },
                 new CapabilityBlueprint { Code = "event.publish.EVT-DIRECTOR-REJECT" }
             ]
-        });
+        };
+        WorkflowSimulationGovernance.Apply(expenseV2Bp);
+        var expenseV2 = new WorkflowClass(tenantId, "ExpenseApprovalV2", "1.0.0", expenseV2Bp);
         Assert.True(manager.Publish(expenseV2).IsValid);
         db.WorkflowClasses.Add(expenseV2);
         db.SaveChanges();

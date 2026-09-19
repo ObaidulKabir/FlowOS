@@ -87,7 +87,7 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
             binding.TenantId,
             revision,
             result,
-            options.RequireExistingTenantRoles,
+            options.RequirePublishedSource,
             cancellationToken);
         ValidateMappings(source, revision, result);
         ValidateDecisionProviders(source, revision, result);
@@ -289,9 +289,8 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
 
         foreach (var role in source.Definition.Roles)
         {
-            var tenantRole = TryGetValue(revision.Definition.RoleOverrides, role.Name, out var mapped)
-                ? mapped
-                : role.Name;
+            if (!TryGetValue(revision.Definition.RoleOverrides, role.Name, out var tenantRole))
+                continue;
             AddExpected(tenantRole, role.GrantedCapabilities ?? new List<string>());
         }
 
@@ -310,9 +309,8 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
                 .ToList();
             foreach (var templateRole in inboxRoles)
             {
-                var tenantRole = TryGetValue(revision.Definition.RoleOverrides, templateRole, out var mapped)
-                    ? mapped
-                    : templateRole;
+                if (!TryGetValue(revision.Definition.RoleOverrides, templateRole, out var tenantRole))
+                    continue;
                 AddExpected(tenantRole, remappedCaps);
             }
 
@@ -334,9 +332,8 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
                         revision.Definition.EventAliases));
                 foreach (var templateRole in inboxRoles)
                 {
-                    var tenantRole = TryGetValue(revision.Definition.RoleOverrides, templateRole, out var mapped)
-                        ? mapped
-                        : templateRole;
+                    if (!TryGetValue(revision.Definition.RoleOverrides, templateRole, out var tenantRole))
+                        continue;
                     AddExpected(tenantRole, eventCaps);
                 }
             }
