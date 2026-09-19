@@ -68,6 +68,16 @@ public class ExpenseApprovalAmountRoleTests
     }
 
     [Fact]
+    public async Task SeededV2_LowAmount_DirectorCanSignManagerInbox()
+    {
+        var data = await SimulateSeededV2(450, "Director", "EVT-SUBMIT", "EVT-APPROVE");
+
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("END", data["currentStepId"]?.ToString());
+        Assert.Equal("Approved", data["finalState"]?.ToString());
+    }
+
+    [Fact]
     public async Task SeededV2_HighAmount_ManagerCannotSignDirectorInbox()
     {
         var data = await SimulateSeededV2(7500, "Manager", "EVT-SUBMIT", "EVT-DIRECTOR-APPROVE");

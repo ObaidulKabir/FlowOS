@@ -262,7 +262,9 @@ public static class McpToolSchemas
                   "description":{"type":"string"},
                   "category":{"type":"string","enum":["Decision","System","Human","Agent"],"default":"System"},
                   "isTerminal":{"type":"boolean","default":false},
-                  "payloadSchema":{"type":["string","null"]}
+                  "payloadSchema":{"type":["string","null"]},
+                  "allowedRoles":{"type":"array","items":{"type":"string"},"description":"Inbox hint for who receives this human event. Empty does not hide step requiredRoles. Not the execution gate."},
+                  "requiredCapabilities":{"type":"array","items":{"type":"string"},"description":"Execution gate, typically event.publish.<eventId>. Human events must declare at least one (GOV-002). Roles are inbox only."}
                 },
                 "additionalProperties":false
               }
@@ -332,8 +334,9 @@ public static class McpToolSchemas
                           "additionalProperties":false
                         }
                       },
-                      "requiredRoles":{"type":"array","items":{"type":"string"}},
-                      "allowedRoles":{"type":"array","items":{"type":"string"}},
+                      "requiredRoles":{"type":"array","items":{"type":"string"},"description":"HumanTask inbox assignment only. Who sees the task. Does not authorize execution."},
+                      "allowedRoles":{"type":"array","items":{"type":"string"},"description":"Optional inbox merge with requiredRoles. Empty must not hide requiredRoles."},
+                      "requiredCapabilities":{"type":"array","items":{"type":"string"},"description":"Execution gate for completing this HumanTask or its human exits (event.publish.<eventId>). requiredRoles is inbox only."},
                       "actor":{"type":"string","enum":["Human","Agent","Either"],"default":"Human","description":"Who may act on a waiting step. Human is the default. Agent/Either host a DecisionPacket and may auto-commit only when autoCommit matches."},
                       "decisionGuideline":{"type":"string","description":"Template markdown: how to decide among legal nextSteps (allowed outcomes, examples, escalate-if)."},
                       "autoCommit":{
@@ -397,13 +400,14 @@ public static class McpToolSchemas
             },
             "roles":{
               "type":"array",
+              "description":"Business-context grant bags compiled onto WorkflowDefinition.BusinessRoles. Never written to tenant IAM Role tables. name is the inbox label; grantedCapabilities is the execution grant.",
               "items":{
                 "type":"object",
                 "required":["name"],
                 "properties":{
-                  "name":{"type":"string","minLength":1},
+                  "name":{"type":"string","minLength":1,"description":"Inbox / grant-bag name. Not a FlowOS tenant IAM role."},
                   "description":{"type":"string"},
-                  "grantedCapabilities":{"type":"array","items":{"type":"string"}},
+                  "grantedCapabilities":{"type":"array","items":{"type":"string"},"description":"Capabilities this business role may execute (e.g. event.publish.EVT-APPROVE). Director may hold Manager event grants without being the inbox role."},
                   "resolutionType":{"type":"string","enum":["Assignment","Expression","Static"]},
                   "memberExpression":{"type":"string"},
                   "staticMembers":{"type":"array","items":{"type":"string"}}
@@ -413,11 +417,12 @@ public static class McpToolSchemas
             },
             "capabilities":{
               "type":"array",
+              "description":"Declared capability catalog. Human events/steps reference these codes as the execution gate.",
               "items":{
                 "type":"object",
                 "required":["code"],
                 "properties":{
-                  "code":{"type":"string","minLength":1},
+                  "code":{"type":"string","minLength":1,"description":"Capability code, typically event.publish.<eventId>."},
                   "description":{"type":"string"}
                 },
                 "additionalProperties":false
@@ -566,7 +571,7 @@ public static class McpToolSchemas
             "roles":{
               "type":"array",
               "items":{"type":"string","minLength":1},
-              "description":"Default simulated business roles used by task and state-machine role checks."
+              "description":"Simulated business-context roles (inbox labels plus grant bags). Execution is gated by grantedCapabilities / event.publish.*, not by matching the HumanTask inbox."
             },
             "events":{
               "type":"array",
@@ -705,7 +710,7 @@ public static class McpToolSchemas
             },
             "role":{
               "type":"string",
-              "description":"Simulated user role invoking tasks (e.g. 'User', 'Manager', 'Director', 'Admin'). Defaults to 'User'."
+              "description":"Simulated business-context role (inbox label plus grant bag). HumanTask execution is gated by grantedCapabilities, not by matching requiredRoles. Defaults to 'User'."
             },
             "events":{
               "type":"array",
@@ -806,7 +811,7 @@ public static class McpToolSchemas
             },
             "role":{
               "type":"string",
-              "description":"Simulated user role invoking tasks. Defaults to 'User'."
+              "description":"Simulated business-context role (inbox label plus grant bag). Execution is gated by grantedCapabilities. Defaults to 'User'."
             },
             "events":{
               "type":"array",
@@ -1235,7 +1240,7 @@ public static class McpToolSchemas
             "targetStepIndex":{"type":"integer","minimum":0,"default":0,"description":"Historical snapshot index to clone as the what-if origin."},
             "alternativeEvent":{"type":"string","minLength":1,"description":"Alternate event type to evaluate (e.g. EVT-REJECT)."},
             "alternativePayload":{"type":"object","description":"Optional alternate payload used only inside the sandbox."},
-            "simulatedRoles":{"type":"array","items":{"type":"string","minLength":1},"description":"Business roles used by contextual role and state-machine guard checks."},
+            "simulatedRoles":{"type":"array","items":{"type":"string","minLength":1},"description":"Simulated business-context roles (inbox labels plus grant bags). Execution is gated by grantedCapabilities, not by matching the HumanTask inbox."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false

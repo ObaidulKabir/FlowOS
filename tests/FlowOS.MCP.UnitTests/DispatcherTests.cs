@@ -91,6 +91,8 @@ public sealed class DispatcherTests
         Assert.Contains("upsert_agent_prompt", initResult["instructions"]!.ToString());
         Assert.Contains("state-only catch-up", initResult["instructions"]!.ToString());
         Assert.Contains("autoAdvanceTimers", initResult["instructions"]!.ToString());
+        Assert.Contains("Capability is the execution gate", initResult["instructions"]!.ToString());
+        Assert.Contains("requiredRoles is inbox", initResult["instructions"]!.ToString());
         Assert.NotNull(initResult["capabilities"]?["prompts"]);
         Assert.NotNull(initResult["capabilities"]?["resources"]);
 
@@ -149,6 +151,8 @@ public sealed class DispatcherTests
         Assert.Contains("throwaway", dualKernelText);
         Assert.Contains("autoAdvanceTimers", dualKernelText);
         Assert.Contains("SLA", dualKernelText);
+        Assert.Contains("execution gate", dualKernelText);
+        Assert.Contains("inbox only", dualKernelText);
 
         var slaGuideRead = await dispatcher.DispatchAsync(Request(7, "resources/read", new { uri = "flowos://guides/sla-reminder-simulation" }));
         var slaGuideResult = JObject.FromObject(((JsonRpcResponse)slaGuideRead.Response!).Result!);

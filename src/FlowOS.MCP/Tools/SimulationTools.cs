@@ -7,6 +7,7 @@ using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Queries.Governance;
 using FlowOS.Application.Services;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.Services;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
 using FlowOS.StateMachines.Engine;
@@ -356,6 +357,8 @@ public class SimulationTools
         Queue<string>? childEventsQueue = null,
         bool autoAdvanceTimers = false)
     {
+        WorkflowSimulationGovernance.Apply(blueprint);
+
         var startStepId = !string.IsNullOrWhiteSpace(blueprint.Workflow?.StartStepId)
             ? blueprint.Workflow.StartStepId
             : (blueprint.Workflow?.Steps.FirstOrDefault()?.StepId ?? "Start");
@@ -639,8 +642,8 @@ public class SimulationTools
             // --- HUMAN TASK STEP ---
             if (stepTypeLower.Contains("human"))
             {
-                var roles = GetStepRoles(step);
-                bool authorized = IsRoleAuthorized(roles, simulatedRole);
+                var inboxRoles = GetInboxRoles(step);
+                var stepCaps = NormalizeNames(step.RequiredCapabilities);
                 var remindersPreview = (step.Sla?.Reminders != null && step.Sla.Reminders.Count > 0)
                     ? step.Sla.Reminders.Select(r => new
                     {
@@ -652,33 +655,9 @@ public class SimulationTools
 
                 TryPrependSlaClockEvents(step, eventsQueue, autoAdvanceTimers, slaClockApplied);
 
-                if (!authorized)
-                {
-                    status = "WaitingForHumanTask";
-                    pendingHumanTask = new
-                    {
-                        stepId = step.StepId,
-                        requiredRoles = roles,
-                        allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
-                        sla = step.Sla,
-                        reminders = remindersPreview,
-                        unauthorizedAttempt = true,
-                        simulatedRole
-                    };
-                    executionTrace.Add(new
-                    {
-                        stepNumber = totalStepsExecuted + 1,
-                        stepId = step.StepId,
-                        stepType = "HumanTask",
-                        action = $"Role mismatch: Step requires [{string.Join(", ", roles)}], but simulated role is '{simulatedRole}'. Task cannot be completed by this role.",
-                        state = currentState
-                    });
-                    break;
-                }
-
                 if (eventsQueue.Count > 0)
                 {
-                    var evt = eventsQueue.Dequeue();
+                    var evt = eventsQueue.Peek();
                     var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
 
                     var nextStepPair = nextSteps.FirstOrDefault(kvp =>
@@ -686,6 +665,7 @@ public class SimulationTools
 
                     if (string.IsNullOrEmpty(nextStepPair.Value))
                     {
+                        eventsQueue.Dequeue();
                         if (SlaSimulationClock.IsReminderEvent(step.Sla, evt))
                         {
                             ApplySlaReminderStay(
@@ -706,6 +686,34 @@ public class SimulationTools
                         break;
                     }
 
+                    if (!IsClockEvent(step, evt) && !IsEventAuthorized(blueprint, step, evt, simulatedRole))
+                    {
+                        var required = ResolveEventRequiredCapabilities(blueprint, step, evt);
+                        status = "WaitingForHumanTask";
+                        pendingHumanTask = new
+                        {
+                            stepId = step.StepId,
+                            requiredRoles = inboxRoles,
+                            requiredCapabilities = required.Count > 0 ? required : stepCaps,
+                            allowedEvents = nextSteps.Keys.ToList(),
+                            sla = step.Sla,
+                            reminders = remindersPreview,
+                            unauthorizedAttempt = true,
+                            deniedEvent = evt,
+                            simulatedRole
+                        };
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = "HumanTask",
+                            action = $"Capability denied for '{evt}': requires [{string.Join(", ", required)}], simulated role '{simulatedRole}' is not granted. Inbox remains [{string.Join(", ", inboxRoles)}].",
+                            state = currentState
+                        });
+                        break;
+                    }
+
+                    eventsQueue.Dequeue();
                     var targetStep = nextStepPair.Value;
 
                     var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, evt, payload);
@@ -771,7 +779,8 @@ public class SimulationTools
                     pendingHumanTask = new
                     {
                         stepId = step.StepId,
-                        requiredRoles = roles,
+                        requiredRoles = inboxRoles,
+                        requiredCapabilities = stepCaps,
                         allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
                         sla = step.Sla,
                         reminders = remindersPreview
@@ -781,7 +790,7 @@ public class SimulationTools
                         stepNumber = totalStepsExecuted + 1,
                         stepId = step.StepId,
                         stepType = "HumanTask",
-                        action = $"Workflow paused at HumanTask '{step.StepId}'. Waiting for event dispatch from authorized role [{string.Join(", ", roles)}].",
+                        action = $"Workflow paused at HumanTask '{step.StepId}'. Inbox [{string.Join(", ", inboxRoles)}]; execution gate [{string.Join(", ", stepCaps)}].",
                         state = currentState
                     });
                     break;
@@ -1864,7 +1873,62 @@ public class SimulationTools
         return roles.ToList();
     }
 
-    private static bool IsRoleAuthorized(List<string> stepRoles, string simulatedRole)
+    private static List<string> GetInboxRoles(StepBlueprint step)
+        => GetStepRoles(step).Where(role => !IsOpenOrSystemRole(role)).ToList();
+
+    private static bool IsOpenOrSystemRole(string? role)
+        => string.IsNullOrWhiteSpace(role) ||
+           string.Equals(role, "Anyone", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(role, "Unassigned", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(role, "System", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsClockEvent(StepBlueprint step, string eventId)
+        => SlaSimulationClock.IsReminderEvent(step.Sla, eventId) ||
+           SlaSimulationClock.IsTimeoutEvent(step.Sla, eventId);
+
+    private static List<string> NormalizeNames(IEnumerable<string>? values)
+        => (values ?? Enumerable.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static EventBlueprint? FindEvent(WorkflowClassBlueprint blueprint, string eventId)
+        => blueprint.Events?.FirstOrDefault(item =>
+            string.Equals(item.EventId, eventId, StringComparison.OrdinalIgnoreCase));
+
+    private static List<string> ResolveEventRequiredCapabilities(
+        WorkflowClassBlueprint blueprint,
+        StepBlueprint step,
+        string eventId)
+    {
+        var evt = FindEvent(blueprint, eventId);
+        var eventCaps = NormalizeNames(evt?.RequiredCapabilities);
+        return eventCaps.Count > 0 ? eventCaps : NormalizeNames(step.RequiredCapabilities);
+    }
+
+    private static List<string> GetRoleGrantedCapabilities(WorkflowClassBlueprint blueprint, string role)
+    {
+        var match = blueprint.Roles?.FirstOrDefault(item =>
+            string.Equals(item.Name, role, StringComparison.OrdinalIgnoreCase));
+        return NormalizeNames(match?.GrantedCapabilities);
+    }
+
+    private static bool CapabilitiesAllow(WorkflowClassBlueprint blueprint, string role, IReadOnlyList<string> required)
+    {
+        if (required.Count == 0) return false;
+        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)) return true;
+
+        var granted = GetRoleGrantedCapabilities(blueprint, role);
+        var grantedSet = new HashSet<string>(granted, StringComparer.OrdinalIgnoreCase);
+        if (required.Any(cap => grantedSet.Contains(cap)))
+            return true;
+
+        return grantedSet.Contains("event.publish") &&
+               required.Any(cap => cap.StartsWith("event.publish.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsRoleAuthorized(IReadOnlyList<string> stepRoles, string simulatedRole)
     {
         if (stepRoles.Count == 0) return true;
         if (stepRoles.Any(r => string.Equals(r, "Anyone", StringComparison.OrdinalIgnoreCase) ||
@@ -1872,6 +1936,46 @@ public class SimulationTools
             return true;
 
         return stepRoles.Any(r => string.Equals(r, simulatedRole, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsEventAuthorized(
+        WorkflowClassBlueprint blueprint,
+        StepBlueprint step,
+        string eventId,
+        string simulatedRole)
+    {
+        if (string.IsNullOrWhiteSpace(eventId) ||
+            string.Equals(eventId, "Default", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(eventId, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (IsClockEvent(step, eventId))
+            return true;
+
+        var roleKey = simulatedRole?.Trim() ?? string.Empty;
+        if (string.Equals(roleKey, "Admin", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var required = ResolveEventRequiredCapabilities(blueprint, step, eventId);
+        var eventRoles = NormalizeNames(FindEvent(blueprint, eventId)?.AllowedRoles)
+            .Where(role => !IsOpenOrSystemRole(role))
+            .ToList();
+
+        if (required.Count > 0)
+        {
+            if (CapabilitiesAllow(blueprint, roleKey, required))
+                return true;
+            if (eventRoles.Any(role => string.Equals(role, roleKey, StringComparison.OrdinalIgnoreCase)))
+                return true;
+            return false;
+        }
+
+        if (eventRoles.Count > 0)
+            return eventRoles.Any(role => string.Equals(role, roleKey, StringComparison.OrdinalIgnoreCase));
+
+        return IsRoleAuthorized(GetStepRoles(step), roleKey);
     }
 
     private static bool EvaluateExpressionSafely(string expression, Dictionary<string, object> payload)

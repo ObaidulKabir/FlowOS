@@ -158,6 +158,32 @@ public class SimulationToolsTests
         var pending = data["pendingHumanTask"] as JObject;
         Assert.NotNull(pending);
         Assert.True(pending["unauthorizedAttempt"]?.Value<bool>());
+        Assert.Equal("EVT-APPROVE", pending["deniedEvent"]?.ToString());
+        var deniedCaps = pending["requiredCapabilities"] as JArray;
+        Assert.NotNull(deniedCaps);
+        Assert.Contains(deniedCaps, token => token.ToString().Contains("EVT-APPROVE", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Simulate_DirectorCanCompleteManagerInbox_WhenGrantedManagerEventCapability()
+    {
+        var blueprint = CreateExpenseApprovalBlueprint();
+        var args = new JObject
+        {
+            ["blueprint"] = blueprint,
+            ["payload"] = new JObject { ["Amount"] = 450 },
+            ["role"] = "Director",
+            ["events"] = new JArray("EVT-APPROVE")
+        };
+
+        var result = await _tools.SimulateWorkflowClass(args);
+
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("END", data["currentStepId"]?.ToString());
+        Assert.Equal("Approved", data["finalState"]?.ToString());
     }
 
     [Fact]

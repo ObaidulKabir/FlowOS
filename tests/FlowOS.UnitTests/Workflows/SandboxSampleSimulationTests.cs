@@ -32,7 +32,7 @@ public class SandboxSampleSimulationTests
         {
             ("ExpenseApproval", new JObject { ["Amount"] = 50 }, "Approver",
                 new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved"),
-            ("ExpenseApprovalV2", new JObject { ["Amount"] = 50 }, "Approver",
+            ("ExpenseApprovalV2", new JObject { ["Amount"] = 50 }, "Manager",
                 new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved"),
             ("ExpenseApprovalV2", new JObject { ["Amount"] = 7500 }, "Director",
                 new JArray("EVT-SUBMIT", "EVT-DIRECTOR-APPROVE"), false, "Approved"),
@@ -117,23 +117,23 @@ public class SandboxSampleSimulationTests
             expenseV2.Definition,
             expenseV2.Name,
             new JObject { ["Amount"] = 250 },
-            "Approver",
+            "Manager",
             new JArray("EVT-SUBMIT", "EVT-ESCALATE"),
             false);
         Assert.True(escalate.Ok, escalate.Error);
         Assert.Equal("WaitingForHumanTask", escalate.Status);
         Assert.Equal("PendingDirector", escalate.CurrentStepId);
 
-        var directorBlocked = await Simulate(
+        var directorCanEscalateManagerInbox = await Simulate(
             expenseV2.Definition,
             expenseV2.Name,
             new JObject { ["Amount"] = 250 },
             "Director",
             new JArray("EVT-SUBMIT", "EVT-ESCALATE"),
             false);
-        Assert.True(directorBlocked.Ok, directorBlocked.Error);
-        Assert.Equal("WaitingForHumanTask", directorBlocked.Status);
-        Assert.Equal("PendingManager", directorBlocked.CurrentStepId);
+        Assert.True(directorCanEscalateManagerInbox.Ok, directorCanEscalateManagerInbox.Error);
+        Assert.Equal("WaitingForHumanTask", directorCanEscalateManagerInbox.Status);
+        Assert.Equal("PendingDirector", directorCanEscalateManagerInbox.CurrentStepId);
     }
 
     [Fact]

@@ -166,6 +166,16 @@ public sealed class ContractAndTenantTests
         var transitionProperties = blueprintProperties["stateMachine"]?["properties"]?["transitions"]?
             ["items"]?["properties"];
         Assert.NotNull(transitionProperties?["condition"]);
+
+        var eventProperties = blueprintProperties["events"]?["items"]?["properties"];
+        Assert.NotNull(eventProperties?["requiredCapabilities"]);
+        Assert.NotNull(eventProperties?["allowedRoles"]);
+        Assert.Contains("execution gate", eventProperties?["requiredCapabilities"]?["description"]?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+
+        var stepProperties = blueprintProperties["workflow"]?["properties"]?["steps"]?["items"]?["properties"];
+        Assert.NotNull(stepProperties?["requiredCapabilities"]);
+        Assert.Contains("inbox", stepProperties?["requiredRoles"]?["description"]?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("grant bags", blueprintProperties["roles"]?["description"]?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

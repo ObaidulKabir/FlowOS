@@ -197,7 +197,7 @@ public static class McpToolDescriptions
                 "[Business-Context Simulator] Runs a side-effect-free, production-parity simulation of a saved draft or pinned active context-binding revision. " +
                 "Draft bindings may point at a Draft workflow class; do not publish a throwaway variant just to simulate. " +
                 "WorkflowClass roles are business-context declarations compiled onto the workflow definition; they are never written to FlowOS tenant Role tables. CTX-ROLE-002 only means a role override mapped to an empty name. " +
-                "Projects source payloads into canonical context, applies contextual event aliases and event mappings, enforces workflow/state-machine guards and simulated roles, and reports actions, timers, and subworkflows without executing them. " +
+                "Projects source payloads into canonical context, applies contextual event aliases and event mappings, enforces workflow/state-machine guards and capability grants for simulated business roles (requiredRoles remains inbox only), and reports actions, timers, and subworkflows without executing them. " +
                 "SLA reminders fire in duration order before a completing nextSteps event; set autoAdvanceTimers=true with no completing event to also fire TimeoutEvent. Do not start a live instance just to prove reminders. " +
                 "Returns: {ok:true,data:{contextBindingId,revisionKind,status,initialProjection,initialCanonicalContext,finalCanonicalContext,trace,pendingWork,graph,sideEffectsSuppressed:true}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-VALIDATION, CTX-STATE-001, MCP-INTERNAL. " +
@@ -241,7 +241,8 @@ public static class McpToolDescriptions
 
             ["simulate_workflowclass"] =
                 "[Simulator] Runs a zero-side-effect, in-memory dry-run simulation of a WorkflowClass using either an existing draft/published ID or an inline blueprint. " +
-                "Evaluates decision conditions against context payloads, validates state machine guards, enforces human-task role permissions, advances automated steps, " +
+                "Evaluates decision conditions against context payloads, validates state machine guards (first eligible transition when several share EventId), " +
+                "enforces HumanTask capability gates (requiredCapabilities / grantedCapabilities; requiredRoles is inbox only), advances automated steps, " +
                 "and applies queued domain events to the state machine on Decision and Default Command steps when the event is not reserved for a HumanTask/Timer. " +
                 "HumanTask/Command SLA reminders fire in duration order before a completing nextSteps event; set autoAdvanceTimers=true with no completing event to also fire TimeoutEvent. Timer steps still require autoAdvanceTimers to elapse. " +
                 "Evaluates dynamic payload mappings and Handlebars templates, and injects simulated step faults via `simulateFailureAtStep` to test OnFailure Saga rollback compensation actions. " +

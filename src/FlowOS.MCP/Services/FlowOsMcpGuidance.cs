@@ -22,7 +22,7 @@ public static class FlowOsMcpGuidance
         FlowOS is a dual-kernel enterprise process operating system that strictly separates:
         1. State Authority (Mathematical State Machine) - Controls what state transitions are legally permitted.
         2. Process Orchestration (Workflow Engine) - Manages step execution, timer SLAs, and task completion.
-        3. Policy Governance (RBAC & Capabilities) - Governs who can trigger events or execute steps.
+        3. Policy Governance (capabilities as execution gate; roles as inbox / grant bags). Tenant IAM roles are not workflow inbox roles.
 
         Canonical 5-Step Operating Lifecycle for AI Agents:
         ---------------------------------------------------
@@ -34,8 +34,9 @@ public static class FlowOsMcpGuidance
             The blueprint MUST define:
             - `stateMachine`: `initialState`, `states`, and `transitions` (fromState, toState, triggerEvent).
             - `workflow`: `startStepId` and `steps` (stepId, stepType, requiredRoles, requiredCapabilities, nextSteps). Capability is the execution gate; requiredRoles is inbox only.
-            - `events`: List of event identifiers (e.g. EVT-SUBMIT, EVT-APPROVE, EVT-REJECT).
-            - `roles`: Role definitions governing step permissions.
+            - `events`: Event identifiers with `requiredCapabilities` (gate, typically event.publish.<eventId>) and optional `allowedRoles` (inbox hint). Empty allowedRoles must not hide step requiredRoles.
+            - `roles`: Business-context grant bags (`name` + `grantedCapabilities`). Inbox label only; never written to tenant IAM Role tables.
+            - `capabilities`: Catalog of codes referenced by events and HumanTasks.
 
         [Step 2: Authoritative Parity Validation]
           • Call `validate_draft_workflowclass` with `id`.
@@ -76,7 +77,7 @@ public static class FlowOsMcpGuidance
         - FlowOS then applies it as a state-only catch-up: step stays put, state advances. Omitting it leaves state behind; the next event is Denied as a state-machine violation.
         - Preferred design: HumanTask/Command `nextSteps` consume the same event the state machine uses. Do not auto-skip a legal gate unless you still emit that event.
         - Repeatable paths (retry-password, resubmit, pin re-entry) MUST declare `pathLimits` on the looping nextSteps key: `{ "maxTravels": 3, "onExceeded": "LockedOut" }`. The engine counts each travel and fails closed or routes to onExceeded. Cyclic edges without a declaration still cap at 5.
-        - WorkflowClass `roles[]`/`capabilities[]` are business-context vocabulary compiled onto `WorkflowDefinition.BusinessRoles`. They are never written to FlowOS tenant Role/TenantUserRole tables. `simulate_context_binding` may use a Draft template. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source. `CTX-ROLE-002` only means a role override mapped to an empty name.
+        - WorkflowClass `roles[]`/`capabilities[]` are business-context vocabulary compiled onto `WorkflowDefinition.BusinessRoles`. They are never written to FlowOS tenant Role/TenantUserRole tables. Capability is the execution gate; `requiredRoles` is inbox only. A Director granted Manager event capabilities can fire those events without being the inbox role. Payload-decided inbox (Amount > 5000 → Director, else Manager) uses a Work Decision plus dual Law transitions on the same EventId; `simulate_workflowclass` picks the first eligible guard. `simulate_context_binding` may use a Draft template. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source. `CTX-ROLE-002` only means a role override mapped to an empty name.
         - Diagnose divergence: if `currentStep` is ahead of `currentState` (e.g. MaterialDecision / Assigned), the missing event is the unused state-machine trigger.
 
         SLA reminder / timeout simulation law (read before concluding the simulator is broken):
@@ -380,7 +381,8 @@ public static class FlowOsMcpGuidance
                                 3. If an event was rejected, verify:
                                    - Is the event declared for this workflow?
                                    - Does a transition exist from `currentState` using this event in the State Machine?
-                                   - Does the caller have the required role or capability?
+                                   - Does the caller have a granted capability for this event (`event.publish.<event>`)? Inbox `requiredRoles` only decide who sees the HumanTask.
+                                   - Did payload conditions route the inbox to a different role (e.g. Amount > 5000 → Director)?
                                    - If currentStep is ahead of currentState, a Decision auto-route skipped a gate: publish the unused state-machine event (state-only catch-up). Read `flowos://guides/dual-kernel-design`.
                                 4. Call `suggest_agent_action` with `agentId: "RiskAnalysisAgent"` to analyze anomaly conditions.
                                 """
@@ -617,6 +619,17 @@ public static class FlowOsMcpGuidance
 
         Runtime counts `from|event|to`. Travel 1–3 stay on EnterPassword. Travel 4 routes to `LockedOut` (or fails closed if `onExceeded` is omitted). Cyclic edges without `pathLimits` still cap at 5. Align Law: add a state-machine overflow transition such as `Authenticating + LOCKED_OUT → Locked`.
 
+        ## Role and capability (inbox vs gate)
+
+        Capability is the execution gate. `requiredRoles` / event `allowedRoles` are the HumanTask inbox only.
+
+        - Human events and HumanTasks declare `requiredCapabilities` (`event.publish.<eventId>`). GOV-002 if missing.
+        - `roles[].grantedCapabilities` is the grant bag. Director may hold Manager event grants without being the Manager inbox.
+        - Empty event `allowedRoles: []` must not hide step `requiredRoles`.
+        - `simulate_workflowclass` authorizes the **event**, not the inbox label. Command `Default`/`true` auto-routes stay authorized.
+        - Payload-decided inbox: dual Law transitions on the same EventId with different `condition` (Amount > 5000 → PendingDirector, else PendingManager) plus a Work Decision. Simulate with the matching role for the landing inbox, or a role that holds that event's capability.
+        - WorkflowClass roles are never FlowOS tenant IAM roles. `CTX-ROLE-002` is an empty override name, not a missing tenant Role row.
+
         ## Preferred MCP design loop
 
         1. `describe_workflowclass_schema`
@@ -850,7 +863,7 @@ public static class FlowOsMcpGuidance
         4. Put **the case + tenant policy** on the context binding: `inputMapping` / canonical fields plus optional `policyGuideline`.
         5. Declare `autoCommit.minConfidence` and `autoCommit.allowedEvents` as a **subset of `nextSteps`**. Those events must also exist on the state machine.
         6. Never put `TimeoutEvent` or SLA reminder events in `autoCommit.allowedEvents`. Overdue stays timer-owned.
-        7. Keep `requiredRoles` as the human fallback. If policy fails, FlowOS parks a HumanTask Smart Action from the insight.
+        7. Keep `requiredRoles` as the HumanTask inbox and `requiredCapabilities` as the execution gate. If policy fails, FlowOS parks a HumanTask Smart Action from the insight.
 
         FlowOS hosts the loop: wait → DecisionPacket → `IWorkflowAgent` → AutoCommitPolicy → `PublishEventCommand` (actor `Agent:{id}`) or park. Do **not** teach an external chat agent to `publish_event` from free text. Call `get_agent_context` or `preview_agent_context` to inspect Prompt/Data/Tools/Provider; call `suggest_agent_action` to run the agent without publishing; call `run_agent_task` only to request the hosted loop.
 
