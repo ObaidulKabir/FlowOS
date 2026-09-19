@@ -29,9 +29,6 @@ public class RoleRepository : IRoleRepository
     public Task<Role?> GetByIdAsync(Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
         => _context.Roles.FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, cancellationToken);
 
-    public Task<Role?> GetByNameAsync(Guid tenantId, string roleName, CancellationToken cancellationToken = default)
-        => _context.Roles.FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Name == roleName, cancellationToken);
-
     public async Task<IReadOnlyList<Role>> ListAsync(Guid tenantId, CancellationToken cancellationToken = default)
         => await _context.Roles
             .AsNoTracking()
