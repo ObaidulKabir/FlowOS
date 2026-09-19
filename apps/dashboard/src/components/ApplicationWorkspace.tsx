@@ -121,7 +121,7 @@ export const ApplicationWorkspace: React.FC<Props> = ({
               <Plus size={14} /> New workflow
             </button>
             {onOpenSimulator && (
-              <button onClick={onOpenSimulator} className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20">
+              <button type="button" onClick={onOpenSimulator} className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20">
                 <Sparkles size={14} /> Visual Demo Simulator
               </button>
             )}

@@ -57,6 +57,7 @@ const FALLBACK_EXPENSE_V2 = applySimulationGovernance({
     InitialState: 'Draft',
     States: ['Draft', 'PendingManager', 'PendingDirector', 'Approved', 'Rejected'],
     Transitions: [
+      { FromState: 'Draft', ToState: 'PendingDirector', EventId: 'EVT-SUBMIT', Condition: 'Amount > 5000' },
       { FromState: 'Draft', ToState: 'PendingManager', EventId: 'EVT-SUBMIT' },
       { FromState: 'PendingManager', ToState: 'Approved', EventId: 'EVT-APPROVE' },
       { FromState: 'PendingManager', ToState: 'PendingDirector', EventId: 'EVT-ESCALATE' },
@@ -71,8 +72,18 @@ const FALLBACK_EXPENSE_V2 = applySimulationGovernance({
       {
         StepId: 'Draft',
         StepType: 'Command',
-        NextSteps: { 'EVT-SUBMIT': 'PendingManager' },
+        NextSteps: { 'EVT-SUBMIT': 'CheckAmount' },
         RequiredRoles: ['User']
+      },
+      {
+        StepId: 'CheckAmount',
+        StepType: 'Decision',
+        Conditions: {
+          'Amount > 5000': 'PendingDirector',
+          Default: 'PendingManager'
+        },
+        NextSteps: { Default: 'PendingManager' },
+        RequiredRoles: ['System']
       },
       {
         StepId: 'PendingManager',
@@ -278,6 +289,66 @@ const FALLBACK_SECOPS = applySimulationGovernance({
     ]
   }
 });
+
+/** Align ExpenseApprovalV2 so inbox role follows Amount (high → Director, else Manager). */
+export function ensureAmountRoutedExpenseApproval(definition: any): any {
+  if (!definition) return definition;
+  const workflow = definition.Workflow || definition.workflow;
+  const steps: any[] = workflow?.Steps || workflow?.steps;
+  if (!Array.isArray(steps)) return definition;
+
+  const stepId = (step: any) => String(step?.StepId || step?.stepId || '');
+  const hasDirector = steps.some(step => /pendingdirector|directorapproval/i.test(stepId(step)));
+  const hasManager = steps.some(step => /pendingmanager|managerapproval/i.test(stepId(step)));
+  if (!hasDirector || !hasManager) return definition;
+
+  const draft = steps.find(step => stepId(step).toLowerCase() === 'draft');
+  let check = steps.find(step => stepId(step).toLowerCase() === 'checkamount');
+  if (!check) {
+    check = {
+      StepId: 'CheckAmount',
+      StepType: 'Decision',
+      Conditions: { 'Amount > 5000': 'PendingDirector', Default: 'PendingManager' },
+      NextSteps: { Default: 'PendingManager' },
+      RequiredRoles: ['System']
+    };
+    const insertAt = draft ? steps.indexOf(draft) + 1 : 0;
+    steps.splice(insertAt, 0, check);
+  } else {
+    check.StepType = 'Decision';
+    check.stepType = 'Decision';
+    check.Conditions = { 'Amount > 5000': 'PendingDirector', Default: 'PendingManager' };
+    check.conditions = check.Conditions;
+    check.NextSteps = { Default: 'PendingManager' };
+    check.nextSteps = check.NextSteps;
+    check.RequiredRoles = ['System'];
+  }
+
+  if (draft) {
+    const next = draft.NextSteps || draft.nextSteps || {};
+    next['EVT-SUBMIT'] = 'CheckAmount';
+    draft.NextSteps = next;
+    draft.nextSteps = next;
+  }
+
+  const sm = definition.StateMachine || definition.stateMachine;
+  const transitions: any[] = sm?.Transitions || sm?.transitions;
+  if (Array.isArray(transitions) && sm) {
+    const remaining = transitions.filter(item => {
+      const from = String(item.FromState || item.fromState || '');
+      const eventId = String(item.EventId || item.eventId || '');
+      return !(from === 'Draft' && eventId === 'EVT-SUBMIT');
+    });
+    remaining.unshift(
+      { FromState: 'Draft', ToState: 'PendingDirector', EventId: 'EVT-SUBMIT', Condition: 'Amount > 5000' },
+      { FromState: 'Draft', ToState: 'PendingManager', EventId: 'EVT-SUBMIT' }
+    );
+    sm.Transitions = remaining;
+    sm.transitions = remaining;
+  }
+
+  return definition;
+}
 
 export const DEMO_FALLBACKS: Record<string, { id: string; name: string; version: string; definition: any }> = {
   ExpenseApprovalV2: {

@@ -5,6 +5,7 @@ using FlowOS.Domain.Entities;
 using FlowOS.Domain.Services;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.MCP.Tools;
+using FlowOS.Workflows.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -33,6 +34,8 @@ public class SandboxSampleSimulationTests
                 new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved"),
             ("ExpenseApprovalV2", new JObject { ["Amount"] = 50 }, "Approver",
                 new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved"),
+            ("ExpenseApprovalV2", new JObject { ["Amount"] = 7500 }, "Director",
+                new JArray("EVT-SUBMIT", "EVT-DIRECTOR-APPROVE"), false, "Approved"),
             ("OrderSagaFulfillment", new JObject
             {
                 ["OrderId"] = "ORD-1",
@@ -153,8 +156,10 @@ public class SandboxSampleSimulationTests
         var v2Def = WorkflowClassCompiler.MapToRuntimeDefinition(v2);
         Assert.Contains(v2Def.BusinessRoles, role => role.Name == "Director");
         Assert.Contains(v2Def.Steps.Single(s => s.StepId == "PendingDirector").AllowedRoles, role => role == "Director");
-        Assert.DoesNotContain(v2.Definition.Workflow.Steps, step => step.StepId == "CheckAmount");
-        Assert.Equal("PendingManager", v2.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
+        var checkAmount = v2.Definition.Workflow.Steps.Single(step => step.StepId == "CheckAmount");
+        Assert.Equal("Decision", checkAmount.StepType);
+        Assert.Equal("PendingDirector", checkAmount.Conditions["Amount > 5000"]);
+        Assert.Equal("CheckAmount", v2.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
 
         var loan = await db.WorkflowClasses.FirstAsync(w => w.Name == "LoanUnderwritingFlow");
         var loanDef = WorkflowClassCompiler.MapToRuntimeDefinition(loan);
@@ -163,7 +168,7 @@ public class SandboxSampleSimulationTests
     }
 
     [Fact]
-    public async Task RepairExpenseApprovalV2_RemovesDeadCheckAmountHop()
+    public async Task RepairExpenseApprovalV2_RestoresAmountRoutedRoles()
     {
         var tenantId = Guid.NewGuid();
         await using var db = new FlowOSDbContext(new DbContextOptionsBuilder<FlowOSDbContext>()
@@ -231,27 +236,44 @@ public class SandboxSampleSimulationTests
         await DataSeeder.RepairExpenseApprovalV2GraphAsync(db, tenantId);
 
         var repaired = await db.WorkflowClasses.SingleAsync(item => item.Name == "ExpenseApprovalV2");
-        Assert.DoesNotContain(repaired.Definition.Workflow.Steps, step => step.StepId == "CheckAmount");
-        Assert.Equal("PendingManager", repaired.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
+        var checkAmount = repaired.Definition.Workflow.Steps.Single(step => step.StepId == "CheckAmount");
+        Assert.Equal("Decision", checkAmount.StepType);
+        Assert.Equal("PendingDirector", checkAmount.Conditions["Amount > 5000"]);
+        Assert.Equal("CheckAmount", repaired.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
         Assert.Contains(
             repaired.Definition.Workflow.Steps.Single(step => step.StepId == "PendingManager").RequiredRoles,
             role => role == "Manager");
+        Assert.Contains(
+            repaired.Definition.Workflow.Steps.Single(step => step.StepId == "PendingDirector").RequiredRoles,
+            role => role == "Director");
 
         var definition = await db.WorkflowDefinitions.SingleAsync(item => item.Id == compiled.Id);
-        Assert.DoesNotContain(definition.Steps, step => step.StepId == "CheckAmount");
-        Assert.Equal("PendingManager", definition.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
+        Assert.Contains(definition.Steps, step => step.StepId == "CheckAmount" && step.StepType == WorkflowStepType.Decision);
+        Assert.Equal("CheckAmount", definition.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
 
         var highValue = await Simulate(
             repaired.Definition,
             repaired.Name,
             new JObject { ["Amount"] = 75000, ["Currency"] = "USD" },
-            "Manager",
-            new JArray("EVT-SUBMIT", "EVT-ESCALATE"),
+            "User",
+            new JArray("EVT-SUBMIT"),
             false);
         Assert.True(highValue.Ok, highValue.Error);
         Assert.Equal("WaitingForHumanTask", highValue.Status);
         Assert.Equal("PendingDirector", highValue.CurrentStepId);
         Assert.Equal("PendingDirector", highValue.FinalState);
+
+        var lowValue = await Simulate(
+            repaired.Definition,
+            repaired.Name,
+            new JObject { ["Amount"] = 450, ["Currency"] = "USD" },
+            "User",
+            new JArray("EVT-SUBMIT"),
+            false);
+        Assert.True(lowValue.Ok, lowValue.Error);
+        Assert.Equal("WaitingForHumanTask", lowValue.Status);
+        Assert.Equal("PendingManager", lowValue.CurrentStepId);
+        Assert.Equal("PendingManager", lowValue.FinalState);
     }
 
     private async Task<(bool Ok, string? Error, string? Status, string? CurrentStepId, string? FinalState)> Simulate(

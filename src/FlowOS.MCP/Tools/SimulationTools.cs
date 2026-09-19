@@ -2043,33 +2043,37 @@ public class SimulationTools
         if (sm?.Transitions == null || sm.Transitions.Count == 0)
             return (null, false, null);
 
-        var matching = sm.Transitions.FirstOrDefault(t =>
-            (string.Equals(t.FromState, currentState, StringComparison.OrdinalIgnoreCase) || t.FromState == "*") &&
-            string.Equals(t.EventId, eventId, StringComparison.OrdinalIgnoreCase));
+        var candidates = sm.Transitions
+            .Where(t =>
+                (string.Equals(t.FromState, currentState, StringComparison.OrdinalIgnoreCase) || t.FromState == "*") &&
+                string.Equals(t.EventId, eventId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-        if (matching == null)
+        if (candidates.Count == 0)
             return (null, false, null);
 
-        string? constraint = matching.Condition;
-        if (string.IsNullOrWhiteSpace(constraint) && matching.Constraints != null)
+        string? lastFailedGuard = null;
+        foreach (var matching in candidates)
         {
-            if (matching.Constraints.TryGetValue("Expression", out var expr))
-                constraint = expr;
-            else if (matching.Constraints.TryGetValue("condition", out var cond))
-                constraint = cond;
-            else if (matching.Constraints.Count > 0)
-                constraint = matching.Constraints.Values.FirstOrDefault();
-        }
-
-        if (!string.IsNullOrWhiteSpace(constraint))
-        {
-            if (!EvaluateExpressionSafely(constraint, payload))
+            string? constraint = matching.Condition;
+            if (string.IsNullOrWhiteSpace(constraint) && matching.Constraints != null)
             {
-                return (matching, true, $"State machine guard condition '{constraint}' evaluated to FALSE against payload.");
+                if (matching.Constraints.TryGetValue("Expression", out var expr))
+                    constraint = expr;
+                else if (matching.Constraints.TryGetValue("condition", out var cond))
+                    constraint = cond;
             }
+
+            if (!string.IsNullOrWhiteSpace(constraint) && !EvaluateExpressionSafely(constraint, payload))
+            {
+                lastFailedGuard = constraint;
+                continue;
+            }
+
+            return (matching, false, null);
         }
 
-        return (matching, false, null);
+        return (candidates[0], true, $"State machine guard condition '{lastFailedGuard}' evaluated to FALSE against payload.");
     }
 
     private static Dictionary<string, object> ToPayloadDictionary(JObject? jObj)

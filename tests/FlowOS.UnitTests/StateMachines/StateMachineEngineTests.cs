@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.ValueObjects;
 using FlowOS.StateMachines.Engine;
@@ -58,6 +60,75 @@ public class StateMachineEngineTests
         // Assert
         Assert.False(result.IsAllowed);
         Assert.Contains("not valid for current state", result.Reason);
+    }
+
+    [Fact]
+    public void ValidateTransition_AmountGuard_SelectsDirectorOrManager()
+    {
+        var def = new StateMachineDefinition(_tenantId, "Expense", "Draft");
+        def.AddState("Draft");
+        def.AddState("PendingDirector");
+        def.AddState("PendingManager");
+        def.AddTransition(new StateTransition
+        {
+            FromState = "Draft",
+            ToState = "PendingDirector",
+            EventId = "EVT-SUBMIT",
+            Constraints = new Dictionary<string, string> { ["Expression"] = "Amount > 5000" }
+        });
+        def.AddTransition(new StateTransition
+        {
+            FromState = "Draft",
+            ToState = "PendingManager",
+            EventId = "EVT-SUBMIT"
+        });
+
+        var evt = new TestDomainEvent(_tenantId, "EVT-SUBMIT");
+        var high = _engine.ValidateTransition(def, "Draft", evt, new FlowOS.StateMachines.Models.ExecutionContext
+        {
+            Payload = new Dictionary<string, object> { ["Amount"] = 7500 }
+        });
+        Assert.True(high.IsAllowed);
+        Assert.Equal("PendingDirector", high.MatchedTransition!.ToState);
+
+        var low = _engine.ValidateTransition(def, "Draft", evt, new FlowOS.StateMachines.Models.ExecutionContext
+        {
+            Payload = new Dictionary<string, object> { ["Amount"] = 450 }
+        });
+        Assert.True(low.IsAllowed);
+        Assert.Equal("PendingManager", low.MatchedTransition!.ToState);
+    }
+
+    [Fact]
+    public void ValidateTransition_AllAmountGuardsFail_IsDenied()
+    {
+        var def = new StateMachineDefinition(_tenantId, "Expense", "Draft");
+        def.AddState("Draft");
+        def.AddState("PendingDirector");
+        def.AddState("PendingManager");
+        def.AddTransition(new StateTransition
+        {
+            FromState = "Draft",
+            ToState = "PendingDirector",
+            EventId = "EVT-SUBMIT",
+            Constraints = new Dictionary<string, string> { ["Expression"] = "Amount > 5000" }
+        });
+        def.AddTransition(new StateTransition
+        {
+            FromState = "Draft",
+            ToState = "PendingManager",
+            EventId = "EVT-SUBMIT",
+            Constraints = new Dictionary<string, string> { ["Expression"] = "Amount > 1000" }
+        });
+
+        var result = _engine.ValidateTransition(def, "Draft", new TestDomainEvent(_tenantId, "EVT-SUBMIT"),
+            new FlowOS.StateMachines.Models.ExecutionContext
+            {
+                Payload = new Dictionary<string, object> { ["Amount"] = 50 }
+            });
+
+        Assert.False(result.IsAllowed);
+        Assert.Contains("evaluated to false", result.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

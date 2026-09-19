@@ -1,9 +1,36 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Component, ErrorInfo, ReactNode, useEffect, useMemo, useState } from 'react';
 import { FlaskConical, Link2, Sparkles } from 'lucide-react';
 import { WorkflowClass } from '../types';
 import { DraftSimulator } from './DraftSimulator';
 import { ContextSimulationStudio } from './ContextSimulationStudio';
-import { DEMO_FALLBACKS, DEMO_NAMES } from '../lib/demoWorkflows';
+import { DEMO_FALLBACKS, DEMO_NAMES, ensureAmountRoutedExpenseApproval } from '../lib/demoWorkflows';
+
+class SimulatorErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message || 'Simulator failed to render' };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Visual Demo Simulator crashed', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-950/30 p-6 text-sm text-rose-200">
+          <div className="font-bold mb-1">Visual Demo Simulator could not open</div>
+          <p className="text-xs text-rose-300/80">{this.state.error}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface Props {
   blueprints: WorkflowClass[];
@@ -34,7 +61,9 @@ export const DemoVisualSimulator: React.FC<Props> = ({
       id: bp.id,
       name: bp.name,
       version: bp.version,
-      definition: bp.definition,
+      definition: bp.name === 'ExpenseApprovalV2'
+        ? ensureAmountRoutedExpenseApproval(structuredClone(bp.definition))
+        : bp.definition,
       source: 'catalog' as const
     }));
 
@@ -133,7 +162,9 @@ export const DemoVisualSimulator: React.FC<Props> = ({
 
           {selected?.definition ? (
             <div className="rounded-2xl border border-slate-700 bg-slate-900/60 overflow-hidden min-h-[520px]">
-              <DraftSimulator key={selected.id} definition={selected.definition} />
+              <SimulatorErrorBoundary>
+                <DraftSimulator key={selected.id} definition={selected.definition} />
+              </SimulatorErrorBoundary>
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-700 p-10 text-center text-sm text-slate-400">

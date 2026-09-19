@@ -74,7 +74,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
     setLoading(true);
     setError(null);
     try {
-      if (activeTab === 'Instances' || activeTab === 'Application') {
+      if (activeTab === 'Instances' || activeTab === 'Application' || activeTab === 'Simulator') {
         const [instResult, bpResult] = await Promise.allSettled([
           api.listInstances('Tenant'),
           api.list(undefined, undefined, 'Tenant')
@@ -228,6 +228,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
             <button
+              type="button"
               onClick={() => {
                 setSimulationTarget({});
                 setActiveTab('Simulator');
@@ -336,6 +337,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               <span>🔑 Applications & API Keys</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('Simulator')}
               className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
                 activeTab === 'Simulator' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-inner' : 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-750 font-bold'

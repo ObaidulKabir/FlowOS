@@ -950,6 +950,7 @@ public static class DataSeeder
             context.WorkflowDefinitions.Add(secOpsDef);
         }
 
+        await RepairExpenseApprovalV2GraphAsync(context, clientTenantId);
         await context.SaveChangesAsync();
     }
 
@@ -1518,12 +1519,18 @@ public static class DataSeeder
         await context.SaveChangesAsync();
     }
 
+    private const string HighValueExpenseCondition = "Amount > 5000";
+
     private static bool ExpenseV2GraphNeedsRebuild(WorkflowClassBlueprint blueprint)
     {
         var pending = blueprint.Workflow.Steps.FirstOrDefault(step =>
             string.Equals(step.StepId, "PendingManager", StringComparison.OrdinalIgnoreCase));
+        var director = blueprint.Workflow.Steps.FirstOrDefault(step =>
+            string.Equals(step.StepId, "PendingDirector", StringComparison.OrdinalIgnoreCase));
         return pending == null ||
-               !string.Equals(pending.StepType, "HumanTask", StringComparison.OrdinalIgnoreCase);
+               !string.Equals(pending.StepType, "HumanTask", StringComparison.OrdinalIgnoreCase) ||
+               director == null ||
+               !string.Equals(director.StepType, "HumanTask", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void RepairExpenseApprovalV2Blueprint(WorkflowClassBlueprint blueprint)
@@ -1531,67 +1538,80 @@ public static class DataSeeder
         var steps = blueprint.Workflow.Steps;
         steps.RemoveAll(step => string.Equals(step.StepId, "CheckAmount", StringComparison.OrdinalIgnoreCase));
 
-        foreach (var step in steps)
-        {
-            foreach (var key in step.NextSteps.Keys.ToList())
-            {
-                if (string.Equals(step.NextSteps[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
-                    step.NextSteps[key] = "PendingManager";
-            }
-
-            foreach (var key in step.Conditions.Keys.ToList())
-            {
-                if (string.Equals(step.Conditions[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
-                    step.Conditions[key] = "PendingManager";
-            }
-        }
-
         var draft = steps.FirstOrDefault(step =>
             string.Equals(step.StepId, "Draft", StringComparison.OrdinalIgnoreCase));
+        var insertAt = draft == null ? 0 : Math.Min(steps.IndexOf(draft) + 1, steps.Count);
+        steps.Insert(insertAt, new StepBlueprint
+        {
+            StepId = "CheckAmount",
+            StepType = "Decision",
+            RequiredRoles = new() { "System" },
+            Conditions = new()
+            {
+                { HighValueExpenseCondition, "PendingDirector" },
+                { "Default", "PendingManager" }
+            },
+            NextSteps = new() { { "Default", "PendingManager" } }
+        });
+
         if (draft != null)
-            draft.NextSteps["EVT-SUBMIT"] = "PendingManager";
+            draft.NextSteps["EVT-SUBMIT"] = "CheckAmount";
+
+        var transitions = blueprint.StateMachine.Transitions;
+        transitions.RemoveAll(item =>
+            string.Equals(item.FromState, "Draft", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.EventId, "EVT-SUBMIT", StringComparison.OrdinalIgnoreCase));
+        transitions.Insert(0, new TransitionBlueprint
+        {
+            FromState = "Draft",
+            ToState = "PendingDirector",
+            EventId = "EVT-SUBMIT",
+            Condition = HighValueExpenseCondition
+        });
+        transitions.Insert(1, new TransitionBlueprint
+        {
+            FromState = "Draft",
+            ToState = "PendingManager",
+            EventId = "EVT-SUBMIT"
+        });
     }
 
     private static void RepairDeadCheckAmountHop(WorkflowDefinition definition)
     {
-        if (!definition.Steps.Any(step =>
-                string.Equals(step.StepId, "CheckAmount", StringComparison.OrdinalIgnoreCase)))
-        {
-            var draft = definition.Steps.FirstOrDefault(step =>
-                string.Equals(step.StepId, "Draft", StringComparison.OrdinalIgnoreCase));
-            if (draft != null &&
-                draft.NextSteps.TryGetValue("EVT-SUBMIT", out var target) &&
-                string.Equals(target, "PendingManager", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-        }
-
         var previousStatus = definition.Status;
         SetPrivateProperty(definition, nameof(WorkflowDefinition.Status), WorkflowStatus.Draft);
 
-        foreach (var step in definition.Steps)
+        var check = definition.Steps.FirstOrDefault(step =>
+            string.Equals(step.StepId, "CheckAmount", StringComparison.OrdinalIgnoreCase));
+        if (check == null)
         {
-            foreach (var key in step.NextSteps.Keys.ToList())
+            definition.AddStep(new WorkflowStepDefinition("CheckAmount", WorkflowStepType.Decision)
             {
-                if (string.Equals(step.NextSteps[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
-                    step.NextSteps[key] = "PendingManager";
-            }
-
-            foreach (var key in step.Conditions.Keys.ToList())
-            {
-                if (string.Equals(step.Conditions[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
-                    step.Conditions[key] = "PendingManager";
-            }
+                AllowedRoles = new() { "System" },
+                Conditions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [HighValueExpenseCondition] = "PendingDirector",
+                    ["Default"] = "PendingManager"
+                },
+                NextSteps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Default"] = "PendingManager"
+                }
+            });
+        }
+        else
+        {
+            check.StepType = WorkflowStepType.Decision;
+            check.Conditions[HighValueExpenseCondition] = "PendingDirector";
+            check.Conditions["Default"] = "PendingManager";
+            check.NextSteps["Default"] = "PendingManager";
         }
 
         var draftStep = definition.Steps.FirstOrDefault(step =>
             string.Equals(step.StepId, "Draft", StringComparison.OrdinalIgnoreCase));
         if (draftStep != null)
-            draftStep.NextSteps["EVT-SUBMIT"] = "PendingManager";
+            draftStep.NextSteps["EVT-SUBMIT"] = "CheckAmount";
 
-        definition.Steps.RemoveAll(step =>
-            string.Equals(step.StepId, "CheckAmount", StringComparison.OrdinalIgnoreCase));
         SetPrivateProperty(definition, nameof(WorkflowDefinition.Status), previousStatus);
     }
 
@@ -1614,6 +1634,7 @@ public static class DataSeeder
                 States = new() { "Draft", "PendingManager", "PendingDirector", "Approved", "Rejected" },
                 Transitions = new()
                 {
+                    new TransitionBlueprint { FromState = "Draft", ToState = "PendingDirector", EventId = "EVT-SUBMIT", Condition = HighValueExpenseCondition },
                     new TransitionBlueprint { FromState = "Draft", ToState = "PendingManager", EventId = "EVT-SUBMIT" },
                     new TransitionBlueprint { FromState = "PendingManager", ToState = "Approved", EventId = "EVT-APPROVE" },
                     new TransitionBlueprint { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-ESCALATE" },
@@ -1631,7 +1652,19 @@ public static class DataSeeder
                     {
                         StepId = "Draft",
                         StepType = "Command",
-                        NextSteps = new() { { "EVT-SUBMIT", "PendingManager" } }
+                        NextSteps = new() { { "EVT-SUBMIT", "CheckAmount" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "CheckAmount",
+                        StepType = "Decision",
+                        RequiredRoles = new() { "System" },
+                        Conditions = new()
+                        {
+                            { HighValueExpenseCondition, "PendingDirector" },
+                            { "Default", "PendingManager" }
+                        },
+                        NextSteps = new() { { "Default", "PendingManager" } }
                     },
                     new StepBlueprint
                     {

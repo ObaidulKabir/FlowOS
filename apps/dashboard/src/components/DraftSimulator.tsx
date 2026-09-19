@@ -5,7 +5,7 @@ import {
   Zap, Bell, Send, Radio
 } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
-import { applySimulationGovernance } from '../lib/simulationGovernance';
+import { applySimulationGovernance, inferEventInboxRoles } from '../lib/simulationGovernance';
 
 interface Props {
   definition: any;
@@ -20,7 +20,11 @@ const PRESET_PAYLOADS: Record<string, { label: string; data: Record<string, any>
       Category: 'Equipment',
       Department: 'Engineering',
       Urgent: true,
-      Requester: 'Alice Smith'
+      Requester: 'Alice Smith',
+      ApplicantName: 'Alice Smith',
+      CreditScore: 750,
+      DebtToIncome: 0.28,
+      OrderId: 'ORD-4421'
     }
   },
   lowExpense: {
@@ -114,8 +118,20 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       return definition;
     }
   }, [definition]);
-  const [currentStepId, setCurrentStepId] = useState<string>('');
-  const [currentState, setCurrentState] = useState<string>('');
+  const initialStartStepId =
+    pack?.workflow?.startStepId ||
+    pack?.workflow?.StartStepId ||
+    pack?.Workflow?.startStepId ||
+    pack?.Workflow?.StartStepId ||
+    'Start';
+  const initialLegalState =
+    pack?.stateMachine?.initialState ||
+    pack?.stateMachine?.InitialState ||
+    pack?.StateMachine?.initialState ||
+    pack?.StateMachine?.InitialState ||
+    '';
+  const [currentStepId, setCurrentStepId] = useState<string>(initialStartStepId);
+  const [currentState, setCurrentState] = useState<string>(initialLegalState);
   const [history, setHistory] = useState<string[]>([]);
   const [activeSideTab, setActiveSideTab] = useState<'controls' | 'context'>('controls');
 
@@ -123,7 +139,21 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const [payload, setPayload] = useState<Record<string, any>>(PRESET_PAYLOADS.highExpense.data);
   const [payloadText, setPayloadText] = useState<string>(JSON.stringify(PRESET_PAYLOADS.highExpense.data, null, 2));
   const [payloadError, setPayloadError] = useState<string | null>(null);
-  const [simulatedRole, setSimulatedRole] = useState<string>('Manager');
+  const [simulatedRole, setSimulatedRole] = useState<string>(() => {
+    const workflow = pack?.workflow || pack?.Workflow || {};
+    const startId = String(workflow.startStepId || workflow.StartStepId || '').toLowerCase();
+    const steps = workflow.steps || workflow.Steps || [];
+    const start = steps.find((step: any) =>
+      String(step?.stepId || step?.StepId || '').toLowerCase() === startId
+    );
+    const bags = [start?.requiredRoles, start?.RequiredRoles, start?.allowedRoles, start?.AllowedRoles];
+    for (const bag of bags) {
+      const names = (Array.isArray(bag) ? bag : []).map((role: any) => String(role).trim()).filter(Boolean);
+      const inbox = names.find((role: string) => !['anyone', 'unassigned', 'system'].includes(role.toLowerCase()));
+      if (inbox) return inbox;
+    }
+    return 'User';
+  });
   /** current = show this step's events + required/active role; asRole = filter actions to the selected simulated role */
   const [eventViewMode, setEventViewMode] = useState<'current' | 'asRole'>('current');
 
@@ -204,20 +234,73 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     if (snapshot) logs.push(snapshot);
   };
 
-  const getStepRoles = (step: any): string[] => {
-    if (!step) return [];
-    const raw = getProp(step, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles', 'roles', 'Roles');
-    if (!raw || (Array.isArray(raw) && raw.length === 0)) {
-      const type = (getProp(step, 'stepType', 'StepType') || '').toString().toLowerCase();
-      if (type.includes('human')) return ['Unassigned'];
-      return ['System'];
-    }
-    if (Array.isArray(raw)) return raw.map((r: any) => r.toString().trim()).filter(Boolean);
-    if (typeof raw === 'string') return raw.split(',').map((r: string) => r.trim()).filter(Boolean);
-    return [raw.toString()];
+  const asRoleList = (value: any): string[] => {
+    if (value == null || value === '') return [];
+    const items = Array.isArray(value) ? value : String(value).split(',');
+    return items.map((item: any) => String(item).trim()).filter(Boolean);
   };
 
+  const mergeRoleFields = (source: any, keys: string[]): string[] => {
+    if (!source) return [];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    keys.forEach(key => {
+      const camel = key.charAt(0).toLowerCase() + key.slice(1);
+      const pascal = key.charAt(0).toUpperCase() + key.slice(1);
+      [source[key], source[camel], source[pascal]].forEach(value => {
+        asRoleList(value).forEach(role => {
+          const keyName = role.toLowerCase();
+          if (keyName === 'anyone' || keyName === 'unassigned') return;
+          if (seen.has(keyName)) return;
+          seen.add(keyName);
+          result.push(role);
+        });
+      });
+    });
+    return result;
+  };
+
+  const firstInboxRole = (roles: string[]): string | undefined =>
+    roles.find(role => !['anyone', 'unassigned', 'system'].includes(role.toLowerCase()))
+    || roles.find(role => role.toLowerCase() === 'system');
+
   const catalogRoles: any[] = getProp(pack, 'roles', 'Roles') || [];
+
+  const getEventAllowedRoles = (eventId: string): string[] => {
+    if (!eventId) return [];
+    const eventIdKey = eventId.trim().toLowerCase();
+    if (['default', 'true', 'subworkflowcompleted'].includes(eventIdKey)) return [];
+    const found = catalogEvents.find((e: any) => {
+      const id = (getProp(e, 'eventId', 'EventId') || getProp(e, 'name', 'Name') || '').toString().toLowerCase();
+      return id === eventIdKey;
+    });
+    const listed = mergeRoleFields(found, ['allowedRoles', 'requiredRoles', 'roles']);
+    if (listed.length > 0) return listed;
+    const catalogNames = catalogRoles
+      .map((role: any) => String(getProp(role, 'name', 'Name') || '').trim())
+      .filter(Boolean);
+    return inferEventInboxRoles(eventId, catalogRoles, catalogNames);
+  };
+
+  const getStepRoles = (step: any): string[] => {
+    if (!step) return [];
+    const listed = mergeRoleFields(step, ['allowedRoles', 'requiredRoles', 'roles']);
+    if (listed.length > 0) return listed;
+
+    const inferred = getNextStepRoutes(step).flatMap(route => getEventAllowedRoles(route.outcome));
+    const uniqueInferred: string[] = [];
+    const seen = new Set<string>();
+    inferred.forEach(role => {
+      const key = role.toLowerCase();
+      if (seen.has(key) || key === 'anyone' || key === 'unassigned') return;
+      seen.add(key);
+      uniqueInferred.push(role);
+    });
+    if (uniqueInferred.length > 0) return uniqueInferred;
+
+    const type = (getProp(step, 'stepType', 'StepType') || '').toString().toLowerCase();
+    return type.includes('human') ? [] : ['System'];
+  };
 
   // Collect all known roles from the blueprint
   const allKnownRoles = useMemo(() => {
@@ -283,18 +366,6 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     });
   };
 
-  const getEventAllowedRoles = (eventId: string): string[] => {
-    if (!eventId) return [];
-    const eventIdKey = eventId.trim().toLowerCase();
-    const found = catalogEvents.find((e: any) => {
-      const id = (getProp(e, 'eventId', 'EventId') || getProp(e, 'name', 'Name') || '').toString().toLowerCase();
-      return id === eventIdKey;
-    });
-    if (!found) return [];
-    const roles = getProp(found, 'allowedRoles', 'AllowedRoles') || [];
-    return Array.isArray(roles) ? roles.map((r: any) => String(r)) : [];
-  };
-
   const roleCanActOnStep = (step: any, role: string): boolean => {
     if (!step) return false;
     const roleKey = (role || '').trim().toLowerCase();
@@ -302,11 +373,13 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     if (roleKey === 'admin') return true;
 
     const required = getRequiredCapabilities(step);
+    const roles = getStepRoles(step);
     if (required.length > 0) {
-      return capabilitiesAllow(role, required);
+      if (capabilitiesAllow(role, required)) return true;
+      if (roles.map(r => r.toLowerCase()).includes(roleKey)) return true;
+      return false;
     }
 
-    const roles = getStepRoles(step);
     if (roles.length === 0 || roles.some(r => ['anyone', 'unassigned'].includes(r.toLowerCase()))) {
       return true;
     }
@@ -328,7 +401,47 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return false;
   };
 
+  const isTerminalId = (stepId?: string) => {
+    const key = String(stepId || '').trim().toLowerCase();
+    return !key || key === 'end' || key === 'none';
+  };
+
+  const isAutoCloseStep = (step: any) => {
+    if (!step) return false;
+    const type = String(getProp(step, 'stepType', 'StepType') || '').toLowerCase();
+    if (type.includes('human') || type.includes('decision') || type.includes('choice')) return false;
+    const conditions = getProp(step, 'conditions', 'Conditions') || {};
+    if (conditions && typeof conditions === 'object' && Object.keys(conditions).length > 0) return false;
+    const routes = getNextStepRoutes(step);
+    return routes.length > 0 && routes.every(route =>
+      ['default', 'true'].includes(route.outcome.trim().toLowerCase())
+    );
+  };
+
+  const resolveDecisionTarget = (step: any): string | null => {
+    if (!step) return null;
+    const type = String(getProp(step, 'stepType', 'StepType') || '').toLowerCase();
+    const conditions = getProp(step, 'conditions', 'Conditions') || {};
+    const entries = conditions && typeof conditions === 'object' ? Object.entries(conditions) : [];
+    const isDecision = type.includes('decision') || type.includes('choice') || entries.length > 0;
+    if (!isDecision) return null;
+    let winner: string | null = null;
+    let defaultTarget: string | null = null;
+    entries.forEach(([expression, target]) => {
+      if (String(expression).trim().toLowerCase() === 'default') {
+        defaultTarget = String(target);
+        return;
+      }
+      if (!winner && evaluateExpression(String(expression), payload).result) {
+        winner = String(target);
+      }
+    });
+    return winner || defaultTarget;
+  };
+
   const isEventAuthorized = (eventId: string, step: any, role: string): boolean => {
+    const eventKey = (eventId || '').trim().toLowerCase();
+    if (eventKey === 'default' || eventKey === 'true') return true;
     const roleKey = (role || '').trim().toLowerCase();
     if (!roleKey) return false;
     if (roleKey === 'admin') return true;
@@ -336,11 +449,13 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     const eventCaps = getEventRequiredCapabilities(eventId);
     const stepCaps = getRequiredCapabilities(step);
     const required = eventCaps.length > 0 ? eventCaps : stepCaps;
+    const eventRoles = getEventAllowedRoles(eventId);
     if (required.length > 0) {
-      return capabilitiesAllow(role, required);
+      if (capabilitiesAllow(role, required)) return true;
+      if (eventRoles.map(r => r.toLowerCase()).includes(roleKey)) return true;
+      return false;
     }
 
-    const eventRoles = getEventAllowedRoles(eventId);
     if (eventRoles.length > 0) {
       if (eventRoles.some(r => ['anyone', 'unassigned'].includes(r.toLowerCase()))) return true;
       if (eventRoles.map(r => r.toLowerCase()).includes(roleKey)) return true;
@@ -491,18 +606,6 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     resetSimulation();
   }, [pack]);
 
-  // Auto-select required role when entering a new step
-  useEffect(() => {
-    const inbox = currentStepRoles.filter(role =>
-      !['anyone', 'unassigned', 'system'].includes(role.toLowerCase())
-    );
-    if (inbox.length === 0) return;
-    if (!inbox.some(role => role.toLowerCase() === simulatedRole.toLowerCase())) {
-      setSimulatedRole(inbox[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStepId, currentStepRoles.join('|')]);
-
   const resetSimulation = () => {
     setCurrentStepId(startStepId);
     setCurrentState(initialState);
@@ -520,8 +623,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     setHistory(initialLogs);
   };
 
+  const resolvedStepId = currentStepId || startStepId;
   const currentStep = rawSteps.find((s: any) => 
-    (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (currentStepId || '').toLowerCase()
+    (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (resolvedStepId || '').toLowerCase()
   );
 
   const normalizedStepId = (currentStepId || '').trim().toLowerCase();
@@ -534,6 +638,19 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     hasSimulationProgress && (isTerminalStepId || !currentStep);
 
   const currentStepRoles = getStepRoles(currentStep);
+
+  useEffect(() => {
+    const inbox = firstInboxRole(currentStepRoles);
+    if (!inbox) return;
+    const alreadyInInbox = currentStepRoles.some(role =>
+      role.toLowerCase() === simulatedRole.toLowerCase() &&
+      !['anyone', 'unassigned', 'system'].includes(role.toLowerCase())
+    );
+    if (!alreadyInInbox) setSimulatedRole(inbox);
+    // Only realign when the step changes, so the operator can still pick a mismatched role.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStepId, currentStepRoles.join('|')]);
+
   const stepType = (getProp(currentStep, 'stepType', 'StepType') || 'Command').toString();
   const stepTypeLower = stepType.toLowerCase();
   const isHumanTask = stepTypeLower.includes('human');
@@ -633,8 +750,34 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
+    let hopId = targetStepId;
+    let hops = 0;
+    while (hops < 8 && !isTerminalId(hopId)) {
+      const hopStep = rawSteps.find((s: any) =>
+        (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
+      );
+      const decisionTarget = resolveDecisionTarget(hopStep);
+      if (decisionTarget) {
+        newLogs.push(`[Role: System] Auto-advanced Decision -> ${decisionTarget} (from ${hopId})`);
+        hopId = decisionTarget;
+        hops += 1;
+        continue;
+      }
+      if (!isAutoCloseStep(hopStep)) break;
+      const route = pickAutoStepRoute(getNextStepRoutes(hopStep));
+      newLogs.push(
+        `[Role: System] Auto-advanced "${route.outcome}" -> Step: ${route.target} (close-out from ${hopId})`
+      );
+      hopId = route.target;
+      hops += 1;
+    }
+    if (isTerminalId(hopId)) {
+      hopId = hopId?.trim() ? hopId : 'END';
+      newLogs.push('[SYSTEM] Reached End of Workflow.');
+    }
+
     setHistory(prev => [...prev, ...newLogs]);
-    setCurrentStepId(targetStepId);
+    setCurrentStepId(hopId);
   };
 
   const fireEvent = (eventId: string, targetStepId: string) => {
@@ -659,21 +802,25 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
     if (matching.length > 0) {
       matchedTransition = true;
-      const transition = matching[0];
-      const targetState = getProp(transition, 'toState', 'ToState');
-      
-      // Check transition guard condition against payload if configured
-      const constraint = getProp(transition, 'condition', 'Condition', 'constraint', 'Constraint');
-      if (constraint && typeof constraint === 'string') {
-        const evalRes = evaluateExpression(constraint, payload);
-        if (!evalRes.result) {
-          guardBlocked = true;
-          guardReason = `State Machine Guard Failed: Expression "${constraint}" evaluated to FALSE against current payload.`;
-        }
-      }
-
-      if (!guardBlocked && targetState) {
-        nextState = targetState;
+      const transitionCondition = (item: any): string => {
+        const direct = getProp(item, 'condition', 'Condition');
+        if (direct && typeof direct === 'string') return direct;
+        const constraints = getProp(item, 'constraints', 'Constraints') || {};
+        const expression = constraints.Expression || constraints.expression;
+        return typeof expression === 'string' ? expression : '';
+      };
+      const eligible = matching.filter(item => {
+        const constraint = transitionCondition(item);
+        return !constraint || evaluateExpression(constraint, payload).result;
+      });
+      const transition = eligible[0];
+      if (!transition) {
+        const blocked = transitionCondition(matching[0]);
+        guardBlocked = true;
+        guardReason = `State Machine Guard Failed: Expression "${blocked}" evaluated to FALSE against current payload.`;
+      } else {
+        const targetState = getProp(transition, 'toState', 'ToState');
+        if (targetState) nextState = targetState;
       }
     }
 
@@ -689,6 +836,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     };
 
     const resolveCatchUpStep = (stepId: string, state?: string) => {
+      if (isTerminalId(stepId)) return stepId?.trim() ? stepId : 'END';
       const stateKey = String(state || '').trim().toLowerCase();
       if (!stateKey) return stepId;
       const stateStep = rawSteps.find((s: any) =>
@@ -768,13 +916,49 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
+    let hopId = workStepId;
+    let hops = 0;
+    while (hops < 8 && !isTerminalId(hopId)) {
+      const hopStep = rawSteps.find((s: any) =>
+        (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
+      );
+      const decisionTarget = resolveDecisionTarget(hopStep);
+      if (decisionTarget) {
+        newLogs.push(`[Role: System] Auto-advanced Decision -> ${decisionTarget} (from ${hopId})`);
+        hopId = decisionTarget;
+        hops += 1;
+        continue;
+      }
+      if (!isAutoCloseStep(hopStep)) break;
+      const route = pickAutoStepRoute(getNextStepRoutes(hopStep));
+      newLogs.push(
+        `[Role: System] Auto-advanced "${route.outcome}" -> Step: ${route.target} (close-out from ${hopId})`
+      );
+      hopId = route.target;
+      hops += 1;
+    }
+    if (isTerminalId(hopId)) {
+      hopId = hopId?.trim() ? hopId : 'END';
+      newLogs.push('[SYSTEM] Reached End of Workflow.');
+    }
+
+    const landedStep = rawSteps.find((s: any) =>
+      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
+    );
     setHistory(prev => [...prev, ...newLogs]);
-    setCurrentStepId(workStepId);
+    setCurrentStepId(hopId);
     setCurrentState(nextState);
+    const nextInbox = firstInboxRole(getStepRoles(landedStep));
+    if (nextInbox && nextInbox.toLowerCase() !== simulatedRole.toLowerCase()) {
+      setSimulatedRole(nextInbox);
+    }
   };
 
   // Check role authorization for human tasks
   const isRoleAuthorized = useMemo(() => {
+    if (!currentStep) return false;
+    const type = String(getProp(currentStep, 'stepType', 'StepType') || '').toLowerCase();
+    if (type.includes('decision') || type.includes('choice')) return true;
     return roleCanActOnStep(currentStep, simulatedRole);
   }, [currentStep, simulatedRole]);
 
@@ -786,8 +970,19 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     if (!isAuthorized) {
       const eventRoles = eventId ? getEventAllowedRoles(eventId) : [];
       const reqRolesDisplay = eventRoles.length > 0 ? eventRoles.join(', ') : activeRoleDisplay;
+      const requiredCaps = eventId
+        ? (getEventRequiredCapabilities(eventId).length > 0
+          ? getEventRequiredCapabilities(eventId)
+          : getRequiredCapabilities(currentStep))
+        : getRequiredCapabilities(currentStep);
+      const grantedCaps = getRoleGrantedCapabilities(simulatedRole);
+      const missingCaps = requiredCaps.filter(cap =>
+        !grantedCaps.some(granted => granted.toLowerCase() === cap.toLowerCase())
+      );
       alert(
-        `Your current role "${simulatedRole}" cannot perform "${actionLabel}" at step [${currentStepId}].\n\nRequired role: ${reqRolesDisplay}.\n\nSwitch your role in the right panel to match the required role.`
+        `Your current role "${simulatedRole}" cannot perform "${actionLabel}" at step [${currentStepId}].\n\nRequired role: ${reqRolesDisplay || 'Unassigned'}.${
+          missingCaps.length > 0 ? `\nMissing capability: ${missingCaps.join(', ')}.` : ''
+        }\n\nSwitch your role in the right panel to match the required role.`
       );
       return true;
     }
@@ -806,6 +1001,15 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
   // Render controls based on active step
   const renderControls = () => {
+    if (!currentStep && !isSimulationComplete) {
+      return (
+        <div className="text-slate-400 text-xs py-6 text-center space-y-2">
+          <p className="font-semibold text-slate-200">Preparing simulator</p>
+          <p className="text-[11px] text-slate-500">Starting at step {startStepId || 'Draft'}.</p>
+        </div>
+      );
+    }
+
     if (isSimulationComplete || !currentStep) return (
       <div className="text-slate-500 text-xs py-6 text-center space-y-3">
         <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center justify-center mx-auto">
@@ -900,15 +1104,15 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               <span className="w-5 h-5 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-[10px] font-bold shrink-0">✕</span>
               <span>Events <strong>disabled</strong> — your role <strong className="text-white">{simulatedRole}</strong> does not match required role <strong className="text-amber-300">{activeRoleDisplay}</strong></span>
             </div>
-            <button 
-              onClick={() => {
-                const firstRole = currentStepRoles.find(r => !['unassigned', 'anyone'].includes(r.toLowerCase()));
-                if (firstRole) setSimulatedRole(firstRole);
-              }}
-              className="shrink-0 px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 text-[10px] font-bold rounded-lg transition-colors"
-            >
-              Switch to {currentStepRoles.find(r => !['unassigned', 'anyone'].includes(r.toLowerCase())) || 'required role'}
-            </button>
+              <button 
+                onClick={() => {
+                  const firstRole = firstInboxRole(currentStepRoles);
+                  if (firstRole) setSimulatedRole(firstRole);
+                }}
+                className="shrink-0 px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 text-[10px] font-bold rounded-lg transition-colors"
+              >
+                Switch to {firstInboxRole(currentStepRoles) || 'required role'}
+              </button>
           </div>
         )}
         {isRoleAuthorized && (
@@ -998,7 +1202,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               </div>
               <button 
                 onClick={() => fireEventGuarded(autoRoute.outcome, autoRoute.target)}
-                disabled={!isRoleAuthorized}
+                disabled={!isEventAuthorized(autoRoute.outcome, currentStep, simulatedRole)}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                 title={`Fire "${autoRoute.outcome}" → ${autoRoute.target}`}
               >
@@ -1008,21 +1212,53 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             <p className="text-[10px] text-slate-500 italic">
               Fires the step outcome as the dual-kernel event (not a hard-coded Default), so Law state advances when a matching transition exists.
             </p>
+            {(() => {
+              const autoRoles = getEventAllowedRoles(autoRoute.outcome);
+              const autoCaps = getEventRequiredCapabilities(autoRoute.outcome);
+              const autoAuth = isEventAuthorized(autoRoute.outcome, currentStep, simulatedRole);
+              const switchRole = firstInboxRole(autoRoles.length > 0 ? autoRoles : currentStepRoles);
+              return (
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                  <span className={`px-2 py-0.5 rounded-full border font-mono ${
+                    autoAuth ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  }`}>
+                    Role: <strong>{autoRoles.join(', ') || activeRoleDisplay}</strong>
+                  </span>
+                  {autoCaps.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full border border-slate-700 text-slate-400 font-mono">
+                      Cap: {autoCaps[0]}
+                    </span>
+                  )}
+                  {!autoAuth && switchRole && (
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedRole(switchRole)}
+                      className="text-amber-300 hover:text-white underline font-semibold"
+                    >
+                      Switch to {switchRole}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             {alternateRoutes.length > 0 && (
               <div className="pt-1 border-t border-blue-500/20 space-y-1.5">
                 <p className="text-[10px] text-slate-400 font-semibold">Alternate outcomes:</p>
                 <div className="flex flex-wrap gap-2">
-                  {alternateRoutes.map(route => (
-                    <button
-                      key={`${route.outcome}:${route.target}`}
-                      onClick={() => fireEventGuarded(route.outcome, route.target)}
-                      disabled={!isRoleAuthorized}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-800"
-                    >
-                      Fire: <span className="text-amber-300 font-mono font-bold">{route.outcome}</span>
-                      <span className="text-slate-500">→ {route.target}</span>
-                    </button>
-                  ))}
+                  {alternateRoutes.map(route => {
+                    const routeAuth = isEventAuthorized(route.outcome, currentStep, simulatedRole);
+                    return (
+                      <button
+                        key={`${route.outcome}:${route.target}`}
+                        onClick={() => fireEventGuarded(route.outcome, route.target)}
+                        disabled={!routeAuth}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-800"
+                      >
+                        Fire: <span className="text-amber-300 font-mono font-bold">{route.outcome}</span>
+                        <span className="text-slate-500">→ {route.target}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1136,7 +1372,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 <div className="mb-2 p-2 bg-rose-500/15 border border-rose-500/30 rounded-lg text-rose-300 text-[11px] flex items-center justify-between gap-2">
                   <span>Your role <strong>{simulatedRole}</strong> cannot handle this step. Required: <strong>{activeRoleDisplay}</strong></span>
                   <button 
-                    onClick={() => setSimulatedRole(currentStepRoles[0] || 'Manager')} 
+                    onClick={() => setSimulatedRole(firstInboxRole(currentStepRoles) || currentStepRoles[0] || 'Manager')} 
                     className="underline text-[10px] font-bold text-rose-200 hover:text-white shrink-0"
                   >
                     Switch Role
@@ -1152,7 +1388,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               {Object.entries(nextSteps).map(([outcome, target]) => {
                 const eventAuth = isEventAuthorized(outcome, currentStep, simulatedRole);
                 const eventReqRoles = getEventAllowedRoles(outcome);
-                const reqRolesDisplay = eventReqRoles.length > 0 ? eventReqRoles.join(', ') : activeRoleDisplay;
+                const eventCaps = getEventRequiredCapabilities(outcome);
+                const reqRolesDisplay = eventReqRoles.length > 0 ? eventReqRoles.join(', ') : (activeRoleDisplay || 'Unassigned');
+                const switchRole = firstInboxRole(eventReqRoles.length > 0 ? eventReqRoles : currentStepRoles);
 
                 return (
                   <div key={outcome} className="flex flex-wrap items-center gap-2">
@@ -1174,12 +1412,17 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                     }`}>
                       Role: <strong>{reqRolesDisplay}</strong>
                     </span>
-                    {!eventAuth && eventReqRoles.length > 0 && (
+                    {eventCaps.length > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-400 font-mono">
+                        Cap: {eventCaps[0].replace(/^event\.publish\./, '')}
+                      </span>
+                    )}
+                    {!eventAuth && switchRole && (
                       <button
-                        onClick={() => setSimulatedRole(eventReqRoles[0])}
+                        onClick={() => setSimulatedRole(switchRole)}
                         className="text-[10px] text-amber-300 hover:text-white underline font-semibold shrink-0"
                       >
-                        Switch to {eventReqRoles[0]}
+                        Switch to {switchRole}
                       </button>
                     )}
                   </div>
@@ -1352,7 +1595,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 text-[11px]">Current Step:</span>
                     <span className="font-mono text-amber-300 font-bold px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
-                      {currentStepId || 'END'}
+                      {resolvedStepId || 'END'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -1386,6 +1629,34 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                       </span>
                     </div>
                   </div>
+                  {(() => {
+                    const requiredCaps = Array.from(new Set([
+                      ...getRequiredCapabilities(currentStep),
+                      ...getNextStepRoutes(currentStep).flatMap(route => getEventRequiredCapabilities(route.outcome))
+                    ]));
+                    const grantedCaps = getRoleGrantedCapabilities(simulatedRole);
+                    if (requiredCaps.length === 0 && grantedCaps.length === 0) return null;
+                    return (
+                      <div className="pt-2 border-t border-slate-800/80 space-y-1">
+                        {requiredCaps.length > 0 && (
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-slate-500 text-[10px] shrink-0">Required cap:</span>
+                            <span className="font-mono text-[10px] text-amber-200 text-right">
+                              {requiredCaps.slice(0, 3).map(cap => cap.replace(/^event\.publish\./, '')).join(', ')}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-slate-500 text-[10px] shrink-0">Your grants:</span>
+                          <span className="font-mono text-[10px] text-slate-300 text-right">
+                            {grantedCaps.length > 0
+                              ? grantedCaps.slice(0, 3).map(cap => cap.replace(/^event\.publish\./, '')).join(', ')
+                              : 'none'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 text-[11px]">Legal State:</span>
                     <span className="font-mono text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30">

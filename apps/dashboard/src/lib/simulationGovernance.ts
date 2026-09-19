@@ -63,13 +63,32 @@ const EVENT_INBOX: Record<string, string[]> = {
   'evt-decline': ['Manager', 'Director'],
   'evt-director-approve': ['Director'],
   'evt-director-reject': ['Director'],
-  'evt-revoke': ['SecOps']
+  'evt-revoke': ['System', 'SecOps'],
+  'evt-pay-success': ['System'],
+  'evt-stock-locked': ['Warehouse'],
+  'evt-ship-fail': ['Logistics'],
+  'evt-compensate': ['System'],
+  'evt-auto-approve': ['System'],
+  'evt-manual-review': ['System'],
+  'evt-validate': ['System']
 };
 
 const preferCatalogNames = (candidates: string[], catalogNames: string[]) => {
   const catalog = new Set(catalogNames.map(name => name.toLowerCase()));
   const matched = candidates.filter(name => catalog.has(name.toLowerCase()));
   return matched.length > 0 ? matched : candidates;
+};
+
+export const inferEventInboxRoles = (
+  eventId: string,
+  declaredRoles: any[] = [],
+  catalogRoleNames: string[] = []
+): string[] => {
+  const id = String(eventId || '').trim();
+  if (!id) return [];
+  const fromGrants = rolesGranting(declaredRoles, `event.publish.${id}`);
+  if (fromGrants.length > 0) return fromGrants;
+  return preferCatalogNames(EVENT_INBOX[id.toLowerCase()] || [], catalogRoleNames);
 };
 
 const rolesGranting = (roles: any[], capability: string): string[] => {
@@ -105,10 +124,7 @@ export function applySimulationGovernance(definition: AnyRecord): AnyRecord {
     const eventId = String(read(evt, 'EventId', 'eventId') || '').trim();
     let allowed = asArray(read(evt, 'AllowedRoles', 'allowedRoles')).filter(role => !isSystemRole(role));
     if (allowed.length === 0 && eventId) {
-      const fromGrants = rolesGranting(declaredRoles, `event.publish.${eventId}`);
-      allowed = fromGrants.length
-        ? fromGrants
-        : preferCatalogNames(EVENT_INBOX[eventId.toLowerCase()] || [], catalogRoleNames);
+      allowed = inferEventInboxRoles(eventId, declaredRoles, catalogRoleNames);
     }
     if (allowed.length > 0) {
       evt.AllowedRoles = allowed;
@@ -116,19 +132,20 @@ export function applySimulationGovernance(definition: AnyRecord): AnyRecord {
     }
   });
 
+  const inferStepInbox = (step: any) => unique(humanExitEvents(step).flatMap(eventId => {
+    const match = events.find((evt: any) =>
+      String(read(evt, 'EventId', 'eventId') || '').trim().toLowerCase() === eventId.toLowerCase()
+    );
+    const allowed = asArray(read(match, 'AllowedRoles', 'allowedRoles')).filter(role => !isSystemRole(role));
+    if (allowed.length > 0) return allowed;
+    return inferEventInboxRoles(eventId, declaredRoles, catalogRoleNames);
+  }));
+
   steps.forEach(step => {
-    if (!isHumanTask(step)) return;
+    const exits = humanExitEvents(step);
+    if (!isHumanTask(step) && exits.length === 0) return;
     let inbox = inboxRoles(step);
-    if (inbox.length === 0) {
-      inbox = unique(humanExitEvents(step).flatMap(eventId => {
-        const match = events.find((evt: any) =>
-          String(read(evt, 'EventId', 'eventId') || '').trim().toLowerCase() === eventId.toLowerCase()
-        );
-        const allowed = asArray(read(match, 'AllowedRoles', 'allowedRoles')).filter(role => !isSystemRole(role));
-        if (allowed.length > 0) return allowed;
-        return preferCatalogNames(EVENT_INBOX[eventId.toLowerCase()] || [], catalogRoleNames);
-      }));
-    }
+    if (inbox.length === 0) inbox = inferStepInbox(step);
     if (inbox.length > 0) {
       step.RequiredRoles = inbox;
       step.requiredRoles = inbox;
@@ -174,11 +191,13 @@ export function applySimulationGovernance(definition: AnyRecord): AnyRecord {
   });
 
   steps.forEach(step => {
-    if (!isHumanTask(step)) return;
+    const exits = humanExitEvents(step);
+    if (!isHumanTask(step) && exits.length === 0) return;
     let caps = unique(asArray(read(step, 'RequiredCapabilities', 'requiredCapabilities')));
     if (caps.length === 0) {
-      caps = humanExitEvents(step).map(eventId => `event.publish.${eventId}`);
+      caps = exits.map(eventId => `event.publish.${eventId}`);
     }
+    if (caps.length === 0) return;
     caps.forEach(cap => catalog.add(cap));
     step.RequiredCapabilities = caps;
     step.requiredCapabilities = caps;
