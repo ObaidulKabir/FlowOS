@@ -136,6 +136,7 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
 | `GOV-001` | Governance | A role's `grantedCapabilities` must all appear in the top-level `capabilities` array. |
 | `GOV-002` | Governance | A HumanTask (with a human exit event) and each `category: Human` event must declare at least one `requiredCapabilities` entry. |
 | `GOV-003` | Governance | Every `requiredCapabilities` code on a step or event must appear in the top-level `capabilities` array. |
+| `GOV-004` | Governance | When `Roles[]` is declared, every step `RequiredRoles` / `AllowedRoles` / SLA `EscalationRole` must name a declared business-context role (except reserved Anyone/Unassigned/System). |
 
 *Example error:* `CON-004: Step 'Working' references unknown NextStep 'Finished'`.
 

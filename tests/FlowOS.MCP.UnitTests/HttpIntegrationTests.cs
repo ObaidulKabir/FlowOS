@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
 using Microsoft.AspNetCore.Hosting;
@@ -270,7 +271,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
             .Select(tool => tool["name"]!.ToString())
             .OrderBy(name => name)
             .ToArray();
-        Assert.Equal(66, httpNames.Length);
+        Assert.Equal(McpToolDescriptions.All.Count, httpNames.Length);
         Assert.All(httpTools, tool =>
         {
             Assert.NotNull(tool["inputSchema"]);
@@ -333,7 +334,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var json = JObject.Parse(await response.Content.ReadAsStringAsync());
         var tools = Assert.IsType<JArray>(json["tools"]);
-        Assert.Equal(66, tools.Count);
+        Assert.Equal(McpToolDescriptions.All.Count, tools.Count);
 
         foreach (var tool in tools)
         {

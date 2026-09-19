@@ -211,13 +211,21 @@ tenant-scoped tool requires an explicit `tenantId` argument.
 5. Use `plan_workflow_compensation_path` on live instances to verify execution-aware compensation paths from replay history.
 6. If violations persist, call `explain_validation_violation` with the code and step context to generate a remediation hint for the agent/human.
 
-### InvokeCapability MCP guideline (hybrid extension path)
+### Connector MCP guideline (hybrid extension path)
 
-1. Register or update the remote binding with `register_capability_binding` (capability name + endpoint URL + timeout/retry profile).
-2. Run `validate_capability_binding` and ensure `isValid=true` before wiring steps.
-3. Attach an `InvokeCapability` action using `attach_step_action` and set `action.capability` explicitly.
+A **connector** is an outbound tenant worker reached over HTTP. It is not a security capability — that is a role
+permission code ([Chapter 8](08-security-roles-and-policies.md)).
+
+1. Register or update the connector with `register_connector` (connector name + endpoint URL + timeout/retry profile).
+2. Run `validate_connector` and ensure `isValid=true` before wiring steps.
+3. Attach an `InvokeConnector` action using `attach_step_action` and set `action.connector` explicitly.
 4. Keep `OnFailure` compensation hooks on side-effecting steps to satisfy `WF-COMP-010`.
-5. Use `list_capability_bindings` to audit enabled/disabled capability mappings during rollouts.
+5. Use `list_connectors` to audit enabled/disabled connectors during rollouts.
+
+Deprecated but still accepted: the tool names `register_capability_binding`, `list_capability_bindings`, and
+`validate_capability_binding`; the argument `capabilityName`; the action type `InvokeCapability`; and the action
+field `capability`. FlowOS normalizes all of them onto the connector shape, so existing blueprints and saved agent
+scripts keep working without edits.
 
 ### Plugin discovery & action plugin capabilities (AI design loop)
 
@@ -227,7 +235,7 @@ tenant-scoped tool requires an explicit `tenantId` argument.
 4. Verify each alias with `resolve_plugin_binding` before publishing. Agent bindings report `hasApiKey`, never the secret.
 5. Use `list_plugin_bindings` to audit all active mappings for the tenant.
 6. On an agent-handled waiting step, set `agentProvider` to the agent-binding alias and `agentTools` to resource plugins plus notify/write aliases. FlowOS puts them on DecisionPacket.Tools; the model does not call HTTP itself.
-7. Tenant resources are capability bindings, not plugin DLLs. Register the URL with `register_capability_binding`, then declare `LookupRecord:<capability>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, or `CheckPolicy:` on the waiting step. FlowOS prefetches those reads into Agent Context. Write APIs stay `capability:<name>` and are not prefetched. The model never sees the endpoint URL.
+7. Tenant resources are connectors, not plugin DLLs. Register the URL with `register_connector`, then declare `LookupRecord:<connector>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, or `CheckPolicy:` on the waiting step. FlowOS prefetches those reads into Agent Context. Write APIs stay `connector:<name>` (legacy `capability:<name>`) and are not prefetched. The model never sees the endpoint URL.
 
 ## Usage example: design loop for "Leave Approval"
 
@@ -316,7 +324,7 @@ MCP governance tools (`create`/`update`/`validate`/`fork`/`list_public`) now go 
 
 ### Reuse a published template through context bindings
 
-The seven binding governance tools are `create_context_binding`, `update_context_binding`, `validate_context_binding`, `activate_context_binding`, `archive_context_binding`, `list_context_bindings`, and `get_context_binding`. `simulate_context_binding` is a separate read-only analysis tool. A draft binding may point at a Draft workflow class so agents can simulate a business payload without publishing a throwaway variant. `validate_context_binding` and `activate_context_binding` still require a Published or Public source. Simulation does not enforce tenant-role existence (CTX-ROLE-002); activation does. After activation, call the existing `start_workflow` with `contextBindingId` or `contextType`. Activation and archival require `confirmHumanApproval: true`. Full mapping and simulation examples are in [Chapter 17](17-workflow-context-bindings.md).
+The seven binding governance tools are `create_context_binding`, `update_context_binding`, `validate_context_binding`, `activate_context_binding`, `archive_context_binding`, `list_context_bindings`, and `get_context_binding`. `simulate_context_binding` is a separate read-only analysis tool. A draft binding may point at a Draft workflow class so agents can simulate a business payload without publishing a throwaway variant. `validate_context_binding` and `activate_context_binding` still require a Published or Public source. WorkflowClass roles are business-context declarations compiled onto `WorkflowDefinition.BusinessRoles`; activation never writes FlowOS tenant Role rows. `CTX-ROLE-002` only means a role override mapped to an empty name. After activation, call the existing `start_workflow` with `contextBindingId` or `contextType`. Activation and archival require `confirmHumanApproval: true`. Full mapping and simulation examples are in [Chapter 17](17-workflow-context-bindings.md).
 
 Agents should load MCP prompt `design_dual_kernel_workflow` or resource `flowos://guides/dual-kernel-design` before authoring Decision steps. Workflow `currentStep` and state-machine `currentState` move independently. A Decision `Default`/`true` auto-route does not consume a business event; include that event in `simulate_workflowclass` / `simulate_context_binding` so FlowOS can apply it as state-only catch-up. To prove SLA reminders vs timeout, load prompt `test_sla_reminders_in_simulator` or resource `flowos://guides/sla-reminder-simulation`: a simulate-to-Paid run is not a wall clock (completing event means in-time; look for `[SLA Reminder Fired]`); overdue requires `autoAdvanceTimers: true` with the completing event omitted. Do not start a live instance to wait. For agent-handled waiting steps, load `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`: keep a HumanTask/Command wait, set `actor` Agent/Either, put how-to-decide on `decisionGuideline` and tenant policy on binding `policyGuideline`, point `agentProvider` at a tenant `agent` plugin binding (BYO model/key, never in Agent Context), declare `agentTools` as resource plugins (`LookupRecord:<capability>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify/write capabilities, and auto-commit only events listed on both `nextSteps` and `autoCommit.allowedEvents`. Context bindings never create tenant roles. Do not publish a stripped-roles simulator class just to bind; bind the draft and simulate, then publish once.
 

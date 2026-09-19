@@ -5,6 +5,7 @@ using System.Text.Json;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
+using FlowOS.Domain.Services;
 using FlowOS.Domain.ValueObjects;
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
@@ -69,45 +70,9 @@ public static class WorkflowClassCompiler
                     stepBp.Sla.EscalationRole,
                     stepBp.Sla.IsInterrupting,
                     stepBp.Sla.Reminders?.Select(r => new StepReminderDefinition(r.Duration, r.TriggerEvent)).ToList()) : null,
-                OnEntry = stepBp.OnEntry?.Select(a => new StepActionDefinition(a.ActionType)
-                {
-                    Target = a.Target,
-                    Capability = a.Capability,
-                    Url = a.Url,
-                    Method = a.Method,
-                    Template = a.Template,
-                    PayloadMapping = a.PayloadMapping,
-                    Condition = a.Condition,
-                    Headers = a.Headers,
-                    SignPayload = a.SignPayload,
-                    SecretName = a.SecretName
-                }).ToList() ?? new List<StepActionDefinition>(),
-                OnExit = stepBp.OnExit?.Select(a => new StepActionDefinition(a.ActionType)
-                {
-                    Target = a.Target,
-                    Capability = a.Capability,
-                    Url = a.Url,
-                    Method = a.Method,
-                    Template = a.Template,
-                    PayloadMapping = a.PayloadMapping,
-                    Condition = a.Condition,
-                    Headers = a.Headers,
-                    SignPayload = a.SignPayload,
-                    SecretName = a.SecretName
-                }).ToList() ?? new List<StepActionDefinition>(),
-                OnFailure = stepBp.OnFailure?.Select(a => new StepActionDefinition(a.ActionType)
-                {
-                    Target = a.Target,
-                    Capability = a.Capability,
-                    Url = a.Url,
-                    Method = a.Method,
-                    Template = a.Template,
-                    PayloadMapping = a.PayloadMapping,
-                    Condition = a.Condition,
-                    Headers = a.Headers,
-                    SignPayload = a.SignPayload,
-                    SecretName = a.SecretName
-                }).ToList() ?? new List<StepActionDefinition>(),
+                OnEntry = MapActions(stepBp.OnEntry),
+                OnExit = MapActions(stepBp.OnExit),
+                OnFailure = MapActions(stepBp.OnFailure),
                 Actor = FlowOS.Domain.Enums.StepActor.Normalize(stepBp.Actor),
                 DecisionGuideline = stepBp.DecisionGuideline,
                 AutoCommit = MapAutoCommit(stepBp.AutoCommit),
@@ -118,6 +83,7 @@ public static class WorkflowClassCompiler
             def.AddStep(stepDef);
         }
 
+        ApplyTemplateBusinessRoles(def, wc.Definition);
         def.Publish();
         return def;
     }
@@ -275,6 +241,8 @@ public static class WorkflowClassCompiler
 
             workflow.AddStep(compiledStep);
         }
+
+        ApplyTemplateBusinessRoles(workflow, source.Definition, mapping);
 
         workflow.SetContextLineage(source.Id, revision.Id, stateMachine.Id);
         workflow.Publish();
@@ -460,7 +428,7 @@ public static class WorkflowClassCompiler
                 {
                     target = MapValue(target, mapping.EventAliases);
                 }
-                else if (string.Equals(action.ActionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase))
+                else if (StepActionVocabulary.IsConnectorInvocation(action.ActionType))
                 {
                     target = MapCapability(target, mapping);
                 }
@@ -470,12 +438,14 @@ public static class WorkflowClassCompiler
                 }
             }
 
-            return new StepActionDefinition(action.ActionType)
+            var connector = action.Connector ?? action.Capability;
+
+            return new StepActionDefinition(StepActionVocabulary.NormalizeActionType(action.ActionType))
             {
                 Target = target,
-                Capability = string.IsNullOrWhiteSpace(action.Capability)
-                    ? action.Capability
-                    : MapCapability(action.Capability, mapping),
+                Capability = string.IsNullOrWhiteSpace(connector)
+                    ? connector
+                    : MapCapability(connector, mapping),
                 Url = action.Url,
                 Method = action.Method,
                 Template = action.Template,
@@ -490,6 +460,42 @@ public static class WorkflowClassCompiler
                 SecretName = action.SecretName
             };
         }).ToList();
+    }
+
+    private static List<StepActionDefinition> MapActions(List<StepActionBlueprint>? actions)
+        => actions?.Select(a => new StepActionDefinition(StepActionVocabulary.NormalizeActionType(a.ActionType))
+        {
+            Target = a.Target,
+            Capability = StepActionVocabulary.IsConnectorInvocation(a.ActionType)
+                ? StepActionVocabulary.ResolveConnectorName(a)
+                : a.Connector ?? a.Capability,
+            Url = a.Url,
+            Method = a.Method,
+            Template = a.Template,
+            PayloadMapping = a.PayloadMapping,
+            Condition = a.Condition,
+            Headers = a.Headers,
+            SignPayload = a.SignPayload,
+            SecretName = a.SecretName
+        }).ToList() ?? new List<StepActionDefinition>();
+
+    public static void ApplyTemplateBusinessRoles(
+        WorkflowDefinition workflow,
+        WorkflowClassBlueprint blueprint,
+        WorkflowContextBindingDefinition? mapping = null)
+    {
+        mapping ??= new WorkflowContextBindingDefinition();
+        var businessRoles = ContextRoleProvisioningRules.Resolve(blueprint, mapping)
+            .Select(requirement => new BusinessRoleDefinition
+            {
+                Name = requirement.RoleName,
+                Capabilities = requirement.Capabilities.ToList(),
+                ResolutionType = requirement.ResolutionType,
+                MemberExpression = requirement.MemberExpression,
+                StaticMembers = requirement.StaticMembers.ToList()
+            })
+            .ToList();
+        workflow.AttachBusinessRoles(businessRoles);
     }
 
     private static string MapCapability(string value, WorkflowContextBindingDefinition mapping)

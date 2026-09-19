@@ -66,20 +66,21 @@ public static class AgentToolCatalog
         var original = name.Trim();
         var (head, tail) = Split(original);
 
-        if (string.Equals(head, "capability", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(head, "connector", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(head, "capability", StringComparison.OrdinalIgnoreCase))
         {
-            var capability = string.IsNullOrWhiteSpace(tail) ? original : tail;
-            var read = LooksLikeRead(capability);
+            var connector = string.IsNullOrWhiteSpace(tail) ? original : tail;
+            var read = LooksLikeRead(connector);
             return new AgentToolDescriptor(
                 original,
                 "capability",
                 "InvokeCapability",
                 read
-                    ? "Read tenant resource via capability binding. FlowOS invokes the endpoint; the agent does not call HTTP."
-                    : "Write tenant capability. Not prefetched at decision time; FlowOS may invoke only if later policy allows.",
+                    ? "Read tenant resource via a connector. FlowOS invokes the endpoint; the agent does not call HTTP."
+                    : "Write through a tenant connector. Not prefetched at decision time; FlowOS may invoke only if later policy allows.",
                 read ? "none" : "write",
                 read,
-                capability);
+                connector);
         }
 
         if (ResourcePlugins.Contains(head))
@@ -88,7 +89,7 @@ public static class AgentToolCatalog
                 original,
                 "resource",
                 head,
-                $"{head} tenant resource through a capability binding. The model never sees the URL.",
+                $"{head} tenant resource through a connector. The model never sees the URL.",
                 "none",
                 !string.IsNullOrWhiteSpace(tail),
                 string.IsNullOrWhiteSpace(tail) ? null : tail);
@@ -159,6 +160,7 @@ public static class AgentToolCatalog
     {
         var colon = name.IndexOf(':');
         var dot = name.StartsWith("plugin.", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("connector.", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith("capability.", StringComparison.OrdinalIgnoreCase)
             ? name.IndexOf('.')
             : -1;
@@ -170,7 +172,7 @@ public static class AgentToolCatalog
 
     private static string StripDeclaredPrefix(string name)
     {
-        foreach (var prefix in new[] { "plugin:", "plugin.", "capability:", "capability." })
+        foreach (var prefix in new[] { "plugin:", "plugin.", "connector:", "connector.", "capability:", "capability." })
         {
             if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && name.Length > prefix.Length)
                 return name[prefix.Length..];

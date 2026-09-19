@@ -219,13 +219,24 @@ public class TenantAuthService : ITenantAuthService
         user.RecordLogin();
         await _context.SaveChangesAsync(ct);
 
+        var assignedRoles = await _context.TenantUserRoles
+            .AsNoTracking()
+            .Where(a => a.TenantId == user.TenantId && a.TenantUserId == user.Id)
+            .Join(
+                _context.Roles.AsNoTracking().Where(r => r.TenantId == user.TenantId),
+                assignment => assignment.RoleId,
+                role => role.Id,
+                (_, role) => role.Name)
+            .ToListAsync(ct);
+
         var token = _jwtTokenService.GenerateToken(
             user.Id,
             user.Email,
             user.FullName,
             tenant.TenantId,
             tenant.Name,
-            user.Role);
+            user.Role,
+            assignedRoles);
 
         var userDto = new TenantUserDto(
             user.Id,

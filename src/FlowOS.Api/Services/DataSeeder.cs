@@ -236,23 +236,7 @@ public static class DataSeeder
                     manager.Publish(wc);
                 }
                 
-                // Manually Create WorkflowDefinition (Bridging the gap between Governance and Engine)
-                // In a real app, a Domain Event Handler for WorkflowClassPublished would do this.
-                var def = new WorkflowDefinition(wc.TenantId, wc.Name, 1, demoBpFix.Workflow.StartStepId);
-                // Map Steps
-                foreach (var stepBp in demoBpFix.Workflow.Steps)
-                {
-                    var stepType = Enum.Parse<WorkflowStepType>(stepBp.StepType);
-                    var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType);
-                    foreach (var next in stepBp.NextSteps)
-                    {
-                        stepDef.NextSteps.Add(next.Key, next.Value);
-                    }
-                    def.AddStep(stepDef);
-                }
-                
-                def.Publish();
-                
+                var def = WorkflowClassCompiler.MapToRuntimeDefinition(wc);
                 context.WorkflowDefinitions.Add(def);
 
                 await context.SaveChangesAsync();
@@ -285,7 +269,10 @@ public static class DataSeeder
                     foreach (var stepBp in demoBpFix.Workflow.Steps)
                     {
                         var stepType = Enum.Parse<WorkflowStepType>(stepBp.StepType);
-                        var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType);
+                        var stepDef = new WorkflowStepDefinition(stepBp.StepId, stepType)
+                        {
+                            AllowedRoles = stepBp.RequiredRoles.ToList()
+                        };
                         foreach (var next in stepBp.NextSteps)
                         {
                             stepDef.NextSteps.Add(next.Key, next.Value);
@@ -300,6 +287,13 @@ public static class DataSeeder
                         SetPrivateProperty(existingDef, "Status", WorkflowStatus.Draft);
                         existingDef.AddStep(stepDef);
                     }
+
+                    var existingClass = await context.WorkflowClasses.FirstOrDefaultAsync(
+                        w => w.TenantId == clientTenantId && w.Name == "ExpenseApproval");
+                    if (existingClass != null)
+                        SetPrivateProperty(existingClass, "Definition", demoBpFix);
+
+                    WorkflowClassCompiler.ApplyTemplateBusinessRoles(existingDef, demoBpFix);
                     SetPrivateProperty(existingDef, "Status", WorkflowStatus.Published);
                     await context.SaveChangesAsync();
                 }
@@ -365,40 +359,6 @@ public static class DataSeeder
                     { 
                         StepId = "Draft", 
                         StepType = "Command",
-                        NextSteps = new() { { "EVT-SUBMIT", "CheckAmount" } } // Go to System Check first
-                    },
-                    new FlowOS.Domain.Blueprints.StepBlueprint 
-                    { 
-                        StepId = "CheckAmount", 
-                        StepType = "SystemTask", // This needs to be supported or simulated
-                        // For now, let's simplify: Submit goes to PendingManager.
-                        // We will handle the condition in the Manager Step logic or via specialized events?
-                        // FlowOS currently supports explicit transitions. 
-                        // Let's implement it as:
-                        // Draft -> (EVT-SUBMIT) -> PendingManager
-                        // PendingManager -> (EVT-APPROVE) -> CheckDirectorNeeded (System Step?)
-                        // If we don't have System Steps with logic yet, we can simulate it in the client/backend?
-                        // "require approval of director if amount >$100"
-                        // This implies the Manager approves, and THEN it goes to Director if high value.
-                        // OR it goes straight to Director? Usually Manager first.
-                        
-                        // Let's try this flow:
-                        // 1. Submit -> PendingManager
-                        // 2. Manager Approves (EVT-APPROVE)
-                        // 3. Workflow Engine checks condition? (Not yet implemented in engine)
-                        // 4. So we need a "Gateway" step or the Client decides which event to fire?
-                        // The user asked to "create another version... that require approval".
-                        // Let's model it with explicit steps for now.
-                        
-                        // Revised Flow:
-                        // Draft -> PendingManager
-                        // PendingManager -> (EVT-APPROVE) -> CheckHighValue (System)
-                        // CheckHighValue -> (EVT-HIGH-VALUE) -> PendingDirector
-                        // CheckHighValue -> (EVT-LOW-VALUE) -> Approved
-                        
-                        // Since we don't have automatic system tasks yet in this seed, we'll rely on the backend to fire the correct event based on amount.
-                        // Backend will fire EVT-APPROVE-LOW (<100) or EVT-APPROVE-HIGH (>100).
-                        
                         NextSteps = new() { { "EVT-SUBMIT", "PendingManager" } }
                     },
                     new FlowOS.Domain.Blueprints.StepBlueprint 
@@ -427,7 +387,9 @@ public static class DataSeeder
                     new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { { "Default", "END" } } },
                     new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
                 }
-            }
+            },
+            Roles = ExpenseV2Roles(),
+            Capabilities = ExpenseV2Capabilities()
         };
         WorkflowSimulationGovernance.Apply(v2Bp);
 
@@ -437,37 +399,7 @@ public static class DataSeeder
         manager2.Publish(v2Wc);
         context.WorkflowClasses.Add(v2Wc);
         
-        // Create Definition
-        var def = new WorkflowDefinition(clientTenantId, v2Name, 1, "Draft");
-        
-        // Draft
-        var draft = new WorkflowStepDefinition("Draft", WorkflowStepType.Command);
-        draft.NextSteps.Add("EVT-SUBMIT", "PendingManager");
-        def.AddStep(draft);
-
-        // PendingManager
-        var mgr = new WorkflowStepDefinition("PendingManager", WorkflowStepType.HumanTask);
-        mgr.NextSteps.Add("EVT-APPROVE", "Approved"); // Low value path
-        mgr.NextSteps.Add("EVT-ESCALATE", "PendingDirector"); // High value path
-        mgr.NextSteps.Add("EVT-REJECT", "Rejected");
-        def.AddStep(mgr);
-
-        // PendingDirector
-        var dir = new WorkflowStepDefinition("PendingDirector", WorkflowStepType.HumanTask);
-        dir.NextSteps.Add("EVT-DIRECTOR-APPROVE", "Approved");
-        dir.NextSteps.Add("EVT-DIRECTOR-REJECT", "Rejected");
-        def.AddStep(dir);
-
-        // End States
-        var approved = new WorkflowStepDefinition("Approved", WorkflowStepType.Command);
-        approved.NextSteps.Add("Default", "END");
-        def.AddStep(approved);
-
-        var rejected = new WorkflowStepDefinition("Rejected", WorkflowStepType.Command);
-        rejected.NextSteps.Add("Default", "END");
-        def.AddStep(rejected);
-
-        def.Publish();
+        var def = WorkflowClassCompiler.MapToRuntimeDefinition(v2Wc);
         context.WorkflowDefinitions.Add(def);
         await context.SaveChangesAsync();
     }
@@ -543,6 +475,7 @@ public static class DataSeeder
         // 7. Seed Enterprise Flagship Workflows
         await SeedFlagshipWorkflowsAsync(context, clientTenantId);
         await EnsurePublishedRuntimeDefinitionsAsync(context, clientTenantId);
+        await RepairSandboxSampleDeclarationsAsync(context, clientTenantId);
     }
 
     public static async Task SeedFlagshipWorkflowsAsync(FlowOSDbContext context, Guid clientTenantId)
@@ -697,7 +630,9 @@ public static class DataSeeder
                             }
                         }
                     }
-                }
+                },
+                Roles = SagaRoles(),
+                Capabilities = SagaCapabilities()
             };
             WorkflowSimulationGovernance.Apply(sagaBp);
 
@@ -866,7 +801,9 @@ public static class DataSeeder
                             }
                         }
                     }
-                }
+                },
+                Roles = LoanRoles(),
+                Capabilities = LoanCapabilities()
             };
             WorkflowSimulationGovernance.Apply(loanBp);
 
@@ -1060,7 +997,9 @@ public static class DataSeeder
                             }
                         }
                     }
-                }
+                },
+                Roles = SecOpsRoles(),
+                Capabilities = SecOpsCapabilities()
             };
             WorkflowSimulationGovernance.Apply(secOpsBp);
 
@@ -1073,6 +1012,207 @@ public static class DataSeeder
             var secOpsDef = WorkflowClassCompiler.MapToRuntimeDefinition(secOpsWc);
             secOpsDef.Publish();
             context.WorkflowDefinitions.Add(secOpsDef);
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    private static CapabilityBlueprint Cap(string code, string description) =>
+        new() { Code = code, Description = description };
+
+    private static RoleBlueprint BizRole(string name, string description, params string[] capabilities) =>
+        new()
+        {
+            Name = name,
+            Description = description,
+            GrantedCapabilities = capabilities.ToList(),
+            ResolutionType = "Assignment"
+        };
+
+    private static List<CapabilityBlueprint> ExpenseCapabilities() =>
+    [
+        Cap("workflow.read", "Read expense instance state"),
+        Cap("event.publish.EVT-SUBMIT", "Submit an expense"),
+        Cap("event.publish.EVT-APPROVE", "Approve an expense"),
+        Cap("event.publish.EVT-REJECT", "Reject an expense")
+    ];
+
+    private static List<RoleBlueprint> ExpenseRoles() =>
+    [
+        BizRole("Submitter", "Files the expense request", "workflow.read", "event.publish.EVT-SUBMIT"),
+        BizRole("Approver", "Approves or rejects the expense", "workflow.read", "event.publish.EVT-APPROVE", "event.publish.EVT-REJECT")
+    ];
+
+    private static List<CapabilityBlueprint> ExpenseV2Capabilities() =>
+    [
+        Cap("workflow.read", "Read expense instance state"),
+        Cap("event.publish.EVT-SUBMIT", "Submit an expense"),
+        Cap("event.publish.EVT-APPROVE", "Manager approves a low-value expense"),
+        Cap("event.publish.EVT-REJECT", "Manager rejects an expense"),
+        Cap("event.publish.EVT-ESCALATE", "Escalate a high-value expense to Director"),
+        Cap("event.publish.EVT-DIRECTOR-APPROVE", "Director approves an escalated expense"),
+        Cap("event.publish.EVT-DIRECTOR-REJECT", "Director rejects an escalated expense")
+    ];
+
+    private static List<RoleBlueprint> ExpenseV2Roles() =>
+    [
+        BizRole("Submitter", "Files the expense request", "workflow.read", "event.publish.EVT-SUBMIT"),
+        BizRole("Manager", "First-line manager review", "workflow.read", "event.publish.EVT-APPROVE", "event.publish.EVT-REJECT", "event.publish.EVT-ESCALATE"),
+        BizRole("Director", "Second-line approval for high-value expenses", "workflow.read", "event.publish.EVT-DIRECTOR-APPROVE", "event.publish.EVT-DIRECTOR-REJECT")
+    ];
+
+    private static List<CapabilityBlueprint> SagaCapabilities() =>
+    [
+        Cap("workflow.read", "Read order saga instance state"),
+        Cap("event.publish.EVT-VALIDATE", "Validate the order"),
+        Cap("event.publish.EVT-PAY-SUCCESS", "Confirm payment authorization"),
+        Cap("event.publish.EVT-STOCK-LOCKED", "Confirm inventory reservation"),
+        Cap("event.publish.EVT-SHIP-FAIL", "Signal shipping failure"),
+        Cap("event.publish.EVT-COMPENSATE", "Complete saga rollback")
+    ];
+
+    private static List<RoleBlueprint> SagaRoles() =>
+    [
+        BizRole("OrderClerk", "Owns order intake and payment authorization", "workflow.read", "event.publish.EVT-VALIDATE", "event.publish.EVT-PAY-SUCCESS"),
+        BizRole("Warehouse", "Reserves and releases inventory", "workflow.read", "event.publish.EVT-STOCK-LOCKED"),
+        BizRole("Logistics", "Ships the order or triggers saga compensation", "workflow.read", "event.publish.EVT-SHIP-FAIL", "event.publish.EVT-COMPENSATE")
+    ];
+
+    private static List<CapabilityBlueprint> LoanCapabilities() =>
+    [
+        Cap("workflow.read", "Read loan instance state"),
+        Cap("event.publish.EVT-APPLY", "Submit a loan application"),
+        Cap("event.publish.EVT-AUTO-APPROVE", "Auto-approve a prime application"),
+        Cap("event.publish.EVT-MANUAL-REVIEW", "Send an application to underwriting"),
+        Cap("event.publish.EVT-FINAL-APPROVE", "Approve after underwriter review"),
+        Cap("event.publish.EVT-DECLINE", "Decline a loan application")
+    ];
+
+    private static List<RoleBlueprint> LoanRoles() =>
+    [
+        BizRole("Applicant", "Submits a loan application", "workflow.read", "event.publish.EVT-APPLY"),
+        BizRole("Manager", "Manual underwriter who can approve or decline", "workflow.read", "event.publish.EVT-MANUAL-REVIEW", "event.publish.EVT-FINAL-APPROVE", "event.publish.EVT-DECLINE"),
+        BizRole("Director", "Senior underwriter with the same decision rights", "workflow.read", "event.publish.EVT-FINAL-APPROVE", "event.publish.EVT-DECLINE")
+    ];
+
+    private static List<CapabilityBlueprint> SecOpsCapabilities() =>
+    [
+        Cap("workflow.read", "Read access-governance instance state"),
+        Cap("event.publish.EVT-REQUEST-ACCESS", "Request privileged access"),
+        Cap("event.publish.EVT-APPROVE", "Manager approves access"),
+        Cap("event.publish.EVT-ESCALATE", "Escalate after SLA breach"),
+        Cap("event.publish.EVT-DIRECTOR-APPROVE", "Director approves escalated access"),
+        Cap("event.publish.EVT-REVOKE", "Revoke temporary credentials")
+    ];
+
+    private static List<RoleBlueprint> SecOpsRoles() =>
+    [
+        BizRole("Requester", "Asks for privileged access", "workflow.read", "event.publish.EVT-REQUEST-ACCESS"),
+        BizRole("Manager", "Approves access or lets SLA escalate", "workflow.read", "event.publish.EVT-APPROVE", "event.publish.EVT-ESCALATE"),
+        BizRole("Director", "Approves after a 24h SLA breach", "workflow.read", "event.publish.EVT-DIRECTOR-APPROVE"),
+        BizRole("SecOps", "Owns credential provisioning and revocation", "workflow.read", "event.publish.EVT-REVOKE")
+    ];
+
+    private static void EnsureStepRequiredRoles(WorkflowClassBlueprint blueprint, string stepId, params string[] roles)
+    {
+        var step = blueprint.Workflow.Steps.FirstOrDefault(s => s.StepId == stepId);
+        if (step == null) return;
+        foreach (var role in roles)
+        {
+            if (!step.RequiredRoles.Contains(role, StringComparer.OrdinalIgnoreCase))
+                step.RequiredRoles.Add(role);
+        }
+    }
+
+    private static void EnsureCapabilityList(List<CapabilityBlueprint> target, IEnumerable<CapabilityBlueprint> source)
+    {
+        foreach (var capability in source)
+        {
+            if (!target.Any(existing => string.Equals(existing.Code, capability.Code, StringComparison.OrdinalIgnoreCase)))
+                target.Add(capability);
+        }
+    }
+
+    private static void EnsureRoleList(List<RoleBlueprint> target, IEnumerable<RoleBlueprint> source)
+    {
+        foreach (var role in source)
+        {
+            if (!target.Any(existing => string.Equals(existing.Name, role.Name, StringComparison.OrdinalIgnoreCase)))
+                target.Add(role);
+        }
+    }
+
+    private static void EnsureSampleRoleVocabulary(WorkflowClass workflowClass)
+    {
+        var blueprint = workflowClass.Definition;
+        switch (workflowClass.Name)
+        {
+            case "ExpenseApproval":
+                EnsureStepRequiredRoles(blueprint, "Pending", "Manager");
+                EnsureRoleList(blueprint.Roles, ExpenseRoles());
+                EnsureCapabilityList(blueprint.Capabilities, ExpenseCapabilities());
+                WorkflowSimulationGovernance.Apply(blueprint);
+                break;
+            case "ExpenseApprovalV2":
+                EnsureStepRequiredRoles(blueprint, "PendingManager", "Manager");
+                EnsureStepRequiredRoles(blueprint, "PendingDirector", "Director");
+                EnsureRoleList(blueprint.Roles, ExpenseV2Roles());
+                EnsureCapabilityList(blueprint.Capabilities, ExpenseV2Capabilities());
+                WorkflowSimulationGovernance.Apply(blueprint);
+                break;
+            case "OrderSagaFulfillment":
+                EnsureRoleList(blueprint.Roles, SagaRoles());
+                EnsureCapabilityList(blueprint.Capabilities, SagaCapabilities());
+                WorkflowSimulationGovernance.Apply(blueprint);
+                break;
+            case "LoanUnderwritingFlow":
+                EnsureStepRequiredRoles(blueprint, "UnderwriterReview", "Manager", "Director");
+                EnsureRoleList(blueprint.Roles, LoanRoles());
+                EnsureCapabilityList(blueprint.Capabilities, LoanCapabilities());
+                WorkflowSimulationGovernance.Apply(blueprint);
+                break;
+            case "SecOpsAccessGovernance":
+                EnsureStepRequiredRoles(blueprint, "ManagerApproval", "Manager");
+                EnsureStepRequiredRoles(blueprint, "DirectorEscalation", "Director");
+                EnsureRoleList(blueprint.Roles, SecOpsRoles());
+                EnsureCapabilityList(blueprint.Capabilities, SecOpsCapabilities());
+                WorkflowSimulationGovernance.Apply(blueprint);
+                break;
+        }
+    }
+
+    private static async Task RepairSandboxSampleDeclarationsAsync(FlowOSDbContext context, Guid tenantId)
+    {
+        foreach (var name in SandboxSampleWorkflowNames)
+        {
+            var workflowClass = await context.WorkflowClasses.FirstOrDefaultAsync(
+                w => w.TenantId == tenantId && w.Name == name);
+            if (workflowClass == null)
+                continue;
+
+            EnsureSampleRoleVocabulary(workflowClass);
+            context.Entry(workflowClass).Property(w => w.Definition).IsModified = true;
+
+            var definition = await context.WorkflowDefinitions
+                .Include(d => d.Steps)
+                .Where(d => d.TenantId == tenantId && d.Name == name)
+                .OrderByDescending(d => d.Version)
+                .FirstOrDefaultAsync();
+            if (definition == null)
+                continue;
+
+            foreach (var stepBlueprint in workflowClass.Definition.Workflow.Steps)
+            {
+                var step = definition.Steps.FirstOrDefault(s => s.StepId == stepBlueprint.StepId);
+                if (step == null || stepBlueprint.RequiredRoles.Count == 0)
+                    continue;
+                step.AllowedRoles = stepBlueprint.RequiredRoles.ToList();
+            }
+
+            var previousStatus = definition.Status;
+            SetPrivateProperty(definition, "Status", WorkflowStatus.Draft);
+            WorkflowClassCompiler.ApplyTemplateBusinessRoles(definition, workflowClass.Definition);
+            SetPrivateProperty(definition, "Status", previousStatus);
         }
 
         await context.SaveChangesAsync();

@@ -36,6 +36,14 @@ public class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<Workflow
             .HasForeignKey(w => w.StateMachineDefinitionId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Business-context roles the source WorkflowClass declared, compiled in at publish time.
+        // Declarative metadata only (see BusinessRoleDefinition) — stored as JSON, same as Steps.
+        builder.Property(w => w.BusinessRoles)
+            .HasConversion(
+                d => JsonSerializer.Serialize(d, (JsonSerializerOptions)null),
+                s => JsonSerializer.Deserialize<List<BusinessRoleDefinition>>(s, (JsonSerializerOptions)null) ?? new List<BusinessRoleDefinition>()
+            );
+
         // Store Steps as JSONB
         builder.OwnsMany(w => w.Steps, step =>
         {

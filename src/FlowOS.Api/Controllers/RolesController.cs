@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -46,6 +47,45 @@ public class RolesController : ControllerBase
         var role = await _mediator.Send(new GetRoleByIdQuery(_currentUser.TenantId, id));
         if (role == null) return NotFound();
         return Ok(role);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ListRoles()
+    {
+        var roles = await _mediator.Send(new ListRolesQuery(_currentUser.TenantId));
+        return Ok(roles.Select(role => new
+        {
+            role.Id,
+            role.Name,
+            Capabilities = role.Permissions.OrderBy(x => x).ToList()
+        }));
+    }
+
+    [HttpPost("{id}/users/{userId}")]
+    public async Task<IActionResult> AssignRoleToUser(Guid id, Guid userId)
+    {
+        var assigned = await _mediator.Send(
+            new AssignRoleToUserCommand(_currentUser.TenantId, id, userId));
+
+        if (!assigned) return NotFound();
+        return Ok();
+    }
+
+    [HttpDelete("{id}/users/{userId}")]
+    public async Task<IActionResult> RevokeRoleFromUser(Guid id, Guid userId)
+    {
+        var revoked = await _mediator.Send(
+            new RevokeRoleFromUserCommand(_currentUser.TenantId, id, userId));
+
+        if (!revoked) return NotFound();
+        return NoContent();
+    }
+
+    [HttpGet("users/{userId}")]
+    public async Task<IActionResult> ListUserRoles(Guid userId)
+    {
+        var roles = await _mediator.Send(new ListUserRolesQuery(_currentUser.TenantId, userId));
+        return Ok(roles);
     }
 }
 

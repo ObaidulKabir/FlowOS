@@ -362,7 +362,8 @@ public class WorkflowClassValidator : IWorkflowClassValidator
             bool hasSideEffects = entryActions.Concat(exitActions).Any(a =>
             {
                 var t = a.ActionType?.Trim().ToLowerInvariant();
-                return t == "webhook" || t == "publishevent" || t == "invokecapability" || IsPluginActionAlias(t);
+                return t == "webhook" || t == "publishevent" ||
+                       StepActionVocabulary.IsConnectorInvocation(t) || IsPluginActionAlias(t);
             });
             bool hasCompensation = failureActions.Any();
             if (isReachable && hasSideEffects && !hasCompensation)
@@ -379,7 +380,7 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 var actionType = action.ActionType?.Trim().ToLowerInvariant() ?? "";
                 if (!IsSupportedActionType(actionType))
                 {
-                    result.AddError("WF-ACT-001", "ActionValidation", $"Step '{step.StepId}' defines an action with unknown ActionType '{action.ActionType}'. Supported types: Notification, Webhook, PublishEvent, InvokeCapability, or plugin-prefixed alias (plugin:* / plugin.*).", "Steps");
+                    result.AddError("WF-ACT-001", "ActionValidation", $"Step '{step.StepId}' defines an action with unknown ActionType '{action.ActionType}'. Supported types: Notification, Webhook, PublishEvent, InvokeConnector (legacy InvokeCapability), or plugin-prefixed alias (plugin:* / plugin.*).", "Steps");
                 }
 
                 if (actionType == "webhook")
@@ -404,12 +405,11 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                         result.AddError("WF-ACT-004", "ActionValidation", $"Step '{step.StepId}' defines a PublishEvent action with undeclared event '{action.Target}'", "Steps");
                     }
                 }
-                else if (actionType == "invokecapability")
+                else if (StepActionVocabulary.IsConnectorInvocation(actionType))
                 {
-                    var capabilityName = !string.IsNullOrWhiteSpace(action.Capability) ? action.Capability : action.Target;
-                    if (string.IsNullOrWhiteSpace(capabilityName))
+                    if (string.IsNullOrWhiteSpace(StepActionVocabulary.ResolveConnectorName(action)))
                     {
-                        result.AddError("WF-ACT-005", "ActionValidation", $"Step '{step.StepId}' defines InvokeCapability action without a capability name (set Capability or Target).", "Steps");
+                        result.AddError("WF-ACT-005", "ActionValidation", $"Step '{step.StepId}' defines an {action.ActionType} action without a connector name (set Connector, or legacy Capability/Target).", "Steps");
                     }
                 }
             }
@@ -528,6 +528,42 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                     "Governance",
                     $"HumanTask '{step.StepId}' must declare requiredCapabilities on the step or on each human exit event.",
                     "Steps");
+            }
+        }
+
+        var declaredRoles = bp.Roles
+            .Where(role => !string.IsNullOrWhiteSpace(role.Name))
+            .Select(role => role.Name.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (declaredRoles.Count > 0)
+        {
+            var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Anyone", "Unassigned", "System" };
+            foreach (var step in bp.Workflow.Steps)
+            {
+                foreach (var role in step.RequiredRoles.Concat(step.AllowedRoles ?? Enumerable.Empty<string>()))
+                {
+                    if (string.IsNullOrWhiteSpace(role) || reserved.Contains(role)) continue;
+                    if (!declaredRoles.Contains(role.Trim()))
+                    {
+                        result.AddError(
+                            "GOV-004",
+                            "Governance",
+                            $"Step '{step.StepId}' requires undeclared business-context role '{role}'.",
+                            "Steps");
+                    }
+                }
+
+                var escalationRole = step.Sla?.EscalationRole;
+                if (!string.IsNullOrWhiteSpace(escalationRole) &&
+                    !reserved.Contains(escalationRole) &&
+                    !declaredRoles.Contains(escalationRole.Trim()))
+                {
+                    result.AddError(
+                        "GOV-004",
+                        "Governance",
+                        $"Step '{step.StepId}' escalates to undeclared business-context role '{escalationRole}'.",
+                        "Steps");
+                }
             }
         }
 
@@ -732,6 +768,7 @@ public class WorkflowClassValidator : IWorkflowClassValidator
         actionType == "notification" ||
         actionType == "webhook" ||
         actionType == "publishevent" ||
+        actionType == "invokeconnector" ||
         actionType == "invokecapability" ||
         IsPluginActionAlias(actionType);
 

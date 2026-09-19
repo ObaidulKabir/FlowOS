@@ -111,6 +111,51 @@ public partial class WorkflowCommandHandlers
                 "EventPermission",
                 $"publish '{request.EventType}'",
                 cancellationToken);
+
+            var isPlatformAdmin = userRoles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+            if (!isPlatformAdmin &&
+                definition.BusinessRoles.Count > 0 &&
+                _businessRoleResolver != null)
+            {
+                var grantedByBusinessRole = definition.BusinessRoles
+                    .SelectMany(role => role.Capabilities)
+                    .Any(capability =>
+                        requiredCapabilities.Any(required =>
+                            string.Equals(capability, required, StringComparison.OrdinalIgnoreCase)) ||
+                        string.Equals(capability, "event.publish", StringComparison.OrdinalIgnoreCase));
+                if (grantedByBusinessRole)
+                {
+                    PreparedWorkflowContext? preparedForRole = null;
+                    if (_workflowContextService != null)
+                    {
+                        preparedForRole = await _workflowContextService.PrepareForInstanceAsync(
+                            request.TenantId,
+                            definition,
+                            instance.Id,
+                            request.EventType,
+                            request.Payload,
+                            cancellationToken);
+                    }
+
+                    var callerBusinessRoles = _businessRoleResolver.ResolveCallerRoles(
+                        definition,
+                        instance,
+                        preparedForRole?.Payload,
+                        _currentUser.Id);
+                    var holdsEvent = definition.BusinessRoles.Any(role =>
+                        callerBusinessRoles.Contains(role.Name, StringComparer.OrdinalIgnoreCase) &&
+                        role.Capabilities.Any(capability =>
+                            requiredCapabilities.Any(required =>
+                                string.Equals(capability, required, StringComparison.OrdinalIgnoreCase)) ||
+                            string.Equals(capability, "event.publish", StringComparison.OrdinalIgnoreCase)));
+                    if (!holdsEvent)
+                    {
+                        throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
+                            "BusinessEventPermission",
+                            $"Event '{request.EventType}' requires a declared business-context role that grants one of: {string.Join(", ", requiredCapabilities)}.");
+                    }
+                }
+            }
         }
 
         var isRegistered = await _eventRegistry.ExistsAsync(request.EventType, request.TenantId);

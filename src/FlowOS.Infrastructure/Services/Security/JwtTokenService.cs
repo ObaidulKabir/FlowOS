@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -34,7 +35,15 @@ public class JwtTokenService : IJwtTokenService
         _keyBytes = Encoding.UTF8.GetBytes(secret.PadRight(32, '!'));
     }
 
-    public string GenerateToken(Guid userId, string email, string fullName, Guid tenantId, string tenantName, string role, TimeSpan? lifetime = null)
+    public string GenerateToken(
+        Guid userId,
+        string email,
+        string fullName,
+        Guid tenantId,
+        string tenantName,
+        string role,
+        IEnumerable<string>? additionalRoles = null,
+        TimeSpan? lifetime = null)
     {
         var now = DateTimeOffset.UtcNow;
         var expires = now.Add(lifetime ?? TimeSpan.FromHours(_defaultExpirationHours));
@@ -53,6 +62,7 @@ public class JwtTokenService : IJwtTokenService
             ["tenant_id"] = tenantId.ToString(),
             ["tenant_name"] = tenantName,
             ["role"] = role,
+            ["roles"] = CombineRoles(role, additionalRoles),
             ["iss"] = _issuer,
             ["aud"] = _audience,
             ["iat"] = now.ToUnixTimeSeconds(),
@@ -72,6 +82,27 @@ public class JwtTokenService : IJwtTokenService
         var signatureEncoded = Base64UrlEncode(signatureBytes);
 
         return $"{unsignedToken}.{signatureEncoded}";
+    }
+
+    private static string[] CombineRoles(string primaryRole, IEnumerable<string>? additionalRoles)
+    {
+        var combined = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(primaryRole) && seen.Add(primaryRole))
+        {
+            combined.Add(primaryRole);
+        }
+
+        foreach (var role in additionalRoles ?? Enumerable.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(role) && seen.Add(role.Trim()))
+            {
+                combined.Add(role.Trim());
+            }
+        }
+
+        return combined.ToArray();
     }
 
     public ClaimsPrincipal? ValidateToken(string token)
@@ -134,10 +165,23 @@ public class JwtTokenService : IJwtTokenService
             if (root.TryGetProperty("tenant_name", out var tenantNameProp))
                 claims.Add(new Claim("tenant_name", tenantNameProp.GetString()!));
 
-            if (root.TryGetProperty("role", out var roleProp))
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("role", out var roleProp) && roleProp.GetString() is { } primaryRole)
             {
-                claims.Add(new Claim(ClaimTypes.Role, roleProp.GetString()!));
-                claims.Add(new Claim("role", roleProp.GetString()!));
+                claims.Add(new Claim(ClaimTypes.Role, primaryRole));
+                claims.Add(new Claim("role", primaryRole));
+                emitted.Add(primaryRole);
+            }
+
+            if (root.TryGetProperty("roles", out var rolesProp) && rolesProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in rolesProp.EnumerateArray())
+                {
+                    if (entry.GetString() is { } additionalRole && emitted.Add(additionalRole))
+                    {
+                        claims.Add(new Claim(ClaimTypes.Role, additionalRole));
+                    }
+                }
             }
 
             var identity = new ClaimsIdentity(claims, "Bearer");

@@ -29,6 +29,15 @@ public class WorkflowInstance : IWorkflowInstance
     /// </summary>
     public Dictionary<string, int> PathTravelCounts { get; private set; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Business-role assignments for this instance only, keyed by the role name declared on
+    /// <see cref="WorkflowDefinition.BusinessRoles"/> (e.g. "Approver" -&gt; "alice@acme.com").
+    /// This is the "Assignment" resolution strategy for a business-context role: it comes to life
+    /// only once this instance runs and something assigns it (see <see cref="AssignRole"/>), lives
+    /// only on this instance, and is unrelated to FlowOS's own tenant Role/TenantUserRole tables.
+    /// </summary>
+    public Dictionary<string, string> RoleAssignments { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
     // Orchestration state only - not business data
 
     protected WorkflowInstance()
@@ -37,6 +46,7 @@ public class WorkflowInstance : IWorkflowInstance
         ActiveStepIds = new List<string>();
         CompletedParallelStepIds = new List<string>();
         PathTravelCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        RoleAssignments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     public WorkflowInstance(
@@ -68,6 +78,7 @@ public class WorkflowInstance : IWorkflowInstance
         ActiveStepIds = new List<string> { initialStepId };
         CompletedParallelStepIds = new List<string>();
         PathTravelCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        RoleAssignments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     public DateTime CreatedAt { get; private set; }
@@ -132,6 +143,25 @@ public class WorkflowInstance : IWorkflowInstance
         CurrentState = state;
     }
 
+    /// <summary>
+    /// Records that <paramref name="callerRef"/> is acting as <paramref name="roleName"/> for this
+    /// instance — e.g. from an AssignRole step action, or a "Claim" call from a task list. Scoped
+    /// strictly to this instance; never written anywhere else.
+    /// </summary>
+    public void AssignRole(string roleName, string callerRef)
+    {
+        if (string.IsNullOrWhiteSpace(roleName)) throw new ArgumentException("RoleName is required.", nameof(roleName));
+        if (string.IsNullOrWhiteSpace(callerRef)) throw new ArgumentException("CallerRef is required.", nameof(callerRef));
+
+        RoleAssignments[roleName.Trim()] = callerRef.Trim();
+    }
+
+    public void UnassignRole(string roleName)
+    {
+        if (string.IsNullOrWhiteSpace(roleName)) return;
+        RoleAssignments.Remove(roleName.Trim());
+    }
+
     public int GetPathTravelCount(string edgeKey)
     {
         return PathTravelCounts.TryGetValue(edgeKey, out var count) ? count : 0;
@@ -178,7 +208,8 @@ public class WorkflowInstance : IWorkflowInstance
             CompletedAt = CompletedAt,
             ActiveStepIds = new List<string>(ActiveStepIds),
             CompletedParallelStepIds = new List<string>(CompletedParallelStepIds),
-            PathTravelCounts = new Dictionary<string, int>(PathTravelCounts, StringComparer.Ordinal)
+            PathTravelCounts = new Dictionary<string, int>(PathTravelCounts, StringComparer.Ordinal),
+            RoleAssignments = new Dictionary<string, string>(RoleAssignments, StringComparer.OrdinalIgnoreCase)
         };
 
         return copy;

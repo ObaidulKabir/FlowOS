@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FlowOS.Domain.Services;
 using FlowOS.Domain.Validation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -520,7 +521,7 @@ namespace FlowOS.Infrastructure.Services
                 var actionType = action["actionType"]?.Value<string>();
                 if (string.Equals(actionType, "Webhook", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(actionType, "PublishEvent", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(actionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase) ||
+                    StepActionVocabulary.IsConnectorInvocation(actionType) ||
                     IsPluginActionAlias(actionType))
                 {
                     return true;
@@ -545,16 +546,18 @@ namespace FlowOS.Infrastructure.Services
             foreach (var action in actions)
             {
                 var actionType = action["actionType"]?.Value<string>();
-                if (string.Equals(actionType, "InvokeCapability", StringComparison.OrdinalIgnoreCase))
+                if (StepActionVocabulary.IsConnectorInvocation(actionType))
                 {
-                    var capability = action["capability"]?.Value<string>() ?? action["target"]?.Value<string>();
-                    if (string.IsNullOrWhiteSpace(capability))
+                    var connector = action["connector"]?.Value<string>()
+                        ?? action["capability"]?.Value<string>()
+                        ?? action["target"]?.Value<string>();
+                    if (string.IsNullOrWhiteSpace(connector))
                     {
                         AddError(
                             errors,
                             action,
                             "WF-ACT-005",
-                            $"Step '{stepId}' InvokeCapability action in '{hookName}' requires 'capability' (or legacy 'target').",
+                            $"Step '{stepId}' {actionType} action in '{hookName}' requires 'connector' (or legacy 'capability'/'target').",
                             $"workflow.steps[{stepId}].{hookName}[{index}]",
                             "Workflow");
                     }

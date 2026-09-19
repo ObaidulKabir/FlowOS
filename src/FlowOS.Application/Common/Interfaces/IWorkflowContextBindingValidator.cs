@@ -3,12 +3,10 @@ using FlowOS.Domain.Validation;
 
 namespace FlowOS.Application.Common.Interfaces;
 
-public readonly record struct WorkflowContextBindingValidationOptions(
-    bool RequirePublishedSource,
-    bool RequireExistingTenantRoles)
+public readonly record struct WorkflowContextBindingValidationOptions(bool RequirePublishedSource)
 {
-    public static WorkflowContextBindingValidationOptions Strict { get; } = new(true, true);
-    public static WorkflowContextBindingValidationOptions Simulation { get; } = new(false, false);
+    public static WorkflowContextBindingValidationOptions Strict { get; } = new(true);
+    public static WorkflowContextBindingValidationOptions Simulation { get; } = new(false);
 }
 
 public interface IWorkflowContextBindingValidator

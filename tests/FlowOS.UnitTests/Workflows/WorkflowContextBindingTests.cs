@@ -628,7 +628,7 @@ public class WorkflowContextBindingTests
     }
 
     [Fact]
-    public async Task CreateBinding_AcceptsDraftSource_AndSimulationSkipsMissingTenantRoles()
+    public async Task CreateBinding_AcceptsDraftSource_AndSimulationDoesNotRequireTenantRoles()
     {
         var source = CreateSource();
         var options = new DbContextOptionsBuilder<FlowOSDbContext>()
@@ -672,7 +672,8 @@ public class WorkflowContextBindingTests
             default);
         Assert.False(validation.IsValid);
         Assert.Contains(validation.Errors, item => item.Code == "CTX-SOURCE-002");
-        Assert.Contains(validation.Errors, item => item.Code == "CTX-ROLE-002");
+        Assert.DoesNotContain(validation.Errors, item => item.Code == "CTX-ROLE-001");
+        Assert.DoesNotContain(validation.Errors, item => item.Code == "CTX-ROLE-002");
 
         var simulation = await new WorkflowContextSimulationService(
                 unitOfWork,

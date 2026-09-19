@@ -75,6 +75,7 @@ public partial class WorkflowCommandHandlers
                 cancellationToken);
         }
 
+
         PreparedWorkflowContext? preparedContext = null;
         if (_workflowContextService != null)
         {
@@ -86,6 +87,12 @@ public partial class WorkflowCommandHandlers
                 null,
                 cancellationToken);
         }
+
+        EnsureCallerHoldsRequiredBusinessRole(
+            definition,
+            instance,
+            preparedContext?.Payload,
+            "ContextTaskRole");
 
         var domainEvent = new TaskCompleted(request.TenantId, request.TaskId, Guid.Empty);
         

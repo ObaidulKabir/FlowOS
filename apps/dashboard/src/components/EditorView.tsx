@@ -194,12 +194,67 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                     
                     return stepObj;
                 })
-            }
+            },
+            Roles: deriveBusinessRoles(steps, events),
+            Capabilities: deriveBusinessCapabilities(events)
         };
         applySimulationGovernance(def);
         setRawJson(JSON.stringify(def, null, 2));
     }
   }, [events, states, initialState, transitions, steps, startStepId, jsonMode]);
+
+  const deriveBusinessCapabilities = (
+    eventList: {eventId: string, name: string}[]
+  ) => {
+    const caps = [
+      { Code: 'workflow.read', Description: 'Read workflow instance state' },
+      ...eventList
+        .filter(event => event.eventId)
+        .map(event => ({
+          Code: `event.publish.${event.eventId}`,
+          Description: `Publish ${event.name || event.eventId}`
+        }))
+    ];
+    const seen = new Set<string>();
+    return caps.filter(cap => {
+      const key = cap.Code.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const deriveBusinessRoles = (
+    stepList: { roles: string; nextSteps: {outcome: string, target: string}[] }[],
+    eventList: {eventId: string, name: string}[]
+  ) => {
+    const reserved = new Set(['system', 'anyone', 'unassigned', '']);
+    const eventIds = new Set(eventList.map(event => event.eventId).filter(Boolean));
+    const byName = new Map<string, { Name: string; Description: string; GrantedCapabilities: string[]; ResolutionType: string }>();
+
+    stepList.forEach(step => {
+      const names = (step.roles || '').split(',').map(role => role.trim()).filter(role => role && !reserved.has(role.toLowerCase()));
+      const granted = ['workflow.read', ...step.nextSteps
+        .map(route => route.outcome)
+        .filter(outcome => eventIds.has(outcome))
+        .map(outcome => `event.publish.${outcome}`)];
+      names.forEach(name => {
+        const existing = byName.get(name.toLowerCase());
+        if (!existing) {
+          byName.set(name.toLowerCase(), {
+            Name: name,
+            Description: `Business-context role ${name}`,
+            GrantedCapabilities: Array.from(new Set(granted)),
+            ResolutionType: 'Assignment'
+          });
+          return;
+        }
+        existing.GrantedCapabilities = Array.from(new Set([...existing.GrantedCapabilities, ...granted]));
+      });
+    });
+
+    return Array.from(byName.values());
+  };
 
   const handleSave = () => {
     try {
@@ -237,8 +292,8 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
         setTransitions(commonTransitions);
         setStartStepId('Draft');
         setSteps([
-            { stepId: 'Draft', stepType: 'Command', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'Pending' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
-            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'Approved' }, { outcome: 'EVT-REJECT', target: 'Rejected' }], roles: 'Manager', slaDuration: '48h', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'Rejected', onEntry: [], onExit: [], onFailure: [] },
+            { stepId: 'Draft', stepType: 'Command', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'Pending' }], roles: 'Submitter', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
+            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'Approved' }, { outcome: 'EVT-REJECT', target: 'Rejected' }], roles: 'Approver', slaDuration: '48h', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'Rejected', onEntry: [], onExit: [], onFailure: [] },
             { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
             { stepId: 'Rejected', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] }
         ]);
@@ -253,9 +308,9 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
         setStartStepId('ValidateInput'); 
         setSteps([
             { stepId: 'ValidateInput', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Draft' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
-            { stepId: 'Draft', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'FraudCheck' }], roles: 'User', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
+            { stepId: 'Draft', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-SUBMIT', target: 'FraudCheck' }], roles: 'Submitter', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
             { stepId: 'FraudCheck', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'Pending' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
-            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'NotifyApproval' }, { outcome: 'EVT-REJECT', target: 'NotifyRejection' }], roles: 'Manager', slaDuration: '7d', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'NotifyRejection', onEntry: [], onExit: [], onFailure: [] },
+            { stepId: 'Pending', stepType: 'HumanTask', nextSteps: [{ outcome: 'EVT-APPROVE', target: 'NotifyApproval' }, { outcome: 'EVT-REJECT', target: 'NotifyRejection' }], roles: 'Approver', slaDuration: '7d', slaTimeoutEvent: 'EVT-ESCALATE', slaEscalationStepId: 'NotifyRejection', onEntry: [], onExit: [], onFailure: [] },
             { stepId: 'NotifyApproval', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Approved' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
             { stepId: 'NotifyRejection', stepType: 'Event', nextSteps: [{ outcome: 'Default', target: 'Rejected' }], roles: 'System', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
             { stepId: 'Approved', stepType: 'Command', nextSteps: [{ outcome: 'Default', target: 'END' }], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] },
@@ -285,7 +340,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 stepId: 'ValidateOrder',
                 stepType: 'Command',
                 nextSteps: [{ outcome: 'Default', target: 'AuthorizePayment' }],
-                roles: 'System',
+                roles: 'OrderClerk',
                 slaDuration: '',
                 slaTimeoutEvent: '',
                 slaEscalationStepId: '',
@@ -297,7 +352,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 stepId: 'AuthorizePayment',
                 stepType: 'Command',
                 nextSteps: [{ outcome: 'EVT-PAY-SUCCESS', target: 'ReserveInventory' }],
-                roles: 'System',
+                roles: 'OrderClerk',
                 slaDuration: '',
                 slaTimeoutEvent: '',
                 slaEscalationStepId: '',
@@ -363,7 +418,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 stepId: 'CompensateOrder',
                 stepType: 'Command',
                 nextSteps: [{ outcome: 'EVT-COMPENSATE', target: 'END' }],
-                roles: 'System',
+                roles: 'Logistics',
                 slaDuration: '',
                 slaTimeoutEvent: '',
                 slaEscalationStepId: '',
@@ -532,7 +587,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 stepId: 'RequestAccess',
                 stepType: 'Command',
                 nextSteps: [{ outcome: 'EVT-REQUEST-ACCESS', target: 'ManagerApproval' }],
-                roles: 'Employee',
+                roles: 'Requester',
                 slaDuration: '',
                 slaTimeoutEvent: '',
                 slaEscalationStepId: '',

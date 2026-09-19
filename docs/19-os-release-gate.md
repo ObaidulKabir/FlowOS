@@ -120,7 +120,7 @@ Each row is **must-pass**. The gate stays RED while any status is `partial` or `
 
 | | |
 |---|---|
-| **Capability** | Prove dual-kernel, context bindings, and SLA reminder vs timeout without `start_workflow` and without Outbox side effects. Draft bindings may simulate; activate still needs Published source + tenant roles. |
+| **Capability** | Prove dual-kernel, context bindings, and SLA reminder vs timeout without `start_workflow` and without Outbox side effects. Draft bindings may simulate; activate still needs a Published source. WorkflowClass roles stay on BusinessRoles and never write tenant Role rows. |
 | **Status** | **done** |
 | **Proof** | `simulate_workflowclass`, `simulate_context_binding`, `fork_workflow_simulation`; MCP guides `dual-kernel-design` and `sla-reminder-simulation`; `tests/FlowOS.MCP.UnitTests/HttpIntegrationTests.cs`. |
 | **Engine blocker** | None for v1. |

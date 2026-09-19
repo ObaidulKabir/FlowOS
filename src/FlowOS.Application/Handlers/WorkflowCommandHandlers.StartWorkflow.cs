@@ -244,6 +244,10 @@ public partial class WorkflowCommandHandlers
         {
             autoAdvanceContext.Payload = ToPayloadDictionary(request.Payload) ?? new Dictionary<string, object>();
         }
+        if (fullDefinition != null)
+        {
+            ApplyDeclaredBusinessRoleAssignments(instance, fullDefinition, autoAdvanceContext.Payload);
+        }
         AddCurrentRolesToContext(autoAdvanceContext);
         await EnrichExecutionContextWithPluginBindingsAsync(autoAdvanceContext, request.TenantId, cancellationToken);
 

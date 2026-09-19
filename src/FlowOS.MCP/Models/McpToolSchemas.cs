@@ -346,22 +346,22 @@ public static class McpToolSchemas
                       },
                       "agentProvider":{"type":"string","description":"Alias resolved against a tenant plugin binding of type agent. The binding holds provider/model/endpoint/apiKey. The key never appears in Agent Context."},
                       "agentPrompt":{"type":"string","description":"Alias of a tenant prompt binding (bindingType prompt). Create/edit the prompt independently; FlowOS loads title/system/instructions into Agent Context.Prompt."},
-                      "agentTools":{"type":"array","items":{"type":"string"},"description":"Declared tools: resource plugins (LookupRecord:<capability>, QueryRecords:, FetchDocument:, SearchKnowledge:, CheckPolicy:), notify plugins (Webhook/Email/Slack/WhatsApp), and write capabilities (capability:payment.refund.v1). Reads are prefetched; writes are not. Legal nextSteps events are always included."},
+                      "agentTools":{"type":"array","items":{"type":"string"},"description":"Declared tools: resource plugins (LookupRecord:<connector>, QueryRecords:, FetchDocument:, SearchKnowledge:, CheckPolicy:), notify plugins (Webhook/Email/Slack/WhatsApp), and write connectors (connector:payment.refund.v1; legacy capability: prefix still accepted). Reads are prefetched; writes are not. Legal nextSteps events are always included."},
                       "conditions":{"type":"object","additionalProperties":{"type":"string"}},
                       "branches":{"type":"array","items":{"type":"string"}},
                       "joinPolicy":{"type":"string"},
                       "inboundSteps":{"type":"array","items":{"type":"string"}},
                       "onEntry":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"capability":{"type":"string"},"url":{"type":"string"}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"}}}
                       },
                       "onExit":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"capability":{"type":"string"},"url":{"type":"string"}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"}}}
                       },
                       "onFailure":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"capability":{"type":"string"},"url":{"type":"string"}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"}}}
                       },
                       "sla":{
                         "type":"object",
@@ -403,7 +403,10 @@ public static class McpToolSchemas
                 "properties":{
                   "name":{"type":"string","minLength":1},
                   "description":{"type":"string"},
-                  "grantedCapabilities":{"type":"array","items":{"type":"string"}}
+                  "grantedCapabilities":{"type":"array","items":{"type":"string"}},
+                  "resolutionType":{"type":"string","enum":["Assignment","Expression","Static"]},
+                  "memberExpression":{"type":"string"},
+                  "staticMembers":{"type":"array","items":{"type":"string"}}
                 },
                 "additionalProperties":false
               }
@@ -868,9 +871,10 @@ public static class McpToolSchemas
               "type":"object",
               "required":["actionType"],
               "properties":{
-                "actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeCapability, or plugin alias (plugin:* / plugin.*)."},
+                "actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},
                 "target":{"type":"string","description":"Target URL, recipient role/user, or domain event name."},
-                "capability":{"type":"string","description":"Capability binding name for InvokeCapability actions (e.g. payment.refund.v1)."},
+                "connector":{"type":"string","description":"Connector name for InvokeConnector actions (e.g. payment.refund.v1)."},
+                "capability":{"type":"string","description":"Deprecated alias for connector."},
                 "url":{"type":"string","description":"Webhook destination URL (supports dynamic tokens like {{OrderId}})."},
                 "method":{"type":"string","enum":["POST","GET","PUT"],"default":"POST"},
                 "template":{"type":"string","description":"Message template string with optional {{Expression}} placeholders."},
@@ -922,15 +926,16 @@ public static class McpToolSchemas
         }
         """);
 
-    public static JObject RegisterCapabilityBinding() => JObject.Parse(
+    public static JObject RegisterConnector() => JObject.Parse(
         """
         {
           "type":"object",
-          "required":["capabilityName","endpointUrl"],
+          "required":["endpointUrl"],
           "properties":{
-            "capabilityName":{"type":"string","minLength":1,"description":"Unique capability key (e.g. payment.refund.v1)."},
+            "connectorName":{"type":"string","minLength":1,"description":"Unique connector key (e.g. payment.refund.v1)."},
+            "capabilityName":{"type":"string","minLength":1,"description":"Deprecated alias for connectorName."},
             "transport":{"type":"string","enum":["http"],"default":"http"},
-            "endpointUrl":{"type":"string","description":"Absolute HTTP/HTTPS endpoint of the capability worker."},
+            "endpointUrl":{"type":"string","description":"Absolute HTTP/HTTPS endpoint of the connector worker."},
             "authRef":{"type":"string","description":"Optional auth reference name passed as x-flowos-auth-ref."},
             "requestSchemaVersion":{"type":"string","description":"Optional request contract version label."},
             "responseSchemaVersion":{"type":"string","description":"Optional response contract version label."},
@@ -943,31 +948,38 @@ public static class McpToolSchemas
         }
         """);
 
-    public static JObject ListCapabilityBindings() => JObject.Parse(
+    public static JObject ListConnectors() => JObject.Parse(
         """
         {
           "type":"object",
           "properties":{
-            "capabilityName":{"type":"string","description":"Optional capability key filter."},
-            "enabledOnly":{"type":"boolean","description":"Optional filter to list only enabled bindings."},
+            "connectorName":{"type":"string","description":"Optional connector key filter."},
+            "capabilityName":{"type":"string","description":"Deprecated alias for connectorName."},
+            "enabledOnly":{"type":"boolean","description":"Optional filter to list only enabled connectors."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false
         }
         """);
 
-    public static JObject ValidateCapabilityBinding() => JObject.Parse(
+    public static JObject ValidateConnector() => JObject.Parse(
         """
         {
           "type":"object",
-          "required":["capabilityName"],
           "properties":{
-            "capabilityName":{"type":"string","minLength":1,"description":"Capability key to validate."},
+            "connectorName":{"type":"string","minLength":1,"description":"Connector key to validate."},
+            "capabilityName":{"type":"string","minLength":1,"description":"Deprecated alias for connectorName."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID."}
           },
           "additionalProperties":false
         }
         """);
+
+    public static JObject RegisterCapabilityBinding() => RegisterConnector();
+
+    public static JObject ListCapabilityBindings() => ListConnectors();
+
+    public static JObject ValidateCapabilityBinding() => ValidateConnector();
 
     public static JObject RegisterPluginBinding() => JObject.Parse(
         """

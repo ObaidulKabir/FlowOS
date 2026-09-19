@@ -43,9 +43,10 @@ public partial class WorkflowCommandHandlers :
     private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
     private readonly IWorkflowExecutionContextService? _workflowContextService;
     private readonly IAgentTaskRunner? _agentTaskRunner;
+    private readonly IBusinessRoleResolver? _businessRoleResolver;
 
     public WorkflowCommandHandlers(
-        IUnitOfWork unitOfWork, 
+        IUnitOfWork unitOfWork,
         IEventRegistry eventRegistry,
         ICurrentUser currentUser,
         ICapabilityService capabilityService,
@@ -56,7 +57,8 @@ public partial class WorkflowCommandHandlers :
         IPluginBindingRegistryService? pluginBindingRegistry = null,
         IWorkflowExecutionContextService? workflowContextService = null,
         IAgentTaskRunner? agentTaskRunner = null,
-        IActivityAuthorizationService? activityAuthorization = null)
+        IActivityAuthorizationService? activityAuthorization = null,
+        IBusinessRoleResolver? businessRoleResolver = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
@@ -70,6 +72,7 @@ public partial class WorkflowCommandHandlers :
         _pluginBindingRegistry = pluginBindingRegistry;
         _workflowContextService = workflowContextService;
         _agentTaskRunner = agentTaskRunner;
+        _businessRoleResolver = businessRoleResolver;
     }
 
 
@@ -345,6 +348,106 @@ public partial class WorkflowCommandHandlers :
         {
             return null;
         }
+    }
+
+    private static readonly HashSet<string> InitiatorBusinessRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Submitter", "Employee", "Applicant", "Requester", "OrderClerk", "User"
+    };
+
+    private void EnsureCallerHoldsRequiredBusinessRole(
+        WorkflowDefinition definition,
+        WorkflowInstance instance,
+        Dictionary<string, object>? businessPayload,
+        string policyName)
+    {
+        if (definition.BusinessRoles.Count == 0) return;
+
+        var currentStep = definition.Steps.FirstOrDefault(x => x.StepId == instance.CurrentStepId);
+        var requiredRoles = currentStep?.AllowedRoles ?? new List<string>();
+        if (requiredRoles.Count == 0) return;
+
+        var isPlatformAdmin = (_currentUser.Roles ?? new List<string>())
+            .Contains("Admin", StringComparer.OrdinalIgnoreCase);
+        if (isPlatformAdmin) return;
+
+        var hasRequiredRole = false;
+        if (_businessRoleResolver != null)
+        {
+            var callerBusinessRoles = _businessRoleResolver.ResolveCallerRoles(
+                definition,
+                instance,
+                businessPayload,
+                _currentUser.Id);
+            hasRequiredRole = requiredRoles.Any(required =>
+                callerBusinessRoles.Contains(required, StringComparer.OrdinalIgnoreCase));
+        }
+
+        if (!hasRequiredRole)
+        {
+            throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
+                policyName,
+                $"Current step requires one of these business-context roles: {string.Join(", ", requiredRoles)}.");
+        }
+    }
+
+    private void ApplyDeclaredBusinessRoleAssignments(
+        WorkflowInstance instance,
+        WorkflowDefinition definition,
+        Dictionary<string, object>? payload)
+    {
+        if (definition.BusinessRoles.Count == 0 || string.IsNullOrWhiteSpace(_currentUser.Id))
+            return;
+
+        if (payload != null &&
+            payload.TryGetValue("roleAssignments", out var rawAssignments) &&
+            rawAssignments != null)
+        {
+            var assignments = ToStringDictionary(rawAssignments);
+            foreach (var assignment in assignments)
+            {
+                if (definition.BusinessRoles.Any(role =>
+                        string.Equals(role.Name, assignment.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    instance.AssignRole(assignment.Key, assignment.Value);
+                }
+            }
+        }
+
+        foreach (var role in definition.BusinessRoles)
+        {
+            if (!string.Equals(role.ResolutionType, "Assignment", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (instance.RoleAssignments.ContainsKey(role.Name))
+                continue;
+            if (InitiatorBusinessRoles.Contains(role.Name))
+                instance.AssignRole(role.Name, _currentUser.Id);
+        }
+    }
+
+    private static Dictionary<string, string> ToStringDictionary(object raw)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(raw);
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(json);
+            if (parsed == null) return result;
+            foreach (var item in parsed)
+            {
+                var value = item.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? item.Value.GetString()
+                    : item.Value.ToString();
+                if (!string.IsNullOrWhiteSpace(value))
+                    result[item.Key] = value!;
+            }
+        }
+        catch
+        {
+            // Ignore malformed roleAssignments payloads; start still succeeds.
+        }
+
+        return result;
     }
 
     private void AddCurrentRolesToContext(FlowOS.StateMachines.Models.ExecutionContext context)

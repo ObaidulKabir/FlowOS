@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FlowOS.Workflows.Enums;
 
 namespace FlowOS.Workflows.Domain;
@@ -18,10 +19,18 @@ public class WorkflowDefinition
     
     public List<WorkflowStepDefinition> Steps { get; private set; }
 
-    protected WorkflowDefinition() 
+    /// <summary>
+    /// Business-context roles the source WorkflowClass declares (the modeled application's own
+    /// roles, not FlowOS tenant/IAM roles). Purely declarative metadata compiled in at publish
+    /// time; membership is resolved per running instance — see <see cref="BusinessRoleDefinition"/>.
+    /// </summary>
+    public List<BusinessRoleDefinition> BusinessRoles { get; private set; }
+
+    protected WorkflowDefinition()
     {
         Name = null!;
         Steps = new List<WorkflowStepDefinition>();
+        BusinessRoles = new List<BusinessRoleDefinition>();
     }
 
     public WorkflowDefinition(Guid tenantId, string name, int version = 1, string startStepId = "Start")
@@ -35,14 +44,28 @@ public class WorkflowDefinition
         Status = WorkflowStatus.Draft;
         StartStepId = startStepId;
         Steps = new List<WorkflowStepDefinition>();
+        BusinessRoles = new List<BusinessRoleDefinition>();
     }
 
     public void AddStep(WorkflowStepDefinition step)
     {
         if (Status != WorkflowStatus.Draft)
             throw new InvalidOperationException("Cannot modify workflow after publication.");
-        
+
         Steps.Add(step);
+    }
+
+    /// <summary>
+    /// Attaches the compiled business-context role declarations. Declarative only — this never
+    /// grants anything; it just carries the vocabulary a running instance resolves membership
+    /// against (see <see cref="BusinessRoleDefinition.ResolutionType"/>).
+    /// </summary>
+    public void AttachBusinessRoles(IEnumerable<BusinessRoleDefinition> roles)
+    {
+        if (Status != WorkflowStatus.Draft)
+            throw new InvalidOperationException("Cannot modify workflow after publication.");
+
+        BusinessRoles = roles?.ToList() ?? new List<BusinessRoleDefinition>();
     }
 
     public void SetContextLineage(

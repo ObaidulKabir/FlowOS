@@ -173,6 +173,21 @@ public class WorkflowCommandHandlersTests : IDisposable
             RequiredCapabilities = ["expense.approve"],
             NextSteps = new Dictionary<string, string> { ["TaskCompleted"] = "END" }
         });
+        definition.AttachBusinessRoles(
+        [
+            new BusinessRoleDefinition
+            {
+                Name = "FinanceManager",
+                Capabilities = ["workflow.read", "event.publish.TaskCompleted"],
+                ResolutionType = "Assignment"
+            },
+            new BusinessRoleDefinition
+            {
+                Name = "Requester",
+                Capabilities = ["workflow.read"],
+                ResolutionType = "Assignment"
+            }
+        ]);
         definition.SetContextLineage(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         definition.Publish();
 

@@ -80,6 +80,13 @@ public class WorkflowContextMaterializer : IWorkflowContextMaterializer
             }
         }
 
+        // Business-context roles (source.Definition.Roles) are NOT provisioned into FlowOS's own
+        // tenant Role/TenantUserRole tables here. They are the modeled application's own roles, not
+        // FlowOS IAM roles, and they already rode along as declarative metadata on
+        // package.WorkflowDefinition.BusinessRoles (compiled by WorkflowClassCompiler via
+        // ContextRoleProvisioningRules). Membership in them is resolved per running instance by
+        // IBusinessRoleResolver — nothing to write here, on purpose.
+
         revision.Activate(
             package.WorkflowDefinition.Id,
             package.StateMachineDefinition.Id,

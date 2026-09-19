@@ -61,6 +61,17 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
                       ?? new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.Ordinal)
             );
 
+        // Business-role assignments for this instance only (role name -> caller ref). Ephemeral,
+        // instance-scoped data — never touches FlowOS's own Role/TenantUserRole tables.
+        builder.Property(w => w.RoleAssignments)
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrEmpty(v)
+                    ? new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+                    : System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null)
+                      ?? new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+            );
+
         builder.HasIndex(w => w.TenantId);
         builder.HasIndex(w => w.CorrelationId);
         builder.HasIndex(w => w.WorkflowDefinitionId);

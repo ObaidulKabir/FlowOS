@@ -8,6 +8,10 @@ using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.Tools;
 
+/// <summary>
+/// Connector registry tools. "Connector" is the current name for an outbound tenant worker;
+/// the older "capability binding" wording stays accepted on the wire.
+/// </summary>
 public class CapabilityRegistryMcpTools
 {
     private readonly ICapabilityRegistryService _capabilityRegistry;
@@ -17,16 +21,24 @@ public class CapabilityRegistryMcpTools
         _capabilityRegistry = capabilityRegistry;
     }
 
+    private static string? ReadConnectorName(JObject args)
+    {
+        var name = args["connectorName"]?.ToString()?.Trim();
+        return string.IsNullOrWhiteSpace(name)
+            ? args["capabilityName"]?.ToString()?.Trim()
+            : name;
+    }
+
     public async Task<CallToolResult> RegisterCapabilityBinding(JObject args)
     {
         try
         {
             var tenantId = McpTenantResolver.ResolveRequired(args);
-            var capabilityName = args["capabilityName"]?.ToString()?.Trim();
+            var connectorName = ReadConnectorName(args);
             var endpointUrl = args["endpointUrl"]?.ToString()?.Trim();
-            if (string.IsNullOrWhiteSpace(capabilityName) || string.IsNullOrWhiteSpace(endpointUrl))
+            if (string.IsNullOrWhiteSpace(connectorName) || string.IsNullOrWhiteSpace(endpointUrl))
             {
-                return McpToolResults.Fail("MCP-ARG-001", "capabilityName and endpointUrl are required.");
+                return McpToolResults.Fail("MCP-ARG-001", "connectorName and endpointUrl are required.");
             }
 
             var transport = args["transport"]?.ToString()?.Trim() ?? "http";
@@ -39,7 +51,7 @@ public class CapabilityRegistryMcpTools
 
             var binding = await _capabilityRegistry.UpsertAsync(
                 tenantId,
-                capabilityName,
+                connectorName,
                 endpointUrl,
                 transport,
                 timeoutMs,
@@ -53,6 +65,7 @@ public class CapabilityRegistryMcpTools
             {
                 binding.Id,
                 binding.TenantId,
+                ConnectorName = binding.CapabilityName,
                 binding.CapabilityName,
                 binding.Transport,
                 binding.EndpointUrl,
@@ -76,7 +89,7 @@ public class CapabilityRegistryMcpTools
         }
         catch (Exception ex)
         {
-            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to register capability binding: {ex.Message}");
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to register connector: {ex.Message}");
         }
     }
 
@@ -85,17 +98,35 @@ public class CapabilityRegistryMcpTools
         try
         {
             var tenantId = McpTenantResolver.ResolveRequired(args);
-            var capabilityName = args["capabilityName"]?.ToString()?.Trim();
+            var connectorName = ReadConnectorName(args);
             bool? enabledOnly = args["enabledOnly"]?.Value<bool>();
 
-            var bindings = await _capabilityRegistry.ListAsync(tenantId, capabilityName, enabledOnly);
+            var bindings = await _capabilityRegistry.ListAsync(tenantId, connectorName, enabledOnly);
             return McpToolResults.Success(new
             {
                 totalCount = bindings.Count,
+                connectors = bindings.Select(b => new
+                {
+                    b.Id,
+                    b.TenantId,
+                    ConnectorName = b.CapabilityName,
+                    b.CapabilityName,
+                    b.Transport,
+                    b.EndpointUrl,
+                    b.AuthRef,
+                    b.RequestSchemaVersion,
+                    b.ResponseSchemaVersion,
+                    b.RetryPolicy,
+                    b.TimeoutMs,
+                    b.IsEnabled,
+                    b.CreatedAtUtc,
+                    b.UpdatedAtUtc
+                }).ToList(),
                 bindings = bindings.Select(b => new
                 {
                     b.Id,
                     b.TenantId,
+                    ConnectorName = b.CapabilityName,
                     b.CapabilityName,
                     b.Transport,
                     b.EndpointUrl,
@@ -116,7 +147,7 @@ public class CapabilityRegistryMcpTools
         }
         catch (Exception ex)
         {
-            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to list capability bindings: {ex.Message}");
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to list connectors: {ex.Message}");
         }
     }
 
@@ -125,22 +156,24 @@ public class CapabilityRegistryMcpTools
         try
         {
             var tenantId = McpTenantResolver.ResolveRequired(args);
-            var capabilityName = args["capabilityName"]?.ToString()?.Trim();
-            if (string.IsNullOrWhiteSpace(capabilityName))
+            var connectorName = ReadConnectorName(args);
+            if (string.IsNullOrWhiteSpace(connectorName))
             {
-                return McpToolResults.Fail("MCP-ARG-001", "capabilityName is required.");
+                return McpToolResults.Fail("MCP-ARG-001", "connectorName is required.");
             }
 
-            var (isValid, message, binding) = await _capabilityRegistry.ValidateBindingAsync(tenantId, capabilityName);
+            var (isValid, message, binding) = await _capabilityRegistry.ValidateBindingAsync(tenantId, connectorName);
             return McpToolResults.Success(new
             {
-                capabilityName,
+                connectorName,
+                capabilityName = connectorName,
                 isValid,
                 message,
                 binding = binding == null ? null : new
                 {
                     binding.Id,
                     binding.TenantId,
+                    ConnectorName = binding.CapabilityName,
                     binding.CapabilityName,
                     binding.Transport,
                     binding.EndpointUrl,
@@ -159,7 +192,7 @@ public class CapabilityRegistryMcpTools
         }
         catch (Exception ex)
         {
-            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to validate capability binding: {ex.Message}");
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to validate connector: {ex.Message}");
         }
     }
 }

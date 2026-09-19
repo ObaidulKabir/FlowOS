@@ -68,6 +68,16 @@ public static class ToolRegistration
         registry.Register("list_step_actions", McpToolDescriptions.For("list_step_actions"), McpToolSchemas.ListStepActions(),
             async (args) => await ExecuteScopedAsync<LifecycleActionMcpTools>(serviceProvider, t => t.ListStepActions(args)));
 
+        registry.Register("register_connector", McpToolDescriptions.For("register_connector"), McpToolSchemas.RegisterConnector(),
+            async (args) => await ExecuteScopedAsync<CapabilityRegistryMcpTools>(serviceProvider, t => t.RegisterCapabilityBinding(args)));
+
+        registry.Register("list_connectors", McpToolDescriptions.For("list_connectors"), McpToolSchemas.ListConnectors(),
+            async (args) => await ExecuteScopedAsync<CapabilityRegistryMcpTools>(serviceProvider, t => t.ListCapabilityBindings(args)));
+
+        registry.Register("validate_connector", McpToolDescriptions.For("validate_connector"), McpToolSchemas.ValidateConnector(),
+            async (args) => await ExecuteScopedAsync<CapabilityRegistryMcpTools>(serviceProvider, t => t.ValidateCapabilityBinding(args)));
+
+        // Deprecated aliases kept so live tenants and saved agent scripts keep working.
         registry.Register("register_capability_binding", McpToolDescriptions.For("register_capability_binding"), McpToolSchemas.RegisterCapabilityBinding(),
             async (args) => await ExecuteScopedAsync<CapabilityRegistryMcpTools>(serviceProvider, t => t.RegisterCapabilityBinding(args)));
 

@@ -43,7 +43,7 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 
 * Conditions remain owned by the reusable template. Bindings can project canonical fields, add typed parameters, and select registered decision providers, but cannot rewrite expression strings.
 * Input mappings support dotted object paths only. Complex transformation belongs in a plugin.
-* Bindings reference tenant roles and capabilities but never provision them.
+* **Business-context roles never touch FlowOS's own tenant Role/TenantUserRole tables, by design.** A `WorkflowClassBlueprint.roles[]` entry belongs to the modeled application, not to FlowOS's tenant/IAM security model (see [Chapter 8](08-security-roles-and-policies.md) vs. [Chapter 17 § Business-context roles](17-workflow-context-bindings.md#business-context-roles)). Activation compiles them onto `WorkflowDefinition.BusinessRoles` as declarative metadata; membership is resolved per running instance by `IBusinessRoleResolver`, not by creating a FlowOS role. This is not a gap to close — conflating the two was the bug. Proof: `tests/FlowOS.UnitTests/Security/RoleCapabilityFinalizationTests.cs`.
 * Nested subworkflows do not inherit or automatically select context bindings. Child references remain concrete.
 * Source business payloads are not retained by default; only the canonical snapshot and canonical audit deltas are durable.
 * Template publication does not auto-upgrade bindings. Each binding revision is explicitly validated and activated.

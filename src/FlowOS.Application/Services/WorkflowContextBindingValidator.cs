@@ -80,13 +80,7 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
         }
 
         ValidateEventAliases(source, revision, result);
-        await ValidateRolesAsync(
-            source,
-            binding.TenantId,
-            revision,
-            result,
-            options.RequireExistingTenantRoles,
-            cancellationToken);
+        ValidateRoles(source, revision, result);
         ValidateCapabilities(source, revision, result);
         await ValidateRoleCapabilityGrantsAsync(
             source,
@@ -195,18 +189,17 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
         }
     }
 
-    private async Task ValidateRolesAsync(
+    private static void ValidateRoles(
         WorkflowClass source,
-        Guid tenantId,
         WorkflowContextBindingRevision revision,
-        ValidationResult result,
-        bool requireExistingTenantRoles,
-        CancellationToken cancellationToken)
+        ValidationResult result)
     {
+        // Business-context roles (source.Definition.Roles) belong to the modeled application, not
+        // to FlowOS's own tenant Role/TenantUserRole tables, so a RoleOverride is just a rename
+        // within that business vocabulary — there is no FlowOS Role row for it to match against.
         var declared = source.Definition.Roles
             .Select(x => x.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var invalidMappedRoles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var role in revision.Definition.RoleOverrides)
         {
@@ -220,42 +213,14 @@ public class WorkflowContextBindingValidator : IWorkflowContextBindingValidator
                 continue;
             }
 
-            if (!requireExistingTenantRoles) continue;
-
-            if (string.IsNullOrWhiteSpace(role.Value) ||
-                !await _unitOfWork.Roles.ExistsByNameAsync(tenantId, role.Value, cancellationToken))
+            if (string.IsNullOrWhiteSpace(role.Value))
             {
-                invalidMappedRoles.Add(role.Value ?? string.Empty);
                 result.AddError(
                     "CTX-ROLE-002",
                     "Roles",
-                    $"Mapped tenant role '{role.Value}' does not exist.",
+                    $"Role override for '{role.Key}' maps to an empty name.",
                     $"Definition.RoleOverrides.{role.Key}");
             }
-        }
-
-        if (!requireExistingTenantRoles) return;
-
-        foreach (var declaredRole in declared)
-        {
-            var effectiveRole = TryGetValue(
-                revision.Definition.RoleOverrides,
-                declaredRole,
-                out var mappedRole)
-                ? mappedRole
-                : declaredRole;
-            if (string.IsNullOrWhiteSpace(effectiveRole) ||
-                invalidMappedRoles.Contains(effectiveRole) ||
-                await _unitOfWork.Roles.ExistsByNameAsync(tenantId, effectiveRole, cancellationToken))
-            {
-                continue;
-            }
-
-            result.AddError(
-                "CTX-ROLE-002",
-                "Roles",
-                $"Effective tenant role '{effectiveRole}' does not exist.",
-                $"Definition.RoleOverrides.{declaredRole}");
         }
     }
 

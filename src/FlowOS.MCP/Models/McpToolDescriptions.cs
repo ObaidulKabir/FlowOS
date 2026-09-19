@@ -196,7 +196,7 @@ public static class McpToolDescriptions
             ["simulate_context_binding"] =
                 "[Business-Context Simulator] Runs a side-effect-free, production-parity simulation of a saved draft or pinned active context-binding revision. " +
                 "Draft bindings may point at a Draft workflow class; do not publish a throwaway variant just to simulate. " +
-                "Tenant-role existence (CTX-ROLE-002) is not enforced during simulation; activation still requires existing tenant roles. " +
+                "WorkflowClass roles are business-context declarations compiled onto the workflow definition; they are never written to FlowOS tenant Role tables. CTX-ROLE-002 only means a role override mapped to an empty name. " +
                 "Projects source payloads into canonical context, applies contextual event aliases and event mappings, enforces workflow/state-machine guards and simulated roles, and reports actions, timers, and subworkflows without executing them. " +
                 "SLA reminders fire in duration order before a completing nextSteps event; set autoAdvanceTimers=true with no completing event to also fire TimeoutEvent. Do not start a live instance just to prove reminders. " +
                 "Returns: {ok:true,data:{contextBindingId,revisionKind,status,initialProjection,initialCanonicalContext,finalCanonicalContext,trace,pendingWork,graph,sideEffectsSuppressed:true}}. " +
@@ -287,25 +287,44 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"stepId\":\"ApproveStep\"}",
 
-            ["register_capability_binding"] =
-                "[Capability Registry] Creates or updates a tenant-scoped capability binding that maps an InvokeCapability action name to a remote endpoint contract. " +
+            ["register_connector"] =
+                "[Connector Registry] Creates or updates a tenant-scoped connector that maps an InvokeConnector action name to a remote endpoint contract. " +
+                "A connector is an outbound integration worker; it is not a security capability (that is a role permission code). " +
                 "Supports transport, endpoint URL, timeout, retry profile, schema versions, auth reference, and enable/disable state. " +
-                "Returns: {ok:true,data:{id,tenantId,capabilityName,transport,endpointUrl,authRef,requestSchemaVersion,responseSchemaVersion,retryPolicy,timeoutMs,isEnabled,createdAtUtc,updatedAtUtc}}. " +
+                "Returns: {ok:true,data:{id,tenantId,connectorName,capabilityName,transport,endpointUrl,authRef,requestSchemaVersion,responseSchemaVersion,retryPolicy,timeoutMs,isEnabled,createdAtUtc,updatedAtUtc}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
-                "Input example: {\"capabilityName\":\"payment.refund.v1\",\"endpointUrl\":\"https://worker.example.com/capabilities/refund\",\"transport\":\"http\",\"timeoutMs\":15000,\"retryPolicy\":\"aggressive\"}",
+                "Input example: {\"connectorName\":\"payment.refund.v1\",\"endpointUrl\":\"https://worker.example.com/connectors/refund\",\"transport\":\"http\",\"timeoutMs\":15000,\"retryPolicy\":\"aggressive\"}",
+
+            ["list_connectors"] =
+                "[Connector Registry] Lists tenant-scoped connectors available for InvokeConnector actions, with optional name and enabled filters. " +
+                "Returns: {ok:true,data:{totalCount,connectors:[{id,connectorName,transport,endpointUrl,timeoutMs,isEnabled,...}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"enabledOnly\":true}",
+
+            ["validate_connector"] =
+                "[Connector Registry] Validates whether a connector exists, is enabled, uses a supported transport, and has a valid endpoint URL. " +
+                "Returns validation status and connector metadata without mutating state. " +
+                "Returns: {ok:true,data:{connectorName,isValid,message,binding}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"connectorName\":\"payment.refund.v1\"}",
+
+            ["register_capability_binding"] =
+                "[Connector Registry - deprecated alias] Use register_connector. Identical behaviour; capabilityName is accepted as an alias for connectorName. " +
+                "Returns: {ok:true,data:{id,tenantId,connectorName,capabilityName,transport,endpointUrl,authRef,requestSchemaVersion,responseSchemaVersion,retryPolicy,timeoutMs,isEnabled,createdAtUtc,updatedAtUtc}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"connectorName\":\"payment.refund.v1\",\"endpointUrl\":\"https://worker.example.com/connectors/refund\"}",
 
             ["list_capability_bindings"] =
-                "[Capability Registry] Lists tenant-scoped capability bindings available for InvokeCapability actions, with optional name and enabled filters. " +
-                "Returns: {ok:true,data:{totalCount,bindings:[{id,capabilityName,transport,endpointUrl,timeoutMs,isEnabled,...}]}}. " +
+                "[Connector Registry - deprecated alias] Use list_connectors. Identical behaviour; the response repeats the list under both 'connectors' and 'bindings'. " +
+                "Returns: {ok:true,data:{totalCount,connectors:[...],bindings:[...]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"enabledOnly\":true}",
 
             ["validate_capability_binding"] =
-                "[Capability Registry] Validates whether a capability binding exists, is enabled, uses a supported transport, and has a valid endpoint URL. " +
-                "Returns validation status and binding metadata without mutating state. " +
-                "Returns: {ok:true,data:{capabilityName,isValid,message,binding}}. " +
+                "[Connector Registry - deprecated alias] Use validate_connector. Identical behaviour; capabilityName is accepted as an alias for connectorName. " +
+                "Returns: {ok:true,data:{connectorName,isValid,message,binding}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
-                "Input example: {\"capabilityName\":\"payment.refund.v1\"}",
+                "Input example: {\"connectorName\":\"payment.refund.v1\"}",
 
             ["register_plugin_binding"] =
                 "[Plugin Binding Registry] Creates or updates a tenant-scoped mapping from blueprint aliases to server-owned plugins (action/decision), a tenant-owned LLM (bindingType agent), or a named prompt (bindingType prompt). " +
@@ -508,6 +527,9 @@ public static class McpToolDescriptions
             ["attach_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["remove_step_action"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["list_step_actions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["register_connector"] = new("integration", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["list_connectors"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
+            ["validate_connector"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
             ["register_capability_binding"] = new("integration", "authenticated", true, true, true, "reversible", true, "medium"),
             ["list_capability_bindings"] = new("integration", "authenticated", true, true, false, "none", true, "low"),
             ["validate_capability_binding"] = new("integration", "authenticated", true, true, false, "none", true, "low"),

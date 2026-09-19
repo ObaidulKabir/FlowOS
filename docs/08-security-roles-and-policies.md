@@ -5,13 +5,24 @@ Governance is a first-class citizen in FlowOS: a Policy can block an action even
 ## Concepts
 
 * **Capability** — the **execution gate**. A granular permission string (e.g. `expense.approve`, `event.publish.EVT-APPROVE`, `workflow.start`). If the caller holds the remapped required capability, they may perform the activity even when their role name is not listed on the step.
-* **Role** — a tenant-scoped **bag of capabilities** plus an **inbox / assignment label** (e.g. `"Manager"`). Roles do not authorize by name at runtime; they grant capabilities and route waiting HumanTasks.
+* **Role** — a tenant-scoped **bag of capabilities** plus an **inbox / assignment label** (e.g. `"Manager"`). Tenant roles grant capabilities and route waiting HumanTasks.
 * **Business context** — remaps names only (`roleOverrides`, `capabilityOverrides`). It never creates tenant roles or grants permissions.
 * **Policy** — dynamic, tenant-specific access control logic layered on top of capability checks.
 
 Workflow activities declare `requiredCapabilities` on the HumanTask / human event in the workflow definition. Inbox still uses remapped `requiredRoles`. Tenant `POST /api/roles` + capabilities remains the live grant store.
 
-Runtime `publish_event` and `complete_task` share one `AuthorizeActivity` gate: after context remaps, the caller may act if their tenant-role permissions intersect the compiled required capabilities. Role names on the step are not the execution gate. Empty compiled capabilities fail closed for HumanTask / human events once the pack declared them; System/Default auto-routes stay internal. Admin still bypasses. `event.publish` remains a wildcard for `event.publish.*`. Policies run after this gate.
+Runtime `publish_event` and `complete_task` share one `AuthorizeActivity` gate: after context remaps, the caller may act if their tenant-role permissions intersect the compiled required capabilities. Empty compiled capabilities fail closed for HumanTask / human events once the pack declared them; System/Default auto-routes stay internal. Admin still bypasses. `event.publish` remains a wildcard for `event.publish.*`. Policies run after this gate.
+
+> **This chapter is about FlowOS's own tenant/IAM roles** — who can log into a tenant and call FlowOS
+> APIs (`RolesController`, JWT `role`/`roles` claims, `[Authorize(Roles = ...)]`). A `WorkflowClassBlueprint`
+> also declares `roles[]`/`capabilities[]`, but those describe the *application the workflow was designed
+> to model* (e.g. "Approver" in an order-approval process) — a completely separate, business-context-scoped
+> vocabulary that is never written into this chapter's Role/TenantUserRole tables. See [Chapter 17](17-workflow-context-bindings.md#business-context-roles) for how those are declared and resolved per instance.
+
+> **Capability means permission, not integration.** An outbound HTTP worker (e.g. `payment.refund.v1`) is a
+> **connector**, registered with `register_connector` and invoked by an `InvokeConnector` step action. It has
+> nothing to do with role permissions. The older `capability binding` / `InvokeCapability` wording still works —
+> see [Chapter 13](13-mcp-and-ai-agent-integration.md).
 
 ## Managing roles
 
@@ -44,6 +55,35 @@ curl -X POST "http://localhost:5183/api/roles/<roleId>/capabilities" \
 ### Get role details
 
 `GET /api/roles/{roleId}` → `404 Not Found` if the role doesn't exist for the current tenant.
+
+### List roles
+
+`GET /api/roles` returns every role in the current tenant with its capability codes:
+
+```json
+[{ "id": "4791ff7e-...", "name": "Manager", "capabilities": ["event.publish.EVT-APPROVE", "workflow.read"] }]
+```
+
+### Assign roles to users
+
+A user's `role` column is their **primary** role. Additional roles come from assignments:
+
+* `POST /api/roles/{roleId}/users/{userId}` — assign (idempotent).
+* `DELETE /api/roles/{roleId}/users/{userId}` — revoke, `404` when no assignment exists.
+* `GET /api/roles/users/{userId}` — list assigned role names.
+
+On login the JWT carries the primary role in `role` and the full set in `roles`. `ValidateToken` emits one
+`ClaimTypes.Role` claim per entry (deduplicated), so `ICurrentUser.Roles` and `[Authorize(Roles = ...)]` see all
+of them. Capability resolution unions the permissions of every role the caller holds.
+
+### Roles declared by a WorkflowClass are never written here
+
+A `WorkflowClassBlueprint` declares `roles[]` and `capabilities[]`, but activating a context binding
+(`POST /api/context-bindings/{id}/activate`) does **not** create or modify anything in this chapter's
+Role/TenantUserRole tables. Those declarations describe the modeled application's own roles, not FlowOS
+tenant roles, and they are compiled onto the runtime `WorkflowDefinition` as inert declarative metadata
+instead. See [Chapter 17](17-workflow-context-bindings.md#business-context-roles) for how their membership
+is resolved per running workflow instance.
 
 ### Recommended capability codes
 

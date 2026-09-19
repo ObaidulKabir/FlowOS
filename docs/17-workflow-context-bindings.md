@@ -146,7 +146,7 @@ Mappings use `canonicalField -> source.path`. Only explicitly mapped fields ente
 
 1. Create a binding. Revision 1 is Draft.
 2. Update the draft as needed.
-3. Validate aliases, mappings, schemas, tenant roles, capabilities, and decision providers.
+3. Validate aliases, mappings, schemas, business-context role overrides, capabilities, and decision providers.
 4. Activate. MCP requires explicit human confirmation, and the dashboard prompts before FlowOS atomically publishes a new workflow/state-machine/event package.
 5. Update an active binding to create the next draft revision.
 6. Activate again. New starts use the new revision; existing instances remain pinned to their old definition and snapshot.
@@ -198,9 +198,39 @@ Specify exactly one of `contextBindingId` or `contextType`. The result includes 
 
 SLA reminders on a waiting HumanTask or Command do not need a live clock. Agents should read MCP prompt `test_sla_reminders_in_simulator` or resource `flowos://guides/sla-reminder-simulation` before concluding the simulator is broken. A completing `nextSteps` event (`QUOTE_APPROVED`) causes the simulator to inject reminder `triggerEvent`s in duration order first; timeout must not fire. Set `autoAdvanceTimers: true` and omit the completing event to fire `TimeoutEvent` (`QUOTE_RESPONSE_OVERDUE`). Trace `[SLA Reminder Fired]` / `[SLA Timeout Fired]`. Put the timeout event on `nextSteps`. `isValid: true` plus simulate-to-Paid is the happy path, not a timeout proof.
 
-A waiting step may also be acted by an agent. Put tenant-specific how-to-decide text on the binding `policyGuideline` and case fields on `inputMapping`; keep template how-to-decide on step `decisionGuideline`. Point `agentProvider` at a tenant `agent` plugin binding (the API key stays on the binding). Declare `agentTools` as resource plugins (`LookupRecord:<capability>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `capability:*` writes. FlowOS prefetches the reads; the model never sees tenant URLs. Auto-commit still uses `publish_event`. Read `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`. Do not use a Decision `Default` skip as the AI gate.
+A waiting step may also be acted by an agent. Put tenant-specific how-to-decide text on the binding `policyGuideline` and case fields on `inputMapping`; keep template how-to-decide on step `decisionGuideline`. Point `agentProvider` at a tenant `agent` plugin binding (the API key stays on the binding). Declare `agentTools` as resource plugins (`LookupRecord:<connector>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `connector:*` writes. FlowOS prefetches the reads; the model never sees tenant URLs. Auto-commit still uses `publish_event`. Read `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`. Do not use a Decision `Default` skip as the AI gate.
 
-Decision auto-route (`conditions.Default` or `true`) moves `currentStep` without consuming a state-machine event. If the template still declares `Assigned + QUOTE_APPROVED → Quoted`, include `QUOTE_APPROVED` in the simulation event list. FlowOS applies it as state-only catch-up (step unchanged, state advances). Omitting it leaves state at Assigned and the next event is Denied. Bindings never create tenant roles: `simulate_context_binding` does not require tenant roles to exist, and a draft binding may point at a Draft workflow class. Do not publish a stripped-roles simulator variant. `validate_context_binding` / `activate_context_binding` still require a Published source and existing tenant roles (CTX-ROLE-002). Activation also fails if those tenant roles lack the remapped capabilities (CTX-CAP-003); bindings never auto-create roles or grants. Agents should read MCP resource `flowos://guides/dual-kernel-design` or prompt `design_dual_kernel_workflow`.
+Decision auto-route (`conditions.Default` or `true`) moves `currentStep` without consuming a state-machine event. If the template still declares `Assigned + QUOTE_APPROVED → Quoted`, include `QUOTE_APPROVED` in the simulation event list. FlowOS applies it as state-only catch-up (step unchanged, state advances). Omitting it leaves state at Assigned and the next event is Denied. `simulate_context_binding` may use a Draft workflow class and does not consult FlowOS tenant roles. Do not publish a stripped-roles simulator variant. `validate_context_binding` / `activate_context_binding` still require a Published source. Activation also fails if remapped tenant roles lack the compiled capabilities (CTX-CAP-003); bindings never auto-create roles or grants. Agents should read MCP resource `flowos://guides/dual-kernel-design` or prompt `design_dual_kernel_workflow`.
+
+## Business-context roles
+
+A `WorkflowClassBlueprint.roles[]` entry (e.g. `"Approver"`) belongs to the application the workflow was
+designed to model — **not** to FlowOS's own tenant/IAM `Role` (see [Chapter 8](08-security-roles-and-policies.md)).
+Activation never creates, reads, or writes a FlowOS tenant role for it. Instead `ContextRoleProvisioningRules`
+resolves each declared role (applying `roleOverrides`/`capabilityOverrides`) into a `BusinessRoleDefinition`
+compiled onto the runtime `WorkflowDefinition.BusinessRoles` — purely declarative metadata, versioned with
+the workflow definition.
+
+`roleOverrides` is just a rename within that business vocabulary: `CTX-ROLE-001` still catches an override
+that references a template role the source never declared. `CTX-ROLE-002` only fires on an override mapped
+to an empty name.
+
+Each business role declares how its membership is resolved for a running instance
+(`RoleBlueprint.resolutionType`):
+
+* **`Assignment`** (default) — resolved from that instance's own `WorkflowInstance.RoleAssignments`,
+  written by an `AssignRole` step action or an explicit assignment call. Nothing exists until the instance
+  runs and something assigns it.
+* **`Expression`** — evaluated fresh against the instance's business payload every time
+  (`memberExpression`, e.g. `"{{ManagerEmail}}"`). Nothing is ever stored.
+* **`Static`** — a fixed list of caller identifiers (`staticMembers`), overridable per tenant binding via
+  `roleStaticMemberOverrides`. Still business-context config, never a FlowOS IAM grant.
+
+At task-completion time (`CompleteTaskCommand`), a step's `AllowedRoles` is checked against
+`IBusinessRoleResolver.ResolveCallerRoles(...)` — evaluated fresh from the instance's own state and
+business payload — never against `ICurrentUser.Roles` (the caller's FlowOS tenant login roles). Tenant
+capability checks still run first via `AuthorizeActivity`. A FlowOS platform Admin can still act on any
+step as an operational override.
 
 ## MCP sequence
 
@@ -251,7 +281,7 @@ The authenticated tenant always wins over a tenant value supplied by a client. C
 
 ## Security and provisioning
 
-Role and capability overrides are references, not provisioning instructions. Create tenant roles and grant required capabilities before validation/activation. Bound human tasks expose all compiled `requiredRoles`, and completion requires role intersection. Activation and archival are high-risk MCP operations requiring human confirmation.
+Role and capability overrides rename business-context vocabulary; they do not provision FlowOS tenant/IAM roles. Bound human tasks expose compiled `requiredRoles`, and completion is checked by `IBusinessRoleResolver` against instance membership (Assignment/Expression/Static), not against JWT tenant roles. Activation and archival are high-risk MCP operations requiring human confirmation.
 
 ## Payload durability and replay
 

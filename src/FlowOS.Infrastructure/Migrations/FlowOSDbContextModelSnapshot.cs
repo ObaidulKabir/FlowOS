@@ -574,6 +574,34 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("TenantUsers", (string)null);
                 });
 
+            modelBuilder.Entity("FlowOS.Domain.Entities.TenantUserRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AssignedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantUserId", "RoleId")
+                        .IsUnique();
+
+                    b.ToTable("TenantUserRoles", (string)null);
+                });
+
             modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowActionExecutionLog", b =>
                 {
                     b.Property<Guid>("Id")

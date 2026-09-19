@@ -49,7 +49,7 @@ public static class FlowOsMcpGuidance
           • To reuse one template in multiple business domains, call `create_context_binding` against the draft or published class,
             then `simulate_context_binding` with revision `draft`. Do not publish a throwaway simulator variant first.
             `validate_context_binding` and `activate_context_binding` require a Published or Public source.
-            Simulation does not require tenant roles to exist; activation does (CTX-ROLE-002).
+            WorkflowClass roles are business-context declarations, not FlowOS tenant/IAM roles; activation never writes Roles or TenantUserRole.
           • Call `simulate_context_binding` with revision `draft` before activation, then with `active`
             to verify the exact pinned runtime. Simulation never dispatches or persists side effects.
           • Activation and archival require explicit human confirmation. Bindings never create roles or permissions.
@@ -76,7 +76,7 @@ public static class FlowOsMcpGuidance
         - FlowOS then applies it as a state-only catch-up: step stays put, state advances. Omitting it leaves state behind; the next event is Denied as a state-machine violation.
         - Preferred design: HumanTask/Command `nextSteps` consume the same event the state machine uses. Do not auto-skip a legal gate unless you still emit that event.
         - Repeatable paths (retry-password, resubmit, pin re-entry) MUST declare `pathLimits` on the looping nextSteps key: `{ "maxTravels": 3, "onExceeded": "LockedOut" }`. The engine counts each travel and fails closed or routes to onExceeded. Cyclic edges without a declaration still cap at 5.
-        - Context bindings do not create tenant roles. `simulate_context_binding` may use a Draft template and does not require tenant roles to exist. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source and real tenant roles (CTX-ROLE-002).
+        - WorkflowClass `roles[]`/`capabilities[]` are business-context vocabulary compiled onto `WorkflowDefinition.BusinessRoles`. They are never written to FlowOS tenant Role/TenantUserRole tables. `simulate_context_binding` may use a Draft template. Do not publish a stripped-roles copy just to simulate. `validate_context_binding` / `activate_context_binding` still need a Published source. `CTX-ROLE-002` only means a role override mapped to an empty name.
         - Diagnose divergence: if `currentStep` is ahead of `currentState` (e.g. MaterialDecision / Assigned), the missing event is the unused state-machine trigger.
 
         SLA reminder / timeout simulation law (read before concluding the simulator is broken):
@@ -95,7 +95,7 @@ public static class FlowOsMcpGuidance
         - Inspect Agent Context without running the agent: `get_agent_context` (live instance) or `preview_agent_context` (draft/published class + stepId). The payload is one object: Prompt + Data + Tools + redacted Provider.
         - Tenant BYO model: `register_plugin_binding` with `bindingType: agent` (provider/model/endpoint/apiKey). Step `agentProvider` is the alias. The key never appears in Agent Context.
         - Tenant prompts: create/edit with `upsert_agent_prompt` (or `register_plugin_binding` `bindingType: prompt`). List with `list_agent_prompts`. Step `agentPrompt` is the alias. Dashboard: Agent Prompts tab.
-        - Declarative tools: step `agentTools` lists resource plugins (`LookupRecord:<capability>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `capability:*` writes. FlowOS prefetches read tools into Agent Context. The model does not call HTTP or see URLs.
+        - Declarative tools: step `agentTools` lists resource plugins (`LookupRecord:<connector>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `connector:*` writes (legacy `capability:*`). FlowOS prefetches read tools into Agent Context. The model does not call HTTP or see URLs.
         - Preferred prompt: `design_agent_handled_step`. Preferred resource: `flowos://guides/bounded-autonomy-tasks`.
 
         OS claim law (read before calling FlowOS an operating system):
@@ -626,7 +626,7 @@ public static class FlowOsMcpGuidance
         5. Tenant context (do not strip roles or publish a throwaway no-roles variant):
            - `create_context_binding` against the **draft** template id, with `inputMapping` for canonical fields
            - `simulate_context_binding` with `revision: "draft"`, a real business `initialPayload`, optional `roles` for the trace, and the same full event list. SLA overdue uses `autoAdvanceTimers: true` without the completing event — see `flowos://guides/sla-reminder-simulation`.
-           - CTX-ROLE-002 applies to `validate_context_binding` / `activate_context_binding`, not to simulation
+           - `CTX-ROLE-002` means a role override mapped to an empty name. Business-context roles do not need a matching FlowOS tenant role.
         6. `publish_workflowclass` with `confirmHumanApproval: true` when required, then `validate_context_binding`
         7. `activate_context_binding` only after draft simulation is Allowed through the expected final state
         8. Runtime: `start_workflow` then `publish_event` for each remaining state-machine trigger
@@ -634,7 +634,7 @@ public static class FlowOsMcpGuidance
         ## Context-binding rules
 
         - Bindings never create roles or permissions.
-        - Unknown tenant role names fail `validate_context_binding` and `activate_context_binding` (CTX-ROLE-002). They do not fail `simulate_context_binding`.
+        - Role overrides that rename an undeclared template role fail with `CTX-ROLE-001`. Empty override names fail with `CTX-ROLE-002`. A FlowOS tenant role does not have to exist for a business-context role name.
         - Do not publish a stripped-roles copy of the template just to bind and simulate. Bind the draft, simulate, then publish once.
         - `simulate_context_binding` never persists instances or snapshots. A Denied trace is a design signal, not a reason to delete the template.
 
@@ -823,7 +823,7 @@ public static class FlowOsMcpGuidance
         | OS-KERNEL | Dual-kernel | done | WorkflowEngine.Advance, class-backed fail-closed, inverted StateMachineGapTests | none for v1 (L-LAW-STATIC later) |
         | OS-LAW | Policy / capabilities | done | RequiresCapability, ApproveAsPublic admin-only, DefaultPolicyEvaluator malformed JSON fail-closed, MCP-APPROVAL-REQUIRED | none for v1 |
         | OS-INBOX | HumanTask inbox + SLA | done | GET /api/tasks role filter, complete_task, insights on task, SLA timeout not auto-committed | none for v1 (L-INBOX-UX later) |
-        | OS-INT | Integrations | done | register_capability_binding, LookupRecord/QueryRecords/FetchDocument/SearchKnowledge/CheckPolicy | none for v1 |
+        | OS-INT | Integrations | done | register_connector, LookupRecord/QueryRecords/FetchDocument/SearchKnowledge/CheckPolicy | none for v1 |
         | OS-AI | DecisionPacket loop | done | run_agent_task, TenantLlmWorkflowAgent, flowos-risk, get_agent_context, upsert_agent_prompt, BoundedAutonomyTests | none for v1 |
         | OS-SIM | Simulation | done | simulate_workflowclass, simulate_context_binding | none for v1 |
         | OS-OPS | Operations | done | health, DLQ, replay_workflow_history, dual hosts | none for v1 (OTEL is later) |

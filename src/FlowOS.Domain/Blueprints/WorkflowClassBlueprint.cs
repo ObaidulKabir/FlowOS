@@ -104,9 +104,10 @@ public record StepAutoCommitBlueprint
 
 public record StepActionBlueprint
 {
-    public string ActionType { get; init; } = "Notification"; // "Notification", "Webhook", "PublishEvent", "InvokeCapability"
-    public string? Target { get; init; } // Role, User ID, Event name, or capability name (legacy fallback)
-    public string? Capability { get; init; } // Named capability for InvokeCapability actions
+    public string ActionType { get; init; } = "Notification"; // "Notification", "Webhook", "PublishEvent", "InvokeConnector"
+    public string? Target { get; init; } // Role, User ID, Event name, or connector name (legacy fallback)
+    public string? Connector { get; init; } // Named connector for InvokeConnector actions
+    public string? Capability { get; init; } // Deprecated alias for Connector
     public string? Url { get; init; } // Webhook URL
     public string? Method { get; init; } = "POST";
     public string? Template { get; init; } // Template identifier or message text
@@ -151,12 +152,37 @@ public record SubWorkflowReferenceBlueprint
     public Dictionary<string, string> OutputMapping { get; init; } = new();
 }
 
-// Governance Declarations
+// Business-Context Role Declarations
+//
+// A Role here belongs to the application the workflow was designed to model (e.g. "Approver" in an
+// Order-Approval process). It is NOT a FlowOS tenant/IAM role: it is never provisioned into FlowOS's
+// own Role/TenantUserRole tables and is never checked against a caller's FlowOS login. Membership is
+// declarative and comes to life only when a workflow instance actually runs, resolved fresh per
+// instance by ResolutionType (see WorkflowInstance.RoleAssignments / BusinessRoleDefinition).
 public record RoleBlueprint
 {
     public string Name { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public List<string> GrantedCapabilities { get; init; } = new();
+
+    /// <summary>
+    /// How caller membership in this business role is determined at workflow-instance runtime.
+    /// One of: "Assignment" (default) — resolved from the running instance's own
+    /// <see cref="FlowOS.Workflows.Domain.WorkflowInstance.RoleAssignments"/>, written by an
+    /// AssignRole step action or an explicit assignment call; nothing exists until the instance
+    /// runs and something assigns it. "Expression" — evaluated fresh against the instance's
+    /// business payload every time via <see cref="MemberExpression"/> (e.g. "{{ManagerEmail}}");
+    /// nothing is ever stored. "Static" — a fixed list of caller identifiers
+    /// (<see cref="StaticMembers"/>), overridable per tenant binding; still business-context
+    /// config, never a FlowOS IAM grant.
+    /// </summary>
+    public string ResolutionType { get; init; } = "Assignment";
+
+    /// <summary>Expression resolution: a template evaluated against the instance's business payload (e.g. "{{ManagerEmail}}").</summary>
+    public string? MemberExpression { get; init; }
+
+    /// <summary>Static resolution: fixed caller identifiers (e.g. emails) holding this role. Overridable per binding.</summary>
+    public List<string> StaticMembers { get; init; } = new();
 }
 
 public record CapabilityBlueprint

@@ -64,6 +64,13 @@ public class FlagshipWorkflowsSeederTests
         Assert.Equal(WorkflowStatus.Published, sagaDef.Status);
         Assert.Equal(WorkflowStatus.Published, loanDef.Status);
         Assert.Equal(WorkflowStatus.Published, secOpsDef.Status);
+
+        Assert.Contains(sagaWc.Definition.Roles, role => role.Name == "Warehouse");
+        Assert.Contains(loanWc.Definition.Roles, role => role.Name == "Manager");
+        Assert.Contains(secOpsWc.Definition.Roles, role => role.Name == "Director");
+        Assert.Contains(loanDef.BusinessRoles, role => role.Name == "Manager" && role.Capabilities.Contains("event.publish.EVT-FINAL-APPROVE"));
+        Assert.Contains(secOpsDef.BusinessRoles, role => role.Name == "Director");
+        Assert.Contains(loanWc.Definition.Workflow.Steps.Single(s => s.StepId == "UnderwriterReview").RequiredRoles, role => role == "Manager");
     }
 
     [Fact]

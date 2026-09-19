@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IActivityAuthorizationService, FlowOS.Application.Services.ActivityAuthorizationService>();
         services.AddScoped<IWorkflowContextBindingValidator, FlowOS.Application.Services.WorkflowContextBindingValidator>();
         services.AddScoped<IWorkflowContextMaterializer, FlowOS.Application.Services.WorkflowContextMaterializer>();
+        services.AddScoped<IBusinessRoleResolver, FlowOS.Application.Services.BusinessRoleResolver>();
         services.AddScoped<IWorkflowExecutionContextService, FlowOS.Application.Services.WorkflowExecutionContextService>();
         services.AddScoped<IWorkflowContextSimulationService, FlowOS.Application.Services.WorkflowContextSimulationService>();
         services.AddScoped<IDecisionPacketBuilder, FlowOS.Application.Services.DecisionPacketBuilder>();

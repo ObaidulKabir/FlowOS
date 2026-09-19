@@ -195,6 +195,10 @@ public class AnalysisTools
                 humanExplanation = "A step or event requires a capability that is not declared in the pack catalog.";
                 designHint = $"Add '{context?["capability"]}' to Capabilities, or remove it from requiredCapabilities.";
                 break;
+            case "GOV-004":
+                humanExplanation = "A step requires a business-context role that is not declared in Roles.";
+                designHint = $"Add role '{context?["role"]}' to Roles, or remove it from RequiredRoles / EscalationRole.";
+                break;
 
             default:
                 humanExplanation = code switch
