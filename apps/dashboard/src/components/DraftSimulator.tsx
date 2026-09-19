@@ -5,6 +5,7 @@ import {
   Zap, Bell, Send, Radio
 } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
+import { applySimulationGovernance } from '../lib/simulationGovernance';
 
 interface Props {
   definition: any;
@@ -105,6 +106,14 @@ const buildBusinessContextSnapshot = (
 };
 
 export const DraftSimulator: React.FC<Props> = ({ definition }) => {
+  const pack = useMemo(() => {
+    if (!definition) return {};
+    try {
+      return applySimulationGovernance(structuredClone(definition));
+    } catch {
+      return definition;
+    }
+  }, [definition]);
   const [currentStepId, setCurrentStepId] = useState<string>('');
   const [currentState, setCurrentState] = useState<string>('');
   const [history, setHistory] = useState<string[]>([]);
@@ -158,18 +167,18 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return defaultRoute || routes[0];
   };
 
-  const wfObj = getProp(definition, 'workflow', 'Workflow') || definition;
+  const wfObj = getProp(pack, 'workflow', 'Workflow') || pack;
   const rawSteps: any[] = getProp(wfObj, 'steps', 'Steps') || [];
   const startStepId = getProp(wfObj, 'startStepId', 'StartStepId') || 'Start';
   
-  const smObj = getProp(definition, 'stateMachine', 'StateMachine') || {};
+  const smObj = getProp(pack, 'stateMachine', 'StateMachine') || {};
   const initialState = getProp(smObj, 'initialState', 'InitialState') || '';
   const transitions: any[] = getProp(smObj, 'transitions', 'Transitions') || [];
   const entityType =
     getProp(smObj, 'entityType', 'EntityType') ||
-    getProp(definition, 'entityType', 'EntityType') ||
+    getProp(pack, 'entityType', 'EntityType') ||
     '';
-  const catalogEvents: any[] = getProp(definition, 'events', 'Events') || [];
+  const catalogEvents: any[] = getProp(pack, 'events', 'Events') || [];
 
   const resolveEventLabel = (eventId: string): string | undefined => {
     if (!eventId) return undefined;
@@ -198,7 +207,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const getStepRoles = (step: any): string[] => {
     if (!step) return [];
     const raw = getProp(step, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles', 'roles', 'Roles');
-    if (!raw) {
+    if (!raw || (Array.isArray(raw) && raw.length === 0)) {
       const type = (getProp(step, 'stepType', 'StepType') || '').toString().toLowerCase();
       if (type.includes('human')) return ['Unassigned'];
       return ['System'];
@@ -208,7 +217,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return [raw.toString()];
   };
 
-  const catalogRoles: any[] = getProp(definition, 'roles', 'Roles') || [];
+  const catalogRoles: any[] = getProp(pack, 'roles', 'Roles') || [];
 
   // Collect all known roles from the blueprint
   const allKnownRoles = useMemo(() => {
@@ -480,22 +489,19 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   // Initialize
   useEffect(() => {
     resetSimulation();
-  }, [definition]);
+  }, [pack]);
 
   // Auto-select required role when entering a new step
   useEffect(() => {
-    if (currentStepRoles.length > 0) {
-      const lowerRoles = currentStepRoles.map(r => r.toLowerCase());
-      if (
-        !lowerRoles.includes(simulatedRole.toLowerCase()) && 
-        !lowerRoles.includes('anyone') && 
-        !lowerRoles.includes('unassigned')
-      ) {
-        setSimulatedRole(currentStepRoles[0]);
-      }
+    const inbox = currentStepRoles.filter(role =>
+      !['anyone', 'unassigned', 'system'].includes(role.toLowerCase())
+    );
+    if (inbox.length === 0) return;
+    if (!inbox.some(role => role.toLowerCase() === simulatedRole.toLowerCase())) {
+      setSimulatedRole(inbox[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStepId]);
+  }, [currentStepId, currentStepRoles.join('|')]);
 
   const resetSimulation = () => {
     setCurrentStepId(startStepId);
@@ -1294,7 +1300,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
         {/* Left: Graph */}
         <div className="flex-1 bg-slate-950/50 overflow-auto border-r border-slate-800 p-2 relative h-full">
            <WorkflowGraphVisualizer 
-              definition={definition} 
+              definition={pack} 
               currentStepId={currentStepId} 
               currentState={currentState} 
               initialView="both" 

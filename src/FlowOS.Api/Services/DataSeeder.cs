@@ -1489,9 +1489,9 @@ public static class DataSeeder
         else
         {
             RepairExpenseApprovalV2Blueprint(workflowClass.Definition);
-            WorkflowSimulationGovernance.Apply(workflowClass.Definition);
         }
 
+        EnsureSampleRoleVocabulary(workflowClass);
         context.Entry(workflowClass).Property(item => item.Definition).IsModified = true;
 
         var definitions = await context.WorkflowDefinitions
@@ -1503,7 +1503,17 @@ public static class DataSeeder
             .ToListAsync();
 
         foreach (var definition in definitions)
+        {
             RepairDeadCheckAmountHop(definition);
+            foreach (var stepBlueprint in workflowClass.Definition.Workflow.Steps)
+            {
+                var step = definition.Steps.FirstOrDefault(item =>
+                    string.Equals(item.StepId, stepBlueprint.StepId, StringComparison.OrdinalIgnoreCase));
+                if (step == null || stepBlueprint.RequiredRoles.Count == 0)
+                    continue;
+                step.AllowedRoles = stepBlueprint.RequiredRoles.ToList();
+            }
+        }
 
         await context.SaveChangesAsync();
     }

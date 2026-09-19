@@ -233,6 +233,9 @@ public class SandboxSampleSimulationTests
         var repaired = await db.WorkflowClasses.SingleAsync(item => item.Name == "ExpenseApprovalV2");
         Assert.DoesNotContain(repaired.Definition.Workflow.Steps, step => step.StepId == "CheckAmount");
         Assert.Equal("PendingManager", repaired.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
+        Assert.Contains(
+            repaired.Definition.Workflow.Steps.Single(step => step.StepId == "PendingManager").RequiredRoles,
+            role => role == "Manager");
 
         var definition = await db.WorkflowDefinitions.SingleAsync(item => item.Id == compiled.Id);
         Assert.DoesNotContain(definition.Steps, step => step.StepId == "CheckAmount");

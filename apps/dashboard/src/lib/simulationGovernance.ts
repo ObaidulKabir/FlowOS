@@ -52,6 +52,40 @@ const inboxRoles = (step: any): string[] => {
 const isHumanTask = (step: any) =>
   String(read(step, 'StepType', 'stepType') || '').toLowerCase() === 'humantask';
 
+const EVENT_INBOX: Record<string, string[]> = {
+  'evt-submit': ['User', 'Employee', 'Submitter'],
+  'evt-apply': ['User', 'Employee', 'Applicant'],
+  'evt-request-access': ['User', 'Employee', 'Requester'],
+  'evt-approve': ['Manager'],
+  'evt-reject': ['Manager'],
+  'evt-escalate': ['Manager'],
+  'evt-final-approve': ['Manager', 'Director'],
+  'evt-decline': ['Manager', 'Director'],
+  'evt-director-approve': ['Director'],
+  'evt-director-reject': ['Director'],
+  'evt-revoke': ['SecOps']
+};
+
+const preferCatalogNames = (candidates: string[], catalogNames: string[]) => {
+  const catalog = new Set(catalogNames.map(name => name.toLowerCase()));
+  const matched = candidates.filter(name => catalog.has(name.toLowerCase()));
+  return matched.length > 0 ? matched : candidates;
+};
+
+const rolesGranting = (roles: any[], capability: string): string[] => {
+  const capKey = capability.toLowerCase();
+  return unique(roles.flatMap(role => {
+    const name = String(read(role, 'Name', 'name') || '').trim();
+    const granted = asArray(read(role, 'GrantedCapabilities', 'grantedCapabilities'))
+      .map(item => item.toLowerCase());
+    if (!name || isSystemRole(name)) return [];
+    if (granted.includes(capKey) || (granted.includes('event.publish') && capKey.startsWith('event.publish.'))) {
+      return [name];
+    }
+    return [];
+  }));
+};
+
 /**
  * Stamps a visual-sandbox / editor pack so DraftSimulator "As role"
  * uses capability intersection: requiredCapabilities + catalog grants.
@@ -62,6 +96,44 @@ export function applySimulationGovernance(definition: AnyRecord): AnyRecord {
   const events: any[] = read(definition, 'Events', 'events') || [];
   const workflow = read(definition, 'Workflow', 'workflow') || {};
   const steps: any[] = read(workflow, 'Steps', 'steps') || [];
+  const declaredRoles: any[] = read(definition, 'Roles', 'roles') || [];
+  const catalogRoleNames = declaredRoles
+    .map(role => String(read(role, 'Name', 'name') || '').trim())
+    .filter(Boolean);
+
+  events.forEach(evt => {
+    const eventId = String(read(evt, 'EventId', 'eventId') || '').trim();
+    let allowed = asArray(read(evt, 'AllowedRoles', 'allowedRoles')).filter(role => !isSystemRole(role));
+    if (allowed.length === 0 && eventId) {
+      const fromGrants = rolesGranting(declaredRoles, `event.publish.${eventId}`);
+      allowed = fromGrants.length
+        ? fromGrants
+        : preferCatalogNames(EVENT_INBOX[eventId.toLowerCase()] || [], catalogRoleNames);
+    }
+    if (allowed.length > 0) {
+      evt.AllowedRoles = allowed;
+      evt.allowedRoles = allowed;
+    }
+  });
+
+  steps.forEach(step => {
+    if (!isHumanTask(step)) return;
+    let inbox = inboxRoles(step);
+    if (inbox.length === 0) {
+      inbox = unique(humanExitEvents(step).flatMap(eventId => {
+        const match = events.find((evt: any) =>
+          String(read(evt, 'EventId', 'eventId') || '').trim().toLowerCase() === eventId.toLowerCase()
+        );
+        const allowed = asArray(read(match, 'AllowedRoles', 'allowedRoles')).filter(role => !isSystemRole(role));
+        if (allowed.length > 0) return allowed;
+        return preferCatalogNames(EVENT_INBOX[eventId.toLowerCase()] || [], catalogRoleNames);
+      }));
+    }
+    if (inbox.length > 0) {
+      step.RequiredRoles = inbox;
+      step.requiredRoles = inbox;
+    }
+  });
 
   const humanEventIds = new Set<string>();
   steps.forEach(step => {
