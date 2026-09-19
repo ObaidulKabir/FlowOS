@@ -234,6 +234,7 @@ export interface WorkflowContextBindingDefinition {
   eventAliases: Record<string, string>;
   roleOverrides: Record<string, string>;
   capabilityOverrides: Record<string, string>;
+  roleStaticMemberOverrides?: Record<string, string[]>;
   inputMapping: Record<string, string>;
   eventInputMappings: Record<string, Record<string, string>>;
   conditionParameters: Record<string, unknown>;

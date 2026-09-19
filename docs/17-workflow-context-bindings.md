@@ -232,6 +232,21 @@ business payload — never against `ICurrentUser.Roles` (the caller's FlowOS ten
 capability checks still run first via `AuthorizeActivity`. A FlowOS platform Admin can still act on any
 step as an operational override.
 
+Sandbox seed creates one active binding per sample WorkflowClass. Binding names stay distinct from
+the class-compiled `WorkflowDefinition` name so activation can publish a context-runtime package:
+
+| WorkflowClass | Context type | Binding name | Identity maps |
+|---|---|---|---|
+| ExpenseApproval | Expense | Expense Approval Context | Submitter, Approver, User, Employee, Manager + expense publish caps |
+| ExpenseApprovalV2 | ExpenseV2 | Expense Approval V2 Context | Submitter, Manager, Director + escalate/director caps |
+| OrderSagaFulfillment | Order | Order Saga Context | OrderClerk, Warehouse, Logistics |
+| LoanUnderwritingFlow | Loan | Loan Underwriting Context | Applicant, Manager, Director |
+| SecOpsAccessGovernance | Access | Privileged Access Context | Requester, Manager, Director, SecOps |
+
+`roleOverrides` / `capabilityOverrides` on these bindings are identity maps (template name → same
+name) so the business vocabulary is visible on the binding itself. Existing empty sample bindings are
+backfilled on the next seed; tenant-authored rename overrides are left in place.
+
 ## MCP sequence
 
 ```json

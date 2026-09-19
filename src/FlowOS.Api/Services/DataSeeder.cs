@@ -16,6 +16,8 @@ using FlowOS.Domain.Services; // For WorkflowClassManager
 using FlowOS.Events.Models; // For StandardEvent
 using FlowOS.Application.Services;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.ValueObjects;
+using System.Text.Json;
 
 namespace FlowOS.API.Services;
 
@@ -476,6 +478,7 @@ public static class DataSeeder
         await SeedFlagshipWorkflowsAsync(context, clientTenantId);
         await EnsurePublishedRuntimeDefinitionsAsync(context, clientTenantId);
         await RepairSandboxSampleDeclarationsAsync(context, clientTenantId);
+        await SeedSampleBusinessContextsAsync(context, clientTenantId);
     }
 
     public static async Task SeedFlagshipWorkflowsAsync(FlowOSDbContext context, Guid clientTenantId)
@@ -1218,6 +1221,262 @@ public static class DataSeeder
         await context.SaveChangesAsync();
     }
 
+    public static async Task SeedSampleBusinessContextsAsync(FlowOSDbContext context, Guid tenantId)
+    {
+        foreach (var name in SandboxSampleWorkflowNames)
+        {
+            try
+            {
+                var workflowClass = await context.WorkflowClasses.FirstOrDefaultAsync(
+                    w => w.TenantId == tenantId && w.Name == name);
+                if (workflowClass == null)
+                    continue;
+
+                var spec = SampleContextSpec(name);
+                var existingRevisions = await context.WorkflowContextBindingRevisions
+                    .Where(revision => revision.SourceWorkflowClassId == workflowClass.Id)
+                    .ToListAsync();
+                if (existingRevisions.Count > 0)
+                {
+                    await EnsureSampleBindingVocabularyAsync(context, workflowClass, spec, existingRevisions);
+                    continue;
+                }
+
+                if (await context.WorkflowContextBindings.AnyAsync(binding =>
+                        binding.TenantId == tenantId &&
+                        (binding.NormalizedContextType == spec.ContextType.ToUpperInvariant() ||
+                         binding.NormalizedName == spec.BindingName.ToUpperInvariant())))
+                {
+                    continue;
+                }
+
+                var binding = new WorkflowContextBinding(tenantId, spec.ContextType, spec.BindingName);
+                var revision = new WorkflowContextBindingRevision(
+                    binding.Id,
+                    1,
+                    workflowClass.Id,
+                    workflowClass.Version,
+                    CreateSampleContextDefinition(workflowClass, spec));
+                binding.SetDraftRevision(revision.Id);
+
+                var package = WorkflowClassCompiler.MapToContextRuntimePackage(workflowClass, binding, revision);
+                revision.Activate(package.WorkflowDefinition.Id, package.StateMachineDefinition.Id, package.ContentHash);
+                binding.Activate(revision.Id);
+
+                context.WorkflowContextBindings.Add(binding);
+                context.WorkflowContextBindingRevisions.Add(revision);
+                context.StateMachineDefinitions.Add(package.StateMachineDefinition);
+                context.WorkflowDefinitions.Add(package.WorkflowDefinition);
+
+                foreach (var eventDefinition in package.EventDefinitions)
+                {
+                    var exists = await context.EventDefinitions.AnyAsync(existing =>
+                        existing.TenantId == tenantId && existing.EventId == eventDefinition.EventId);
+                    if (!exists)
+                        context.EventDefinitions.Add(eventDefinition);
+                }
+
+                await context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DataSeeder] Skipping business context for '{name}': {ex.Message}");
+            }
+        }
+    }
+
+    private static (string ContextType, string BindingName, string EntityType, Dictionary<string, string> InputMapping, Dictionary<string, JsonElement> ConditionParameters)
+        SampleContextSpec(string workflowName) => workflowName switch
+    {
+        "ExpenseApproval" => (
+            "Expense",
+            "Expense Approval Context",
+            "ExpenseEntity",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Amount"] = "amount",
+                ["Description"] = "justification"
+            },
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ApprovalLimit"] = JsonSerializer.SerializeToElement(5000)
+            }),
+        "ExpenseApprovalV2" => (
+            "ExpenseV2",
+            "Expense Approval V2 Context",
+            "ExpenseEntityV2",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Amount"] = "amount",
+                ["Description"] = "justification"
+            },
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ApprovalLimit"] = JsonSerializer.SerializeToElement(100)
+            }),
+        "OrderSagaFulfillment" => (
+            "Order",
+            "Order Saga Context",
+            "OrderEntity",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["OrderId"] = "orderId",
+                ["Amount"] = "amount",
+                ["ItemSku"] = "itemSku",
+                ["Quantity"] = "quantity"
+            },
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)),
+        "LoanUnderwritingFlow" => (
+            "Loan",
+            "Loan Underwriting Context",
+            "LoanApplication",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ApplicantName"] = "applicantName",
+                ["Amount"] = "amount",
+                ["CreditScore"] = "creditScore",
+                ["DebtToIncome"] = "debtToIncome",
+                ["AccountNum"] = "accountNum"
+            },
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)),
+        "SecOpsAccessGovernance" => (
+            "Access",
+            "Privileged Access Context",
+            "AccessRequest",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["UserEmail"] = "userEmail",
+                ["Environment"] = "environment"
+            },
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)),
+        _ => (
+            workflowName,
+            $"{workflowName} Context",
+            $"{workflowName}Entity",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase))
+    };
+
+    private static WorkflowContextBindingDefinition CreateSampleContextDefinition(
+        WorkflowClass workflowClass,
+        (string ContextType, string BindingName, string EntityType, Dictionary<string, string> InputMapping, Dictionary<string, JsonElement> ConditionParameters) spec)
+    {
+        var roleOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var role in workflowClass.Definition.Roles)
+        {
+            if (string.IsNullOrWhiteSpace(role.Name))
+                continue;
+            roleOverrides[role.Name.Trim()] = role.Name.Trim();
+        }
+
+        var capabilityOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var capability in workflowClass.Definition.Capabilities)
+        {
+            if (string.IsNullOrWhiteSpace(capability.Code))
+                continue;
+            capabilityOverrides[capability.Code.Trim()] = capability.Code.Trim();
+        }
+
+        return new WorkflowContextBindingDefinition
+        {
+            EntityType = spec.EntityType,
+            RoleOverrides = roleOverrides,
+            CapabilityOverrides = capabilityOverrides,
+            InputMapping = spec.InputMapping,
+            ConditionParameters = spec.ConditionParameters,
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["templateRoles"] = string.Join(",", roleOverrides.Keys),
+                ["templateCapabilities"] = string.Join(",", capabilityOverrides.Keys)
+            }
+        };
+    }
+
+    private static async Task EnsureSampleBindingVocabularyAsync(
+        FlowOSDbContext context,
+        WorkflowClass workflowClass,
+        (string ContextType, string BindingName, string EntityType, Dictionary<string, string> InputMapping, Dictionary<string, JsonElement> ConditionParameters) spec,
+        IReadOnlyCollection<WorkflowContextBindingRevision> revisions)
+    {
+        var expected = CreateSampleContextDefinition(workflowClass, spec);
+        var changed = false;
+        foreach (var revision in revisions)
+        {
+            var merged = MergeSampleBindingVocabulary(revision.Definition, expected);
+            if (!SampleBindingVocabularyChanged(revision.Definition, merged))
+                continue;
+
+            SetPrivateProperty(revision, nameof(WorkflowContextBindingRevision.Definition), merged);
+            context.Entry(revision).Property(item => item.Definition).IsModified = true;
+            changed = true;
+
+            if (!revision.WorkflowDefinitionId.HasValue)
+                continue;
+
+            var definition = await context.WorkflowDefinitions.FirstOrDefaultAsync(item =>
+                item.Id == revision.WorkflowDefinitionId.Value);
+            if (definition == null)
+                continue;
+
+            var previousStatus = definition.Status;
+            SetPrivateProperty(definition, nameof(WorkflowDefinition.Status), WorkflowStatus.Draft);
+            WorkflowClassCompiler.ApplyTemplateBusinessRoles(definition, workflowClass.Definition, merged);
+            SetPrivateProperty(definition, nameof(WorkflowDefinition.Status), previousStatus);
+        }
+
+        if (changed)
+            await context.SaveChangesAsync();
+    }
+
+    private static WorkflowContextBindingDefinition MergeSampleBindingVocabulary(
+        WorkflowContextBindingDefinition current,
+        WorkflowContextBindingDefinition expected)
+    {
+        var roleOverrides = new Dictionary<string, string>(current.RoleOverrides, StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in expected.RoleOverrides)
+        {
+            if (!roleOverrides.ContainsKey(pair.Key))
+                roleOverrides[pair.Key] = pair.Value;
+        }
+
+        var capabilityOverrides = new Dictionary<string, string>(current.CapabilityOverrides, StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in expected.CapabilityOverrides)
+        {
+            if (!capabilityOverrides.ContainsKey(pair.Key))
+                capabilityOverrides[pair.Key] = pair.Value;
+        }
+
+        var inputMapping = new Dictionary<string, string>(current.InputMapping, StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in expected.InputMapping)
+        {
+            if (!inputMapping.ContainsKey(pair.Key))
+                inputMapping[pair.Key] = pair.Value;
+        }
+
+        var metadata = new Dictionary<string, string>(current.Metadata, StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in expected.Metadata)
+            metadata[pair.Key] = pair.Value;
+
+        return current with
+        {
+            EntityType = string.IsNullOrWhiteSpace(current.EntityType) ? expected.EntityType : current.EntityType,
+            RoleOverrides = roleOverrides,
+            CapabilityOverrides = capabilityOverrides,
+            InputMapping = inputMapping,
+            Metadata = metadata
+        };
+    }
+
+    private static bool SampleBindingVocabularyChanged(
+        WorkflowContextBindingDefinition current,
+        WorkflowContextBindingDefinition merged)
+        => merged.RoleOverrides.Count != current.RoleOverrides.Count ||
+           merged.CapabilityOverrides.Count != current.CapabilityOverrides.Count ||
+           merged.InputMapping.Count != current.InputMapping.Count ||
+           !string.Equals(merged.EntityType, current.EntityType, StringComparison.Ordinal) ||
+           merged.Metadata.GetValueOrDefault("templateRoles") != current.Metadata.GetValueOrDefault("templateRoles") ||
+           merged.Metadata.GetValueOrDefault("templateCapabilities") != current.Metadata.GetValueOrDefault("templateCapabilities");
+
     private static readonly string[] SandboxSampleWorkflowNames =
     {
         "ExpenseApproval",
@@ -1325,7 +1584,9 @@ public static class DataSeeder
                     new StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { { "Default", "END" } } },
                     new StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
                 }
-            }
+            },
+            Roles = ExpenseRoles(),
+            Capabilities = ExpenseCapabilities()
         };
 
         WorkflowSimulationGovernance.Apply(blueprint);
