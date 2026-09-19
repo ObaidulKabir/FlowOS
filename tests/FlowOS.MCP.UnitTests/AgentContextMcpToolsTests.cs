@@ -112,6 +112,56 @@ public sealed class AgentContextMcpToolsTests
     }
 
     [Fact]
+    public async Task UpsertAndGetAgentProvider_RedactsApiKey()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                model = "gpt-4o-mini",
+                apiKey = "sk-test-do-not-return"
+            }));
+            Assert.False(upsert.IsError);
+
+            var listed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            var listJson = JObject.Parse(listed.Content.Single().Text);
+            Assert.Equal(1, listJson["data"]!["totalCount"]?.Value<int>());
+
+            var loaded = await tools.GetAgentProvider(JObject.FromObject(new { tenantId, alias = "quote-llm" }));
+            var provider = JObject.Parse(loaded.Content.Single().Text)["data"]!;
+            Assert.Equal("quote-llm", provider["alias"]?.ToString());
+            Assert.Equal("openai", provider["providerName"]?.ToString());
+            Assert.Equal("gpt-4o-mini", provider["model"]?.ToString());
+            Assert.True(provider["hasApiKey"]?.Value<bool>());
+            Assert.Null(provider["apiKey"]);
+            Assert.DoesNotContain("sk-test", provider.ToString(), StringComparison.OrdinalIgnoreCase);
+
+            var keepKey = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                model = "gpt-4o"
+            }));
+            Assert.False(keepKey.IsError);
+            var updated = JObject.Parse(keepKey.Content.Single().Text)["data"]!;
+            Assert.Equal("gpt-4o", updated["model"]?.ToString());
+            Assert.True(updated["hasApiKey"]?.Value<bool>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
     public async Task PreviewAgentContext_MissingStep_ReturnsNotFound()
     {
         McpRequestContext.Clear();
@@ -188,6 +238,8 @@ public sealed class AgentContextMcpToolsTests
     {
         private readonly Dictionary<string, PluginBindingDto> _items = new(StringComparer.OrdinalIgnoreCase);
 
+        private readonly Dictionary<string, string> _rawJson = new(StringComparer.OrdinalIgnoreCase);
+
         public Task<PluginBindingDto> UpsertAsync(
             Guid tenantId,
             string bindingType,
@@ -197,18 +249,30 @@ public sealed class AgentContextMcpToolsTests
             string? configurationJson = null,
             CancellationToken ct = default)
         {
-            var prompt = AgentPromptConfiguration.Public(configurationJson);
+            object? configuration;
+            if (string.Equals(bindingType, PluginBindingTypes.Agent, StringComparison.OrdinalIgnoreCase))
+            {
+                var merged = AgentProviderConfiguration.Merge(
+                    _rawJson.GetValueOrDefault(sourceName),
+                    configurationJson);
+                _rawJson[sourceName] = merged;
+                configuration = AgentProviderConfiguration.Redact(merged);
+            }
+            else
+            {
+                var existingJson = _rawJson.GetValueOrDefault(sourceName);
+                var merged = AgentPromptConfiguration.Merge(existingJson, configurationJson);
+                _rawJson[sourceName] = merged;
+                configuration = AgentPromptConfiguration.Public(merged);
+            }
+
             if (_items.TryGetValue(sourceName, out var existing))
             {
-                var merged = AgentPromptConfiguration.Merge(
-                    System.Text.Json.JsonSerializer.Serialize(existing.Configuration),
-                    configurationJson);
-                prompt = AgentPromptConfiguration.Public(merged);
                 var updated = existing with
                 {
                     ProviderName = providerName,
                     IsEnabled = isEnabled,
-                    Configuration = prompt,
+                    Configuration = configuration,
                     UpdatedAtUtc = DateTime.UtcNow
                 };
                 _items[sourceName] = updated;
@@ -224,7 +288,7 @@ public sealed class AgentContextMcpToolsTests
                 isEnabled,
                 DateTime.UtcNow,
                 DateTime.UtcNow,
-                prompt);
+                configuration);
             _items[sourceName] = created;
             return Task.FromResult(created);
         }
@@ -274,6 +338,6 @@ public sealed class AgentContextMcpToolsTests
             Guid tenantId,
             string sourceName,
             CancellationToken ct = default) =>
-            Task.FromResult<AgentProviderConfiguration?>(null);
+            Task.FromResult(AgentProviderConfiguration.Parse(_rawJson.GetValueOrDefault(sourceName)));
     }
 }

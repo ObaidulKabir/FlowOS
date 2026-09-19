@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FlowOS.Application\FlowOS.Application.csproj" />
+    <ProjectReference Include="..\FlowOS.Agents\FlowOS.Agents.csproj" />
     <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
     <ProjectReference Include="..\FlowOS.Infrastructure\FlowOS.Infrastructure.csproj" />
     <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />

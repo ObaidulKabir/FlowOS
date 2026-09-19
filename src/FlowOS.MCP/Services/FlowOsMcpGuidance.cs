@@ -63,12 +63,14 @@ public static class FlowOsMcpGuidance
         [Step 5: Drive Workflow Transitions & Inspect Telemetry]
           • Call `publish_event` with `workflowInstanceId` and `eventType` to trigger state transitions (e.g. EVT-SUBMIT).
           • Call `complete_task` with `workflowInstanceId` and `taskId` to complete human/manual tasks.
+          • When the waiting step is actor `Agent`/`Either`, do not invent the next event in chat. Inspect with `get_agent_context`, then call `run_agent_task` so FlowOS hosts DecisionPacket → tenant LLM (or `flowos-risk`) → AutoCommitPolicy.
+          • Call `suggest_agent_action` to run the same agent without publishing (advisory only).
           • Call `get_workflow_instance_status` or `list_workflow_instances` to inspect runtime status, current step, and execution history.
-          • Call `suggest_agent_action` to run AI risk analysis or decision advisory on active instances.
 
         Tip: Call MCP Prompts (`prompts/list` & `prompts/get`) or read MCP Resources (`resources/list` & `resources/read`) for full templates.
           Preferred prompt: `design_dual_kernel_workflow`. Preferred resource: `flowos://guides/dual-kernel-design`.
           For SLA reminders/timeouts: prompt `test_sla_reminders_in_simulator` and resource `flowos://guides/sla-reminder-simulation`.
+          For AI task automation: prompt `automate_waiting_task_with_ai_agent` and resource `flowos://guides/ai-task-automation`.
 
         Dual-kernel design law (read before drafting Decision steps):
         - The workflow graph moves `currentStep`. The state machine moves `currentState`. They are independent kernels.
@@ -90,14 +92,15 @@ public static class FlowOsMcpGuidance
         - Timer steps and HumanTask SLA are different. `autoAdvanceTimers` elapses Timer steps AND unlocks SLA overdue. Completing-event reminder injection does not need the flag.
         - Preferred prompt: `test_sla_reminders_in_simulator`. Preferred resource: `flowos://guides/sla-reminder-simulation`.
 
-        Bounded-autonomy task law (runtime AI work, not design-time MCP chat):
-        - Dual-kernel still applies. The agent may only return a legal `nextSteps` event. FlowOS hosts wait → DecisionPacket → agent → AutoCommitPolicy → `publish_event` or park as a HumanTask Smart Action.
+        Bounded-autonomy / AI task-automation law (runtime AI work, not design-time MCP chat):
+        - Dual-kernel still applies. The agent may only return a legal `nextSteps` event. FlowOS hosts wait → DecisionPacket → tenant LLM (`TenantLlmWorkflowAgent`) or `flowos-risk` → AutoCommitPolicy → `publish_event` (actor `Agent:{id}`) or park as a HumanTask Smart Action.
         - Do not assign `actor: Agent` to a Decision `Default` skip. Do not auto-commit TimeoutEvent. Do not call `publish_event` from free-form chat; use `run_agent_task` or let the entry hook run.
-        - Inspect Agent Context without running the agent: `get_agent_context` (live instance) or `preview_agent_context` (draft/published class + stepId). The payload is one object: Prompt + Data + Tools + redacted Provider.
-        - Tenant BYO model: `register_plugin_binding` with `bindingType: agent` (provider/model/endpoint/apiKey). Step `agentProvider` is the alias. The key never appears in Agent Context.
-        - Tenant prompts: create/edit with `upsert_agent_prompt` (or `register_plugin_binding` `bindingType: prompt`). List with `list_agent_prompts`. Step `agentPrompt` is the alias. Dashboard: Agent Prompts tab.
+        - Register the tenant model with `upsert_agent_provider` (alias = step `agentProvider`, write-only `apiKey`). Create/edit the prompt with `upsert_agent_prompt` (alias = step `agentPrompt`). Dashboard: Application → select workflow → AI Context → Prompts / Providers. Never paste the key into MCP chat or the blueprint.
+        - Inspect Agent Context without running the agent: `get_agent_context` (live instance) or `preview_agent_context` (draft/published class + stepId). The payload is one object: Prompt + Data + Tools + redacted Provider (`hasApiKey`, never the secret).
+        - Live automation: publish the human gate that reaches the Agent step (e.g. `EVT-SUBMIT` on QuoteAutoReview), then `run_agent_task`. Factory follows step `agentProvider`; omit `agentId` unless you want `RiskAnalysisAgent` / `flowos-risk`. `suggest_agent_action` is the same call without publishing.
+        - Simulate Agent progress without a live LLM: `simulate_workflowclass` hosts AutoCommitEvaluator when the waiting step is actor Agent/Either and no completing business event is queued. Default suggestion is the first `autoCommit.allowedEvents` at confidence 1.0. Override with `simulatedAgent` `{event,confidence,agentId}`. Set `autoAdvanceAgents: false` to park and inspect `pendingAgentTask`. Explicit events still win. Timeout stays timer-owned.
         - Declarative tools: step `agentTools` lists resource plugins (`LookupRecord:<connector>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `connector:*` writes (legacy `capability:*`). FlowOS prefetches read tools into Agent Context. The model does not call HTTP or see URLs.
-        - Preferred prompt: `design_agent_handled_step`. Preferred resource: `flowos://guides/bounded-autonomy-tasks`.
+        - Preferred prompts: `automate_waiting_task_with_ai_agent` (live loop) and `design_agent_handled_step` (step JSON). Preferred resources: `flowos://guides/ai-task-automation` and `flowos://guides/bounded-autonomy-tasks`.
 
         OS claim law (read before calling FlowOS an operating system):
         - Load prompt `check_os_release_gate` or resource `flowos://guides/os-release-gate`.
@@ -151,7 +154,17 @@ public static class FlowOsMcpGuidance
                 description = "How to design a waiting HumanTask/Command that an agent may decide using layered guidelines, with auto-commit only when policy matches.",
                 arguments = new[]
                 {
-                    new { name = "stepId", description = "Waiting step to assign (e.g., ApproveQuote, ExecuteRepair)", required = false }
+                    new { name = "stepId", description = "Waiting step to assign (e.g., ApproveQuote, AgentReview, ExecuteRepair)", required = false }
+                }
+            },
+            new
+            {
+                name = "automate_waiting_task_with_ai_agent",
+                description = "How to bind a tenant AI Agent (prompt + provider) and run it on a waiting Agent/Either task: preview_agent_context, start_workflow, publish the human gate, run_agent_task. Simulate_* does not call the live model.",
+                arguments = new[]
+                {
+                    new { name = "workflowName", description = "Sample or tenant workflow (default QuoteAutoReview)", required = false },
+                    new { name = "stepId", description = "Waiting Agent/Either step (default AgentReview)", required = false }
                 }
             },
             new
@@ -191,6 +204,8 @@ public static class FlowOsMcpGuidance
         var instanceId = arguments?["instanceId"]?.ToString() ?? "<instanceId>";
         var domain = arguments?["domain"]?.ToString() ?? "ServiceRepair";
         var stepId = arguments?["stepId"]?.ToString() ?? "ApproveQuote";
+        var automationWorkflow = arguments?["workflowName"]?.ToString() ?? "QuoteAutoReview";
+        var automationStep = arguments?["stepId"]?.ToString() ?? "AgentReview";
 
         return name switch
         {
@@ -336,6 +351,25 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "automate_waiting_task_with_ai_agent" => new
+            {
+                description = "How to run a tenant AI Agent on a waiting workflow task",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = AiTaskAutomationGuide
+                                .Replace("{WORKFLOW_NAME}", automationWorkflow)
+                                .Replace("{STEP_ID}", automationStep)
+                        }
+                    }
+                }
+            },
+
             "run_workflow_instance" => new
             {
                 description = "Runtime Instance Execution Guide",
@@ -353,7 +387,7 @@ public static class FlowOsMcpGuidance
                                 1. Call `start_workflow` passing {"workflowClassId": "{WORKFLOW_CLASS_ID}"}.
                                 2. Receive the `workflowInstanceId`.
                                 3. Publish business events (`publish_event`) to trigger state transitions according to the state machine graph.
-                                4. Complete any assigned tasks with `complete_task`.
+                                4. Complete human tasks with `complete_task`. If the waiting step is actor Agent/Either, call `get_agent_context` then `run_agent_task` instead of inventing the event in chat.
                                 5. Inspect status and telemetry with `get_workflow_instance_status`.
                                 """
                                 .Replace("{WORKFLOW_CLASS_ID}", workflowClassId)
@@ -384,7 +418,7 @@ public static class FlowOsMcpGuidance
                                    - Does the caller have a granted capability for this event (`event.publish.<event>`)? Inbox `requiredRoles` only decide who sees the HumanTask.
                                    - Did payload conditions route the inbox to a different role (e.g. Amount > 5000 → Director)?
                                    - If currentStep is ahead of currentState, a Decision auto-route skipped a gate: publish the unused state-machine event (state-only catch-up). Read `flowos://guides/dual-kernel-design`.
-                                4. Call `suggest_agent_action` with `agentId: "RiskAnalysisAgent"` to analyze anomaly conditions.
+                                4. If the waiting step is actor Agent/Either, call `get_agent_context` then `run_agent_task` (or `suggest_agent_action` to inspect without publishing). Otherwise call `suggest_agent_action` with the fixture `RiskAnalysisAgent` only when no tenant `agentProvider` is bound.
                                 """
                                 .Replace("{INSTANCE_ID}", instanceId)
                         }
@@ -443,6 +477,13 @@ public static class FlowOsMcpGuidance
                 uri = "flowos://guides/bounded-autonomy-tasks",
                 name = "Bounded-Autonomy AI Task Guide",
                 description = "How to assign actor Agent/Either, layered DecisionPacket guidelines, and auto-commit policy without letting the model invent transitions.",
+                mimeType = "text/markdown"
+            },
+            new
+            {
+                uri = "flowos://guides/ai-task-automation",
+                name = "AI Agent Task Automation Guide",
+                description = "How to register a tenant prompt and LLM provider, preview Agent Context, start a live instance, and run_agent_task on a waiting Agent/Either step. simulate_* does not call the live model.",
                 mimeType = "text/markdown"
             },
             new
@@ -521,6 +562,21 @@ public static class FlowOsMcpGuidance
                         uri,
                         mimeType = "text/markdown",
                         text = BoundedAutonomyTasksGuide.Replace("{STEP_ID}", "ApproveQuote")
+                    }
+                }
+            },
+
+            "flowos://guides/ai-task-automation" => new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        uri,
+                        mimeType = "text/markdown",
+                        text = AiTaskAutomationGuide
+                            .Replace("{WORKFLOW_NAME}", "QuoteAutoReview")
+                            .Replace("{STEP_ID}", "AgentReview")
                     }
                 }
             },
@@ -658,6 +714,7 @@ public static class FlowOsMcpGuidance
         - After a live instance exists: `fork_workflow_simulation` / `replay_workflow_history`
         - SLA reminder vs timeout in the simulator: `test_sla_reminders_in_simulator` / `flowos://guides/sla-reminder-simulation`
         - Agent-handled waiting steps: `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`
+        - Live AI task automation: `automate_waiting_task_with_ai_agent` / `flowos://guides/ai-task-automation` (`upsert_agent_provider` + `run_agent_task`)
         """;
 
     public const string SlaReminderSimulationGuide =
@@ -837,7 +894,7 @@ public static class FlowOsMcpGuidance
         | OS-LAW | Policy / capabilities | done | RequiresCapability, ApproveAsPublic admin-only, DefaultPolicyEvaluator malformed JSON fail-closed, MCP-APPROVAL-REQUIRED | none for v1 |
         | OS-INBOX | HumanTask inbox + SLA | done | GET /api/tasks role filter, complete_task, insights on task, SLA timeout not auto-committed | none for v1 (L-INBOX-UX later) |
         | OS-INT | Integrations | done | register_connector, LookupRecord/QueryRecords/FetchDocument/SearchKnowledge/CheckPolicy | none for v1 |
-        | OS-AI | DecisionPacket loop | done | run_agent_task, TenantLlmWorkflowAgent, flowos-risk, get_agent_context, upsert_agent_prompt, BoundedAutonomyTests | none for v1 |
+        | OS-AI | DecisionPacket loop | done | run_agent_task, TenantLlmWorkflowAgent, upsert_agent_provider, flowos-risk, get_agent_context, upsert_agent_prompt, BoundedAutonomyTests | none for v1 |
         | OS-SIM | Simulation | done | simulate_workflowclass, simulate_context_binding | none for v1 |
         | OS-OPS | Operations | done | health, DLQ, replay_workflow_history, dual hosts | none for v1 (OTEL is later) |
         | OS-COMM | Entitlement | done | MCP-PLAN-REQUIRED, RequireRuntimePlan, EntitlementHttpTests | none for v1 (payment provider is later) |
@@ -845,6 +902,95 @@ public static class FlowOsMcpGuidance
         Later (does not block GREEN): L-PAY payment provider, L-SSO OIDC, L-USERS invite/SCIM, L-OTEL, L-LAW-STATIC publish-time Law projection, L-POLICY richer ConditionJson, L-INBOX-UX dashboard Inbox + list_tasks after role filtering exists.
 
         How the gate stays GREEN: keep every must-pass done here and in docs/19. Tests fail if GREEN while any must-pass is not done.
+        """;
+
+    public const string AiTaskAutomationGuide =
+        """
+        # FlowOS AI Agent Task Automation
+
+        Target workflow: {WORKFLOW_NAME}
+        Target waiting step: {STEP_ID}
+
+        Use this when a HumanTask/Command must be decided by a **real tenant AI Agent** (AI Context prompt + provider), not by the simulator's AutoCommitEvaluator.
+
+        `simulate_workflowclass` / `simulate_context_binding` never call the tenant model. They only prove graph, Law, inbox, and auto-commit policy. Live automation uses a **runtime instance**.
+
+        ## Register AI Context (once per tenant)
+
+        1. Prompt — `upsert_agent_prompt`. Point the step with `agentPrompt`.
+        2. Provider — `upsert_agent_provider` (preferred) or `register_plugin_binding` `bindingType: agent`. Point the step with `agentProvider`. Write-only `apiKey`. List/get return `hasApiKey`, never the secret. Omit `apiKey` on later updates to keep the stored key.
+        3. Dashboard equivalent: tenant portal → **Application** → select the workflow → scroll to **AI Context** → **Prompts** / **Providers**. Do not use the top **Keys** tab (that is the FlowOS API key).
+        4. Do **not** paste the LLM key into MCP chat, the blueprint, `decisionGuideline`, or Agent Context.
+
+        Example prompt:
+
+        ```json
+        {
+          "alias": "quote-approval",
+          "title": "Quote approval",
+          "system": "You are a FlowOS workflow agent. Suggest one legal nextSteps event as JSON.",
+          "instructions": "Accept if Amount is at or below ApprovalLimit and within 15% of Estimate. Otherwise do not auto-accept."
+        }
+        ```
+
+        Example provider (key stays on the tenant store):
+
+        ```json
+        {
+          "alias": "quote-llm",
+          "providerName": "openai",
+          "model": "gpt-4o-mini",
+          "apiKey": "<tenant-key>"
+        }
+        ```
+
+        `flowos-risk` needs no key and hosts `RiskAnalysisAgent`. It does **not** use the tenant prompt as an HTTP model.
+
+        ## Design the waiting step
+
+        Keep {STEP_ID} a waiting HumanTask or Command. Set `actor` to `Agent` or `Either`. Set `agentPrompt` and `agentProvider` to the aliases above. Declare `autoCommit.allowedEvents` as a subset of `nextSteps`. Never put TimeoutEvent or SLA reminders in `allowedEvents`.
+
+        Seeded sample: **QuoteAutoReview** / step **AgentReview** (`agentPrompt: quote-approval`, `agentProvider: quote-llm`). Amount ≤ 1500 routes to the agent; Amount > 1500 routes to Advisor (human).
+
+        ## Preview (does not run the model)
+
+        ```json
+        {
+          "workflowClassId": "<class-id>",
+          "stepId": "{STEP_ID}",
+          "contextBindingId": "<quote-binding-id>",
+          "canonicalContext": { "Amount": 900, "Estimate": 880 }
+        }
+        ```
+
+        Call `preview_agent_context`. Confirm Prompt (system/instructions + policyGuideline), Data, Tools, and Provider (`hasApiKey: true`, no `apiKey` field).
+
+        ## Live loop (this is the real agent)
+
+        Runtime tools need a Managed/Enterprise plan (`MCP-PLAN-REQUIRED` on Trial).
+
+        1. `start_workflow` with `workflowName: "{WORKFLOW_NAME}"` or the Quote `contextBindingId`.
+        2. `publish_event` the **human** gate that reaches {STEP_ID} (QuoteAutoReview: `EVT-SUBMIT` with Amount ≤ 1500). The Agent event (`EVT-ACCEPT`) is **not** this call.
+        3. `get_workflow_instance_status` — current step should be {STEP_ID}, actor Agent/Either.
+        4. `get_agent_context` — inspect the live packet. Still does not run the model.
+        5. `run_agent_task` with `{ "workflowInstanceId": "<id>" }`. Omit `agentId` so the factory follows step `agentProvider`. FlowOS calls the tenant LLM, restricts to legal `nextSteps`, then auto-commits or parks.
+        6. `suggest_agent_action` is the same hosted call **without** publishing (advisory).
+        7. If parked (`parkReason`), a human uses `complete_task` / `publish_event` on a legal nextSteps event. Either steps allow that override.
+
+        The start/publish entry hook may already run the hosted loop. `run_agent_task` is the explicit retry.
+
+        ## What success looks like
+
+        - Auto-commit: `autoCommitted: true`, actor `Agent:{id}`, current step leaves {STEP_ID}.
+        - Park: `autoCommitted: false` plus `parkReason` (low confidence, illegal event, missing key, or event not in `allowedEvents`).
+        - Missing key: `TenantLlmWorkflowAgent` fails with provider missing an API key — register it on the tenant, do not put it in chat.
+
+        ## What not to do
+
+        - Do not ask `simulate_workflowclass` to call OpenAI. Use `autoAdvanceAgents` / `simulatedAgent` only to prove policy.
+        - Do not `publish_event` `EVT-ACCEPT` from free-form chat to "be the agent."
+        - Do not lock `agentId` to `RiskAnalysisAgent` when the step has `agentProvider: quote-llm`.
+        - Do not put the API key on the step or in Agent Context.
         """;
 
     public const string BoundedAutonomyTasksGuide =
@@ -859,22 +1005,34 @@ public static class FlowOsMcpGuidance
 
         1. Keep {STEP_ID} a **waiting** HumanTask or Command. Do **not** make it a Decision with `Default`/`true` so the AI "skips" the gate.
         2. Set `actor` to `Agent` or `Either` (`Human` is the default and never auto-commits).
-        3. Create/edit the **prompt** with `upsert_agent_prompt` (title/system/instructions) and point the step with `agentPrompt`. Optional template fallback: `decisionGuideline`. Inspect the composed context with `preview_agent_context` before go-live, and `get_agent_context` on a live instance.
+        3. Create/edit the **prompt** with `upsert_agent_prompt` (title/system/instructions) and point the step with `agentPrompt`. Register the **provider** with `upsert_agent_provider` (or dashboard Application → AI Context → Providers) and point the step with `agentProvider`. Optional template fallback: `decisionGuideline`. Inspect the composed context with `preview_agent_context` before go-live, and `get_agent_context` on a live instance.
         4. Put **the case + tenant policy** on the context binding: `inputMapping` / canonical fields plus optional `policyGuideline`.
         5. Declare `autoCommit.minConfidence` and `autoCommit.allowedEvents` as a **subset of `nextSteps`**. Those events must also exist on the state machine.
         6. Never put `TimeoutEvent` or SLA reminder events in `autoCommit.allowedEvents`. Overdue stays timer-owned.
         7. Keep `requiredRoles` as the HumanTask inbox and `requiredCapabilities` as the execution gate. If policy fails, FlowOS parks a HumanTask Smart Action from the insight.
 
-        FlowOS hosts the loop: wait → DecisionPacket → `IWorkflowAgent` → AutoCommitPolicy → `PublishEventCommand` (actor `Agent:{id}`) or park. Do **not** teach an external chat agent to `publish_event` from free text. Call `get_agent_context` or `preview_agent_context` to inspect Prompt/Data/Tools/Provider; call `suggest_agent_action` to run the agent without publishing; call `run_agent_task` only to request the hosted loop.
+        FlowOS hosts the loop: wait → DecisionPacket → `TenantLlmWorkflowAgent` (step `agentProvider`) or `RiskAnalysisAgent` (`flowos-risk` / no provider) → AutoCommitPolicy → `PublishEventCommand` (actor `Agent:{id}`) or park. Do **not** teach an external chat agent to `publish_event` from free text. Call `get_agent_context` or `preview_agent_context` to inspect Prompt/Data/Tools/Provider; call `suggest_agent_action` to run the agent without publishing; call `run_agent_task` only to request the hosted loop. Live LLM requires a tenant provider key. `simulate_workflowclass` never calls that model.
+
+        ## Simulate automated Agent progress (no live LLM)
+
+        `simulate_workflowclass` does not call a tenant model. When the current waiting step is actor `Agent`/`Either` and no completing business event is queued, the simulator runs `AutoCommitEvaluator`:
+
+        | Input | Result |
+        | --- | --- |
+        | actor Agent/Either, `autoAdvanceAgents` default true, no `simulatedAgent` | First `autoCommit.allowedEvents` at confidence 1.0. Trace `[Agent Auto-Commit]`. |
+        | `simulatedAgent: { event, confidence }` | That suggestion through the same policy. Low confidence or illegal event parks (`pendingAgentTask`). |
+        | `autoAdvanceAgents: false` and no `simulatedAgent` | Wait. Inspect inbox / DecisionPacket fields. |
+        | Completing `events` already queued | Explicit event wins (human/Either override). |
+        | `autoAdvanceTimers: true`, no completing event, agent parked or disabled | Reminders then TimeoutEvent. Never auto-commit timeout. |
 
         ## DecisionPacket / Agent Context (prompt, data, tools, provider)
 
         - **Prompt**: tenant prompt binding (`agentPrompt` → title/system/instructions) plus template `decisionGuideline`, binding `policyGuideline`, and objective. Create/edit the prompt independently; do not bake the whole prompt into the workflow JSON.
         - **Data**: canonical case fields, event payloads, SLA reminder/timeout facts, plus prefetched `ToolResults` from tenant resource plugins
         - **Tools**: legal `nextSteps` events (always) plus declared `agentTools`. Resource plugins (`LookupRecord`, `QueryRecords`, `FetchDocument`, `SearchKnowledge`, `CheckPolicy`) prefetch through tenant capability bindings. Notify/write plugins are listed but not prefetched. The model never sees URLs or calls HTTP.
-        - **Provider**: tenant-owned. Register with `register_plugin_binding` (`bindingType: agent`, `sourceName` = step `agentProvider`, `providerName` openai/anthropic/azure-openai/google/custom/flowos-risk, `configuration` `{model,endpoint,apiKey}`). List/resolve return `hasApiKey`, never the secret. Omit `apiKey` on update to keep the stored key. The key is never placed in Agent Context.
+        - **Provider**: tenant-owned. Register with `upsert_agent_provider` (alias = step `agentProvider`, `providerName` openai/anthropic/azure-openai/google/custom/flowos-risk, `{model,endpoint,apiKey}`). `register_plugin_binding` `bindingType: agent` is the same store. List/get return `hasApiKey`, never the secret. Omit `apiKey` on update to keep the stored key. Dashboard: Application → select workflow → AI Context → Providers. The key is never placed in Agent Context.
 
-        The model may only return an event from legal `nextSteps`. Illegal suggestions are dropped. Until an LLM HTTP client is wired, FlowOS still hosts `RiskAnalysisAgent` as the fixture runtime; the tenant provider settings are stored and redacted on the packet.
+        The model may only return an event from legal `nextSteps`. Illegal suggestions are dropped. When `agentProvider` resolves to openai/anthropic/azure-openai/google/custom **and** the tenant binding has a key, FlowOS hosts `TenantLlmWorkflowAgent`. Missing provider or `flowos-risk` uses `RiskAnalysisAgent` (no key).
 
         ## Example
 
@@ -890,14 +1048,14 @@ public static class FlowOsMcpGuidance
         }
         ```
 
-        First register the tenant model (write-only key):
+        First register the tenant model with `upsert_agent_provider` (write-only key — do not paste it into this chat):
 
         ```json
         {
-          "bindingType": "agent",
-          "sourceName": "quote-llm",
+          "alias": "quote-llm",
           "providerName": "openai",
-          "configuration": { "model": "gpt-4o-mini", "apiKey": "<tenant-key>" }
+          "model": "gpt-4o-mini",
+          "apiKey": "<tenant-key>"
         }
         ```
 

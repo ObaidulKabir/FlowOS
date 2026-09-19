@@ -27,7 +27,7 @@ public class SampleBusinessContextSeederTests
         var bindings = await db.WorkflowContextBindings
             .Where(binding => binding.TenantId == tenantId)
             .ToListAsync();
-        Assert.Equal(6, bindings.Count);
+        Assert.Equal(7, bindings.Count);
         Assert.All(bindings, binding => Assert.Equal(WorkflowContextBindingStatus.Active, binding.Status));
 
         await AssertBindingVocabulary(db, tenantId, "Expense Approval Context", "Approver", "event.publish.EVT-APPROVE");
@@ -36,6 +36,13 @@ public class SampleBusinessContextSeederTests
         await AssertBindingVocabulary(db, tenantId, "Loan Underwriting Context", "Applicant", "event.publish.EVT-APPLY");
         await AssertBindingVocabulary(db, tenantId, "Privileged Access Context", "Requester", "event.publish.EVT-REQUEST-ACCESS");
         await AssertBindingVocabulary(db, tenantId, "Incident Alert Context", "OnCall", "event.publish.EVT-CLOSE");
+        await AssertBindingVocabulary(db, tenantId, "Quote Auto Review Context", "QuoteAgent", "event.publish.EVT-ACCEPT");
+        var quoteBinding = await db.WorkflowContextBindings.SingleAsync(binding =>
+            binding.TenantId == tenantId && binding.Name == "Quote Auto Review Context");
+        var quoteRevision = await db.WorkflowContextBindingRevisions.SingleAsync(revision =>
+            revision.Id == quoteBinding.ActiveRevisionId);
+        Assert.Equal(DataSeeder.QuoteAutoReviewPolicyGuideline, quoteRevision.Definition.PolicyGuideline);
+        Assert.Equal("amount", quoteRevision.Definition.InputMapping["Amount"]);
 
         var expense = await db.WorkflowContextBindings.SingleAsync(binding =>
             binding.TenantId == tenantId && binding.Name == "Expense Approval Context");
@@ -52,7 +59,7 @@ public class SampleBusinessContextSeederTests
             capability => capability == "event.publish.EVT-APPROVE");
 
         await DataSeeder.SeedSampleBusinessContextsAsync(db, tenantId);
-        Assert.Equal(6, await db.WorkflowContextBindings.CountAsync(binding => binding.TenantId == tenantId));
+        Assert.Equal(7, await db.WorkflowContextBindings.CountAsync(binding => binding.TenantId == tenantId));
     }
 
     [Fact]

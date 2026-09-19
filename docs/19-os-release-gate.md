@@ -111,7 +111,7 @@ Each row is **must-pass**. The gate stays RED while any status is `partial` or `
 |---|---|
 | **Capability** | Waiting step `actor` Agent/Either. FlowOS hosts wait → DecisionPacket (Prompt/Data/Tools/redacted Provider) → agent → `autoCommit` subset of `nextSteps` or park. External chat must not free-form `publish_event`. |
 | **Status** | **done** |
-| **Proof** | [Chapter 7](07-ai-agents-and-insights.md); `WorkflowAgentFactory` + `TenantLlmWorkflowAgent` (secrets loaded internally); `flowos-risk` still uses `RiskAnalysisAgent`; MCP `run_agent_task` / `get_agent_context`; `tests/FlowOS.UnitTests/Agents/TenantLlmWorkflowAgentTests.cs`; `tests/FlowOS.UnitTests/Agents/BoundedAutonomyTests.cs`. |
+| **Proof** | [Chapter 7](07-ai-agents-and-insights.md); `WorkflowAgentFactory` + `TenantLlmWorkflowAgent` (secrets loaded internally); `flowos-risk` still uses `RiskAnalysisAgent`; MCP `upsert_agent_provider` / `run_agent_task` / `get_agent_context` / `automate_waiting_task_with_ai_agent`; `tests/FlowOS.UnitTests/Agents/TenantLlmWorkflowAgentTests.cs`; `tests/FlowOS.UnitTests/Agents/BoundedAutonomyTests.cs`. |
 | **Engine blocker** | None for v1. |
 
 **Done when:** A registered `agent` plugin binding is what `run_agent_task` executes (or an explicit `flowos-risk` provider), keys never enter Agent Context, and illegal suggestions are still dropped.

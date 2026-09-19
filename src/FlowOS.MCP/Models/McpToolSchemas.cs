@@ -40,10 +40,10 @@ public static class McpToolSchemas
         """
         {
           "type":"object",
-          "required":["workflowInstanceId","agentId"],
+          "required":["workflowInstanceId"],
           "properties":{
             "workflowInstanceId":{"type":"string","format":"uuid"},
-            "agentId":{"type":"string","enum":["RiskAnalysisAgent"]},
+            "agentId":{"type":"string","description":"Attribution / fixture id. Omit so the factory follows step.agentProvider (TenantLlmWorkflowAgent). Use RiskAnalysisAgent only for flowos-risk / no provider."},
             "tenantId":{"type":"string","format":"uuid"},
             "objective":{"type":"string","maxLength":500}
           },
@@ -58,10 +58,10 @@ public static class McpToolSchemas
           "required":["workflowInstanceId"],
           "properties":{
             "workflowInstanceId":{"type":"string","format":"uuid"},
-            "agentId":{"type":"string","enum":["RiskAnalysisAgent"],"default":"RiskAnalysisAgent"},
+            "agentId":{"type":"string","description":"Optional attribution id. Omit so the hosted loop uses step.agentProvider (openai/anthropic/azure-openai/google/custom → TenantLlmWorkflowAgent). RiskAnalysisAgent is the no-key fixture."},
             "tenantId":{"type":"string","format":"uuid"}
           },
-            "additionalProperties":false
+          "additionalProperties":false
         }
         """);
 
@@ -143,6 +143,61 @@ public static class McpToolSchemas
         """);
 
     public static JObject GetAgentPrompt() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1},
+            "sourceName":{"type":"string"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject UpsertAgentProvider() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1,"description":"Provider name. Point the waiting step at it with agentProvider."},
+            "sourceName":{"type":"string","description":"Alias synonym for alias."},
+            "providerName":{"type":"string","enum":["openai","anthropic","azure-openai","google","custom","flowos-risk"],"description":"Required on create. Hosted LLM when a key is stored; flowos-risk needs no key."},
+            "model":{"type":"string"},
+            "endpoint":{"type":"string"},
+            "apiKey":{"type":"string","description":"Write-only tenant LLM key. Omit on update to keep the stored key. Never returned."},
+            "configuration":{
+              "type":"object",
+              "properties":{
+                "model":{"type":"string"},
+                "endpoint":{"type":"string"},
+                "apiKey":{"type":"string"}
+              },
+              "additionalProperties":false
+            },
+            "isEnabled":{"type":"boolean","default":true},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListAgentProviders() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "alias":{"type":"string"},
+            "enabledOnly":{"type":"boolean"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetAgentProvider() => JObject.Parse(
         """
         {
           "type":"object",
@@ -599,6 +654,20 @@ public static class McpToolSchemas
               "default":false,
               "description":"When true, also fires HumanTask/Command SLA reminders then TimeoutEvent if no completing event remains. Use this instead of starting a live instance to prove QUOTE_RESPONSE_OVERDUE / REPAIR_OVERDUE."
             },
+            "autoAdvanceAgents":{
+              "type":"boolean",
+              "default":true,
+              "description":"When a waiting step has actor Agent/Either and no completing business event is queued, host AutoCommitEvaluator without a live LLM. Default suggestion is the first autoCommit.allowedEvents at confidence 1.0."
+            },
+            "simulatedAgent":{
+              "type":"object",
+              "properties":{
+                "event":{"type":"string"},
+                "confidence":{"type":"number","minimum":0,"maximum":1,"default":1},
+                "agentId":{"type":"string","default":"RiskAnalysisAgent"}
+              },
+              "additionalProperties":false
+            },
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -742,6 +811,21 @@ public static class McpToolSchemas
               "default":false,
               "description":"When true, automatically elapses Timer steps AND HumanTask/Command SLA clocks (reminders in duration order, then TimeoutEvent) without waiting for a live clock. When false, a completing nextSteps event still fires SLA reminders that would elapse while waiting, but does not fire the timeout. Omit completing events and set this true to simulate QUOTE_RESPONSE_OVERDUE / REPAIR_OVERDUE. Do not start a live instance just to prove reminders."
             },
+            "autoAdvanceAgents":{
+              "type":"boolean",
+              "default":true,
+              "description":"When a waiting step has actor Agent/Either and no completing business event is queued, host AutoCommitEvaluator without a live LLM. Default suggestion is the first autoCommit.allowedEvents at confidence 1.0. Set false to park and inspect pendingAgentTask. TimeoutEvent stays timer-owned. Explicit events still win."
+            },
+            "simulatedAgent":{
+              "type":"object",
+              "properties":{
+                "event":{"type":"string","description":"Legal nextSteps event the simulated agent suggests. Defaults to the first autoCommit.allowedEvents key."},
+                "confidence":{"type":"number","minimum":0,"maximum":1,"default":1,"description":"Suggestion confidence compared to autoCommit.minConfidence."},
+                "agentId":{"type":"string","default":"RiskAnalysisAgent","description":"Attributed as actor Agent:{id} on auto-commit."}
+              },
+              "additionalProperties":false,
+              "description":"Optional simulated DecisionPacket suggestion. Does not call a tenant LLM. Used by AutoCommitEvaluator on actor Agent/Either waiting steps."
+            },
             "childEvents":{
               "type":"array",
               "items":{"type":"string"},
@@ -834,6 +918,20 @@ public static class McpToolSchemas
               "type":"boolean",
               "default":false,
               "description":"When true, automatically elapses Timer steps and HumanTask/Command SLA reminder/timeout clocks without requiring a live waiting instance."
+            },
+            "autoAdvanceAgents":{
+              "type":"boolean",
+              "default":true,
+              "description":"When a waiting child/parent step has actor Agent/Either, host AutoCommitEvaluator without a live LLM."
+            },
+            "simulatedAgent":{
+              "type":"object",
+              "properties":{
+                "event":{"type":"string"},
+                "confidence":{"type":"number","minimum":0,"maximum":1,"default":1},
+                "agentId":{"type":"string","default":"RiskAnalysisAgent"}
+              },
+              "additionalProperties":false
             },
             "tenantId":{
               "type":"string",

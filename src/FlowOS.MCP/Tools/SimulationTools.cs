@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using FlowOS.Agents.Abstractions;
 using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Queries.Governance;
 using FlowOS.Application.Services;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.Enums;
 using FlowOS.Domain.Services;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
@@ -47,8 +49,11 @@ public class SimulationTools
         Dictionary<string, object> Payload,
         List<object> SubWorkflowsExecuted,
         object? PendingTimer = null,
-        IReadOnlyList<string>? EventsRemaining = null
+        IReadOnlyList<string>? EventsRemaining = null,
+        object? PendingAgentTask = null
     );
+
+    private sealed record SimulatedAgentSuggestion(string? Event, double Confidence, string AgentId);
 
     public async Task<CallToolResult> SimulateWorkflowClass(JObject args)
     {
@@ -134,6 +139,8 @@ public class SimulationTools
             var inlineSubWorkflows = ParseInlineSubWorkflows(args);
             bool autoCompleteSubWorkflows = args["autoCompleteSubWorkflows"]?.Value<bool>() ?? false;
             bool autoAdvanceTimers = args["autoAdvanceTimers"]?.Value<bool>() ?? false;
+            bool autoAdvanceAgents = args["autoAdvanceAgents"]?.Value<bool>() ?? true;
+            var simulatedAgent = ParseSimulatedAgent(args["simulatedAgent"]);
 
             var runResult = await ExecuteSimulationRunAsync(
                 blueprint,
@@ -148,7 +155,9 @@ public class SimulationTools
                 autoCompleteSubWorkflows,
                 recursionDepth: 0,
                 childEventsQueue: childEventsQueue,
-                autoAdvanceTimers: autoAdvanceTimers
+                autoAdvanceTimers: autoAdvanceTimers,
+                autoAdvanceAgents: autoAdvanceAgents,
+                simulatedAgent: simulatedAgent
             );
 
             return McpToolResults.Success(new
@@ -162,6 +171,7 @@ public class SimulationTools
                 totalStepsExecuted = runResult.TotalStepsExecuted,
                 simulatedRole = runResult.SimulatedRole,
                 pendingHumanTask = runResult.PendingHumanTask,
+                pendingAgentTask = runResult.PendingAgentTask,
                 pendingSubWorkflow = runResult.PendingSubWorkflow,
                 pendingTimer = runResult.PendingTimer,
                 decisionsEvaluated = runResult.DecisionsEvaluated,
@@ -300,6 +310,8 @@ public class SimulationTools
             if (maxSteps > 100) maxSteps = 100;
 
             bool autoAdvanceTimers = args["autoAdvanceTimers"]?.Value<bool>() ?? false;
+            bool autoAdvanceAgents = args["autoAdvanceAgents"]?.Value<bool>() ?? true;
+            var simulatedAgent = ParseSimulatedAgent(args["simulatedAgent"]);
 
             var runResult = await ExecuteSimulationRunAsync(
                 parentBlueprint,
@@ -314,7 +326,9 @@ public class SimulationTools
                 autoCompleteSubWorkflows: false,
                 recursionDepth: 0,
                 childEventsQueue: childEventsQueue,
-                autoAdvanceTimers: autoAdvanceTimers
+                autoAdvanceTimers: autoAdvanceTimers,
+                autoAdvanceAgents: autoAdvanceAgents,
+                simulatedAgent: simulatedAgent
             );
 
             return McpToolResults.Success(new
@@ -355,7 +369,9 @@ public class SimulationTools
         bool autoCompleteSubWorkflows,
         int recursionDepth,
         Queue<string>? childEventsQueue = null,
-        bool autoAdvanceTimers = false)
+        bool autoAdvanceTimers = false,
+        bool autoAdvanceAgents = true,
+        SimulatedAgentSuggestion? simulatedAgent = null)
     {
         WorkflowSimulationGovernance.Apply(blueprint);
 
@@ -378,9 +394,13 @@ public class SimulationTools
         var actionsTriggered = new List<object>();
         var subworkflowsExecuted = new List<object>();
         object? pendingHumanTask = null;
+        object? pendingAgentTask = null;
         object? pendingSubWorkflow = null;
         object? pendingTimer = null;
         var slaClockApplied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var agentAuthorizedEvents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string agentActorId = simulatedAgent?.AgentId ?? "RiskAnalysisAgent";
+        double agentCommitConfidence = simulatedAgent?.Confidence ?? 1.0;
 
         var initialStepObj = blueprint.Workflow?.Steps.FirstOrDefault(s =>
             string.Equals(s.StepId, currentStepId, StringComparison.OrdinalIgnoreCase));
@@ -653,6 +673,60 @@ public class SimulationTools
                     }).ToList()
                     : null;
 
+                if (!HasBusinessCompletingEventQueued(step, eventsQueue))
+                {
+                    var agentAttempt = TrySimulateAgentAutoCommit(
+                        step, currentState, autoAdvanceAgents, simulatedAgent);
+                    if (agentAttempt.Kind == AgentSimKind.Committed)
+                    {
+                        PrependEvent(eventsQueue, agentAttempt.Event!);
+                        agentAuthorizedEvents.Add(agentAttempt.Event!);
+                        agentActorId = agentAttempt.AgentId;
+                        agentCommitConfidence = agentAttempt.Confidence;
+                    }
+                    else if (agentAttempt.Kind == AgentSimKind.Parked)
+                    {
+                        status = "WaitingForHumanTask";
+                        pendingAgentTask = new
+                        {
+                            stepId = step.StepId,
+                            actor = StepActor.Normalize(step.Actor),
+                            agentId = agentAttempt.AgentId,
+                            suggestedEvent = agentAttempt.Event,
+                            confidence = agentAttempt.Confidence,
+                            parkReason = agentAttempt.ParkReason,
+                            autoCommit = step.AutoCommit == null
+                                ? null
+                                : new
+                                {
+                                    minConfidence = step.AutoCommit.MinConfidence,
+                                    allowedEvents = step.AutoCommit.AllowedEvents
+                                }
+                        };
+                        pendingHumanTask = new
+                        {
+                            stepId = step.StepId,
+                            actor = StepActor.Normalize(step.Actor),
+                            requiredRoles = inboxRoles,
+                            requiredCapabilities = stepCaps,
+                            allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
+                            sla = step.Sla,
+                            reminders = remindersPreview,
+                            parkedByAgent = true,
+                            parkReason = agentAttempt.ParkReason
+                        };
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = "HumanTask",
+                            action = $"[Agent Parked] actor Agent:{agentAttempt.AgentId} did not auto-commit '{agentAttempt.Event ?? "(none)"}' ({agentAttempt.ParkReason}). Inbox remains [{string.Join(", ", inboxRoles)}].",
+                            state = currentState
+                        });
+                        break;
+                    }
+                }
+
                 TryPrependSlaClockEvents(step, eventsQueue, autoAdvanceTimers, slaClockApplied);
 
                 if (eventsQueue.Count > 0)
@@ -686,7 +760,9 @@ public class SimulationTools
                         break;
                     }
 
-                    if (!IsClockEvent(step, evt) && !IsEventAuthorized(blueprint, step, evt, simulatedRole))
+                    if (!IsClockEvent(step, evt) &&
+                        !agentAuthorizedEvents.Contains(evt) &&
+                        !IsEventAuthorized(blueprint, step, evt, simulatedRole))
                     {
                         var required = ResolveEventRequiredCapabilities(blueprint, step, evt);
                         status = "WaitingForHumanTask";
@@ -744,11 +820,14 @@ public class SimulationTools
 
                     bool isReminderEvent = SlaSimulationClock.IsReminderEvent(step.Sla, evt);
                     bool isTimeoutEvent = SlaSimulationClock.IsTimeoutEvent(step.Sla, evt);
+                    bool isAgentCommit = agentAuthorizedEvents.Contains(evt);
                     string actionDesc = isReminderEvent
                         ? $"[SLA Reminder Fired] Reminder event '{evt}' dispatched. Advanced to '{targetStep}'. State is now '{currentState}'."
                         : isTimeoutEvent
                             ? $"[SLA Timeout Fired] Timeout event '{evt}' dispatched after simulated SLA elapsed. Advanced to '{targetStep}'. State is now '{currentState}'."
-                            : $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.";
+                            : isAgentCommit
+                                ? $"[Agent Auto-Commit] actor Agent:{agentActorId} published '{evt}' (confidence {agentCommitConfidence:0.00}). Advanced to '{targetStep}'. State is now '{currentState}'."
+                                : $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.";
 
                     totalStepsExecuted++;
                     executionTrace.Add(new
@@ -779,6 +858,7 @@ public class SimulationTools
                     pendingHumanTask = new
                     {
                         stepId = step.StepId,
+                        actor = StepActor.Normalize(step.Actor),
                         requiredRoles = inboxRoles,
                         requiredCapabilities = stepCaps,
                         allowedEvents = step.NextSteps?.Keys.ToList() ?? new List<string>(),
@@ -790,7 +870,7 @@ public class SimulationTools
                         stepNumber = totalStepsExecuted + 1,
                         stepId = step.StepId,
                         stepType = "HumanTask",
-                        action = $"Workflow paused at HumanTask '{step.StepId}'. Inbox [{string.Join(", ", inboxRoles)}]; execution gate [{string.Join(", ", stepCaps)}].",
+                        action = $"Workflow paused at HumanTask '{step.StepId}' (actor {StepActor.Normalize(step.Actor)}). Inbox [{string.Join(", ", inboxRoles)}]; execution gate [{string.Join(", ", stepCaps)}].",
                         state = currentState
                     });
                     break;
@@ -880,7 +960,9 @@ public class SimulationTools
                         autoCompleteSubWorkflows,
                         recursionDepth + 1,
                         childEventsQueue: null,
-                        autoAdvanceTimers: autoAdvanceTimers
+                        autoAdvanceTimers: autoAdvanceTimers,
+                        autoAdvanceAgents: autoAdvanceAgents,
+                        simulatedAgent: simulatedAgent
                     );
 
                     subworkflowsExecuted.Add(new
@@ -1452,7 +1534,8 @@ public class SimulationTools
             payload,
             subworkflowsExecuted,
             pendingTimer,
-            eventsQueue.ToList()
+            eventsQueue.ToList(),
+            pendingAgentTask
         );
     }
 
@@ -2103,6 +2186,138 @@ public class SimulationTools
         }
 
         return false;
+    }
+
+    private static bool HasBusinessCompletingEventQueued(StepBlueprint step, IReadOnlyCollection<string> queuedEvents)
+    {
+        var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+        foreach (var evt in queuedEvents)
+        {
+            if (SlaSimulationClock.IsReminderEvent(step.Sla, evt) ||
+                SlaSimulationClock.IsTimeoutEvent(step.Sla, evt))
+                continue;
+            if (nextSteps.Keys.Any(key => string.Equals(key, evt, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private enum AgentSimKind
+    {
+        Skipped,
+        Committed,
+        Parked
+    }
+
+    private readonly record struct AgentSimResult(
+        AgentSimKind Kind,
+        string? Event,
+        double Confidence,
+        string AgentId,
+        string? ParkReason);
+
+    private static SimulatedAgentSuggestion? ParseSimulatedAgent(JToken? token)
+    {
+        if (token is not JObject obj)
+            return null;
+
+        var evt = obj["event"]?.ToString()?.Trim();
+        var confidence = obj["confidence"]?.Value<double?>() ?? 1.0;
+        if (confidence < 0) confidence = 0;
+        if (confidence > 1) confidence = 1;
+        var agentId = obj["agentId"]?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(agentId))
+            agentId = "RiskAnalysisAgent";
+        return new SimulatedAgentSuggestion(
+            string.IsNullOrWhiteSpace(evt) ? null : evt,
+            confidence,
+            agentId);
+    }
+
+    private static void PrependEvent(Queue<string> eventsQueue, string eventId)
+    {
+        var rest = eventsQueue.ToList();
+        eventsQueue.Clear();
+        eventsQueue.Enqueue(eventId);
+        foreach (var item in rest)
+            eventsQueue.Enqueue(item);
+    }
+
+    private static AgentSimResult TrySimulateAgentAutoCommit(
+        StepBlueprint step,
+        string currentState,
+        bool autoAdvanceAgents,
+        SimulatedAgentSuggestion? simulatedAgent)
+    {
+        if (!StepActor.IsAgentHandled(step.Actor))
+            return new AgentSimResult(AgentSimKind.Skipped, null, 0, "RiskAnalysisAgent", null);
+
+        if (!autoAdvanceAgents && simulatedAgent == null)
+            return new AgentSimResult(AgentSimKind.Skipped, null, 0, "RiskAnalysisAgent", null);
+
+        var agentId = simulatedAgent?.AgentId ?? "RiskAnalysisAgent";
+        var packet = BuildSimulationDecisionPacket(step, currentState);
+        var suggestedEvent = simulatedAgent?.Event;
+        if (string.IsNullOrWhiteSpace(suggestedEvent))
+            suggestedEvent = packet.AutoCommit?.AllowedEvents.FirstOrDefault();
+
+        var confidence = simulatedAgent?.Confidence ?? 1.0;
+        if (string.IsNullOrWhiteSpace(suggestedEvent))
+        {
+            return new AgentSimResult(
+                AgentSimKind.Parked,
+                null,
+                confidence,
+                agentId,
+                "No legal suggestion.");
+        }
+
+        var action = new SuggestedAction(suggestedEvent, "Simulated agent suggestion.", confidence);
+        if (!AutoCommitEvaluator.CanCommit(packet, action, out var parkReason))
+        {
+            return new AgentSimResult(AgentSimKind.Parked, suggestedEvent, confidence, agentId, parkReason);
+        }
+
+        return new AgentSimResult(AgentSimKind.Committed, suggestedEvent, confidence, agentId, null);
+    }
+
+    private static DecisionPacket BuildSimulationDecisionPacket(StepBlueprint step, string currentState)
+    {
+        var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
+        var legalNext = nextSteps.Keys
+            .Where(key => !DecisionPacketFactory.IsReservedRoute(key))
+            .ToList();
+        var reminders = (step.Sla?.Reminders ?? new List<StepReminderBlueprint>())
+            .Select(reminder => new SlaReminderFact(reminder.Duration, reminder.TriggerEvent))
+            .ToList();
+
+        AutoCommitPolicy? policy = null;
+        if (step.AutoCommit != null)
+        {
+            policy = new AutoCommitPolicy(
+                step.AutoCommit.MinConfidence,
+                step.AutoCommit.AllowedEvents ?? new List<string>());
+        }
+
+        return new DecisionPacket(
+            Guid.Empty,
+            Guid.Empty,
+            step.StepId,
+            currentState,
+            step.StepType,
+            StepActor.Normalize(step.Actor),
+            step.DecisionGuideline,
+            null,
+            new Dictionary<string, object?>(),
+            legalNext,
+            Array.Empty<string>(),
+            step.AllowedRoles ?? new List<string>(),
+            reminders,
+            step.Sla?.TimeoutEvent,
+            new Dictionary<string, object>(),
+            "Simulate bounded-autonomy auto-commit",
+            policy);
     }
 
     private static void ApplySlaReminderStay(

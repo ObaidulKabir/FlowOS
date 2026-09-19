@@ -84,13 +84,18 @@ public sealed class DispatcherTests
         Assert.Contains("test_sla_reminders_in_simulator", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/sla-reminder-simulation", initResult["instructions"]!.ToString());
         Assert.Contains("design_agent_handled_step", initResult["instructions"]!.ToString());
+        Assert.Contains("automate_waiting_task_with_ai_agent", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/bounded-autonomy-tasks", initResult["instructions"]!.ToString());
+        Assert.Contains("flowos://guides/ai-task-automation", initResult["instructions"]!.ToString());
         Assert.Contains("check_os_release_gate", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/os-release-gate", initResult["instructions"]!.ToString());
         Assert.Contains("get_agent_context", initResult["instructions"]!.ToString());
         Assert.Contains("upsert_agent_prompt", initResult["instructions"]!.ToString());
+        Assert.Contains("upsert_agent_provider", initResult["instructions"]!.ToString());
+        Assert.Contains("run_agent_task", initResult["instructions"]!.ToString());
         Assert.Contains("state-only catch-up", initResult["instructions"]!.ToString());
         Assert.Contains("autoAdvanceTimers", initResult["instructions"]!.ToString());
+        Assert.Contains("autoAdvanceAgents", initResult["instructions"]!.ToString());
         Assert.Contains("Capability is the execution gate", initResult["instructions"]!.ToString());
         Assert.Contains("requiredRoles is inbox", initResult["instructions"]!.ToString());
         Assert.NotNull(initResult["capabilities"]?["prompts"]);
@@ -133,6 +138,16 @@ public sealed class DispatcherTests
         Assert.Contains("get_agent_context", agentText);
         Assert.Contains("preview_agent_context", agentText);
         Assert.Contains("upsert_agent_prompt", agentText);
+        Assert.Contains("upsert_agent_provider", agentText);
+        Assert.Contains("TenantLlmWorkflowAgent", agentText);
+
+        var automationPrompt = await dispatcher.DispatchAsync(Request(35, "prompts/get", new { name = "automate_waiting_task_with_ai_agent", arguments = new { workflowName = "QuoteAutoReview", stepId = "AgentReview" } }));
+        var automationText = JObject.FromObject(((JsonRpcResponse)automationPrompt.Response!).Result!)["messages"]![0]!["content"]!["text"]!.ToString();
+        Assert.Contains("QuoteAutoReview", automationText);
+        Assert.Contains("AgentReview", automationText);
+        Assert.Contains("upsert_agent_provider", automationText);
+        Assert.Contains("run_agent_task", automationText);
+        Assert.Contains("never call the tenant model", automationText);
 
         // 3. Resources list & read
         var resourcesList = await dispatcher.DispatchAsync(Request(4, "resources/list"));
@@ -166,12 +181,23 @@ public sealed class DispatcherTests
         var autonomyText = autonomyResult["contents"]![0]!["text"]!.ToString();
         Assert.Contains("autoCommit", autonomyText);
         Assert.Contains("DecisionPacket", autonomyText);
+        Assert.Contains("[Agent Auto-Commit]", autonomyText);
+        Assert.Contains("autoAdvanceAgents", autonomyText);
         Assert.Contains("TimeoutEvent", autonomyText);
         Assert.Contains("agentProvider", autonomyText);
         Assert.Contains("agentPrompt", autonomyText);
         Assert.Contains("register_plugin_binding", autonomyText);
         Assert.Contains("get_agent_context", autonomyText);
         Assert.Contains("upsert_agent_prompt", autonomyText);
+        Assert.Contains("upsert_agent_provider", autonomyText);
+        Assert.Contains("TenantLlmWorkflowAgent", autonomyText);
+
+        var automationRead = await dispatcher.DispatchAsync(Request(10, "resources/read", new { uri = "flowos://guides/ai-task-automation" }));
+        var automationGuide = JObject.FromObject(((JsonRpcResponse)automationRead.Response!).Result!)["contents"]![0]!["text"]!.ToString();
+        Assert.Contains("upsert_agent_provider", automationGuide);
+        Assert.Contains("run_agent_task", automationGuide);
+        Assert.Contains("QuoteAutoReview", automationGuide);
+        Assert.Contains("Application", automationGuide);
 
         var osGateRead = await dispatcher.DispatchAsync(Request(9, "resources/read", new { uri = "flowos://guides/os-release-gate" }));
         var osGateText = JObject.FromObject(((JsonRpcResponse)osGateRead.Response!).Result!)["contents"]![0]!["text"]!.ToString();

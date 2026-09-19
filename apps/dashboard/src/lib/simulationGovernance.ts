@@ -59,6 +59,8 @@ const EVENT_INBOX: Record<string, string[]> = {
   'evt-approve': ['Manager'],
   'evt-reject': ['Manager'],
   'evt-escalate': ['Manager', 'Support'],
+  'evt-accept': ['QuoteAgent', 'Advisor'],
+  'evt-request-revision': ['Advisor'],
   'evt-open': ['User', 'Employee', 'Reporter'],
   'evt-resolve': ['Support', 'Manager'],
   'evt-close': ['OnCall', 'Director'],

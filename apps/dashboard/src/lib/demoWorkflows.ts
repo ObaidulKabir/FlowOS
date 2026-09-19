@@ -6,6 +6,7 @@ export const DEMO_NAMES = [
   'LoanUnderwritingFlow',
   'SecOpsAccessGovernance',
   'IncidentAlertEscalation',
+  'QuoteAutoReview',
   'ExpenseApproval'
 ];
 
@@ -294,6 +295,74 @@ const FALLBACK_INCIDENT_ALERT = applySimulationGovernance({
   }
 });
 
+const FALLBACK_QUOTE_AUTO_REVIEW = applySimulationGovernance({
+  Events: [
+    { EventId: 'EVT-SUBMIT', Name: 'Submit Quote', AllowedRoles: ['Submitter'] },
+    { EventId: 'EVT-ACCEPT', Name: 'Accept Quote', AllowedRoles: ['QuoteAgent', 'Advisor'] },
+    { EventId: 'EVT-REQUEST-REVISION', Name: 'Request Revision', AllowedRoles: ['Advisor'] },
+    { EventId: 'EVT-SLA-WARN-4H', Name: '4h quote reminder' },
+    { EventId: 'EVT-QUOTE-OVERDUE', Name: 'Quote Review Overdue' }
+  ],
+  StateMachine: {
+    InitialState: 'Draft',
+    States: ['Draft', 'AgentQueued', 'AdvisorQueued', 'Accepted', 'RevisionRequested', 'Overdue'],
+    Transitions: [
+      { FromState: 'Draft', ToState: 'AdvisorQueued', EventId: 'EVT-SUBMIT', Condition: 'Amount > 1500' },
+      { FromState: 'Draft', ToState: 'AgentQueued', EventId: 'EVT-SUBMIT' },
+      { FromState: 'AgentQueued', ToState: 'Accepted', EventId: 'EVT-ACCEPT' },
+      { FromState: 'AgentQueued', ToState: 'RevisionRequested', EventId: 'EVT-REQUEST-REVISION' },
+      { FromState: 'AgentQueued', ToState: 'Overdue', EventId: 'EVT-QUOTE-OVERDUE' },
+      { FromState: 'AdvisorQueued', ToState: 'Accepted', EventId: 'EVT-ACCEPT' },
+      { FromState: 'AdvisorQueued', ToState: 'RevisionRequested', EventId: 'EVT-REQUEST-REVISION' },
+      { FromState: 'AdvisorQueued', ToState: 'Overdue', EventId: 'EVT-QUOTE-OVERDUE' }
+    ]
+  },
+  Workflow: {
+    StartStepId: 'SubmitQuote',
+    Steps: [
+      {
+        StepId: 'SubmitQuote',
+        StepType: 'Command',
+        NextSteps: { 'EVT-SUBMIT': 'CheckAmount' },
+        RequiredRoles: ['Submitter']
+      },
+      {
+        StepId: 'CheckAmount',
+        StepType: 'Decision',
+        Conditions: { 'Amount > 1500': 'AdvisorReview', Default: 'AgentReview' },
+        NextSteps: { Default: 'AgentReview' },
+        RequiredRoles: ['System']
+      },
+      {
+        StepId: 'AgentReview',
+        StepType: 'HumanTask',
+        Actor: 'Agent',
+        RequiredRoles: ['QuoteAgent'],
+        DecisionGuideline: 'Accept if Amount is at or below 1500 and within 15% of Estimate.',
+        AgentPrompt: 'quote-approval',
+        AgentProvider: 'quote-llm',
+        AutoCommit: { MinConfidence: 0.9, AllowedEvents: ['EVT-ACCEPT'] },
+        NextSteps: { 'EVT-ACCEPT': 'Closed', 'EVT-REQUEST-REVISION': 'Revision', 'EVT-QUOTE-OVERDUE': 'Overdue' },
+        Sla: {
+          Duration: '24h',
+          TimeoutEvent: 'EVT-QUOTE-OVERDUE',
+          Reminders: [{ Duration: '4h', TriggerEvent: 'EVT-SLA-WARN-4H' }]
+        }
+      },
+      {
+        StepId: 'AdvisorReview',
+        StepType: 'HumanTask',
+        Actor: 'Human',
+        RequiredRoles: ['Advisor'],
+        NextSteps: { 'EVT-ACCEPT': 'Closed', 'EVT-REQUEST-REVISION': 'Revision' }
+      },
+      { StepId: 'Closed', StepType: 'Command', NextSteps: { Default: 'END' } },
+      { StepId: 'Revision', StepType: 'Command', NextSteps: { Default: 'END' } },
+      { StepId: 'Overdue', StepType: 'Command', NextSteps: { Default: 'END' } }
+    ]
+  }
+});
+
 const FALLBACK_SECOPS = applySimulationGovernance({
   Events: [
     { EventId: 'EVT-REQUEST-ACCESS', Name: 'Request Privileged Access', AllowedRoles: ['User', 'Employee'] },
@@ -454,5 +523,11 @@ export const DEMO_FALLBACKS: Record<string, { id: string; name: string; version:
     name: 'IncidentAlertEscalation',
     version: 'demo',
     definition: FALLBACK_INCIDENT_ALERT
+  },
+  QuoteAutoReview: {
+    id: 'fallback-quote-auto-review',
+    name: 'QuoteAutoReview',
+    version: 'demo',
+    definition: FALLBACK_QUOTE_AUTO_REVIEW
   }
 };

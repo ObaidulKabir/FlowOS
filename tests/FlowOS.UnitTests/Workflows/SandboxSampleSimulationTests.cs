@@ -75,7 +75,13 @@ public class SandboxSampleSimulationTests
                 ["TicketId"] = "INC-1",
                 ["Severity"] = "Critical",
                 ["Summary"] = "Payments down"
-            }, "OnCall", new JArray("EVT-OPEN", "EVT-CLOSE"), false, "Resolved")
+            }, "OnCall", new JArray("EVT-OPEN", "EVT-CLOSE"), false, "Resolved"),
+            ("QuoteAutoReview", new JObject
+            {
+                ["QuoteId"] = "Q-100",
+                ["Amount"] = 900,
+                ["Estimate"] = 900
+            }, "Submitter", new JArray("EVT-SUBMIT"), false, "Accepted")
         };
 
         foreach (var (name, payload, role, events, autoAdvance, expectedState) in cases)
@@ -183,6 +189,14 @@ public class SandboxSampleSimulationTests
         Assert.Contains(incidentDef.BusinessRoles, role => role.Name == "OnCall" && role.Capabilities.Contains("event.publish.EVT-CLOSE"));
         Assert.Contains(incident.Definition.Workflow.Steps.Single(s => s.StepId == "L1Review").RequiredRoles, role => role == "Support");
         Assert.Equal("EVT-ESCALATE", incident.Definition.Workflow.Steps.Single(s => s.StepId == "L1Review").Sla?.TimeoutEvent);
+
+        var quote = await db.WorkflowClasses.FirstAsync(w => w.Name == "QuoteAutoReview");
+        var quoteDef = WorkflowClassCompiler.MapToRuntimeDefinition(quote);
+        Assert.Contains(quoteDef.BusinessRoles, role => role.Name == "QuoteAgent" && role.Capabilities.Contains("event.publish.EVT-ACCEPT"));
+        var agentReview = quote.Definition.Workflow.Steps.Single(step => step.StepId == "AgentReview");
+        Assert.Equal("Agent", agentReview.Actor);
+        Assert.Contains("EVT-ACCEPT", agentReview.AutoCommit!.AllowedEvents);
+        Assert.Equal("AdvisorReview", quote.Definition.Workflow.Steps.Single(step => step.StepId == "CheckAmount").Conditions["Amount > 1500"]);
     }
 
     [Fact]

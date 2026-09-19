@@ -593,6 +593,10 @@ public class WorkflowCopilotService : IWorkflowCopilotService
             lowerPrompt.Contains("on-call") ||
             lowerPrompt.Contains("oncall"))
             return "IncidentAlertEscalation";
+        if ((lowerPrompt.Contains("quote") && (lowerPrompt.Contains("agent") || lowerPrompt.Contains("auto"))) ||
+            lowerPrompt.Contains("quoteautoreview") ||
+            lowerPrompt.Contains("bounded autonomy"))
+            return "QuoteAutoReview";
         if (lowerPrompt.Contains("secops") || lowerPrompt.Contains("incident") || lowerPrompt.Contains("access")) return "SecOpsAccessGovernance";
         if (lowerPrompt.Contains("expense") || lowerPrompt.Contains("reimburse")) return "ExpenseReimbursementFlow";
 

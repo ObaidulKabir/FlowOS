@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.Enums;
 using FlowOS.Domain.Services;
 using FlowOS.MCP.Tools;
 using MediatR;
@@ -1166,5 +1167,113 @@ public class SimulationToolsTests
         var remaining = data["eventsRemaining"] as JArray;
         Assert.NotNull(remaining);
         Assert.Empty(remaining);
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_AgentActor_AutoCommitsAllowedEventWithoutQueuedEvent()
+    {
+        var result = await _tools.SimulateWorkflowClass(new JObject
+        {
+            ["blueprint"] = AgentReviewBlueprint(StepActor.Agent),
+            ["events"] = new JArray(),
+            ["role"] = "User"
+        });
+
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("END", data["currentStepId"]?.ToString());
+        Assert.Equal("Accepted", data["finalState"]?.ToString());
+        Assert.Contains(
+            (data["executionTrace"] as JArray ?? new JArray()).Select(token => token["action"]?.ToString() ?? ""),
+            action => action.Contains("[Agent Auto-Commit]") && action.Contains("EVT-ACCEPT"));
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_HumanActor_DoesNotAutoCommit()
+    {
+        var result = await _tools.SimulateWorkflowClass(new JObject
+        {
+            ["blueprint"] = AgentReviewBlueprint(StepActor.Human),
+            ["events"] = new JArray(),
+            ["role"] = "User"
+        });
+
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("WaitingForHumanTask", data["status"]?.ToString());
+        Assert.Equal("AgentReview", data["currentStepId"]?.ToString());
+        Assert.Equal("Human", data["pendingHumanTask"]?["actor"]?.ToString());
+        Assert.True(data["pendingAgentTask"] == null || data["pendingAgentTask"]!.Type == JTokenType.Null);
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_AgentActor_LowConfidenceParksPendingAgentTask()
+    {
+        var result = await _tools.SimulateWorkflowClass(new JObject
+        {
+            ["blueprint"] = AgentReviewBlueprint(StepActor.Agent),
+            ["events"] = new JArray(),
+            ["role"] = "User",
+            ["simulatedAgent"] = new JObject
+            {
+                ["event"] = "EVT-ACCEPT",
+                ["confidence"] = 0.2,
+                ["agentId"] = "RiskAnalysisAgent"
+            }
+        });
+
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("WaitingForHumanTask", data["status"]?.ToString());
+        Assert.Equal("AgentReview", data["currentStepId"]?.ToString());
+        Assert.True(data["pendingHumanTask"]?["parkedByAgent"]?.Value<bool>());
+        Assert.Equal("EVT-ACCEPT", data["pendingAgentTask"]?["suggestedEvent"]?.ToString());
+        Assert.Contains("minConfidence", data["pendingAgentTask"]?["parkReason"]?.ToString());
+    }
+
+    private static JObject AgentReviewBlueprint(string actor)
+    {
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "EVT-ACCEPT", Name = "Accept" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Queued",
+                States = new List<string> { "Queued", "Accepted" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "Queued", ToState = "Accepted", EventId = "EVT-ACCEPT" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "AgentReview",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "AgentReview",
+                        StepType = "HumanTask",
+                        Actor = actor,
+                        DecisionGuideline = "Accept in-bound quotes.",
+                        AutoCommit = new StepAutoCommitBlueprint
+                        {
+                            MinConfidence = 0.9,
+                            AllowedEvents = new List<string> { "EVT-ACCEPT" }
+                        },
+                        NextSteps = new Dictionary<string, string> { { "EVT-ACCEPT", "END" } }
+                    }
+                }
+            }
+        };
+
+        return JObject.FromObject(blueprint);
     }
 }

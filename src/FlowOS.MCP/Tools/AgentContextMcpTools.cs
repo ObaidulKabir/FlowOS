@@ -253,6 +253,136 @@ public class AgentContextMcpTools
         }
     }
 
+    public async Task<CallToolResult> UpsertAgentProvider(JObject args)
+    {
+        try
+        {
+            var alias = FirstNonEmpty(args, "alias", "sourceName");
+            if (string.IsNullOrWhiteSpace(alias))
+                return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var existing = (await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Agent, alias))
+                .FirstOrDefault();
+
+            var providerName = FirstNonEmpty(args, "providerName") ?? existing?.ProviderName;
+            if (string.IsNullOrWhiteSpace(providerName))
+            {
+                return McpToolResults.Fail(
+                    "MCP-ARG-001",
+                    "providerName is required when creating a provider (openai, anthropic, azure-openai, google, custom, flowos-risk).");
+            }
+
+            if (!AgentProviderKinds.IsKnown(providerName))
+            {
+                return McpToolResults.Fail(
+                    "PLUGIN-BIND-005",
+                    "Unknown providerName. Use openai, anthropic, azure-openai, google, custom, or flowos-risk.");
+            }
+
+            var isEnabled = args["isEnabled"]?.Value<bool>() ?? existing?.IsEnabled ?? true;
+            var binding = await _pluginBindings.UpsertAsync(
+                tenantId,
+                PluginBindingTypes.Agent,
+                alias,
+                providerName,
+                isEnabled,
+                BuildProviderConfiguration(args));
+
+            return McpToolResults.Success(ToProviderDto(binding));
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolResults.Fail("MCP-ARG-001", ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to save agent provider.");
+        }
+    }
+
+    public async Task<CallToolResult> ListAgentProviders(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            bool? enabledOnly = args["enabledOnly"]?.Value<bool>();
+            var bindings = await _pluginBindings.ListAsync(
+                tenantId,
+                PluginBindingTypes.Agent,
+                args["alias"]?.ToString()?.Trim(),
+                enabledOnly);
+
+            return McpToolResults.Success(new
+            {
+                totalCount = bindings.Count,
+                providers = bindings.Select(ToProviderDto).ToList()
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to list agent providers.");
+        }
+    }
+
+    public async Task<CallToolResult> GetAgentProvider(JObject args)
+    {
+        try
+        {
+            var alias = FirstNonEmpty(args, "alias", "sourceName");
+            if (string.IsNullOrWhiteSpace(alias))
+                return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var binding = await _pluginBindings.GetEnabledAsync(tenantId, PluginBindingTypes.Agent, alias);
+            if (binding == null)
+            {
+                var listed = await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Agent, alias);
+                binding = listed.FirstOrDefault();
+            }
+
+            if (binding == null)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Agent provider '{alias}' was not found.");
+
+            return McpToolResults.Success(ToProviderDto(binding));
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to load agent provider.");
+        }
+    }
+
+    private static object ToProviderDto(PluginBindingDto binding)
+    {
+        var settings = binding.Configuration as AgentProviderPublicSettings
+            ?? AgentProviderConfiguration.Redact(null);
+        return new
+        {
+            alias = binding.SourceName,
+            providerName = binding.ProviderName,
+            binding.IsEnabled,
+            model = settings.Model,
+            endpoint = settings.Endpoint,
+            hasApiKey = settings.HasApiKey,
+            binding.Id,
+            binding.TenantId,
+            binding.CreatedAtUtc,
+            binding.UpdatedAtUtc
+        };
+    }
+
     private static object ToPromptDto(PluginBindingDto binding)
     {
         var prompt = binding.Configuration as AgentPromptConfiguration
@@ -270,6 +400,21 @@ public class AgentContextMcpTools
             binding.CreatedAtUtc,
             binding.UpdatedAtUtc
         };
+    }
+
+    private static string BuildProviderConfiguration(JObject args)
+    {
+        var nested = args["configuration"] as JObject;
+        var model = FirstNonEmpty(args, "model") ?? nested?["model"]?.ToString();
+        var endpoint = FirstNonEmpty(args, "endpoint") ?? nested?["endpoint"]?.ToString();
+        var apiKey = FirstNonEmpty(args, "apiKey") ?? nested?["apiKey"]?.ToString();
+
+        return new JObject
+        {
+            ["model"] = model,
+            ["endpoint"] = endpoint,
+            ["apiKey"] = apiKey
+        }.ToString(Newtonsoft.Json.Formatting.None);
     }
 
     private static string BuildPromptConfiguration(JObject args)

@@ -39,11 +39,13 @@ public class FlagshipWorkflowsSeederTests
         var loanWc = await db.WorkflowClasses.FirstOrDefaultAsync(w => w.TenantId == _testTenantId && w.Name == "LoanUnderwritingFlow");
         var secOpsWc = await db.WorkflowClasses.FirstOrDefaultAsync(w => w.TenantId == _testTenantId && w.Name == "SecOpsAccessGovernance");
         var incidentWc = await db.WorkflowClasses.FirstOrDefaultAsync(w => w.TenantId == _testTenantId && w.Name == "IncidentAlertEscalation");
+        var quoteWc = await db.WorkflowClasses.FirstOrDefaultAsync(w => w.TenantId == _testTenantId && w.Name == "QuoteAutoReview");
 
         Assert.NotNull(sagaWc);
         Assert.NotNull(loanWc);
         Assert.NotNull(secOpsWc);
         Assert.NotNull(incidentWc);
+        Assert.NotNull(quoteWc);
 
         Assert.Equal(WorkflowClassStatus.Public, sagaWc.Status);
         Assert.Equal(WorkflowClassScope.Public, sagaWc.Scope);
@@ -57,21 +59,27 @@ public class FlagshipWorkflowsSeederTests
         Assert.Equal(WorkflowClassStatus.Public, incidentWc.Status);
         Assert.Equal(WorkflowClassScope.Public, incidentWc.Scope);
 
+        Assert.Equal(WorkflowClassStatus.Public, quoteWc.Status);
+        Assert.Equal(WorkflowClassScope.Public, quoteWc.Scope);
+
         // Assert WorkflowDefinitions
         var sagaDef = await db.WorkflowDefinitions.FirstOrDefaultAsync(d => d.TenantId == _testTenantId && d.Name == "OrderSagaFulfillment");
         var loanDef = await db.WorkflowDefinitions.FirstOrDefaultAsync(d => d.TenantId == _testTenantId && d.Name == "LoanUnderwritingFlow");
         var secOpsDef = await db.WorkflowDefinitions.FirstOrDefaultAsync(d => d.TenantId == _testTenantId && d.Name == "SecOpsAccessGovernance");
         var incidentDef = await db.WorkflowDefinitions.FirstOrDefaultAsync(d => d.TenantId == _testTenantId && d.Name == "IncidentAlertEscalation");
+        var quoteDef = await db.WorkflowDefinitions.FirstOrDefaultAsync(d => d.TenantId == _testTenantId && d.Name == "QuoteAutoReview");
 
         Assert.NotNull(sagaDef);
         Assert.NotNull(loanDef);
         Assert.NotNull(secOpsDef);
         Assert.NotNull(incidentDef);
+        Assert.NotNull(quoteDef);
 
         Assert.Equal(WorkflowStatus.Published, sagaDef.Status);
         Assert.Equal(WorkflowStatus.Published, loanDef.Status);
         Assert.Equal(WorkflowStatus.Published, secOpsDef.Status);
         Assert.Equal(WorkflowStatus.Published, incidentDef.Status);
+        Assert.Equal(WorkflowStatus.Published, quoteDef.Status);
 
         Assert.Contains(sagaWc.Definition.Roles, role => role.Name == "Warehouse");
         Assert.Contains(loanWc.Definition.Roles, role => role.Name == "Manager");
@@ -79,6 +87,7 @@ public class FlagshipWorkflowsSeederTests
         Assert.Contains(loanDef.BusinessRoles, role => role.Name == "Manager" && role.Capabilities.Contains("event.publish.EVT-FINAL-APPROVE"));
         Assert.Contains(secOpsDef.BusinessRoles, role => role.Name == "Director");
         Assert.Contains(incidentDef.BusinessRoles, role => role.Name == "OnCall" && role.Capabilities.Contains("event.publish.EVT-CLOSE"));
+        Assert.Contains(quoteDef.BusinessRoles, role => role.Name == "QuoteAgent" && role.Capabilities.Contains("event.publish.EVT-ACCEPT"));
         Assert.Contains(loanWc.Definition.Workflow.Steps.Single(s => s.StepId == "UnderwriterReview").RequiredRoles, role => role == "Manager");
     }
 
@@ -90,7 +99,7 @@ public class FlagshipWorkflowsSeederTests
         await DataSeeder.SeedFlagshipWorkflowsAsync(db, _testTenantId);
         var validator = new WorkflowClassValidator();
 
-        var flagshipNames = new[] { "OrderSagaFulfillment", "LoanUnderwritingFlow", "SecOpsAccessGovernance", "IncidentAlertEscalation" };
+        var flagshipNames = new[] { "OrderSagaFulfillment", "LoanUnderwritingFlow", "SecOpsAccessGovernance", "IncidentAlertEscalation", "QuoteAutoReview" };
 
         foreach (var name in flagshipNames)
         {

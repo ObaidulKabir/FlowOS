@@ -968,6 +968,24 @@ public static class DataSeeder
             context.WorkflowDefinitions.Add(incidentDef);
         }
 
+        // -------------------------------------------------------------------------------------------------
+        // FLAGSHIP 5: QuoteAutoReview (AI Agent actor auto-commits in-bound quotes)
+        // -------------------------------------------------------------------------------------------------
+        const string quoteName = "QuoteAutoReview";
+        if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == quoteName))
+        {
+            var quoteBp = CreateQuoteAutoReviewBlueprint();
+            var quoteWc = new WorkflowClass(clientTenantId, quoteName, "1.0.0", quoteBp);
+            manager.Publish(quoteWc);
+            manager.SubmitForReview(quoteWc);
+            manager.ApproveAsPublic(quoteWc);
+            context.WorkflowClasses.Add(quoteWc);
+
+            var quoteDef = WorkflowClassCompiler.MapToRuntimeDefinition(quoteWc);
+            quoteDef.Publish();
+            context.WorkflowDefinitions.Add(quoteDef);
+        }
+
         await RepairExpenseApprovalV2GraphAsync(context, clientTenantId);
         await context.SaveChangesAsync();
     }
@@ -1086,6 +1104,23 @@ public static class DataSeeder
         BizRole("OnCall", "L2 inbox after alert escalation", "workflow.read", "event.publish.EVT-CLOSE")
     ];
 
+    private const string HighValueQuoteCondition = "Amount > 1500";
+
+    private static List<CapabilityBlueprint> QuoteCapabilities() =>
+    [
+        Cap("workflow.read", "Read quote instance state"),
+        Cap("event.publish.EVT-SUBMIT", "Submit a quote for review"),
+        Cap("event.publish.EVT-ACCEPT", "Accept an in-bound quote"),
+        Cap("event.publish.EVT-REQUEST-REVISION", "Send a quote back for revision")
+    ];
+
+    private static List<RoleBlueprint> QuoteRoles() =>
+    [
+        BizRole("Submitter", "Files the quote", "workflow.read", "event.publish.EVT-SUBMIT"),
+        BizRole("QuoteAgent", "Hosted agent inbox for in-bound quotes", "workflow.read", "event.publish.EVT-ACCEPT"),
+        BizRole("Advisor", "Human override and over-limit review", "workflow.read", "event.publish.EVT-ACCEPT", "event.publish.EVT-REQUEST-REVISION")
+    ];
+
     private static void EnsureStepRequiredRoles(WorkflowClassBlueprint blueprint, string stepId, params string[] roles)
     {
         var step = blueprint.Workflow.Steps.FirstOrDefault(s => s.StepId == stepId);
@@ -1157,6 +1192,13 @@ public static class DataSeeder
                 EnsureStepRequiredRoles(blueprint, "OnCallEscalation", "OnCall");
                 EnsureRoleList(blueprint.Roles, IncidentRoles());
                 EnsureCapabilityList(blueprint.Capabilities, IncidentCapabilities());
+                WorkflowSimulationGovernance.Apply(blueprint);
+                break;
+            case "QuoteAutoReview":
+                EnsureStepRequiredRoles(blueprint, "AgentReview", "QuoteAgent");
+                EnsureStepRequiredRoles(blueprint, "AdvisorReview", "Advisor");
+                EnsureRoleList(blueprint.Roles, QuoteRoles());
+                EnsureCapabilityList(blueprint.Capabilities, QuoteCapabilities());
                 WorkflowSimulationGovernance.Apply(blueprint);
                 break;
         }
@@ -1338,6 +1380,20 @@ public static class DataSeeder
                 ["Summary"] = "summary"
             },
             new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)),
+        "QuoteAutoReview" => (
+            "Quote",
+            "Quote Auto Review Context",
+            "ServiceQuote",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["QuoteId"] = "quoteId",
+                ["Amount"] = "amount",
+                ["Estimate"] = "estimate"
+            },
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ApprovalLimit"] = JsonSerializer.SerializeToElement(1500)
+            }),
         _ => (
             workflowName,
             $"{workflowName} Context",
@@ -1373,6 +1429,7 @@ public static class DataSeeder
             CapabilityOverrides = capabilityOverrides,
             InputMapping = spec.InputMapping,
             ConditionParameters = spec.ConditionParameters,
+            PolicyGuideline = SamplePolicyGuideline(workflowClass.Name),
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["templateRoles"] = string.Join(",", roleOverrides.Keys),
@@ -1380,6 +1437,14 @@ public static class DataSeeder
             }
         };
     }
+
+    public const string QuoteAutoReviewPolicyGuideline =
+        "ServiceQuote overlay: never auto-accept when Amount is above ApprovalLimit even if the template would accept.";
+
+    private static string? SamplePolicyGuideline(string workflowName) =>
+        string.Equals(workflowName, "QuoteAutoReview", StringComparison.OrdinalIgnoreCase)
+            ? QuoteAutoReviewPolicyGuideline
+            : null;
 
     private static async Task EnsureSampleBindingVocabularyAsync(
         FlowOSDbContext context,
@@ -1452,7 +1517,10 @@ public static class DataSeeder
             RoleOverrides = roleOverrides,
             CapabilityOverrides = capabilityOverrides,
             InputMapping = inputMapping,
-            Metadata = metadata
+            Metadata = metadata,
+            PolicyGuideline = string.IsNullOrWhiteSpace(current.PolicyGuideline)
+                ? expected.PolicyGuideline
+                : current.PolicyGuideline
         };
     }
 
@@ -1463,6 +1531,7 @@ public static class DataSeeder
            merged.CapabilityOverrides.Count != current.CapabilityOverrides.Count ||
            merged.InputMapping.Count != current.InputMapping.Count ||
            !string.Equals(merged.EntityType, current.EntityType, StringComparison.Ordinal) ||
+           !string.Equals(merged.PolicyGuideline, current.PolicyGuideline, StringComparison.Ordinal) ||
            merged.Metadata.GetValueOrDefault("templateRoles") != current.Metadata.GetValueOrDefault("templateRoles") ||
            merged.Metadata.GetValueOrDefault("templateCapabilities") != current.Metadata.GetValueOrDefault("templateCapabilities");
 
@@ -1473,7 +1542,8 @@ public static class DataSeeder
         "OrderSagaFulfillment",
         "LoanUnderwritingFlow",
         "SecOpsAccessGovernance",
-        "IncidentAlertEscalation"
+        "IncidentAlertEscalation",
+        "QuoteAutoReview"
     };
 
     private static async Task EnsureRoleWithPermissionsAsync(
@@ -1795,6 +1865,155 @@ public static class DataSeeder
             },
             Roles = IncidentRoles(),
             Capabilities = IncidentCapabilities()
+        };
+
+        WorkflowSimulationGovernance.Apply(blueprint);
+        return blueprint;
+    }
+
+    public static WorkflowClassBlueprint CreateQuoteAutoReviewBlueprint()
+    {
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new()
+            {
+                new EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Quote", Category = EventCategory.Human, AllowedRoles = new() { "Submitter" } },
+                new EventBlueprint { EventId = "EVT-ACCEPT", Name = "Accept Quote", Category = EventCategory.Agent, AllowedRoles = new() { "QuoteAgent", "Advisor" } },
+                new EventBlueprint { EventId = "EVT-REQUEST-REVISION", Name = "Request Revision", Category = EventCategory.Human, AllowedRoles = new() { "Advisor" } },
+                new EventBlueprint { EventId = "EVT-SLA-WARN-4H", Name = "4h quote reminder", Category = EventCategory.System },
+                new EventBlueprint { EventId = "EVT-QUOTE-OVERDUE", Name = "Quote Review Overdue", Category = EventCategory.System }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = new() { "Draft", "AgentQueued", "AdvisorQueued", "Accepted", "RevisionRequested", "Overdue" },
+                Transitions = new()
+                {
+                    new TransitionBlueprint { FromState = "Draft", ToState = "AdvisorQueued", EventId = "EVT-SUBMIT", Condition = HighValueQuoteCondition },
+                    new TransitionBlueprint { FromState = "Draft", ToState = "AgentQueued", EventId = "EVT-SUBMIT" },
+                    new TransitionBlueprint { FromState = "AgentQueued", ToState = "Accepted", EventId = "EVT-ACCEPT" },
+                    new TransitionBlueprint { FromState = "AgentQueued", ToState = "RevisionRequested", EventId = "EVT-REQUEST-REVISION" },
+                    new TransitionBlueprint { FromState = "AgentQueued", ToState = "Overdue", EventId = "EVT-QUOTE-OVERDUE" },
+                    new TransitionBlueprint { FromState = "AdvisorQueued", ToState = "Accepted", EventId = "EVT-ACCEPT" },
+                    new TransitionBlueprint { FromState = "AdvisorQueued", ToState = "RevisionRequested", EventId = "EVT-REQUEST-REVISION" },
+                    new TransitionBlueprint { FromState = "AdvisorQueued", ToState = "Overdue", EventId = "EVT-QUOTE-OVERDUE" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "SubmitQuote",
+                Steps = new()
+                {
+                    new StepBlueprint
+                    {
+                        StepId = "SubmitQuote",
+                        StepType = "Command",
+                        NextSteps = new() { { "EVT-SUBMIT", "CheckAmount" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "CheckAmount",
+                        StepType = "Decision",
+                        RequiredRoles = new() { "System" },
+                        Conditions = new()
+                        {
+                            { HighValueQuoteCondition, "AdvisorReview" },
+                            { "Default", "AgentReview" }
+                        },
+                        NextSteps = new() { { "Default", "AgentReview" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "AgentReview",
+                        StepType = "HumanTask",
+                        Actor = StepActor.Agent,
+                        RequiredRoles = new() { "QuoteAgent" },
+                        DecisionGuideline = "Accept if Amount is at or below 1500 and within 15% of Estimate. Otherwise request revision. Never accept a missing Estimate.",
+                        AgentPrompt = "quote-approval",
+                        AgentProvider = "quote-llm",
+                        AutoCommit = new StepAutoCommitBlueprint
+                        {
+                            MinConfidence = 0.9,
+                            AllowedEvents = new() { "EVT-ACCEPT" }
+                        },
+                        NextSteps = new()
+                        {
+                            { "EVT-ACCEPT", "Closed" },
+                            { "EVT-REQUEST-REVISION", "Revision" },
+                            { "EVT-QUOTE-OVERDUE", "Overdue" }
+                        },
+                        Sla = new StepSlaBlueprint
+                        {
+                            Duration = "24h",
+                            TimeoutEvent = "EVT-QUOTE-OVERDUE",
+                            Reminders = new()
+                            {
+                                new StepReminderBlueprint { Duration = "4h", TriggerEvent = "EVT-SLA-WARN-4H" }
+                            }
+                        },
+                        OnEntry = new()
+                        {
+                            new StepActionBlueprint
+                            {
+                                ActionType = "Notification",
+                                Target = "QuoteDesk",
+                                Template = "Agent reviewing quote {{QuoteId}} (Amount {{Amount}})."
+                            }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "AdvisorReview",
+                        StepType = "HumanTask",
+                        Actor = StepActor.Human,
+                        RequiredRoles = new() { "Advisor" },
+                        NextSteps = new()
+                        {
+                            { "EVT-ACCEPT", "Closed" },
+                            { "EVT-REQUEST-REVISION", "Revision" },
+                            { "EVT-QUOTE-OVERDUE", "Overdue" }
+                        },
+                        OnEntry = new()
+                        {
+                            new StepActionBlueprint
+                            {
+                                ActionType = "Notification",
+                                Target = "AdvisorInbox",
+                                Template = "Advisor review required for quote {{QuoteId}} (Amount {{Amount}})."
+                            }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "Closed",
+                        StepType = "Command",
+                        NextSteps = new() { { "Default", "END" } },
+                        OnEntry = new()
+                        {
+                            new StepActionBlueprint
+                            {
+                                ActionType = "Notification",
+                                Target = "QuoteDesk",
+                                Template = "Quote {{QuoteId}} accepted."
+                            }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "Revision",
+                        StepType = "Command",
+                        NextSteps = new() { { "Default", "END" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "Overdue",
+                        StepType = "Command",
+                        NextSteps = new() { { "Default", "END" } }
+                    }
+                }
+            },
+            Roles = QuoteRoles(),
+            Capabilities = QuoteCapabilities()
         };
 
         WorkflowSimulationGovernance.Apply(blueprint);

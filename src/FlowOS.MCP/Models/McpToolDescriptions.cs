@@ -32,25 +32,28 @@ public static class McpToolDescriptions
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["list_available_agents"] =
-                "Lists advisory FlowOS agents and their declared capabilities; it does not execute an agent. " +
-                "Returns: {ok:true,data:{agents:[...]}}. Errors: MCP-INTERNAL. Input example: {}",
+                "Lists hosted agent runtimes: the RiskAnalysisAgent fixture plus tenant AI Context providers (bindingType agent). " +
+                "Does not execute an agent or return API keys. HTTP uses the authenticated tenant; stdio may pass tenantId to include BYO providers. " +
+                "Returns: {ok:true,data:{agents:[{id,name,kind,description,hasApiKey,capabilities}]}}. " +
+                "Errors: MCP-TENANT-002, MCP-INTERNAL. Input example: {}",
 
             ["suggest_agent_action"] =
-                "Builds a DecisionPacket (template guideline + binding canonical context + legal nextSteps) and runs the selected agent without publishing. " +
+                "Builds a DecisionPacket (tenant prompt + binding policy + legal nextSteps + redacted provider) and runs the hosted agent without publishing. " +
+                "Factory follows step.agentProvider (TenantLlmWorkflowAgent when a key is stored). Omit agentId unless you want the flowos-risk fixture. " +
                 "Suggestions outside legal nextSteps are dropped. Does not auto-commit. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{autoCommitted:false,packet,result}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"agentId\":\"RiskAnalysisAgent\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"objective\":\"Analyze expense\"}",
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"objective\":\"Decide the next legal event\"}",
 
             ["run_agent_task"] =
-                "Hosts the bounded-autonomy loop for the instance's current waiting step: DecisionPacket → agent → AutoCommitPolicy. " +
-                "If the suggested event is in autoCommit.allowedEvents and confidence is in bounds, FlowOS publishes it via the same PublishEventCommand path as humans (actor Agent:{id}). " +
-                "Otherwise the instance stays a HumanTask and the insight is parked as a Smart Action. Do not invent transitions. " +
-                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Hosts the AI task-automation loop for the instance's current Agent/Either waiting step: DecisionPacket → tenant LLM (or flowos-risk) → AutoCommitPolicy. " +
+                "Omit agentId so the factory uses step.agentProvider. If the suggested event is in autoCommit.allowedEvents and confidence is in bounds, FlowOS publishes it (actor Agent:{id}). " +
+                "Otherwise the instance stays a HumanTask and the insight is parked as a Smart Action. Do not invent transitions or paste API keys. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. Runtime plan required. " +
                 "Returns: {ok:true,data:{autoCommitted,parkReason,packet,result}}. " +
-                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"agentId\":\"RiskAnalysisAgent\"}",
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}",
 
             ["get_agent_context"] =
                 "Composes Agent Context for a live instance current step (Prompt + Data + Tools + redacted Provider) without running the agent and without publishing. " +
@@ -87,6 +90,29 @@ public static class McpToolDescriptions
                 "Returns: {ok:true,data:{alias,kind,title,system,instructions,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-approval\"}",
+
+            ["upsert_agent_provider"] =
+                "Creates or edits a tenant-owned LLM provider used for AI task automation. Point a waiting step at it with agentProvider. " +
+                "apiKey is write-only: stored on the tenant, omitted from responses, and left unchanged when you omit it on update. " +
+                "providerName: openai, anthropic, azure-openai, google, custom, or flowos-risk (no key). Dashboard: Application → AI Context → Providers. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"quote-llm\",\"providerName\":\"openai\",\"model\":\"gpt-4o-mini\"}",
+
+            ["list_agent_providers"] =
+                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey. Never returns the API key. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,isEnabled}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {}",
+
+            ["get_agent_provider"] =
+                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"quote-llm\"}",
 
             ["explain_validation_violation"] =
                 "Explains a FlowOS validator code and gives a design correction hint. The optional context object " +
@@ -245,9 +271,10 @@ public static class McpToolDescriptions
                 "enforces HumanTask capability gates (requiredCapabilities / grantedCapabilities; requiredRoles is inbox only), advances automated steps, " +
                 "and applies queued domain events to the state machine on Decision and Default Command steps when the event is not reserved for a HumanTask/Timer. " +
                 "HumanTask/Command SLA reminders fire in duration order before a completing nextSteps event; set autoAdvanceTimers=true with no completing event to also fire TimeoutEvent. Timer steps still require autoAdvanceTimers to elapse. " +
+                "Waiting steps with actor Agent/Either host AutoCommitEvaluator when no completing business event is queued (no live LLM): default suggestion is the first autoCommit.allowedEvents at confidence 1.0; override with simulatedAgent {event,confidence,agentId}; set autoAdvanceAgents=false to park. Agent auto-commit is attributed as actor Agent:{id} and does not consume the simulated role's capabilities. TimeoutEvent stays timer-owned. Explicit events still win. " +
                 "Evaluates dynamic payload mappings and Handlebars templates, and injects simulated step faults via `simulateFailureAtStep` to test OnFailure Saga rollback compensation actions. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
-                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload,eventsRemaining}}. " +
+                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,pendingAgentTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload,eventsRemaining}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"autoAdvanceTimers\":true,\"simulateFailureAtStep\":\"PaymentStep\"}",
 
@@ -522,6 +549,9 @@ public static class McpToolDescriptions
             ["upsert_agent_prompt"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["list_agent_prompts"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_prompt"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["upsert_agent_provider"] = new("governance", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["list_agent_providers"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["get_agent_provider"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["lint_draft_workflowclass"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_workflowclass"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["simulate_subworkflow"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),

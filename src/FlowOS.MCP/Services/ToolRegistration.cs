@@ -44,6 +44,15 @@ public static class ToolRegistration
         registry.Register("get_agent_prompt", McpToolDescriptions.For("get_agent_prompt"), McpToolSchemas.GetAgentPrompt(),
             async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.GetAgentPrompt(args)));
 
+        registry.Register("upsert_agent_provider", McpToolDescriptions.For("upsert_agent_provider"), McpToolSchemas.UpsertAgentProvider(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.UpsertAgentProvider(args)));
+
+        registry.Register("list_agent_providers", McpToolDescriptions.For("list_agent_providers"), McpToolSchemas.ListAgentProviders(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.ListAgentProviders(args)));
+
+        registry.Register("get_agent_provider", McpToolDescriptions.For("get_agent_provider"), McpToolSchemas.GetAgentProvider(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.GetAgentProvider(args)));
+
         registry.Register("explain_validation_violation", McpToolDescriptions.For("explain_validation_violation"), McpToolSchemas.ExplainValidationViolation(),
             async (args) => await ExecuteScopedAsync<AnalysisTools>(serviceProvider, t => t.ExplainValidationViolation(args)));
 

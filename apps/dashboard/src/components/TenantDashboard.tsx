@@ -508,6 +508,13 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                       desc: 'L1 SLA warning alerts at 1h/3h, 4h timeout escalate to On-Call, and Critical severity skips straight to the pager inbox.'
                     },
                     {
+                      name: 'QuoteAutoReview',
+                      title: 'Quote Auto Review',
+                      badge: 'AI Agent Actor',
+                      badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+                      desc: 'In-bound quotes wait on actor Agent and auto-commit EVT-ACCEPT; over-limit quotes stay in the Advisor inbox.'
+                    },
+                    {
                       name: 'ExpenseApprovalV2',
                       title: 'Expense Approval V2',
                       badge: 'Multi-Tier Approval',

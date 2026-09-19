@@ -1,6 +1,8 @@
 using FlowOS.Agents.Abstractions;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
+using FlowOS.Core.Common.Interfaces;
+using FlowOS.Core.Common.Models;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
 using Newtonsoft.Json.Linq;
@@ -11,14 +13,19 @@ public class AgentTools
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAgentTaskRunner _agentTaskRunner;
+    private readonly IPluginBindingRegistryService? _pluginBindings;
 
-    public AgentTools(IUnitOfWork unitOfWork, IAgentTaskRunner agentTaskRunner)
+    public AgentTools(
+        IUnitOfWork unitOfWork,
+        IAgentTaskRunner agentTaskRunner,
+        IPluginBindingRegistryService? pluginBindings = null)
     {
         _unitOfWork = unitOfWork;
         _agentTaskRunner = agentTaskRunner;
+        _pluginBindings = pluginBindings;
     }
 
-    public Task<CallToolResult> ListAvailableAgents(JObject args)
+    public async Task<CallToolResult> ListAvailableAgents(JObject args)
     {
         var agents = new List<object>
         {
@@ -26,12 +33,42 @@ public class AgentTools
             {
                 id = "RiskAnalysisAgent",
                 name = "Risk Analyzer",
-                description = "Analyzes expense data for high-value risks and fraud patterns using the DecisionPacket (template guideline, binding policy, legal nextSteps).",
-                capabilities = new[] { "EVT-ESCALATE", "EVT-APPROVE" }
+                kind = "fixture",
+                description = "No-key fixture (flowos-risk). Used when the waiting step has no agentProvider or the binding is flowos-risk.",
+                hasApiKey = false,
+                capabilities = new[] { "legal nextSteps only" }
             }
         };
 
-        return Task.FromResult(McpToolResults.Success(new { agents }));
+        if (_pluginBindings != null)
+        {
+            try
+            {
+                var tenantId = McpTenantResolver.ResolveRequired(args);
+                var bindings = await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Agent);
+                foreach (var binding in bindings)
+                {
+                    var settings = binding.Configuration as AgentProviderPublicSettings;
+                    agents.Add(new
+                    {
+                        id = binding.SourceName,
+                        name = binding.SourceName,
+                        kind = binding.ProviderName,
+                        description = "Tenant AI Context provider. Point the waiting step at this alias with agentProvider, then call run_agent_task.",
+                        hasApiKey = settings?.HasApiKey ?? false,
+                        isEnabled = binding.IsEnabled,
+                        model = settings?.Model,
+                        capabilities = new[] { "legal nextSteps only" }
+                    });
+                }
+            }
+            catch (McpToolException)
+            {
+                // Fixture-only when the caller has no tenant yet.
+            }
+        }
+
+        return McpToolResults.Success(new { agents });
     }
 
     public async Task<CallToolResult> SuggestAgentAction(JObject args)
@@ -40,12 +77,11 @@ public class AgentTools
         {
             var instanceIdStr = args["workflowInstanceId"]?.ToString();
             var agentId = args["agentId"]?.ToString();
+            if (string.IsNullOrWhiteSpace(agentId))
+                agentId = "RiskAnalysisAgent";
 
             if (string.IsNullOrEmpty(instanceIdStr) || !Guid.TryParse(instanceIdStr, out var instanceId))
                 return McpToolResults.Fail("MCP-ARG-002", "workflowInstanceId must be a valid UUID.");
-
-            if (string.IsNullOrEmpty(agentId))
-                return McpToolResults.Fail("MCP-ARG-001", "agentId is required.");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
             var run = await _agentTaskRunner.SuggestAsync(
