@@ -133,7 +133,7 @@ public class QuoteAutoReviewSimulationTests
         Assert.DoesNotContain("EVT-QUOTE-OVERDUE", agent.AutoCommit.AllowedEvents);
         Assert.False(string.IsNullOrWhiteSpace(agent.DecisionGuideline));
         Assert.Equal("quote-approval", agent.AgentPrompt);
-        Assert.Equal("quote-llm", agent.AgentProvider);
+        Assert.Equal("flowos-hosted", agent.AgentProvider);
         Assert.Equal("24h", agent.Sla?.Duration);
         Assert.Equal("EVT-QUOTE-OVERDUE", agent.Sla?.TimeoutEvent);
         Assert.Equal("AdvisorReview", pack.Definition.Workflow.Steps

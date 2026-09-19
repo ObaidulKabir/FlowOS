@@ -12,13 +12,16 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPluginBindingRegistryService? _pluginBindings;
+    private readonly IFlowOsHostedLlmRuntime? _hosted;
 
     public DecisionPacketBuilder(
         IUnitOfWork unitOfWork,
-        IPluginBindingRegistryService? pluginBindings = null)
+        IPluginBindingRegistryService? pluginBindings = null,
+        IFlowOsHostedLlmRuntime? hosted = null)
     {
         _unitOfWork = unitOfWork;
         _pluginBindings = pluginBindings;
+        _hosted = hosted;
     }
 
     public async Task<DecisionPacket?> BuildAsync(
@@ -128,11 +131,12 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
                 tenantId, PluginBindingTypes.Action, cancellationToken);
 
             var providerAlias = step?.AgentProvider;
-            if (!string.IsNullOrWhiteSpace(providerAlias))
+            if (!string.IsNullOrWhiteSpace(providerAlias) &&
+                !AgentProviderKinds.IsFlowOsHosted(providerAlias))
             {
                 var binding = await _pluginBindings.GetEnabledAsync(
                     tenantId, PluginBindingTypes.Agent, providerAlias, cancellationToken);
-                if (binding != null)
+                if (binding != null && !AgentProviderKinds.IsFlowOsHosted(binding.ProviderName))
                 {
                     var settings = binding.Configuration as AgentProviderPublicSettings;
                     provider = new AgentProviderRef(
@@ -162,12 +166,32 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
             }
         }
 
+        if (provider == null && ShouldAttachHostedProvider(step?.AgentProvider))
+        {
+            var hosted = _hosted!.PublicSettings;
+            provider = new AgentProviderRef(
+                string.IsNullOrWhiteSpace(step?.AgentProvider) ? AgentProviderKinds.FlowosHosted : step!.AgentProvider,
+                AgentProviderKinds.FlowosHosted,
+                hosted.Model,
+                hosted.Endpoint,
+                hosted.HasApiKey);
+        }
+
         var tools = AgentToolCatalog.FromStep(
             packet.LegalNextStepEvents,
             step?.AgentTools,
             actionBindings);
 
         return packet with { Provider = provider, Tools = tools, PromptBinding = promptBinding };
+    }
+
+    private bool ShouldAttachHostedProvider(string? agentProvider)
+    {
+        if (_hosted == null)
+            return false;
+        if (AgentProviderKinds.IsFlowOsHosted(agentProvider))
+            return true;
+        return string.IsNullOrWhiteSpace(agentProvider) && _hosted.IsConfigured;
     }
 
     private static bool IsVisibleToTenant(WorkflowClass workflowClass, Guid tenantId) =>

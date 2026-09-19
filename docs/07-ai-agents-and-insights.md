@@ -18,7 +18,7 @@ When an `Agent`/`Either` waiting step becomes current, FlowOS builds a **Decisio
 
 ## Tenant-owned model and declarative tools
 
-Businesses bring their own LLM. Register it with MCP `register_plugin_binding`:
+Paid tenants default to **FlowOS hosted OpenAI** (`flowos-hosted`) — see [Chapter 20](20-hosted-llm-and-automation-policy.md). BYO is optional. Register a tenant model with MCP `register_plugin_binding` or `upsert_agent_provider`:
 
 ```json
 {
@@ -29,7 +29,7 @@ Businesses bring their own LLM. Register it with MCP `register_plugin_binding`:
 }
 ```
 
-Known `providerName` values: `openai`, `anthropic`, `azure-openai`, `google`, `custom`, `flowos-risk`. The API key is write-only: omit it on update to keep the stored secret; `list_plugin_bindings` / `resolve_plugin_binding` return `{model,endpoint,hasApiKey}` and never the key. Step `agentProvider` is only the alias. The key is never copied into DecisionPacket / Agent Context.
+Known `providerName` values: `flowos-hosted` (platform OpenAI, no tenant key), `openai`, `anthropic`, `azure-openai`, `google`, `custom`, `flowos-risk`. BYO API keys are write-only: omit on update to keep the stored secret; list/resolve return `{model,endpoint,hasApiKey}` and never the key. Step `agentProvider` is only the alias. Keys are never copied into DecisionPacket / Agent Context.
 
 Tooling is declarative, not free-form HTTP from the model. Tenants expose resources as **capability bindings** (their URL/auth). FlowOS hosts these resource plugins and prefetches read results into `DecisionPacket.Data.ToolResults` before the agent decides:
 

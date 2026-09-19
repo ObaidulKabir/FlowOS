@@ -277,17 +277,20 @@ public class AgentContextMcpTools
             {
                 return McpToolResults.Fail(
                     "PLUGIN-BIND-005",
-                    "Unknown providerName. Use openai, anthropic, azure-openai, google, custom, or flowos-risk.");
+                    "Unknown providerName. Use openai, anthropic, azure-openai, google, custom, flowos-risk, or flowos-hosted.");
             }
 
             var isEnabled = args["isEnabled"]?.Value<bool>() ?? existing?.IsEnabled ?? true;
+            var configuration = AgentProviderKinds.IsFlowOsHosted(providerName)
+                ? "{}"
+                : BuildProviderConfiguration(args);
             var binding = await _pluginBindings.UpsertAsync(
                 tenantId,
                 PluginBindingTypes.Agent,
                 alias,
                 providerName,
                 isEnabled,
-                BuildProviderConfiguration(args));
+                configuration);
 
             return McpToolResults.Success(ToProviderDto(binding));
         }

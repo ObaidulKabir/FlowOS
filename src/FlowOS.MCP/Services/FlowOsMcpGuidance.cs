@@ -97,7 +97,7 @@ public static class FlowOsMcpGuidance
         - Do not assign `actor: Agent` to a Decision `Default` skip. Do not auto-commit TimeoutEvent. Do not call `publish_event` from free-form chat; use `run_agent_task` or let the entry hook run.
         - Register the tenant model with `upsert_agent_provider` (alias = step `agentProvider`, write-only `apiKey`). Create/edit the prompt with `upsert_agent_prompt` (alias = step `agentPrompt`). Dashboard: Application → select workflow → AI Context → Prompts / Providers. Never paste the key into MCP chat or the blueprint.
         - Inspect Agent Context without running the agent: `get_agent_context` (live instance) or `preview_agent_context` (draft/published class + stepId). The payload is one object: Prompt + Data + Tools + redacted Provider (`hasApiKey`, never the secret).
-        - Live automation: publish the human gate that reaches the Agent step (e.g. `EVT-SUBMIT` on QuoteAutoReview), then `run_agent_task`. Factory follows step `agentProvider`; omit `agentId` unless you want `RiskAnalysisAgent` / `flowos-risk`. `suggest_agent_action` is the same call without publishing.
+        - Live automation: publish the human gate that reaches the Agent step (e.g. `EVT-SUBMIT` on QuoteAutoReview), then `run_agent_task`. Paid tenants default to FlowOS hosted OpenAI (`flowos-hosted`, platform key + daily quota). BYO `openai`/`anthropic` still wins when the step alias is a tenant binding with a key. Omit `agentId` unless you want `flowos-risk`. `suggest_agent_action` is the same call without publishing.
         - Simulate Agent progress without a live LLM: `simulate_workflowclass` hosts AutoCommitEvaluator when the waiting step is actor Agent/Either and no completing business event is queued. Default suggestion is the first `autoCommit.allowedEvents` at confidence 1.0. Override with `simulatedAgent` `{event,confidence,agentId}`. Set `autoAdvanceAgents: false` to park and inspect `pendingAgentTask`. Explicit events still win. Timeout stays timer-owned.
         - Declarative tools: step `agentTools` lists resource plugins (`LookupRecord:<connector>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `connector:*` writes (legacy `capability:*`). FlowOS prefetches read tools into Agent Context. The model does not call HTTP or see URLs.
         - Preferred prompts: `automate_waiting_task_with_ai_agent` (live loop) and `design_agent_handled_step` (step JSON). Preferred resources: `flowos://guides/ai-task-automation` and `flowos://guides/bounded-autonomy-tasks`.
@@ -894,7 +894,7 @@ public static class FlowOsMcpGuidance
         | OS-LAW | Policy / capabilities | done | RequiresCapability, ApproveAsPublic admin-only, DefaultPolicyEvaluator malformed JSON fail-closed, MCP-APPROVAL-REQUIRED | none for v1 |
         | OS-INBOX | HumanTask inbox + SLA | done | GET /api/tasks role filter, complete_task, insights on task, SLA timeout not auto-committed | none for v1 (L-INBOX-UX later) |
         | OS-INT | Integrations | done | register_connector, LookupRecord/QueryRecords/FetchDocument/SearchKnowledge/CheckPolicy | none for v1 |
-        | OS-AI | DecisionPacket loop | done | run_agent_task, TenantLlmWorkflowAgent, upsert_agent_provider, flowos-risk, get_agent_context, upsert_agent_prompt, BoundedAutonomyTests | none for v1 |
+        | OS-AI | DecisionPacket loop | done | run_agent_task, TenantLlmWorkflowAgent, flowos-hosted OpenAI, upsert_agent_provider, flowos-risk, get_agent_context, upsert_agent_prompt, BoundedAutonomyTests | none for v1 |
         | OS-SIM | Simulation | done | simulate_workflowclass, simulate_context_binding | none for v1 |
         | OS-OPS | Operations | done | health, DLQ, replay_workflow_history, dual hosts | none for v1 (OTEL is later) |
         | OS-COMM | Entitlement | done | MCP-PLAN-REQUIRED, RequireRuntimePlan, EntitlementHttpTests | none for v1 (payment provider is later) |
@@ -944,13 +944,13 @@ public static class FlowOsMcpGuidance
         }
         ```
 
-        `flowos-risk` needs no key and hosts `RiskAnalysisAgent`. It does **not** use the tenant prompt as an HTTP model.
+        Paid default is `flowos-hosted` (FlowOS OpenAI). Set `FLOWOS_HOSTED_LLM_API_KEY` on the host. `flowos-risk` needs no key and hosts `RiskAnalysisAgent`; it does **not** use the tenant prompt as an HTTP model.
 
         ## Design the waiting step
 
         Keep {STEP_ID} a waiting HumanTask or Command. Set `actor` to `Agent` or `Either`. Set `agentPrompt` and `agentProvider` to the aliases above. Declare `autoCommit.allowedEvents` as a subset of `nextSteps`. Never put TimeoutEvent or SLA reminders in `allowedEvents`.
 
-        Seeded sample: **QuoteAutoReview** / step **AgentReview** (`agentPrompt: quote-approval`, `agentProvider: quote-llm`). Amount ≤ 1500 routes to the agent; Amount > 1500 routes to Advisor (human).
+        Seeded sample: **QuoteAutoReview** / step **AgentReview** (`agentPrompt: quote-approval`, `agentProvider: flowos-hosted`). Amount ≤ 1500 routes to the agent; Amount > 1500 routes to Advisor (human). Paid plan + `FLOWOS_HOSTED_LLM_API_KEY` is enough — no tenant OpenAI key.
 
         ## Preview (does not run the model)
 
@@ -989,7 +989,7 @@ public static class FlowOsMcpGuidance
 
         - Do not ask `simulate_workflowclass` to call OpenAI. Use `autoAdvanceAgents` / `simulatedAgent` only to prove policy.
         - Do not `publish_event` `EVT-ACCEPT` from free-form chat to "be the agent."
-        - Do not lock `agentId` to `RiskAnalysisAgent` when the step has `agentProvider: quote-llm`.
+        - Do not lock `agentId` to `RiskAnalysisAgent` when the step uses `flowos-hosted` or a BYO `agentProvider`.
         - Do not put the API key on the step or in Agent Context.
         """;
 
@@ -1011,7 +1011,7 @@ public static class FlowOsMcpGuidance
         6. Never put `TimeoutEvent` or SLA reminder events in `autoCommit.allowedEvents`. Overdue stays timer-owned.
         7. Keep `requiredRoles` as the HumanTask inbox and `requiredCapabilities` as the execution gate. If policy fails, FlowOS parks a HumanTask Smart Action from the insight.
 
-        FlowOS hosts the loop: wait → DecisionPacket → `TenantLlmWorkflowAgent` (step `agentProvider`) or `RiskAnalysisAgent` (`flowos-risk` / no provider) → AutoCommitPolicy → `PublishEventCommand` (actor `Agent:{id}`) or park. Do **not** teach an external chat agent to `publish_event` from free text. Call `get_agent_context` or `preview_agent_context` to inspect Prompt/Data/Tools/Provider; call `suggest_agent_action` to run the agent without publishing; call `run_agent_task` only to request the hosted loop. Live LLM requires a tenant provider key. `simulate_workflowclass` never calls that model.
+        FlowOS hosts the loop: wait → DecisionPacket → `TenantLlmWorkflowAgent` (`flowos-hosted` platform OpenAI, or BYO step `agentProvider`) or `RiskAnalysisAgent` (`flowos-risk`) → AutoCommitPolicy → `PublishEventCommand` (actor `Agent:{id}`) or park. Do **not** teach an external chat agent to `publish_event` from free text. Call `get_agent_context` or `preview_agent_context` to inspect Prompt/Data/Tools/Provider; call `suggest_agent_action` to run the agent without publishing; call `run_agent_task` only to request the hosted loop. Paid hosted OpenAI uses `FLOWOS_HOSTED_LLM_API_KEY` on the host. `simulate_workflowclass` never calls that model.
 
         ## Simulate automated Agent progress (no live LLM)
 

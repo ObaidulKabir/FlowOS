@@ -13,7 +13,7 @@ interface Props {
 
 type AiSubTab = 'compose' | 'prompts' | 'providers' | 'tools';
 
-const PROVIDERS = ['openai', 'anthropic', 'azure-openai', 'google', 'custom', 'flowos-risk'] as const;
+const PROVIDERS = ['flowos-hosted', 'openai', 'anthropic', 'azure-openai', 'google', 'custom', 'flowos-risk'] as const;
 const TOOL_PLUGINS = ['LookupRecord', 'QueryRecords', 'FetchDocument', 'SearchKnowledge', 'CheckPolicy'] as const;
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -293,8 +293,8 @@ const BindingList: React.FC<{ title: string; empty: string; items: { alias: stri
 
 const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => Promise<void> }> = ({ items, onChanged }) => {
   const [form, setForm] = useState({
-    sourceName: '',
-    providerName: 'openai',
+    sourceName: 'flowos-hosted',
+    providerName: 'flowos-hosted',
     model: '',
     endpoint: '',
     apiKey: '',
@@ -311,11 +311,13 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
         sourceName: form.sourceName,
         providerName: form.providerName,
         isEnabled: form.isEnabled,
-        configuration: {
-          model: form.model || undefined,
-          endpoint: form.endpoint || undefined,
-          apiKey: form.apiKey || undefined
-        }
+        configuration: form.providerName === 'flowos-hosted'
+          ? {}
+          : {
+              model: form.model || undefined,
+              endpoint: form.endpoint || undefined,
+              apiKey: form.apiKey || undefined
+            }
       });
       setForm({ ...form, apiKey: '', sourceName: form.sourceName });
       await onChanged();
@@ -331,7 +333,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
       <div className="space-y-2">
         {items.length === 0 && (
           <div className="text-sm text-slate-500 border border-dashed border-slate-700 rounded-xl p-8 text-center">
-            No providers yet. Bind openai / anthropic / custom with a tenant key. The key never appears in Agent Context.
+            No providers yet. Paid tenants can use flowos-hosted (FlowOS OpenAI, no key). BYO openai / anthropic still store a tenant key. The key never appears in Agent Context.
           </div>
         )}
         {items.map(item => {
@@ -375,25 +377,36 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
         >
           {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-        <input
-          value={form.model}
-          onChange={e => setForm({ ...form, model: e.target.value })}
-          placeholder="model (gpt-4o-mini)"
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-        />
-        <input
-          value={form.endpoint}
-          onChange={e => setForm({ ...form, endpoint: e.target.value })}
-          placeholder="endpoint (optional, custom/azure)"
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-        />
-        <input
-          type="password"
-          value={form.apiKey}
-          onChange={e => setForm({ ...form, apiKey: e.target.value })}
-          placeholder="API key (stored, never shown)"
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-        />
+        {form.providerName !== 'flowos-hosted' && form.providerName !== 'flowos-risk' && (
+          <input
+            value={form.model}
+            onChange={e => setForm({ ...form, model: e.target.value })}
+            placeholder="model (gpt-4o-mini)"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
+          />
+        )}
+        {form.providerName !== 'flowos-hosted' && form.providerName !== 'flowos-risk' && (
+          <>
+            <input
+              value={form.endpoint}
+              onChange={e => setForm({ ...form, endpoint: e.target.value })}
+              placeholder="endpoint (optional, custom/azure)"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
+            />
+            <input
+              type="password"
+              value={form.apiKey}
+              onChange={e => setForm({ ...form, apiKey: e.target.value })}
+              placeholder="API key (stored, never shown)"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
+            />
+          </>
+        )}
+        {form.providerName === 'flowos-hosted' && (
+          <p className="text-[11px] text-violet-200/80 leading-relaxed">
+            FlowOS calls OpenAI with the platform key. No tenant API key. Included on an active paid plan, capped per day.
+          </p>
+        )}
         <button
           type="submit"
           disabled={saving}

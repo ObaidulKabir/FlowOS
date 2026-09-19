@@ -83,7 +83,7 @@ public class PluginBindingMcpTools
                 {
                     return McpToolResults.Fail(
                         "PLUGIN-BIND-004",
-                        $"Unknown agent provider '{providerName}'. Use openai, anthropic, azure-openai, google, custom, or flowos-risk.");
+                        $"Unknown agent provider '{providerName}'. Use openai, anthropic, azure-openai, google, custom, flowos-risk, or flowos-hosted.");
                 }
             }
             else if (!AgentPromptKinds.IsKnown(providerName))
@@ -101,6 +101,9 @@ public class PluginBindingMcpTools
                     ? configToken.ToString()
                     : configToken.ToString(Newtonsoft.Json.Formatting.None);
             }
+
+            if (normalizedType == PluginBindingTypes.Agent && AgentProviderKinds.IsFlowOsHosted(providerName))
+                configurationJson = "{}";
 
             if (normalizedType == PluginBindingTypes.Prompt)
             {

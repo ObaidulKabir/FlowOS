@@ -22,11 +22,23 @@ public static class AgentProviderKinds
     public const string Google = "google";
     public const string Custom = "custom";
     public const string FlowosRisk = "flowos-risk";
+    public const string FlowosHosted = "flowos-hosted";
 
     public static bool IsKnown(string? providerName) =>
         !string.IsNullOrWhiteSpace(providerName) &&
         providerName.Trim().ToLowerInvariant() is
-            OpenAi or Anthropic or AzureOpenAi or Google or Custom or FlowosRisk;
+            OpenAi or Anthropic or AzureOpenAi or Google or Custom or FlowosRisk or FlowosHosted;
+
+    public static bool IsFlowOsHosted(string? providerName) =>
+        string.Equals(providerName?.Trim(), FlowosHosted, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsByoLlm(string? providerName)
+    {
+        if (string.IsNullOrWhiteSpace(providerName))
+            return false;
+        var normalized = providerName.Trim().ToLowerInvariant();
+        return normalized is OpenAi or Anthropic or AzureOpenAi or Google or Custom;
+    }
 }
 
 public static class AgentPromptKinds

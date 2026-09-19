@@ -1930,7 +1930,7 @@ public static class DataSeeder
                         RequiredRoles = new() { "QuoteAgent" },
                         DecisionGuideline = "Accept if Amount is at or below 1500 and within 15% of Estimate. Otherwise request revision. Never accept a missing Estimate.",
                         AgentPrompt = "quote-approval",
-                        AgentProvider = "quote-llm",
+                        AgentProvider = "flowos-hosted",
                         AutoCommit = new StepAutoCommitBlueprint
                         {
                             MinConfidence = 0.9,

@@ -94,11 +94,11 @@ public static class McpToolDescriptions
             ["upsert_agent_provider"] =
                 "Creates or edits a tenant-owned LLM provider used for AI task automation. Point a waiting step at it with agentProvider. " +
                 "apiKey is write-only: stored on the tenant, omitted from responses, and left unchanged when you omit it on update. " +
-                "providerName: openai, anthropic, azure-openai, google, custom, or flowos-risk (no key). Dashboard: Application → AI Context → Providers. " +
+                "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key). Dashboard: Application → AI Context → Providers. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
-                "Input example: {\"alias\":\"quote-llm\",\"providerName\":\"openai\",\"model\":\"gpt-4o-mini\"}",
+                "Input example: {\"alias\":\"flowos-hosted\",\"providerName\":\"flowos-hosted\"}",
 
             ["list_agent_providers"] =
                 "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey. Never returns the API key. " +

@@ -10,13 +10,16 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
 {
     private readonly IPluginBindingRegistryService _bindings;
     private readonly HttpMessageHandler? _handler;
+    private readonly IFlowOsHostedLlmRuntime? _hosted;
 
     public WorkflowAgentFactory(
         IPluginBindingRegistryService bindings,
-        HttpMessageHandler? handler = null)
+        HttpMessageHandler? handler = null,
+        IFlowOsHostedLlmRuntime? hosted = null)
     {
         _bindings = bindings;
         _handler = handler;
+        _hosted = hosted;
     }
 
     public async Task<IWorkflowAgent> CreateAsync(
@@ -25,16 +28,42 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
         CancellationToken cancellationToken = default)
     {
         AgentProviderConfiguration? secrets = null;
-        if (!string.IsNullOrWhiteSpace(packet.Provider?.Alias))
+        if (!string.IsNullOrWhiteSpace(packet.Provider?.Alias) &&
+            !AgentProviderKinds.IsFlowOsHosted(packet.Provider.ProviderName) &&
+            !AgentProviderKinds.IsFlowOsHosted(packet.Provider.Alias))
         {
             secrets = await _bindings.GetAgentSecretsAsync(packet.TenantId, packet.Provider.Alias, cancellationToken);
         }
 
         var providerName = packet.Provider?.ProviderName;
-        if (IsFlowOsRisk(requestedAgentId, providerName))
+
+        if (IsExplicitFlowOsRisk(providerName))
             return new RiskAnalysisAgent();
 
-        if (IsHostedLlm(providerName))
+        if (ShouldUseFlowOsHosted(providerName))
+        {
+            if (_hosted == null)
+            {
+                throw new InvalidOperationException(
+                    $"{FlowOsHostedLlmCodes.Unavailable}: {FlowOsHostedLlmCodes.UnavailableMessage}");
+            }
+
+            var lease = await _hosted.TryLeaseAsync(packet.TenantId, cancellationToken);
+            if (!lease.Allowed)
+            {
+                throw new InvalidOperationException(
+                    $"{lease.Code ?? FlowOsHostedLlmCodes.Unavailable}: {lease.Message ?? FlowOsHostedLlmCodes.UnavailableMessage}");
+            }
+
+            return new TenantLlmWorkflowAgent(
+                AgentProviderKinds.OpenAi,
+                lease.Model,
+                lease.Endpoint,
+                lease.ApiKey,
+                _handler);
+        }
+
+        if (AgentProviderKinds.IsByoLlm(providerName))
         {
             return new TenantLlmWorkflowAgent(
                 providerName!,
@@ -54,21 +83,14 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
             $"No hosted agent is registered for '{requestedAgentId}' (provider '{providerName}').");
     }
 
-    private static bool IsFlowOsRisk(string requestedAgentId, string? providerName) =>
-        string.Equals(providerName, AgentProviderKinds.FlowosRisk, StringComparison.OrdinalIgnoreCase) ||
-        (string.IsNullOrWhiteSpace(providerName) &&
-         requestedAgentId.Equals("RiskAnalysisAgent", StringComparison.OrdinalIgnoreCase));
-
-    private static bool IsHostedLlm(string? providerName)
+    private bool ShouldUseFlowOsHosted(string? providerName)
     {
-        if (string.IsNullOrWhiteSpace(providerName))
-            return false;
+        if (AgentProviderKinds.IsFlowOsHosted(providerName))
+            return true;
 
-        var normalized = providerName.Trim().ToLowerInvariant();
-        return normalized is AgentProviderKinds.OpenAi
-            or AgentProviderKinds.Anthropic
-            or AgentProviderKinds.AzureOpenAi
-            or AgentProviderKinds.Google
-            or AgentProviderKinds.Custom;
+        return string.IsNullOrWhiteSpace(providerName) && _hosted is { IsConfigured: true };
     }
+
+    private static bool IsExplicitFlowOsRisk(string? providerName) =>
+        string.Equals(providerName, AgentProviderKinds.FlowosRisk, StringComparison.OrdinalIgnoreCase);
 }

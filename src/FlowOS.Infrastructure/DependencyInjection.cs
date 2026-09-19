@@ -60,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<IDecisionPacketBuilder, FlowOS.Application.Services.DecisionPacketBuilder>();
         services.AddScoped<IAgentTaskRunner, FlowOS.Application.Services.AgentTaskRunner>();
         services.AddScoped<IWorkflowAgentFactory, FlowOS.Application.Services.WorkflowAgentFactory>();
+        services.AddScoped<IFlowOsHostedLlmRuntime, FlowOsHostedLlmRuntime>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IWebhookSignatureService, FlowOS.Core.Common.Services.WebhookSignatureService>();
         services.AddSingleton<FlowOS.Security.Interfaces.IPasswordHasher, FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher>();
         services.AddSingleton<FlowOS.Security.Interfaces.IJwtTokenService, FlowOS.Infrastructure.Services.Security.JwtTokenService>();

@@ -148,6 +148,7 @@ public sealed class DispatcherTests
         Assert.Contains("upsert_agent_provider", automationText);
         Assert.Contains("run_agent_task", automationText);
         Assert.Contains("never call the tenant model", automationText);
+        Assert.Contains("flowos-hosted", automationText);
 
         // 3. Resources list & read
         var resourcesList = await dispatcher.DispatchAsync(Request(4, "resources/list"));

@@ -14,27 +14,42 @@ public class AgentTools
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAgentTaskRunner _agentTaskRunner;
     private readonly IPluginBindingRegistryService? _pluginBindings;
+    private readonly IFlowOsHostedLlmRuntime? _hosted;
 
     public AgentTools(
         IUnitOfWork unitOfWork,
         IAgentTaskRunner agentTaskRunner,
-        IPluginBindingRegistryService? pluginBindings = null)
+        IPluginBindingRegistryService? pluginBindings = null,
+        IFlowOsHostedLlmRuntime? hosted = null)
     {
         _unitOfWork = unitOfWork;
         _agentTaskRunner = agentTaskRunner;
         _pluginBindings = pluginBindings;
+        _hosted = hosted;
     }
 
     public async Task<CallToolResult> ListAvailableAgents(JObject args)
     {
+        var hosted = _hosted?.PublicSettings;
         var agents = new List<object>
         {
+            new
+            {
+                id = "flowos-hosted",
+                name = "FlowOS Hosted OpenAI",
+                kind = "flowos-hosted",
+                description = "Paid-plan default. FlowOS calls OpenAI with a platform key. No tenant API key. Capped by MaxCompletionsPerDay.",
+                hasApiKey = hosted?.HasApiKey ?? false,
+                model = hosted?.Model ?? "gpt-4o-mini",
+                isEnabled = hosted?.Enabled ?? false,
+                capabilities = new[] { "legal nextSteps only" }
+            },
             new
             {
                 id = "RiskAnalysisAgent",
                 name = "Risk Analyzer",
                 kind = "fixture",
-                description = "No-key fixture (flowos-risk). Used when the waiting step has no agentProvider or the binding is flowos-risk.",
+                description = "No-key fixture (flowos-risk). Used only when the step is explicitly flowos-risk or hosted OpenAI is not configured.",
                 hasApiKey = false,
                 capabilities = new[] { "legal nextSteps only" }
             }
@@ -141,7 +156,10 @@ public class AgentTools
                 CancellationToken.None);
 
             if (!run.Ran)
-                return McpToolResults.Fail("MCP-NOTFOUND-001", run.SkipReason ?? "Agent task was not run.");
+            {
+                var reason = run.SkipReason ?? "Agent task was not run.";
+                return McpToolResults.Fail(HostedFailureCode(reason), reason);
+            }
 
             return McpToolResults.Success(new
             {
@@ -159,6 +177,17 @@ public class AgentTools
         {
             return McpToolResults.Fail("MCP-INTERNAL", "Agent task failed.");
         }
+    }
+
+    private static string HostedFailureCode(string reason)
+    {
+        if (reason.StartsWith(TenantEntitlementPolicy.PlanRequiredCode, StringComparison.Ordinal))
+            return TenantEntitlementPolicy.PlanRequiredCode;
+        if (reason.StartsWith(FlowOsHostedLlmCodes.Quota, StringComparison.Ordinal))
+            return FlowOsHostedLlmCodes.Quota;
+        if (reason.StartsWith(FlowOsHostedLlmCodes.Unavailable, StringComparison.Ordinal))
+            return FlowOsHostedLlmCodes.Unavailable;
+        return "MCP-NOTFOUND-001";
     }
 
     private static object? SummarizePacket(DecisionPacket? packet)

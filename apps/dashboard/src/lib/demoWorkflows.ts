@@ -340,7 +340,7 @@ const FALLBACK_QUOTE_AUTO_REVIEW = applySimulationGovernance({
         RequiredRoles: ['QuoteAgent'],
         DecisionGuideline: 'Accept if Amount is at or below 1500 and within 15% of Estimate.',
         AgentPrompt: 'quote-approval',
-        AgentProvider: 'quote-llm',
+        AgentProvider: 'flowos-hosted',
         AutoCommit: { MinConfidence: 0.9, AllowedEvents: ['EVT-ACCEPT'] },
         NextSteps: { 'EVT-ACCEPT': 'Closed', 'EVT-REQUEST-REVISION': 'Revision', 'EVT-QUOTE-OVERDUE': 'Overdue' },
         Sla: {

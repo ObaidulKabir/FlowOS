@@ -164,7 +164,7 @@ public static class McpToolSchemas
           "properties":{
             "alias":{"type":"string","minLength":1,"description":"Provider name. Point the waiting step at it with agentProvider."},
             "sourceName":{"type":"string","description":"Alias synonym for alias."},
-            "providerName":{"type":"string","enum":["openai","anthropic","azure-openai","google","custom","flowos-risk"],"description":"Required on create. Hosted LLM when a key is stored; flowos-risk needs no key."},
+            "providerName":{"type":"string","enum":["openai","anthropic","azure-openai","google","custom","flowos-risk","flowos-hosted"],"description":"Required on create. flowos-hosted is the paid FlowOS OpenAI default (no tenant key). BYO kinds store a tenant key. flowos-risk needs no key."},
             "model":{"type":"string"},
             "endpoint":{"type":"string"},
             "apiKey":{"type":"string","description":"Write-only tenant LLM key. Omit on update to keep the stored key. Never returned."},
@@ -1092,7 +1092,7 @@ public static class McpToolSchemas
           "properties":{
             "bindingType":{"type":"string","enum":["action","decision","agent","prompt"],"description":"Binding category. Use agent for a tenant-owned model. Use prompt to create/edit named prompt text."},
             "sourceName":{"type":"string","minLength":1,"description":"Blueprint alias: actionType, decisionProvider, step.agentProvider, or step.agentPrompt."},
-            "providerName":{"type":"string","minLength":1,"description":"Concrete provider. Agent: openai, anthropic, azure-openai, google, custom, flowos-risk. Prompt: markdown or flowos-prompt."},
+            "providerName":{"type":"string","minLength":1,"description":"Concrete provider. Agent: openai, anthropic, azure-openai, google, custom, flowos-risk, flowos-hosted. Prompt: markdown or flowos-prompt."},
             "isEnabled":{"type":"boolean","default":true},
             "configuration":{
               "type":"object",

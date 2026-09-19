@@ -162,6 +162,35 @@ public sealed class AgentContextMcpToolsTests
     }
 
     [Fact]
+    public async Task UpsertAgentProvider_FlowOsHosted_DropsTenantApiKey()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "flowos-hosted",
+                providerName = "flowos-hosted",
+                apiKey = "sk-tenant-must-not-store"
+            }));
+            Assert.False(upsert.IsError);
+            var provider = JObject.Parse(upsert.Content.Single().Text)["data"]!;
+            Assert.Equal("flowos-hosted", provider["providerName"]?.ToString());
+            Assert.False(provider["hasApiKey"]?.Value<bool>());
+            Assert.DoesNotContain("sk-tenant", provider.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
     public async Task PreviewAgentContext_MissingStep_ReturnsNotFound()
     {
         McpRequestContext.Clear();
