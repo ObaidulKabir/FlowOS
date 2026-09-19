@@ -153,11 +153,102 @@ public class SandboxSampleSimulationTests
         var v2Def = WorkflowClassCompiler.MapToRuntimeDefinition(v2);
         Assert.Contains(v2Def.BusinessRoles, role => role.Name == "Director");
         Assert.Contains(v2Def.Steps.Single(s => s.StepId == "PendingDirector").AllowedRoles, role => role == "Director");
+        Assert.DoesNotContain(v2.Definition.Workflow.Steps, step => step.StepId == "CheckAmount");
+        Assert.Equal("PendingManager", v2.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
 
         var loan = await db.WorkflowClasses.FirstAsync(w => w.Name == "LoanUnderwritingFlow");
         var loanDef = WorkflowClassCompiler.MapToRuntimeDefinition(loan);
         Assert.Contains(loanDef.BusinessRoles, role => role.Name == "Manager" && role.Capabilities.Contains("event.publish.EVT-FINAL-APPROVE"));
         Assert.Contains(loan.Definition.Workflow.Steps.Single(s => s.StepId == "UnderwriterReview").RequiredRoles, role => role == "Manager");
+    }
+
+    [Fact]
+    public async Task RepairExpenseApprovalV2_RemovesDeadCheckAmountHop()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var db = new FlowOSDbContext(new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase($"sandbox-v2-repair-{tenantId}")
+            .Options);
+
+        var broken = new WorkflowClassBlueprint
+        {
+            Events =
+            [
+                new EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request" },
+                new EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request" },
+                new EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request" },
+                new EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to Director" },
+                new EventBlueprint { EventId = "EVT-DIRECTOR-APPROVE", Name = "Director Approve" },
+                new EventBlueprint { EventId = "EVT-DIRECTOR-REJECT", Name = "Director Reject" }
+            ],
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = ["Draft", "PendingManager", "PendingDirector", "Approved", "Rejected"],
+                Transitions =
+                [
+                    new TransitionBlueprint { FromState = "Draft", ToState = "PendingManager", EventId = "EVT-SUBMIT" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "Approved", EventId = "EVT-APPROVE" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-ESCALATE" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "Rejected", EventId = "EVT-REJECT" }
+                ]
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Draft",
+                Steps =
+                [
+                    new StepBlueprint { StepId = "Draft", StepType = "Command", NextSteps = new() { ["EVT-SUBMIT"] = "CheckAmount" } },
+                    new StepBlueprint { StepId = "CheckAmount", StepType = "Command", NextSteps = new() { ["EVT-SUBMIT"] = "PendingManager" } },
+                    new StepBlueprint
+                    {
+                        StepId = "PendingManager",
+                        StepType = "HumanTask",
+                        RequiredRoles = ["Manager"],
+                        NextSteps = new() { ["EVT-APPROVE"] = "Approved", ["EVT-ESCALATE"] = "PendingDirector", ["EVT-REJECT"] = "Rejected" }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "PendingDirector",
+                        StepType = "HumanTask",
+                        RequiredRoles = ["Director"],
+                        NextSteps = new() { ["EVT-DIRECTOR-APPROVE"] = "Approved", ["EVT-DIRECTOR-REJECT"] = "Rejected" }
+                    },
+                    new StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { ["Default"] = "END" } },
+                    new StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { ["Default"] = "END" } }
+                ]
+            }
+        };
+        WorkflowSimulationGovernance.Apply(broken);
+        var workflowClass = new WorkflowClass(tenantId, "ExpenseApprovalV2", "1.0.0", broken);
+        var published = new WorkflowClassManager().Publish(workflowClass);
+        Assert.True(published.IsValid, string.Join("; ", published.Errors.Select(error => $"{error.Code}: {error.Message}")));
+        db.WorkflowClasses.Add(workflowClass);
+        var compiled = WorkflowClassCompiler.MapToRuntimeDefinition(workflowClass);
+        db.WorkflowDefinitions.Add(compiled);
+        db.SaveChanges();
+
+        await DataSeeder.RepairExpenseApprovalV2GraphAsync(db, tenantId);
+
+        var repaired = await db.WorkflowClasses.SingleAsync(item => item.Name == "ExpenseApprovalV2");
+        Assert.DoesNotContain(repaired.Definition.Workflow.Steps, step => step.StepId == "CheckAmount");
+        Assert.Equal("PendingManager", repaired.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
+
+        var definition = await db.WorkflowDefinitions.SingleAsync(item => item.Id == compiled.Id);
+        Assert.DoesNotContain(definition.Steps, step => step.StepId == "CheckAmount");
+        Assert.Equal("PendingManager", definition.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
+
+        var highValue = await Simulate(
+            repaired.Definition,
+            repaired.Name,
+            new JObject { ["Amount"] = 75000, ["Currency"] = "USD" },
+            "Manager",
+            new JArray("EVT-SUBMIT", "EVT-ESCALATE"),
+            false);
+        Assert.True(highValue.Ok, highValue.Error);
+        Assert.Equal("WaitingForHumanTask", highValue.Status);
+        Assert.Equal("PendingDirector", highValue.CurrentStepId);
+        Assert.Equal("PendingDirector", highValue.FinalState);
     }
 
     private async Task<(bool Ok, string? Error, string? Status, string? CurrentStepId, string? FinalState)> Simulate(

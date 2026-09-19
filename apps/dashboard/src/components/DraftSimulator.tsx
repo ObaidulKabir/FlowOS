@@ -200,13 +200,15 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     const raw = getProp(step, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles', 'roles', 'Roles');
     if (!raw) {
       const type = (getProp(step, 'stepType', 'StepType') || '').toString().toLowerCase();
-      if (type.includes('command') || type.includes('event') || type.includes('timer')) return ['System'];
-      return ['Unassigned'];
+      if (type.includes('human')) return ['Unassigned'];
+      return ['System'];
     }
     if (Array.isArray(raw)) return raw.map((r: any) => r.toString().trim()).filter(Boolean);
     if (typeof raw === 'string') return raw.split(',').map((r: string) => r.trim()).filter(Boolean);
     return [raw.toString()];
   };
+
+  const catalogRoles: any[] = getProp(definition, 'roles', 'Roles') || [];
 
   // Collect all known roles from the blueprint
   const allKnownRoles = useMemo(() => {
@@ -224,10 +226,12 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
         });
       }
     });
+    catalogRoles.forEach((role: any) => {
+      const name = String(getProp(role, 'name', 'Name') || '').trim();
+      if (name && name !== 'Anyone' && name !== 'Unassigned') roleSet.add(name);
+    });
     return Array.from(roleSet);
-  }, [rawSteps, catalogEvents]);
-
-  const catalogRoles: any[] = getProp(definition, 'roles', 'Roles') || [];
+  }, [rawSteps, catalogEvents, catalogRoles]);
 
   const getRoleGrantedCapabilities = (role: string): string[] => {
     const roleKey = (role || '').trim().toLowerCase();
@@ -667,6 +671,46 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
+    const legalEventsFromState = (state?: string) => {
+      const stateKey = String(state || '').trim().toLowerCase();
+      return transitions
+        .filter(t => {
+          const from = String(getProp(t, 'fromState', 'FromState') ?? '').trim().toLowerCase();
+          return from === '*' || from === stateKey;
+        })
+        .map(t => String(getProp(t, 'eventId', 'EventId', 'eventName', 'EventName') ?? '').trim().toLowerCase())
+        .filter(Boolean);
+    };
+
+    const resolveCatchUpStep = (stepId: string, state?: string) => {
+      const stateKey = String(state || '').trim().toLowerCase();
+      if (!stateKey) return stepId;
+      const stateStep = rawSteps.find((s: any) =>
+        String(getProp(s, 'stepId', 'StepId') || '').trim().toLowerCase() === stateKey
+      );
+      if (!stateStep) return stepId;
+      const current = rawSteps.find((s: any) =>
+        String(getProp(s, 'stepId', 'StepId') || '').trim().toLowerCase() === String(stepId || '').trim().toLowerCase()
+      );
+      if (!current) return String(getProp(stateStep, 'stepId', 'StepId') || stepId);
+      const type = String(getProp(current, 'stepType', 'StepType') || '').toLowerCase();
+      if (type.includes('human')) return stepId;
+      const conditions = getProp(current, 'conditions', 'Conditions') || {};
+      if (type.includes('decision') || type.includes('choice') || Object.keys(conditions).length > 0) {
+        return stepId;
+      }
+      const routes = getNextStepRoutes(current);
+      const legal = legalEventsFromState(state);
+      const hasLegalBusinessEvent = routes.some(route => legal.includes(route.outcome.trim().toLowerCase()));
+      const isAutoRouteOnly = routes.length > 0 && routes.every(route =>
+        ['default', 'true'].includes(route.outcome.trim().toLowerCase())
+      );
+      if (!hasLegalBusinessEvent && !isAutoRouteOnly) {
+        return String(getProp(stateStep, 'stepId', 'StepId') || stepId);
+      }
+      return stepId;
+    };
+
     if (guardBlocked) {
       const blockedLogs = [`[GUARD BLOCKED] ${guardReason} (State: ${currentState})`];
       appendBusinessContext(blockedLogs, payload, { eventId, maxFields: 8 });
@@ -674,6 +718,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       alert(`⚠️ State Machine Guard Violation:\n\n${guardReason}\n\nState remains [${currentState}]. Update payload in "Context & Payload" tab to satisfy the guard.`);
       return;
     }
+
+    const workStepId = resolveCatchUpStep(targetStepId, nextState);
 
     // 2. Advance
     const actingRole = simulatedRole || activeRoleDisplay;
@@ -696,23 +742,28 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     }
 
     newLogs.push(
-      `[Role: ${actingRole}] Fired "${eventDisplay}" -> Step: ${targetStepId} (State: ${currentState || 'None'} → ${nextState || 'None'})`
+      `[Role: ${actingRole}] Fired "${eventDisplay}" -> Step: ${workStepId} (State: ${currentState || 'None'} → ${nextState || 'None'})`
     );
+    if (workStepId !== targetStepId) {
+      newLogs.push(
+        `[KERNEL CATCH-UP] Work hop "${targetStepId}" has no legal event from state "${nextState}"; aligned to "${workStepId}".`
+      );
+    }
     appendBusinessContext(newLogs, payload, { eventId, maxFields: 8 });
 
     // OnEntry hooks for entered step
     const targetStep = rawSteps.find((s: any) => 
-      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (targetStepId || '').toLowerCase()
+      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (workStepId || '').toLowerCase()
     );
     if (targetStep) {
       const entryActions = getStepActions(targetStep, 'onEntry');
       if (entryActions.length > 0) {
-        newLogs.push(...evaluateStepHooks(entryActions, 'OnEntry', targetStepId, payload));
+        newLogs.push(...evaluateStepHooks(entryActions, 'OnEntry', workStepId, payload));
       }
     }
 
     setHistory(prev => [...prev, ...newLogs]);
-    setCurrentStepId(targetStepId);
+    setCurrentStepId(workStepId);
     setCurrentState(nextState);
   };
 
@@ -926,7 +977,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               </div>
             )}
           </div>
-        ) : stepTypeLower.includes('command') || stepTypeLower.includes('event') ? (
+        ) : !isHumanTask && !stepTypeLower.includes('timer') ? (
           /* CASE 2: Command / Automated Action Step */
           <div className="bg-blue-500/10 border border-blue-500/30 p-3.5 rounded-xl space-y-2.5">
             <div className="flex items-center justify-between gap-2">

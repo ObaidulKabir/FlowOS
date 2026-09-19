@@ -325,76 +325,7 @@ public static class DataSeeder
     if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == v2Name))
     {
         Console.WriteLine($"[DataSeeder] Creating {v2Name}...");
-        var v2Bp = new FlowOS.Domain.Blueprints.WorkflowClassBlueprint
-        {
-            Events = new() 
-            { 
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request", AllowedRoles = new() { "Employee", "User" } },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request", AllowedRoles = new() { "Manager" } },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request", AllowedRoles = new() { "Manager" } },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-APPROVE", Name = "Director Approve", AllowedRoles = new() { "Director" } },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-DIRECTOR-REJECT", Name = "Director Reject", AllowedRoles = new() { "Director" } },
-                new FlowOS.Domain.Blueprints.EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to Director", AllowedRoles = new() { "Manager" } }
-            },
-            StateMachine = new FlowOS.Domain.Blueprints.StateMachineBlueprint
-            {
-                InitialState = "Draft",
-                States = new() { "Draft", "PendingManager", "PendingDirector", "Approved", "Rejected" },
-                Transitions = new() 
-                {
-                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "Draft", ToState = "PendingManager", EventId = "EVT-SUBMIT" },
-                    // Manager Approval Logic
-                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingManager", ToState = "Approved", EventId = "EVT-APPROVE" }, // < $100
-                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-ESCALATE" }, // > $100
-                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingManager", ToState = "Rejected", EventId = "EVT-REJECT" },
-                    // Director Approval Logic
-                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingDirector", ToState = "Approved", EventId = "EVT-DIRECTOR-APPROVE" },
-                    new FlowOS.Domain.Blueprints.TransitionBlueprint { FromState = "PendingDirector", ToState = "Rejected", EventId = "EVT-DIRECTOR-REJECT" }
-                }
-            },
-            Workflow = new FlowOS.Domain.Blueprints.WorkflowBlueprint
-            {
-                StartStepId = "Draft",
-                Steps = new() 
-                {
-                    new FlowOS.Domain.Blueprints.StepBlueprint 
-                    { 
-                        StepId = "Draft", 
-                        StepType = "Command",
-                        NextSteps = new() { { "EVT-SUBMIT", "PendingManager" } }
-                    },
-                    new FlowOS.Domain.Blueprints.StepBlueprint 
-                    { 
-                        StepId = "PendingManager", 
-                        StepType = "HumanTask",
-                        RequiredRoles = new() { "Manager" },
-                        NextSteps = new() 
-                        { 
-                            { "EVT-APPROVE", "Approved" }, // < 100
-                            { "EVT-ESCALATE", "PendingDirector" }, // > 100
-                            { "EVT-REJECT", "Rejected" } 
-                        }
-                    },
-                    new FlowOS.Domain.Blueprints.StepBlueprint 
-                    { 
-                        StepId = "PendingDirector", 
-                        StepType = "HumanTask",
-                        RequiredRoles = new() { "Director" },
-                        NextSteps = new() 
-                        { 
-                            { "EVT-DIRECTOR-APPROVE", "Approved" }, 
-                            { "EVT-DIRECTOR-REJECT", "Rejected" } 
-                        }
-                    },
-                    new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { { "Default", "END" } } },
-                    new FlowOS.Domain.Blueprints.StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
-                }
-            },
-            Roles = ExpenseV2Roles(),
-            Capabilities = ExpenseV2Capabilities()
-        };
-        WorkflowSimulationGovernance.Apply(v2Bp);
-
+        var v2Bp = CreateExpenseApprovalV2Blueprint();
         var v2Wc = new WorkflowClass(clientTenantId, v2Name, "1.0.0", v2Bp);
         SetPrivateProperty(v2Wc, "Id", Guid.Parse("e912ab44-2222-2222-2222-222222222222"));
         var manager2 = new WorkflowClassManager();
@@ -405,6 +336,8 @@ public static class DataSeeder
         context.WorkflowDefinitions.Add(def);
         await context.SaveChangesAsync();
     }
+
+    await RepairExpenseApprovalV2GraphAsync(context, clientTenantId);
     
     // 5. Ensure runtime roles for sandbox + production API keys (demo key maps to Admin).
     await EnsureRoleWithPermissionsAsync(
@@ -1157,6 +1090,7 @@ public static class DataSeeder
                 WorkflowSimulationGovernance.Apply(blueprint);
                 break;
             case "ExpenseApprovalV2":
+                RepairExpenseApprovalV2Blueprint(blueprint);
                 EnsureStepRequiredRoles(blueprint, "PendingManager", "Manager");
                 EnsureStepRequiredRoles(blueprint, "PendingDirector", "Director");
                 EnsureRoleList(blueprint.Roles, ExpenseV2Roles());
@@ -1539,6 +1473,189 @@ public static class DataSeeder
                 Console.WriteLine($"[DataSeeder] Skipping runtime definition for '{name}': {ex.Message}");
             }
         }
+    }
+
+    public static async Task RepairExpenseApprovalV2GraphAsync(FlowOSDbContext context, Guid tenantId)
+    {
+        var workflowClass = await context.WorkflowClasses.FirstOrDefaultAsync(
+            item => item.TenantId == tenantId && item.Name == "ExpenseApprovalV2");
+        if (workflowClass == null)
+            return;
+
+        if (ExpenseV2GraphNeedsRebuild(workflowClass.Definition))
+        {
+            SetPrivateProperty(workflowClass, nameof(WorkflowClass.Definition), CreateExpenseApprovalV2Blueprint());
+        }
+        else
+        {
+            RepairExpenseApprovalV2Blueprint(workflowClass.Definition);
+            WorkflowSimulationGovernance.Apply(workflowClass.Definition);
+        }
+
+        context.Entry(workflowClass).Property(item => item.Definition).IsModified = true;
+
+        var definitions = await context.WorkflowDefinitions
+            .Include(item => item.Steps)
+            .Where(item => item.TenantId == tenantId &&
+                (item.Name == "ExpenseApprovalV2" ||
+                 item.Name == "Expense Approval V2 Context" ||
+                 item.SourceWorkflowClassId == workflowClass.Id))
+            .ToListAsync();
+
+        foreach (var definition in definitions)
+            RepairDeadCheckAmountHop(definition);
+
+        await context.SaveChangesAsync();
+    }
+
+    private static bool ExpenseV2GraphNeedsRebuild(WorkflowClassBlueprint blueprint)
+    {
+        var pending = blueprint.Workflow.Steps.FirstOrDefault(step =>
+            string.Equals(step.StepId, "PendingManager", StringComparison.OrdinalIgnoreCase));
+        return pending == null ||
+               !string.Equals(pending.StepType, "HumanTask", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void RepairExpenseApprovalV2Blueprint(WorkflowClassBlueprint blueprint)
+    {
+        var steps = blueprint.Workflow.Steps;
+        steps.RemoveAll(step => string.Equals(step.StepId, "CheckAmount", StringComparison.OrdinalIgnoreCase));
+
+        foreach (var step in steps)
+        {
+            foreach (var key in step.NextSteps.Keys.ToList())
+            {
+                if (string.Equals(step.NextSteps[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
+                    step.NextSteps[key] = "PendingManager";
+            }
+
+            foreach (var key in step.Conditions.Keys.ToList())
+            {
+                if (string.Equals(step.Conditions[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
+                    step.Conditions[key] = "PendingManager";
+            }
+        }
+
+        var draft = steps.FirstOrDefault(step =>
+            string.Equals(step.StepId, "Draft", StringComparison.OrdinalIgnoreCase));
+        if (draft != null)
+            draft.NextSteps["EVT-SUBMIT"] = "PendingManager";
+    }
+
+    private static void RepairDeadCheckAmountHop(WorkflowDefinition definition)
+    {
+        if (!definition.Steps.Any(step =>
+                string.Equals(step.StepId, "CheckAmount", StringComparison.OrdinalIgnoreCase)))
+        {
+            var draft = definition.Steps.FirstOrDefault(step =>
+                string.Equals(step.StepId, "Draft", StringComparison.OrdinalIgnoreCase));
+            if (draft != null &&
+                draft.NextSteps.TryGetValue("EVT-SUBMIT", out var target) &&
+                string.Equals(target, "PendingManager", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        var previousStatus = definition.Status;
+        SetPrivateProperty(definition, nameof(WorkflowDefinition.Status), WorkflowStatus.Draft);
+
+        foreach (var step in definition.Steps)
+        {
+            foreach (var key in step.NextSteps.Keys.ToList())
+            {
+                if (string.Equals(step.NextSteps[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
+                    step.NextSteps[key] = "PendingManager";
+            }
+
+            foreach (var key in step.Conditions.Keys.ToList())
+            {
+                if (string.Equals(step.Conditions[key], "CheckAmount", StringComparison.OrdinalIgnoreCase))
+                    step.Conditions[key] = "PendingManager";
+            }
+        }
+
+        var draftStep = definition.Steps.FirstOrDefault(step =>
+            string.Equals(step.StepId, "Draft", StringComparison.OrdinalIgnoreCase));
+        if (draftStep != null)
+            draftStep.NextSteps["EVT-SUBMIT"] = "PendingManager";
+
+        definition.Steps.RemoveAll(step =>
+            string.Equals(step.StepId, "CheckAmount", StringComparison.OrdinalIgnoreCase));
+        SetPrivateProperty(definition, nameof(WorkflowDefinition.Status), previousStatus);
+    }
+
+    private static WorkflowClassBlueprint CreateExpenseApprovalV2Blueprint()
+    {
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new()
+            {
+                new EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request", AllowedRoles = new() { "Employee", "User" } },
+                new EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request", AllowedRoles = new() { "Manager" } },
+                new EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request", AllowedRoles = new() { "Manager" } },
+                new EventBlueprint { EventId = "EVT-DIRECTOR-APPROVE", Name = "Director Approve", AllowedRoles = new() { "Director" } },
+                new EventBlueprint { EventId = "EVT-DIRECTOR-REJECT", Name = "Director Reject", AllowedRoles = new() { "Director" } },
+                new EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to Director", AllowedRoles = new() { "Manager" } }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = new() { "Draft", "PendingManager", "PendingDirector", "Approved", "Rejected" },
+                Transitions = new()
+                {
+                    new TransitionBlueprint { FromState = "Draft", ToState = "PendingManager", EventId = "EVT-SUBMIT" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "Approved", EventId = "EVT-APPROVE" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-ESCALATE" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "Rejected", EventId = "EVT-REJECT" },
+                    new TransitionBlueprint { FromState = "PendingDirector", ToState = "Approved", EventId = "EVT-DIRECTOR-APPROVE" },
+                    new TransitionBlueprint { FromState = "PendingDirector", ToState = "Rejected", EventId = "EVT-DIRECTOR-REJECT" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Draft",
+                Steps = new()
+                {
+                    new StepBlueprint
+                    {
+                        StepId = "Draft",
+                        StepType = "Command",
+                        NextSteps = new() { { "EVT-SUBMIT", "PendingManager" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "PendingManager",
+                        StepType = "HumanTask",
+                        RequiredRoles = new() { "Manager" },
+                        NextSteps = new()
+                        {
+                            { "EVT-APPROVE", "Approved" },
+                            { "EVT-ESCALATE", "PendingDirector" },
+                            { "EVT-REJECT", "Rejected" }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "PendingDirector",
+                        StepType = "HumanTask",
+                        RequiredRoles = new() { "Director" },
+                        NextSteps = new()
+                        {
+                            { "EVT-DIRECTOR-APPROVE", "Approved" },
+                            { "EVT-DIRECTOR-REJECT", "Rejected" }
+                        }
+                    },
+                    new StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { { "Default", "END" } } },
+                    new StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
+                }
+            },
+            Roles = ExpenseV2Roles(),
+            Capabilities = ExpenseV2Capabilities()
+        };
+
+        WorkflowSimulationGovernance.Apply(blueprint);
+        return blueprint;
     }
 
     private static WorkflowClassBlueprint CreateExpenseApprovalBlueprint()

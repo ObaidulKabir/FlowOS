@@ -46,62 +46,48 @@ const FALLBACK_EXPENSE = applySimulationGovernance({
 
 const FALLBACK_EXPENSE_V2 = applySimulationGovernance({
   Events: [
-    { EventId: 'EVT-SUBMIT', Name: 'Submit', AllowedRoles: ['User', 'Employee'] },
-    { EventId: 'EVT-APPROVE', Name: 'Approve', AllowedRoles: ['Manager'] },
-    { EventId: 'EVT-REJECT', Name: 'Reject', AllowedRoles: ['Manager'] },
-    { EventId: 'EVT-ESCALATE', Name: 'Escalate' }
+    { EventId: 'EVT-SUBMIT', Name: 'Submit Request', AllowedRoles: ['User', 'Employee'] },
+    { EventId: 'EVT-APPROVE', Name: 'Approve Request', AllowedRoles: ['Manager'] },
+    { EventId: 'EVT-REJECT', Name: 'Reject Request', AllowedRoles: ['Manager'] },
+    { EventId: 'EVT-ESCALATE', Name: 'Escalate to Director', AllowedRoles: ['Manager'] },
+    { EventId: 'EVT-DIRECTOR-APPROVE', Name: 'Director Approve', AllowedRoles: ['Director'] },
+    { EventId: 'EVT-DIRECTOR-REJECT', Name: 'Director Reject', AllowedRoles: ['Director'] }
   ],
   StateMachine: {
     InitialState: 'Draft',
-    States: ['Draft', 'Pending', 'Approved', 'Rejected'],
+    States: ['Draft', 'PendingManager', 'PendingDirector', 'Approved', 'Rejected'],
     Transitions: [
-      { FromState: 'Draft', ToState: 'Pending', EventId: 'EVT-SUBMIT' },
-      { FromState: 'Pending', ToState: 'Approved', EventId: 'EVT-APPROVE' },
-      { FromState: 'Pending', ToState: 'Rejected', EventId: 'EVT-REJECT' }
+      { FromState: 'Draft', ToState: 'PendingManager', EventId: 'EVT-SUBMIT' },
+      { FromState: 'PendingManager', ToState: 'Approved', EventId: 'EVT-APPROVE' },
+      { FromState: 'PendingManager', ToState: 'PendingDirector', EventId: 'EVT-ESCALATE' },
+      { FromState: 'PendingManager', ToState: 'Rejected', EventId: 'EVT-REJECT' },
+      { FromState: 'PendingDirector', ToState: 'Approved', EventId: 'EVT-DIRECTOR-APPROVE' },
+      { FromState: 'PendingDirector', ToState: 'Rejected', EventId: 'EVT-DIRECTOR-REJECT' }
     ]
   },
   Workflow: {
-    StartStepId: 'ValidateInput',
+    StartStepId: 'Draft',
     Steps: [
       {
-        StepId: 'ValidateInput',
-        StepType: 'Command',
-        NextSteps: { Default: 'Draft' },
-        RequiredRoles: ['System']
-      },
-      {
         StepId: 'Draft',
-        StepType: 'HumanTask',
-        NextSteps: { 'EVT-SUBMIT': 'FraudCheck' },
+        StepType: 'Command',
+        NextSteps: { 'EVT-SUBMIT': 'PendingManager' },
         RequiredRoles: ['User']
       },
       {
-        StepId: 'FraudCheck',
-        StepType: 'Command',
-        NextSteps: { Default: 'Pending' },
-        RequiredRoles: ['System']
-      },
-      {
-        StepId: 'Pending',
+        StepId: 'PendingManager',
         StepType: 'HumanTask',
-        NextSteps: { 'EVT-APPROVE': 'NotifyApproval', 'EVT-REJECT': 'NotifyRejection' },
-        RequiredRoles: ['Manager'],
-        Sla: { Duration: '7d', TimeoutEvent: 'EVT-ESCALATE', EscalationStepId: 'NotifyRejection' }
+        NextSteps: { 'EVT-APPROVE': 'Approved', 'EVT-ESCALATE': 'PendingDirector', 'EVT-REJECT': 'Rejected' },
+        RequiredRoles: ['Manager']
       },
       {
-        StepId: 'NotifyApproval',
-        StepType: 'Event',
-        NextSteps: { Default: 'Approved' },
-        RequiredRoles: ['System']
+        StepId: 'PendingDirector',
+        StepType: 'HumanTask',
+        NextSteps: { 'EVT-DIRECTOR-APPROVE': 'Approved', 'EVT-DIRECTOR-REJECT': 'Rejected' },
+        RequiredRoles: ['Director']
       },
-      {
-        StepId: 'NotifyRejection',
-        StepType: 'Event',
-        NextSteps: { Default: 'Rejected' },
-        RequiredRoles: ['System']
-      },
-      { StepId: 'Approved', StepType: 'Command', NextSteps: { Default: 'END' }, RequiredRoles: [] },
-      { StepId: 'Rejected', StepType: 'Command', NextSteps: { Default: 'END' }, RequiredRoles: [] }
+      { StepId: 'Approved', StepType: 'Command', NextSteps: { Default: 'END' } },
+      { StepId: 'Rejected', StepType: 'Command', NextSteps: { Default: 'END' } }
     ]
   }
 });
