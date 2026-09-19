@@ -27,7 +27,7 @@ public class SampleBusinessContextSeederTests
         var bindings = await db.WorkflowContextBindings
             .Where(binding => binding.TenantId == tenantId)
             .ToListAsync();
-        Assert.Equal(5, bindings.Count);
+        Assert.Equal(6, bindings.Count);
         Assert.All(bindings, binding => Assert.Equal(WorkflowContextBindingStatus.Active, binding.Status));
 
         await AssertBindingVocabulary(db, tenantId, "Expense Approval Context", "Approver", "event.publish.EVT-APPROVE");
@@ -35,6 +35,7 @@ public class SampleBusinessContextSeederTests
         await AssertBindingVocabulary(db, tenantId, "Order Saga Context", "OrderClerk", "event.publish.EVT-VALIDATE");
         await AssertBindingVocabulary(db, tenantId, "Loan Underwriting Context", "Applicant", "event.publish.EVT-APPLY");
         await AssertBindingVocabulary(db, tenantId, "Privileged Access Context", "Requester", "event.publish.EVT-REQUEST-ACCESS");
+        await AssertBindingVocabulary(db, tenantId, "Incident Alert Context", "OnCall", "event.publish.EVT-CLOSE");
 
         var expense = await db.WorkflowContextBindings.SingleAsync(binding =>
             binding.TenantId == tenantId && binding.Name == "Expense Approval Context");
@@ -51,7 +52,7 @@ public class SampleBusinessContextSeederTests
             capability => capability == "event.publish.EVT-APPROVE");
 
         await DataSeeder.SeedSampleBusinessContextsAsync(db, tenantId);
-        Assert.Equal(5, await db.WorkflowContextBindings.CountAsync(binding => binding.TenantId == tenantId));
+        Assert.Equal(6, await db.WorkflowContextBindings.CountAsync(binding => binding.TenantId == tenantId));
     }
 
     [Fact]

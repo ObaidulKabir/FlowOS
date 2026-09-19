@@ -63,7 +63,19 @@ public class SandboxSampleSimulationTests
             {
                 ["UserEmail"] = "ops@example.com",
                 ["Environment"] = "prod"
-            }, "Manager", new JArray("EVT-REQUEST-ACCESS", "EVT-APPROVE"), true, "Revoked")
+            }, "Manager", new JArray("EVT-REQUEST-ACCESS", "EVT-APPROVE"), true, "Revoked"),
+            ("IncidentAlertEscalation", new JObject
+            {
+                ["TicketId"] = "INC-9",
+                ["Severity"] = "Medium",
+                ["Summary"] = "Checkout latency"
+            }, "Support", new JArray("EVT-OPEN", "EVT-RESOLVE"), false, "Resolved"),
+            ("IncidentAlertEscalation", new JObject
+            {
+                ["TicketId"] = "INC-1",
+                ["Severity"] = "Critical",
+                ["Summary"] = "Payments down"
+            }, "OnCall", new JArray("EVT-OPEN", "EVT-CLOSE"), false, "Resolved")
         };
 
         foreach (var (name, payload, role, events, autoAdvance, expectedState) in cases)
@@ -165,6 +177,12 @@ public class SandboxSampleSimulationTests
         var loanDef = WorkflowClassCompiler.MapToRuntimeDefinition(loan);
         Assert.Contains(loanDef.BusinessRoles, role => role.Name == "Manager" && role.Capabilities.Contains("event.publish.EVT-FINAL-APPROVE"));
         Assert.Contains(loan.Definition.Workflow.Steps.Single(s => s.StepId == "UnderwriterReview").RequiredRoles, role => role == "Manager");
+
+        var incident = await db.WorkflowClasses.FirstAsync(w => w.Name == "IncidentAlertEscalation");
+        var incidentDef = WorkflowClassCompiler.MapToRuntimeDefinition(incident);
+        Assert.Contains(incidentDef.BusinessRoles, role => role.Name == "OnCall" && role.Capabilities.Contains("event.publish.EVT-CLOSE"));
+        Assert.Contains(incident.Definition.Workflow.Steps.Single(s => s.StepId == "L1Review").RequiredRoles, role => role == "Support");
+        Assert.Equal("EVT-ESCALATE", incident.Definition.Workflow.Steps.Single(s => s.StepId == "L1Review").Sla?.TimeoutEvent);
     }
 
     [Fact]

@@ -950,6 +950,24 @@ public static class DataSeeder
             context.WorkflowDefinitions.Add(secOpsDef);
         }
 
+        // -------------------------------------------------------------------------------------------------
+        // FLAGSHIP 4: IncidentAlertEscalation (SLA reminder alerts + timeout / severity escalation)
+        // -------------------------------------------------------------------------------------------------
+        const string incidentName = "IncidentAlertEscalation";
+        if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == incidentName))
+        {
+            var incidentBp = CreateIncidentAlertEscalationBlueprint();
+            var incidentWc = new WorkflowClass(clientTenantId, incidentName, "1.0.0", incidentBp);
+            manager.Publish(incidentWc);
+            manager.SubmitForReview(incidentWc);
+            manager.ApproveAsPublic(incidentWc);
+            context.WorkflowClasses.Add(incidentWc);
+
+            var incidentDef = WorkflowClassCompiler.MapToRuntimeDefinition(incidentWc);
+            incidentDef.Publish();
+            context.WorkflowDefinitions.Add(incidentDef);
+        }
+
         await RepairExpenseApprovalV2GraphAsync(context, clientTenantId);
         await context.SaveChangesAsync();
     }
@@ -1050,6 +1068,24 @@ public static class DataSeeder
         BizRole("SecOps", "Owns credential provisioning and revocation", "workflow.read", "event.publish.EVT-REVOKE")
     ];
 
+    private const string CriticalIncidentCondition = "Severity == \"Critical\"";
+
+    private static List<CapabilityBlueprint> IncidentCapabilities() =>
+    [
+        Cap("workflow.read", "Read incident instance state"),
+        Cap("event.publish.EVT-OPEN", "Open an incident ticket"),
+        Cap("event.publish.EVT-RESOLVE", "L1 resolves an incident before SLA breach"),
+        Cap("event.publish.EVT-ESCALATE", "Escalate an incident after SLA breach or L1 handoff"),
+        Cap("event.publish.EVT-CLOSE", "On-call closes an escalated incident")
+    ];
+
+    private static List<RoleBlueprint> IncidentRoles() =>
+    [
+        BizRole("Reporter", "Opens an incident", "workflow.read", "event.publish.EVT-OPEN"),
+        BizRole("Support", "L1 inbox: resolve in SLA or escalate", "workflow.read", "event.publish.EVT-RESOLVE", "event.publish.EVT-ESCALATE"),
+        BizRole("OnCall", "L2 inbox after alert escalation", "workflow.read", "event.publish.EVT-CLOSE")
+    ];
+
     private static void EnsureStepRequiredRoles(WorkflowClassBlueprint blueprint, string stepId, params string[] roles)
     {
         var step = blueprint.Workflow.Steps.FirstOrDefault(s => s.StepId == stepId);
@@ -1114,6 +1150,13 @@ public static class DataSeeder
                 EnsureStepRequiredRoles(blueprint, "DirectorEscalation", "Director");
                 EnsureRoleList(blueprint.Roles, SecOpsRoles());
                 EnsureCapabilityList(blueprint.Capabilities, SecOpsCapabilities());
+                WorkflowSimulationGovernance.Apply(blueprint);
+                break;
+            case "IncidentAlertEscalation":
+                EnsureStepRequiredRoles(blueprint, "L1Review", "Support");
+                EnsureStepRequiredRoles(blueprint, "OnCallEscalation", "OnCall");
+                EnsureRoleList(blueprint.Roles, IncidentRoles());
+                EnsureCapabilityList(blueprint.Capabilities, IncidentCapabilities());
                 WorkflowSimulationGovernance.Apply(blueprint);
                 break;
         }
@@ -1284,6 +1327,17 @@ public static class DataSeeder
                 ["Environment"] = "environment"
             },
             new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)),
+        "IncidentAlertEscalation" => (
+            "Incident",
+            "Incident Alert Context",
+            "IncidentTicket",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["TicketId"] = "ticketId",
+                ["Severity"] = "severity",
+                ["Summary"] = "summary"
+            },
+            new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase)),
         _ => (
             workflowName,
             $"{workflowName} Context",
@@ -1418,7 +1472,8 @@ public static class DataSeeder
         "ExpenseApprovalV2",
         "OrderSagaFulfillment",
         "LoanUnderwritingFlow",
-        "SecOpsAccessGovernance"
+        "SecOpsAccessGovernance",
+        "IncidentAlertEscalation"
     };
 
     private static async Task EnsureRoleWithPermissionsAsync(
@@ -1613,6 +1668,137 @@ public static class DataSeeder
             draftStep.NextSteps["EVT-SUBMIT"] = "CheckAmount";
 
         SetPrivateProperty(definition, nameof(WorkflowDefinition.Status), previousStatus);
+    }
+
+    public static WorkflowClassBlueprint CreateIncidentAlertEscalationBlueprint()
+    {
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new()
+            {
+                new EventBlueprint { EventId = "EVT-OPEN", Name = "Open Incident", Category = EventCategory.Human, AllowedRoles = new() { "Reporter" } },
+                new EventBlueprint { EventId = "EVT-SLA-WARN-1H", Name = "1h SLA warning alert", Category = EventCategory.System },
+                new EventBlueprint { EventId = "EVT-SLA-WARN-3H", Name = "3h SLA warning alert", Category = EventCategory.System },
+                new EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to On-Call", Category = EventCategory.Human, AllowedRoles = new() { "Support" } },
+                new EventBlueprint { EventId = "EVT-RESOLVE", Name = "L1 Resolve", Category = EventCategory.Human, AllowedRoles = new() { "Support" } },
+                new EventBlueprint { EventId = "EVT-CLOSE", Name = "On-Call Close", Category = EventCategory.Human, AllowedRoles = new() { "OnCall" } }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = new() { "Draft", "L1Queued", "Escalated", "Resolved" },
+                Transitions = new()
+                {
+                    new TransitionBlueprint { FromState = "Draft", ToState = "Escalated", EventId = "EVT-OPEN", Condition = CriticalIncidentCondition },
+                    new TransitionBlueprint { FromState = "Draft", ToState = "L1Queued", EventId = "EVT-OPEN" },
+                    new TransitionBlueprint { FromState = "L1Queued", ToState = "Resolved", EventId = "EVT-RESOLVE" },
+                    new TransitionBlueprint { FromState = "L1Queued", ToState = "Escalated", EventId = "EVT-ESCALATE" },
+                    new TransitionBlueprint { FromState = "Escalated", ToState = "Resolved", EventId = "EVT-CLOSE" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "ReportIncident",
+                Steps = new()
+                {
+                    new StepBlueprint
+                    {
+                        StepId = "ReportIncident",
+                        StepType = "Command",
+                        NextSteps = new() { { "EVT-OPEN", "CheckSeverity" } },
+                        OnEntry = new()
+                        {
+                            new StepActionBlueprint
+                            {
+                                ActionType = "Notification",
+                                Target = "IncidentChannel",
+                                Template = "ALERT: Incident {{TicketId}} opened (Severity {{Severity}})."
+                            }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "CheckSeverity",
+                        StepType = "Decision",
+                        RequiredRoles = new() { "System" },
+                        Conditions = new()
+                        {
+                            { CriticalIncidentCondition, "OnCallEscalation" },
+                            { "Default", "L1Review" }
+                        },
+                        NextSteps = new() { { "Default", "L1Review" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "L1Review",
+                        StepType = "HumanTask",
+                        RequiredRoles = new() { "Support" },
+                        NextSteps = new()
+                        {
+                            { "EVT-RESOLVE", "Closed" },
+                            { "EVT-ESCALATE", "OnCallEscalation" }
+                        },
+                        Sla = new StepSlaBlueprint
+                        {
+                            Duration = "4h",
+                            TimeoutEvent = "EVT-ESCALATE",
+                            EscalationStepId = "OnCallEscalation",
+                            EscalationRole = "OnCall",
+                            Reminders = new()
+                            {
+                                new StepReminderBlueprint { Duration = "1h", TriggerEvent = "EVT-SLA-WARN-1H" },
+                                new StepReminderBlueprint { Duration = "3h", TriggerEvent = "EVT-SLA-WARN-3H" }
+                            }
+                        },
+                        OnEntry = new()
+                        {
+                            new StepActionBlueprint
+                            {
+                                ActionType = "Notification",
+                                Target = "SupportInbox",
+                                Template = "ALERT: {{TicketId}} assigned to L1 Support. 4h SLA with warnings at 1h and 3h."
+                            }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "OnCallEscalation",
+                        StepType = "HumanTask",
+                        RequiredRoles = new() { "OnCall" },
+                        NextSteps = new() { { "EVT-CLOSE", "Closed" } },
+                        OnEntry = new()
+                        {
+                            new StepActionBlueprint
+                            {
+                                ActionType = "Notification",
+                                Target = "OnCallPager",
+                                Template = "ESCALATION ALERT: {{TicketId}} paged On-Call (Severity {{Severity}})."
+                            }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "Closed",
+                        StepType = "Command",
+                        NextSteps = new() { { "Default", "END" } },
+                        OnEntry = new()
+                        {
+                            new StepActionBlueprint
+                            {
+                                ActionType = "Notification",
+                                Target = "IncidentChannel",
+                                Template = "Incident {{TicketId}} resolved."
+                            }
+                        }
+                    }
+                }
+            },
+            Roles = IncidentRoles(),
+            Capabilities = IncidentCapabilities()
+        };
+
+        WorkflowSimulationGovernance.Apply(blueprint);
+        return blueprint;
     }
 
     private static WorkflowClassBlueprint CreateExpenseApprovalV2Blueprint()

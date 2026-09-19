@@ -501,6 +501,13 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                       desc: 'Privileged access with 24h SLA auto-escalation to SecOps Director and 8h automated revocation timers.'
                     },
                     {
+                      name: 'IncidentAlertEscalation',
+                      title: 'Incident Alert Escalation',
+                      badge: 'Alerts & Escalation',
+                      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+                      desc: 'L1 SLA warning alerts at 1h/3h, 4h timeout escalate to On-Call, and Critical severity skips straight to the pager inbox.'
+                    },
+                    {
                       name: 'ExpenseApprovalV2',
                       title: 'Expense Approval V2',
                       badge: 'Multi-Tier Approval',

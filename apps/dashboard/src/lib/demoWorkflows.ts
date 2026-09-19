@@ -5,6 +5,7 @@ export const DEMO_NAMES = [
   'OrderSagaFulfillment',
   'LoanUnderwritingFlow',
   'SecOpsAccessGovernance',
+  'IncidentAlertEscalation',
   'ExpenseApproval'
 ];
 
@@ -226,6 +227,73 @@ const FALLBACK_LOAN = applySimulationGovernance({
   }
 });
 
+const FALLBACK_INCIDENT_ALERT = applySimulationGovernance({
+  Events: [
+    { EventId: 'EVT-OPEN', Name: 'Open Incident', AllowedRoles: ['Reporter'] },
+    { EventId: 'EVT-SLA-WARN-1H', Name: '1h SLA warning alert' },
+    { EventId: 'EVT-SLA-WARN-3H', Name: '3h SLA warning alert' },
+    { EventId: 'EVT-ESCALATE', Name: 'Escalate to On-Call', AllowedRoles: ['Support'] },
+    { EventId: 'EVT-RESOLVE', Name: 'L1 Resolve', AllowedRoles: ['Support'] },
+    { EventId: 'EVT-CLOSE', Name: 'On-Call Close', AllowedRoles: ['OnCall'] }
+  ],
+  StateMachine: {
+    InitialState: 'Draft',
+    States: ['Draft', 'L1Queued', 'Escalated', 'Resolved'],
+    Transitions: [
+      { FromState: 'Draft', ToState: 'Escalated', EventId: 'EVT-OPEN', Condition: 'Severity == "Critical"' },
+      { FromState: 'Draft', ToState: 'L1Queued', EventId: 'EVT-OPEN' },
+      { FromState: 'L1Queued', ToState: 'Resolved', EventId: 'EVT-RESOLVE' },
+      { FromState: 'L1Queued', ToState: 'Escalated', EventId: 'EVT-ESCALATE' },
+      { FromState: 'Escalated', ToState: 'Resolved', EventId: 'EVT-CLOSE' }
+    ]
+  },
+  Workflow: {
+    StartStepId: 'ReportIncident',
+    Steps: [
+      {
+        StepId: 'ReportIncident',
+        StepType: 'Command',
+        NextSteps: { 'EVT-OPEN': 'CheckSeverity' },
+        RequiredRoles: ['Reporter']
+      },
+      {
+        StepId: 'CheckSeverity',
+        StepType: 'Decision',
+        Conditions: { 'Severity == "Critical"': 'OnCallEscalation', Default: 'L1Review' },
+        NextSteps: { Default: 'L1Review' },
+        RequiredRoles: ['System']
+      },
+      {
+        StepId: 'L1Review',
+        StepType: 'HumanTask',
+        RequiredRoles: ['Support'],
+        NextSteps: { 'EVT-RESOLVE': 'Closed', 'EVT-ESCALATE': 'OnCallEscalation' },
+        Sla: {
+          Duration: '4h',
+          TimeoutEvent: 'EVT-ESCALATE',
+          EscalationStepId: 'OnCallEscalation',
+          EscalationRole: 'OnCall',
+          Reminders: [
+            { Duration: '1h', TriggerEvent: 'EVT-SLA-WARN-1H' },
+            { Duration: '3h', TriggerEvent: 'EVT-SLA-WARN-3H' }
+          ]
+        }
+      },
+      {
+        StepId: 'OnCallEscalation',
+        StepType: 'HumanTask',
+        RequiredRoles: ['OnCall'],
+        NextSteps: { 'EVT-CLOSE': 'Closed' }
+      },
+      {
+        StepId: 'Closed',
+        StepType: 'Command',
+        NextSteps: { Default: 'END' }
+      }
+    ]
+  }
+});
+
 const FALLBACK_SECOPS = applySimulationGovernance({
   Events: [
     { EventId: 'EVT-REQUEST-ACCESS', Name: 'Request Privileged Access', AllowedRoles: ['User', 'Employee'] },
@@ -380,5 +448,11 @@ export const DEMO_FALLBACKS: Record<string, { id: string; name: string; version:
     name: 'SecOpsAccessGovernance',
     version: 'demo',
     definition: FALLBACK_SECOPS
+  },
+  IncidentAlertEscalation: {
+    id: 'fallback-incident-alert',
+    name: 'IncidentAlertEscalation',
+    version: 'demo',
+    definition: FALLBACK_INCIDENT_ALERT
   }
 };

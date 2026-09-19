@@ -588,6 +588,11 @@ public class WorkflowCopilotService : IWorkflowCopilotService
         if (lowerPrompt.Contains("loan") || lowerPrompt.Contains("underwrit")) return "CommercialLoanUnderwriting";
         if (lowerPrompt.Contains("onboard") || lowerPrompt.Contains("vendor")) return "VendorOnboardingFlow";
         if (lowerPrompt.Contains("order") || lowerPrompt.Contains("fulfill") || lowerPrompt.Contains("saga")) return "OrderFulfillmentSaga";
+        if ((lowerPrompt.Contains("alert") && lowerPrompt.Contains("escalat")) ||
+            lowerPrompt.Contains("incidentalert") ||
+            lowerPrompt.Contains("on-call") ||
+            lowerPrompt.Contains("oncall"))
+            return "IncidentAlertEscalation";
         if (lowerPrompt.Contains("secops") || lowerPrompt.Contains("incident") || lowerPrompt.Contains("access")) return "SecOpsAccessGovernance";
         if (lowerPrompt.Contains("expense") || lowerPrompt.Contains("reimburse")) return "ExpenseReimbursementFlow";
 
