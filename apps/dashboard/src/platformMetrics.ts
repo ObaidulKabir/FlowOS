@@ -4,12 +4,12 @@ import { mcpRpcPath } from './mcpUrl';
 export const VERIFIED_PLATFORM_METRICS = {
   mcpTools: 66,
   tests: {
-    total: 369,
-    unit: 303,
-    endToEnd: 28,
-    mcp: 38
+    total: 638,
+    unit: 551,
+    endToEnd: 30,
+    mcp: 57
   },
-  verifiedOn: '2026-09-15'
+  verifiedOn: '2026-09-21'
 } as const;
 
 let discoveredMcpToolCount: number | undefined;
