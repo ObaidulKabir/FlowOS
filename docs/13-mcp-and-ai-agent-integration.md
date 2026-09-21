@@ -137,7 +137,10 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS registers **66 production tools** categorized by governance lifecycle, context-aware simulation, Copilot synthesis, time-travel debugging, operational execution, and runtime advisory intelligence:
+FlowOS advertises **74 tool names**: 71 canonical tools plus 3 deprecated
+capability-binding aliases retained for compatibility. They cover governance
+lifecycle, context-aware simulation, Copilot synthesis, time-travel debugging,
+operational execution, and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|

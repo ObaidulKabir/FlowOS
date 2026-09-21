@@ -5,6 +5,9 @@ import {
   AI_TASK_AUTOMATION_ROWS,
   COMPARISON_LOSSES,
   COMPARISON_PLATFORMS,
+  MCP_COMPARISON_SOURCES,
+  MCP_CONTROL_PLANE_ROWS,
+  MCP_STRATEGIC_PRIORITIES,
   OS1_PILLARS,
   fitClass,
   fitLabel,
@@ -39,7 +42,7 @@ export const OsReleaseComparisonMatrix: React.FC = () => {
           <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 shrink-0">
             <div className="text-[11px] text-slate-400">FlowOS differentiator</div>
             <div className="text-sm font-bold text-amber-400 font-mono">
-              Dual-kernel Law + {mcpTools}-tool MCP
+              Governed MCP + dual-kernel Law
             </div>
           </div>
         </div>
@@ -93,6 +96,96 @@ export const OsReleaseComparisonMatrix: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="bg-slate-900 border border-cyan-500/20 rounded-3xl overflow-hidden">
+        <div className="p-4 border-b border-slate-800 bg-slate-950/60 flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <div>
+            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+              <Zap size={14} className="text-cyan-400" />
+              MCP competitive reality
+            </span>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Every serious rival now has an MCP story. FlowOS must win on governed outcomes, not protocol presence or raw tool count.
+            </p>
+          </div>
+          <span className="text-[11px] text-cyan-300 border border-cyan-500/20 bg-cyan-950/30 px-2.5 py-1 rounded-lg shrink-0">
+            FlowOS registry: {mcpTools} discoverable tools
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1280px] text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-950 text-slate-400 text-[11px] uppercase border-b border-slate-800">
+                <th className="p-3.5 pl-5 font-bold w-44">MCP capability</th>
+                <th className="p-3.5 font-bold w-52">Why it matters</th>
+                {COMPARISON_PLATFORMS.map((platform) => (
+                  <th
+                    key={`mcp-${platform.id}`}
+                    className={`p-3.5 font-semibold min-w-44 ${
+                      platform.id === "flowos"
+                        ? "text-cyan-300 bg-cyan-950/20 border-x border-cyan-500/20"
+                        : ""
+                    }`}
+                  >
+                    {platform.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {MCP_CONTROL_PLANE_ROWS.map((row) => (
+                <tr key={row.capability} className="hover:bg-slate-850/50">
+                  <td className="p-3.5 pl-5 font-bold text-slate-200 align-top">
+                    {row.capability}
+                  </td>
+                  <td className="p-3.5 text-slate-500 align-top">{row.whyItMatters}</td>
+                  {COMPARISON_PLATFORMS.map((platform) => (
+                    <td
+                      key={`${platform.id}-${row.capability}`}
+                      className={`p-3.5 text-slate-400 align-top leading-relaxed ${
+                        platform.id === "flowos"
+                          ? "bg-cyan-950/20 border-x border-cyan-500/20 text-emerald-200"
+                          : ""
+                      }`}
+                    >
+                      {row.answers[platform.id]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-4 border-t border-slate-800 bg-slate-950/30">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            {MCP_STRATEGIC_PRIORITIES.map((item) => (
+              <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-500/20 px-1.5 py-0.5 rounded">
+                    {item.priority}
+                  </span>
+                  <span className="text-xs font-bold text-slate-200">{item.title}</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">{item.outcome}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[10px] text-slate-500">
+            <span>Official sources checked 2026-09-21:</span>
+            {MCP_COMPARISON_SOURCES.map((source) => (
+              <a
+                key={source.href}
+                href={source.href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-cyan-400 hover:text-cyan-300"
+              >
+                {source.label}
+              </a>
+            ))}
+          </div>
         </div>
       </div>
 
