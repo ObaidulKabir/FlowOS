@@ -42,7 +42,7 @@ public static class McpToolDescriptions
                 "Factory follows step.agentProvider (TenantLlmWorkflowAgent when a key is stored). Omit agentId unless you want the flowos-risk fixture. " +
                 "Suggestions outside legal nextSteps are dropped. Does not auto-commit. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{autoCommitted:false,packet,result}}. " +
+                "Returns: {ok:true,data:{jobId,executionId,autoCommitted:false,packet,result}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"objective\":\"Decide the next legal event\"}",
 
@@ -51,9 +51,25 @@ public static class McpToolDescriptions
                 "Omit agentId so the factory uses step.agentProvider. If the suggested event is in autoCommit.allowedEvents and confidence is in bounds, FlowOS publishes it (actor Agent:{id}). " +
                 "Otherwise the instance stays a HumanTask and the insight is parked as a Smart Action. Do not invent transitions or paste API keys. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. Runtime plan required. " +
-                "Returns: {ok:true,data:{autoCommitted,parkReason,packet,result}}. " +
+                "Returns: {ok:true,data:{jobId,executionId,autoCommitted,parkReason,packet,result}}. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}",
+
+            ["get_agent_execution_history"] =
+                "Reads tenant-scoped durable agent execution history, optionally filtered to one workflow instance, UTC window, and status. " +
+                "Returns allowlisted identifiers, provider/model aliases, timings, token counts, suggestion/confidence, commit/park/override, and labeled outcome evaluation only. " +
+                "Never returns API keys, prompt bodies, model response bodies, event payloads, idempotency keys, or failure text. HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{fromUtc,toUtc,limit,hasMore,executions:[{jobId,executionId,workflowInstanceId,status,failureCode,outcomeEvaluation}]}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"limit\":50}",
+
+            ["get_agent_evaluation_metrics"] =
+                "Calculates governed tenant agent metrics for a required UTC window of at most 90 days. " +
+                "Includes runs/successes/failures, commits, parks, hosted quota denials, overrides, outcome coverage, immutable-outcome Brier calibration bins, latency, tokens, and provider/model breakdown. " +
+                "Unevaluated suggestions are counted explicitly. This read-only tool never trains a model or mutates policy, workflow events, or execution records. " +
+                "Returns: {ok:true,data:{runs,succeededRuns,failedRuns,unevaluatedOutcomes,confidenceCalibration,providerModelBreakdown}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-LIMIT-001, MCP-INTERNAL. " +
+                "Input example: {\"fromUtc\":\"2026-09-01T00:00:00Z\",\"toUtc\":\"2026-09-22T00:00:00Z\"}",
 
             ["get_agent_context"] =
                 "Composes Agent Context for a live instance current step (Prompt + Data + Tools + redacted Provider) without running the agent and without publishing. " +
@@ -224,8 +240,9 @@ public static class McpToolDescriptions
                 "Draft bindings may point at a Draft workflow class; do not publish a throwaway variant just to simulate. " +
                 "WorkflowClass roles are business-context declarations compiled onto the workflow definition; they are never written to FlowOS tenant Role tables. CTX-ROLE-002 only means a role override mapped to an empty name. " +
                 "Projects source payloads into canonical context, applies contextual event aliases and event mappings, enforces workflow/state-machine guards and capability grants for simulated business roles (requiredRoles remains inbox only), and reports actions, timers, and subworkflows without executing them. " +
+                "Waiting HumanTask/Command steps with actor Agent/Either use the same deterministic AgentDecisionPolicy as simulate_workflowclass (never an LLM): autoAdvanceAgents defaults true, simulatedAgent can override event/confidence/agentId, explicit completing events win, and agent commits bypass human capability grants. " +
                 "SLA reminders fire in duration order before a completing nextSteps event; set autoAdvanceTimers=true with no completing event to also fire TimeoutEvent. Do not start a live instance just to prove reminders. " +
-                "Returns: {ok:true,data:{contextBindingId,revisionKind,status,initialProjection,initialCanonicalContext,finalCanonicalContext,trace,pendingWork,graph,sideEffectsSuppressed:true}}. " +
+                "Returns: {ok:true,data:{contextBindingId,revisionKind,status,initialProjection,initialCanonicalContext,finalCanonicalContext,trace,pendingWork,pendingAgentTask,graph,sideEffectsSuppressed:true}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-VALIDATION, CTX-STATE-001, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"revision\":\"draft\",\"initialPayload\":{\"expense\":{\"amount\":1500}},\"roles\":[\"FinanceManager\"],\"events\":[{\"eventType\":\"EVT-EXP-SUBMIT\"}],\"autoAdvanceTimers\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
@@ -544,6 +561,8 @@ public static class McpToolDescriptions
             ["list_available_agents"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["suggest_agent_action"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["run_agent_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["get_agent_execution_history"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
+            ["get_agent_evaluation_metrics"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_context"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["preview_agent_context"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["upsert_agent_prompt"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),

@@ -10,6 +10,7 @@ using FlowOS.Infrastructure.Persistence.Repositories;
 using FlowOS.MCP.Services;
 using FlowOS.MCP.Tools;
 using FlowOS.Workflows.Engine;
+using FlowOS.Workflows.Enums;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Newtonsoft.Json.Linq;
@@ -166,7 +167,8 @@ public class QuoteAgentContextBindingTests
                     Revision: "active",
                     InitialPayload: new { quoteId = "Q-77", amount = 900, estimate = 880 },
                     Roles: ["Submitter"],
-                    Events: [new WorkflowContextSimulationEventRequest("EVT-SUBMIT")]));
+                    Events: [new WorkflowContextSimulationEventRequest("EVT-SUBMIT")],
+                    AutoAdvanceAgents: false));
 
             Assert.Equal("Running", result.Status);
             Assert.Equal("AgentReview", result.CurrentStepId);
@@ -177,6 +179,130 @@ public class QuoteAgentContextBindingTests
                 work.Kind == "HumanTask" && work.StepId == "AgentReview");
             Assert.True(result.SideEffectsSuppressed);
             Assert.Empty(db.WorkflowInstances);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, 1.0, true, "Completed", null)]
+    [InlineData("EVT-ACCEPT", 0.4, true, "Running", "minConfidence")]
+    [InlineData(null, 1.0, false, "Running", "disabled")]
+    public async Task SimulateContextBinding_AgentPolicyMatchesDeterministicEvaluator(
+        string? simulatedEvent,
+        double confidence,
+        bool autoAdvanceAgents,
+        string expectedStatus,
+        string? expectedParkReason)
+    {
+        var (tenantId, db, _, binding) = await SeedQuoteAsync();
+        await using (db)
+        {
+            var unitOfWork = new UnitOfWork(db);
+            var simulatedAgent = simulatedEvent == null
+                ? null
+                : new WorkflowContextSimulationAgentRequest(
+                    simulatedEvent,
+                    confidence,
+                    "context-agent");
+            var result = await new WorkflowContextSimulationService(
+                    unitOfWork,
+                    new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object),
+                    new WorkflowExecutionContextService(unitOfWork),
+                    new WorkflowEngine(new StateMachineEngine()))
+                .SimulateAsync(tenantId, new WorkflowContextSimulationRequest(
+                    ContextBindingId: binding.Id,
+                    Revision: "active",
+                    InitialPayload: new { quoteId = "Q-78", amount = 900, estimate = 880 },
+                    Roles: ["Submitter"],
+                    Events: [new WorkflowContextSimulationEventRequest("EVT-SUBMIT")],
+                    AutoAdvanceAgents: autoAdvanceAgents,
+                    SimulatedAgent: simulatedAgent));
+
+            Assert.Equal(expectedStatus, result.Status);
+            if (expectedParkReason == null)
+            {
+                Assert.Null(result.PendingAgentTask);
+                Assert.Equal("Accepted", result.CurrentState);
+                Assert.Contains(result.Trace, item =>
+                    item.Outcome.Contains("auto-committed", StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                Assert.NotNull(result.PendingAgentTask);
+                Assert.Contains(
+                    expectedParkReason,
+                    result.PendingAgentTask.ParkReason,
+                    StringComparison.OrdinalIgnoreCase);
+                Assert.Equal("AgentReview", result.CurrentStepId);
+            }
+
+            Assert.Empty(db.WorkflowInstances);
+            Assert.Empty(db.WorkflowContextSnapshots);
+        }
+    }
+
+    [Fact]
+    public async Task SimulateContextBinding_ExplicitCompletingEventWinsOverAgent()
+    {
+        var (tenantId, db, _, binding) = await SeedQuoteAsync();
+        await using (db)
+        {
+            var unitOfWork = new UnitOfWork(db);
+            var result = await new WorkflowContextSimulationService(
+                    unitOfWork,
+                    new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object),
+                    new WorkflowExecutionContextService(unitOfWork),
+                    new WorkflowEngine(new StateMachineEngine()))
+                .SimulateAsync(tenantId, new WorkflowContextSimulationRequest(
+                    ContextBindingId: binding.Id,
+                    Revision: "active",
+                    InitialPayload: new { quoteId = "Q-79", amount = 900, estimate = 880 },
+                    Roles: ["Submitter", "Advisor"],
+                    Events:
+                    [
+                        new WorkflowContextSimulationEventRequest("EVT-SUBMIT"),
+                        new WorkflowContextSimulationEventRequest("EVT-REQUEST-REVISION")
+                    ]));
+
+            Assert.Equal("Completed", result.Status);
+            Assert.Equal("RevisionRequested", result.CurrentState);
+            Assert.Null(result.PendingAgentTask);
+            Assert.DoesNotContain(result.Trace, item =>
+                item.Outcome.Contains("auto-committed", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public async Task SimulateContextBinding_AgentWaitingCommand_UsesSamePolicyAndBypassesHumanCapability()
+    {
+        var (tenantId, db, _, binding) = await SeedQuoteAsync();
+        await using (db)
+        {
+            var runtime = await db.WorkflowDefinitions.SingleAsync(definition =>
+                definition.ContextBindingRevisionId == binding.ActiveRevisionId);
+            var agentStep = runtime.Steps.Single(step => step.StepId == "AgentReview");
+            agentStep.StepType = WorkflowStepType.Command;
+            agentStep.RequiredCapabilities = ["event.publish.unavailable-to-simulated-role"];
+            db.WorkflowDefinitions.Update(runtime);
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+
+            var unitOfWork = new UnitOfWork(db);
+            var result = await new WorkflowContextSimulationService(
+                    unitOfWork,
+                    new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object),
+                    new WorkflowExecutionContextService(unitOfWork),
+                    new WorkflowEngine(new StateMachineEngine()))
+                .SimulateAsync(tenantId, new WorkflowContextSimulationRequest(
+                    ContextBindingId: binding.Id,
+                    Revision: "active",
+                    InitialPayload: new { quoteId = "Q-80", amount = 900, estimate = 880 },
+                    Roles: ["Submitter"],
+                    Events: [new WorkflowContextSimulationEventRequest("EVT-SUBMIT")]));
+
+            Assert.Equal("Completed", result.Status);
+            Assert.Equal("Accepted", result.CurrentState);
+            Assert.Contains(result.Trace, item =>
+                item.Outcome.Contains("auto-committed", StringComparison.OrdinalIgnoreCase));
         }
     }
 

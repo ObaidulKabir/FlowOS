@@ -16,6 +16,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
     private readonly string? _apiKey;
     private readonly HttpMessageHandler? _handler;
     private readonly ILlmProviderAdapter _adapter;
+    private readonly ILlmTransport? _transport;
 
     public TenantLlmWorkflowAgent(
         string providerName,
@@ -23,7 +24,8 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         string? endpoint,
         string? apiKey,
         HttpMessageHandler? handler = null,
-        ILlmProviderAdapter? adapter = null)
+        ILlmProviderAdapter? adapter = null,
+        ILlmTransport? transport = null)
     {
         _providerName = string.IsNullOrWhiteSpace(providerName) ? "openai" : providerName.Trim();
         _model = string.IsNullOrWhiteSpace(model) ? "gpt-4o-mini" : model.Trim();
@@ -31,37 +33,84 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
         _handler = handler;
         _adapter = adapter ?? LlmProviderAdapterFactory.GetAdapter(_providerName);
+        _transport = transport;
     }
 
-    public async Task<AgentResult> ExecuteAsync(AgentContext context)
+    public Task<AgentResult> ExecuteAsync(AgentContext context) =>
+        ExecuteAsync(context, CancellationToken.None);
+
+    public async Task<AgentResult> ExecuteAsync(
+        AgentContext context,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (string.IsNullOrWhiteSpace(_apiKey))
-            return AgentResult.Failure($"Agent provider '{_providerName}' is missing an API key.");
+        {
+            return AgentResult.Failure(
+                AgentFailureCodes.ProviderAuth,
+                "Provider API key is not configured.");
+        }
 
         try
         {
-            using var client = _handler == null ? new HttpClient() : new HttpClient(_handler, disposeHandler: false);
             var systemPrompt = BuildSystemPrompt(context);
             var userPrompt = BuildUserPrompt(context);
             using var request = _adapter.CreateRequest(_endpoint, _apiKey, _model, systemPrompt, userPrompt);
+            var response = _transport == null
+                ? await SendDirectAsync(request, cancellationToken)
+                : await _transport.SendAsync(request, cancellationToken);
 
-            using var response = await client.SendAsync(request);
-            var body = await response.Content.ReadAsStringAsync();
-            if (!response.IsSuccessStatusCode)
-                return AgentResult.Failure($"Agent provider '{_providerName}' returned {(int)response.StatusCode}.");
+            var transportTelemetry = new AgentTelemetry(
+                response.HttpStatusCode,
+                response.ProviderRequestId,
+                AttemptCount: Math.Max(0, response.AttemptCount));
+            if (!response.Success)
+            {
+                return AgentResult.Failure(
+                    response.FailureCode ?? AgentFailureCodes.ProviderUnavailable,
+                    FailureMessage(response.FailureCode),
+                    transportTelemetry);
+            }
 
-            var parsed = ParseSuggestion(body);
-            if (parsed == null)
-                return AgentResult.Failure($"Agent provider '{_providerName}' returned an unreadable suggestion.");
+            var providerResponse = _adapter.ParseResponse(response.Content ?? string.Empty);
+            var telemetry = new AgentTelemetry(
+                response.HttpStatusCode,
+                response.ProviderRequestId ?? providerResponse.ProviderRequestId,
+                providerResponse.InputTokens,
+                providerResponse.OutputTokens,
+                providerResponse.TotalTokens,
+                Math.Max(0, response.AttemptCount));
+
+            if (!TryParseSuggestion(providerResponse.Content, out var parsed))
+            {
+                return AgentResult.Failure(
+                    AgentFailureCodes.InvalidModelOutput,
+                    "Provider returned model output that did not match the required suggestion contract.",
+                    telemetry);
+            }
 
             var result = AgentResult.WithActions(parsed.Insight, parsed.Actions);
+            result.Telemetry = telemetry;
             if (context.RestrictToLegalEvents)
+            {
                 result = AgentSuggestionContract.RestrictToLegalEvents(result, context.LegalEvents);
+                if (result.SuggestedActions.Count == 0)
+                {
+                    return AgentResult.Failure(
+                        AgentFailureCodes.InvalidModelOutput,
+                        "Provider suggested an event outside the legal nextSteps set.",
+                        telemetry);
+                }
+            }
+
             return result;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return AgentResult.Failure($"Agent provider '{_providerName}' call failed.");
+            return AgentResult.Failure(
+                AgentFailureCodes.ProviderUnavailable,
+                "Provider call failed.");
         }
     }
 
@@ -94,37 +143,144 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         });
     }
 
-    private ParsedSuggestion? ParseSuggestion(string body)
+    private async Task<LlmTransportResult> SendDirectAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
     {
-        var content = _adapter.ExtractContent(body);
+        try
+        {
+            using var client = _handler == null
+                ? new HttpClient()
+                : new HttpClient(_handler, disposeHandler: false);
+            using var response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            var statusCode = (int)response.StatusCode;
+            var requestId = ReadProviderRequestId(response);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new LlmTransportResult(
+                    false,
+                    null,
+                    statusCode,
+                    requestId,
+                    FailureCode(statusCode));
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            return new LlmTransportResult(
+                true,
+                body,
+                statusCode,
+                requestId,
+                null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TaskCanceledException)
+        {
+            return new LlmTransportResult(
+                false, null, null, null, AgentFailureCodes.ProviderTimeout);
+        }
+        catch (HttpRequestException)
+        {
+            return new LlmTransportResult(
+                false, null, null, null, AgentFailureCodes.ProviderUnavailable);
+        }
+    }
+
+    private static bool TryParseSuggestion(
+        string? content,
+        out ParsedSuggestion parsed)
+    {
+        parsed = null!;
         if (string.IsNullOrWhiteSpace(content))
-            return null;
+            return false;
 
         try
         {
             using var suggestion = JsonDocument.Parse(content);
-            var s = suggestion.RootElement;
-            var eventType = ReadString(s, "eventType") ?? ReadString(s, "event");
-            var reason = ReadString(s, "reason") ?? "Hosted agent suggestion.";
-            var insight = ReadString(s, "insight") ?? reason;
-            var confidence = 0.5;
-            if (s.TryGetProperty("confidence", out var confProp) && confProp.TryGetDouble(out var conf))
-                confidence = conf;
+            var root = suggestion.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !TryReadBoundedString(root, "eventType", 200, out var eventType) ||
+                !TryReadBoundedString(root, "reason", 2000, out var reason) ||
+                !TryReadBoundedString(root, "insight", 2000, out var insight) ||
+                !root.TryGetProperty("confidence", out var confidenceElement) ||
+                confidenceElement.ValueKind != JsonValueKind.Number ||
+                !confidenceElement.TryGetDouble(out var confidence) ||
+                !double.IsFinite(confidence) ||
+                confidence is < 0 or > 1)
+            {
+                return false;
+            }
 
-            var actions = new List<SuggestedAction>();
-            if (!string.IsNullOrWhiteSpace(eventType))
-                actions.Add(new SuggestedAction(eventType, reason, confidence));
-
-            return new ParsedSuggestion(insight, actions);
+            parsed = new ParsedSuggestion(
+                insight,
+                [new SuggestedAction(eventType, reason, confidence)]);
+            return true;
         }
-        catch
+        catch (JsonException)
         {
-            return null;
+            return false;
         }
     }
 
-    private static string? ReadString(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var prop) ? prop.GetString() : null;
+    private static bool TryReadBoundedString(
+        JsonElement element,
+        string name,
+        int maximumLength,
+        out string value)
+    {
+        value = string.Empty;
+        if (!element.TryGetProperty(name, out var property) ||
+            property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var candidate = property.GetString()?.Trim();
+        if (string.IsNullOrWhiteSpace(candidate) || candidate.Length > maximumLength)
+            return false;
+
+        value = candidate;
+        return true;
+    }
+
+    private static string? ReadProviderRequestId(HttpResponseMessage response)
+    {
+        foreach (var name in new[] { "x-request-id", "request-id", "openai-request-id" })
+        {
+            if (!response.Headers.TryGetValues(name, out var values))
+                continue;
+
+            var sanitized = LlmTelemetrySanitizer.SanitizeRequestId(values.FirstOrDefault());
+            if (sanitized != null)
+                return sanitized;
+        }
+
+        return null;
+    }
+
+    private static string FailureCode(int statusCode) =>
+        statusCode switch
+        {
+            401 or 403 => AgentFailureCodes.ProviderAuth,
+            429 => AgentFailureCodes.ProviderRateLimit,
+            408 => AgentFailureCodes.ProviderTimeout,
+            _ => AgentFailureCodes.ProviderUnavailable
+        };
+
+    private static string FailureMessage(string? failureCode) =>
+        failureCode switch
+        {
+            AgentFailureCodes.ProviderAuth => "Provider authentication failed.",
+            AgentFailureCodes.ProviderRateLimit => "Provider rate limit was reached.",
+            AgentFailureCodes.ProviderTimeout => "Provider request timed out.",
+            _ => "Provider is unavailable."
+        };
 
     private sealed record ParsedSuggestion(string Insight, List<SuggestedAction> Actions);
 }

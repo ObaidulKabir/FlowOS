@@ -16,6 +16,10 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - Sandbox__DataTtlHours=4  # Automatically purges temporary data older than 4 hours (2-6h range)
       - Sandbox__AutoCleanupEnabled=true
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
     restart: unless-stopped
 
   flowos-mcp-sandbox:
@@ -33,6 +37,10 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - UseInMemoryDatabase=true
       - FLOWOS_API_URL=http://flowos-api-sandbox:8080
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
     depends_on:
       - flowos-api-sandbox
     restart: unless-stopped

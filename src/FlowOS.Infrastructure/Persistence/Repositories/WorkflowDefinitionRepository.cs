@@ -46,6 +46,16 @@ public class WorkflowDefinitionRepository : IWorkflowDefinitionRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Name == name && d.Version == version && d.TenantId == tenantId, cancellationToken);
 
+    public Task<WorkflowDefinition?> GetByNameAndVersionForUpdateAsync(
+        string name,
+        int version,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+        => _context.WorkflowDefinitions
+            .FirstOrDefaultAsync(
+                d => d.Name == name && d.Version == version && d.TenantId == tenantId,
+                cancellationToken);
+
     public Task<WorkflowDefinition?> GetAnyByNameAsync(string name, Guid tenantId, CancellationToken cancellationToken = default)
         => _context.WorkflowDefinitions
             .AsNoTracking()

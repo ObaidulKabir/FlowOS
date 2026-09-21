@@ -18,7 +18,9 @@ public sealed record FlowOsHostedLlmLease(
     string? Model,
     string? Endpoint,
     string? Code,
-    string? Message);
+    string? Message,
+    Guid? TenantId = null,
+    DateOnly? UsageDateUtc = null);
 
 public interface IFlowOsHostedLlmRuntime
 {
@@ -27,6 +29,14 @@ public interface IFlowOsHostedLlmRuntime
     FlowOsHostedLlmPublicSettings PublicSettings { get; }
 
     Task<FlowOsHostedLlmLease> TryLeaseAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+    Task FinalizeAsync(
+        FlowOsHostedLlmLease lease,
+        bool succeeded,
+        long inputTokens = 0,
+        long outputTokens = 0,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }
 
 public static class FlowOsHostedLlmCodes

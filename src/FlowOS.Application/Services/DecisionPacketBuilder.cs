@@ -122,7 +122,18 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
         CancellationToken cancellationToken)
     {
         Dictionary<string, string>? actionBindings = null;
-        AgentProviderRef? provider = null;
+        var providerAlias = step?.AgentProvider;
+        AgentProviderRef? provider = string.Equals(
+            providerAlias,
+            AgentProviderKinds.FlowosRisk,
+            StringComparison.OrdinalIgnoreCase)
+            ? new AgentProviderRef(
+                AgentProviderKinds.FlowosRisk,
+                AgentProviderKinds.FlowosRisk,
+                null,
+                null,
+                false)
+            : null;
         AgentPromptRef? promptBinding = null;
 
         if (_pluginBindings != null)
@@ -130,8 +141,8 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
             actionBindings = await _pluginBindings.ResolveBindingsAsync(
                 tenantId, PluginBindingTypes.Action, cancellationToken);
 
-            var providerAlias = step?.AgentProvider;
-            if (!string.IsNullOrWhiteSpace(providerAlias) &&
+            if (provider == null &&
+                !string.IsNullOrWhiteSpace(providerAlias) &&
                 !AgentProviderKinds.IsFlowOsHosted(providerAlias))
             {
                 var binding = await _pluginBindings.GetEnabledAsync(

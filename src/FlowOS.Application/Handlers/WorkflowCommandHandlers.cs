@@ -42,7 +42,7 @@ public partial class WorkflowCommandHandlers :
     private readonly IIdempotencyService? _idempotencyService;
     private readonly IPluginBindingRegistryService? _pluginBindingRegistry;
     private readonly IWorkflowExecutionContextService? _workflowContextService;
-    private readonly IAgentTaskRunner? _agentTaskRunner;
+    private readonly IAgentTaskQueue? _agentTaskQueue;
     private readonly IBusinessRoleResolver? _businessRoleResolver;
 
     public WorkflowCommandHandlers(
@@ -56,7 +56,7 @@ public partial class WorkflowCommandHandlers :
         IIdempotencyService? idempotencyService = null,
         IPluginBindingRegistryService? pluginBindingRegistry = null,
         IWorkflowExecutionContextService? workflowContextService = null,
-        IAgentTaskRunner? agentTaskRunner = null,
+        IAgentTaskQueue? agentTaskQueue = null,
         IActivityAuthorizationService? activityAuthorization = null,
         IBusinessRoleResolver? businessRoleResolver = null)
     {
@@ -71,26 +71,35 @@ public partial class WorkflowCommandHandlers :
         _idempotencyService = idempotencyService;
         _pluginBindingRegistry = pluginBindingRegistry;
         _workflowContextService = workflowContextService;
-        _agentTaskRunner = agentTaskRunner;
+        _agentTaskQueue = agentTaskQueue;
         _businessRoleResolver = businessRoleResolver;
     }
 
 
     private async Task<FlowOS.Domain.Entities.StateMachineDefinition?> ResolveStateMachineDefinitionAsync(
+        WorkflowDefinition definition,
         Guid workflowClassId,
-        Guid tenantId,
-        string workflowName,
-        CancellationToken cancellationToken,
-        Guid? pinnedStateMachineDefinitionId = null)
+        CancellationToken cancellationToken)
     {
-        if (pinnedStateMachineDefinitionId.HasValue)
+        if (definition.StateMachineDefinitionId.HasValue)
         {
             var pinned = await _unitOfWork.StateMachines.GetByIdAsNoTrackingAsync(
-                pinnedStateMachineDefinitionId.Value,
+                definition.StateMachineDefinitionId.Value,
                 cancellationToken);
-            if (pinned == null || pinned.TenantId != tenantId)
-                throw new InvalidOperationException("Pinned state-machine definition was not found.");
+            if (pinned == null ||
+                pinned.TenantId != definition.TenantId ||
+                !WorkflowClassCompiler.IsUsablePinnedLaw(pinned))
+            {
+                throw new InvalidOperationException(
+                    "Class-backed definitions require a usable pinned state machine. Dual-kernel Law is fail-closed.");
+            }
             return pinned;
+        }
+
+        if (definition.SourceWorkflowClassId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Class-backed definitions require a usable pinned state machine. Dual-kernel Law is fail-closed.");
         }
 
         if (workflowClassId != Guid.Empty)
@@ -101,9 +110,10 @@ public partial class WorkflowCommandHandlers :
 
             var smBp = wc!.Definition.StateMachine;
             var smDef = new FlowOS.Domain.Entities.StateMachineDefinition(
-                tenantId,
+                definition.TenantId,
                 string.IsNullOrWhiteSpace(smBp.EntityType) ? wc.Name : smBp.EntityType,
-                smBp.InitialState
+                smBp.InitialState,
+                definition.Version
             );
             foreach (var state in smBp.States)
             {
@@ -126,11 +136,15 @@ public partial class WorkflowCommandHandlers :
                     Constraints = constraints
                 });
             }
+            smDef.Publish();
             return smDef;
         }
-        else if (!string.IsNullOrEmpty(workflowName))
+        else if (!string.IsNullOrEmpty(definition.Name))
         {
-            var smDef = await _unitOfWork.StateMachines.GetByEntityTypeAndTenantAsync(workflowName, tenantId, cancellationToken);
+            var smDef = await _unitOfWork.StateMachines.GetByEntityTypeAndTenantAsync(
+                definition.Name,
+                definition.TenantId,
+                cancellationToken);
             if (smDef != null) return smDef;
         }
 
@@ -138,13 +152,20 @@ public partial class WorkflowCommandHandlers :
     }
 
     private static void EnsureClassBackedLaw(
-        WorkflowInstance instance,
+        WorkflowDefinition definition,
+        Guid workflowClassId,
         FlowOS.Domain.Entities.StateMachineDefinition? smDef)
     {
-        if (instance.WorkflowClassId == Guid.Empty)
+        // Runtime lineage, not a caller-supplied/stale instance class id, determines
+        // whether this definition belongs to the dual-kernel contract. Definitions
+        // created before class compilation had no lineage and remain explicit
+        // graph-only legacy definitions.
+        if (!definition.SourceWorkflowClassId.HasValue &&
+            !definition.ContextBindingRevisionId.HasValue &&
+            !definition.StateMachineDefinitionId.HasValue)
             return;
 
-        if (smDef == null || smDef.Transitions.Count == 0)
+        if (!WorkflowClassCompiler.IsUsablePinnedLaw(smDef))
         {
             throw new InvalidOperationException(
                 "Class-backed instances require a resolvable state machine. Dual-kernel Law is fail-closed.");
@@ -599,6 +620,12 @@ public partial class WorkflowCommandHandlers :
             parentInstance.TenantId,
             parentStep,
             cancellationToken);
+        childWorkflowClassId = childDefinition.SourceWorkflowClassId ?? childWorkflowClassId;
+        var childSmDef = await ResolveStateMachineDefinitionAsync(
+            childDefinition,
+            childWorkflowClassId,
+            cancellationToken);
+        EnsureClassBackedLaw(childDefinition, childWorkflowClassId, childSmDef);
 
         var childPayload = BuildSubWorkflowInputPayload(parentStep, parentPayload);
         childPayload["ParentWorkflowInstanceId"] = parentInstance.Id.ToString();
@@ -611,7 +638,9 @@ public partial class WorkflowCommandHandlers :
             childDefinition.Version,
             childDefinition.StartStepId,
             correlationId: null,
-            initialState: null,
+            initialState: childDefinition.StateMachineDefinitionId.HasValue || childWorkflowClassId != Guid.Empty
+                ? childSmDef?.InitialState
+                : null,
             parentWorkflowInstanceId: parentInstance.Id,
             parentStepId: parentStep.StepId);
 
@@ -651,13 +680,6 @@ public partial class WorkflowCommandHandlers :
         AddCurrentRolesToContext(childContext);
         await EnrichExecutionContextWithPluginBindingsAsync(childContext, parentInstance.TenantId, cancellationToken);
 
-        var childSmDef = await ResolveStateMachineDefinitionAsync(
-            childInstance.WorkflowClassId,
-            parentInstance.TenantId,
-            childDefinition.Name,
-            cancellationToken,
-            childDefinition.StateMachineDefinitionId);
-
         RunAutoAdvance(childInstance, childDefinition, parentInstance.TenantId, childContext, childSmDef);
         var autoAdvancedEnteredStepIds = (childInstance.ActiveStepIds != null && childInstance.ActiveStepIds.Count > 0)
             ? childInstance.ActiveStepIds.ToList()
@@ -669,6 +691,10 @@ public partial class WorkflowCommandHandlers :
             childContext.Payload,
             cancellationToken);
         await CheckAndScheduleTimerAsync(childInstance, childDefinition, parentInstance.TenantId, childContext.Payload, cancellationToken);
+        await StageBoundedAutonomyAsync(
+            childInstance,
+            childDefinition,
+            cancellationToken);
 
         if (childInstance.Status == WorkflowInstanceStatus.Completed)
         {
@@ -836,11 +862,10 @@ public partial class WorkflowCommandHandlers :
         await EnrichExecutionContextWithPluginBindingsAsync(context, parentInstance.TenantId, cancellationToken);
 
         var stateMachineDefinition = await ResolveStateMachineDefinitionAsync(
+            parentDefinition,
             parentInstance.WorkflowClassId,
-            parentInstance.TenantId,
-            parentDefinition.Name,
-            cancellationToken,
-            parentDefinition.StateMachineDefinitionId);
+            cancellationToken);
+        EnsureClassBackedLaw(parentDefinition, parentInstance.WorkflowClassId, stateMachineDefinition);
         var currentEntityState = parentInstance.CurrentState ?? parentInstance.CurrentStepId;
         var previousStepId = parentInstance.CurrentStepId;
         var previousState = parentInstance.CurrentState ?? parentInstance.CurrentStepId;
@@ -949,6 +974,10 @@ public partial class WorkflowCommandHandlers :
             context.Payload,
             cancellationToken);
         await CheckAndScheduleTimerAsync(parentInstance, parentDefinition, parentInstance.TenantId, context.Payload, cancellationToken);
+        await StageBoundedAutonomyAsync(
+            parentInstance,
+            parentDefinition,
+            cancellationToken);
     }
 
     private static Dictionary<string, object> BuildSubWorkflowInputPayload(
@@ -1089,20 +1118,20 @@ public partial class WorkflowCommandHandlers :
         }
     }
 
-    private async Task TryRunBoundedAutonomyAsync(Guid tenantId, Guid instanceId, CancellationToken cancellationToken)
+    private async Task StageBoundedAutonomyAsync(
+        WorkflowInstance instance,
+        WorkflowDefinition definition,
+        CancellationToken cancellationToken)
     {
-        if (_agentTaskRunner == null) return;
+        if (_agentTaskQueue == null)
+            return;
 
-        await _agentTaskRunner.TryRunForCurrentStepAsync(tenantId, instanceId, cancellationToken: cancellationToken);
-
-        var children = await _unitOfWork.WorkflowInstances.GetSummariesByTenantAsync(
-            tenantId,
-            WorkflowInstanceStatus.Running,
-            instanceId,
-            cancellationToken);
-        foreach (var child in children)
+        foreach (var request in AgentTaskScheduling.ForCurrentWaitingStep(
+                     instance,
+                     definition,
+                     AgentTaskSource.WorkflowEntry))
         {
-            await _agentTaskRunner.TryRunForCurrentStepAsync(tenantId, child.Id, cancellationToken: cancellationToken);
+            await _agentTaskQueue.StageAsync(request, cancellationToken);
         }
     }
 }

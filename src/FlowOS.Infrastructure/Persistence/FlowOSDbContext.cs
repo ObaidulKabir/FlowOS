@@ -33,6 +33,10 @@ public class FlowOSDbContext : DbContext
     public DbSet<WorkflowContextBinding> WorkflowContextBindings { get; set; }
     public DbSet<WorkflowContextBindingRevision> WorkflowContextBindingRevisions { get; set; }
     public DbSet<WorkflowContextSnapshot> WorkflowContextSnapshots { get; set; }
+    public DbSet<AgentTaskJob> AgentTaskJobs { get; set; }
+    public DbSet<DistributedLease> DistributedLeases { get; set; }
+    public DbSet<HostedLlmDailyUsage> HostedLlmDailyUsages { get; set; }
+    public DbSet<AgentExecutionRecord> AgentExecutionRecords { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

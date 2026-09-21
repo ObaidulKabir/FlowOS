@@ -1,8 +1,11 @@
+using FlowOS.Agents.Abstractions;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Infrastructure.Persistence.Repositories;
 using FlowOS.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FlowOS.Infrastructure;
 
@@ -13,6 +16,7 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddFlowOSPersistence(this IServiceCollection services)
     {
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IConfigurationPublisher, ConfigurationPublisher>();
         services.AddScoped<IWorkflowTimerService, WorkflowTimerService>();
@@ -57,10 +61,56 @@ public static class DependencyInjection
         services.AddScoped<IBusinessRoleResolver, FlowOS.Application.Services.BusinessRoleResolver>();
         services.AddScoped<IWorkflowExecutionContextService, FlowOS.Application.Services.WorkflowExecutionContextService>();
         services.AddScoped<IWorkflowContextSimulationService, FlowOS.Application.Services.WorkflowContextSimulationService>();
+        services.AddScoped<WorkflowDefinitionLineageBackfillService>();
         services.AddScoped<IDecisionPacketBuilder, FlowOS.Application.Services.DecisionPacketBuilder>();
+        services.AddSingleton(provider =>
+        {
+            var options = new LlmTransportOptions();
+            provider.GetService<IConfiguration>()
+                ?.GetSection(LlmTransportOptions.ConfigurationSection)
+                .Bind(options);
+            return options;
+        });
+        services.AddHttpClient(
+                LlmHttpTransport.HttpClientName,
+                (provider, client) =>
+                {
+                    client.Timeout = provider
+                        .GetRequiredService<LlmTransportOptions>()
+                        .Timeout;
+                })
+            .RedactLoggedHeaders(
+            [
+                "Authorization",
+                "api-key",
+                "x-api-key",
+                "x-goog-api-key"
+            ]);
+        services.AddSingleton<ILlmTransport, LlmHttpTransport>();
         services.AddScoped<IAgentTaskRunner, FlowOS.Application.Services.AgentTaskRunner>();
-        services.AddScoped<IWorkflowAgentFactory, FlowOS.Application.Services.WorkflowAgentFactory>();
+        services.AddScoped<IAgentTaskCoordinator, FlowOS.Application.Services.AgentTaskCoordinator>();
+        services.AddScoped<IWorkflowAgentFactory>(provider =>
+            new FlowOS.Application.Services.WorkflowAgentFactory(
+                provider.GetRequiredService<FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService>(),
+                hosted: provider.GetRequiredService<IFlowOsHostedLlmRuntime>(),
+                transport: provider.GetRequiredService<ILlmTransport>()));
         services.AddScoped<IFlowOsHostedLlmRuntime, FlowOsHostedLlmRuntime>();
+        services.AddScoped<IAgentTaskQueue, AgentTaskQueue>();
+        services.AddScoped<IDistributedLeaseService, DistributedLeaseService>();
+        services.AddScoped<IHostedLlmUsageStore, HostedLlmUsageStore>();
+        services.AddScoped<AgentExecutionStore>();
+        services.AddScoped<IAgentExecutionRecorder>(provider => provider.GetRequiredService<AgentExecutionStore>());
+        services.AddScoped<IAgentExecutionHistoryStore>(provider => provider.GetRequiredService<AgentExecutionStore>());
+        services.AddScoped<IAgentObservabilityQueryService, FlowOS.Application.Services.AgentObservabilityQueryService>();
+        services.AddScoped(provider =>
+        {
+            var options = new AgentPersistenceRetentionOptions();
+            provider.GetService<IConfiguration>()
+                ?.GetSection(AgentPersistenceRetentionOptions.ConfigurationSection)
+                .Bind(options);
+            return options;
+        });
+        services.AddScoped<IAgentPersistenceCleanupService, AgentPersistenceCleanupService>();
         services.AddSingleton<FlowOS.Core.Common.Interfaces.IWebhookSignatureService, FlowOS.Core.Common.Services.WebhookSignatureService>();
         services.AddSingleton<FlowOS.Security.Interfaces.IPasswordHasher, FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher>();
         services.AddSingleton<FlowOS.Security.Interfaces.IJwtTokenService, FlowOS.Infrastructure.Services.Security.JwtTokenService>();

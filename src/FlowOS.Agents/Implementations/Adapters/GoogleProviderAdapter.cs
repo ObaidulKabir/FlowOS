@@ -1,6 +1,7 @@
 ﻿using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using FlowOS.Agents.Abstractions;
 
 namespace FlowOS.Agents.Implementations.Adapters;
 
@@ -18,13 +19,9 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
             ? $"https://generativelanguage.googleapis.com/v1beta/models/{targetModel}:generateContent"
             : endpoint.Trim();
 
-        if (!string.IsNullOrWhiteSpace(apiKey) && !url.Contains("key="))
-        {
-            var separator = url.Contains('?') ? "&" : "?";
-            url = $"{url}{separator}key={apiKey}";
-        }
-
         var request = new HttpRequestMessage(HttpMethod.Post, url);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
 
         var payload = new
         {
@@ -50,12 +47,16 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
         return request;
     }
 
-    public string? ExtractContent(string responseBody)
+    public string? ExtractContent(string responseBody) =>
+        ParseResponse(responseBody).Content;
+
+    public LlmProviderResponse ParseResponse(string responseBody)
     {
         try
         {
             using var doc = JsonDocument.Parse(responseBody);
             var root = doc.RootElement;
+            string? contentText = null;
             if (root.TryGetProperty("candidates", out var candidates) &&
                 candidates.ValueKind == JsonValueKind.Array &&
                 candidates.GetArrayLength() > 0)
@@ -66,15 +67,55 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
                     parts.ValueKind == JsonValueKind.Array &&
                     parts.GetArrayLength() > 0)
                 {
-                    return parts[0].TryGetProperty("text", out var textProp) ? textProp.GetString() : null;
+                    if (parts[0].TryGetProperty("text", out var textProp) &&
+                        textProp.ValueKind == JsonValueKind.String)
+                    {
+                        contentText = textProp.GetString();
+                    }
                 }
             }
 
-            return null;
+            long? inputTokens = null;
+            long? outputTokens = null;
+            long? totalTokens = null;
+            if (root.TryGetProperty("usageMetadata", out var usage) &&
+                usage.ValueKind == JsonValueKind.Object)
+            {
+                inputTokens = ReadNonNegativeInt64(usage, "promptTokenCount");
+                outputTokens = ReadNonNegativeInt64(usage, "candidatesTokenCount");
+                totalTokens = ReadNonNegativeInt64(usage, "totalTokenCount");
+            }
+
+            var requestId = root.TryGetProperty("responseId", out var id) &&
+                            id.ValueKind == JsonValueKind.String
+                ? LlmTelemetrySanitizer.SanitizeRequestId(id.GetString())
+                : null;
+
+            return new LlmProviderResponse(
+                contentText,
+                inputTokens,
+                outputTokens,
+                totalTokens ?? SumTokens(inputTokens, outputTokens),
+                requestId);
         }
         catch
         {
-            return null;
+            return new LlmProviderResponse(null);
         }
     }
+
+    private static long? ReadNonNegativeInt64(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) &&
+        value.ValueKind == JsonValueKind.Number &&
+        value.TryGetInt64(out var parsed) &&
+        parsed >= 0
+            ? parsed
+            : null;
+
+    private static long? SumTokens(long? inputTokens, long? outputTokens) =>
+        inputTokens.HasValue &&
+        outputTokens.HasValue &&
+        inputTokens.Value <= long.MaxValue - outputTokens.Value
+            ? inputTokens.Value + outputTokens.Value
+            : null;
 }

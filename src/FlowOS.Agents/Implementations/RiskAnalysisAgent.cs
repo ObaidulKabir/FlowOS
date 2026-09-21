@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using FlowOS.Agents.Abstractions;
 
@@ -10,8 +11,15 @@ namespace FlowOS.Agents.Implementations;
 /// </summary>
 public class RiskAnalysisAgent : IWorkflowAgent
 {
-    public Task<AgentResult> ExecuteAsync(AgentContext context)
+    public Task<AgentResult> ExecuteAsync(AgentContext context) =>
+        ExecuteAsync(context, CancellationToken.None);
+
+    public Task<AgentResult> ExecuteAsync(
+        AgentContext context,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // 1. Extract Data
         var payload = context.EntitySnapshot as Dictionary<string, object>;
         if (payload == null)

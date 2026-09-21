@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { CheckCircle2, Layers, Scale, XCircle, Zap } from "lucide-react";
 import { usePlatformMetrics } from "../platformMetrics";
 import {
+  AI_TASK_AUTOMATION_ROWS,
   COMPARISON_LOSSES,
   COMPARISON_PLATFORMS,
   OS1_PILLARS,
@@ -114,6 +115,57 @@ export const OsReleaseComparisonMatrix: React.FC = () => {
               {platform.name}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
+        <div className="p-4 border-b border-slate-800 bg-slate-950/60">
+          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+            AI task automation
+          </span>
+          <p className="text-[11px] text-slate-400 mt-1">
+            After FlowOS hosted OpenAI: paid tenants run Agent/Either steps without a BYO key. Scored as product behavior, not marketing.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-950 text-slate-400 text-[11px] uppercase border-b border-slate-800">
+                <th className="p-3.5 pl-5 font-bold">Question</th>
+                {COMPARISON_PLATFORMS.map((platform) => (
+                  <th
+                    key={`ai-${platform.id}`}
+                    className={`p-3.5 font-semibold ${
+                      platform.id === "flowos"
+                        ? "text-blue-400 bg-blue-950/20 border-x border-blue-500/20"
+                        : ""
+                    }`}
+                  >
+                    {platform.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {AI_TASK_AUTOMATION_ROWS.map((row) => (
+                <tr key={row.question} className="hover:bg-slate-850/50">
+                  <td className="p-3.5 pl-5 font-bold text-slate-300 align-top">{row.question}</td>
+                  {COMPARISON_PLATFORMS.map((platform) => (
+                    <td
+                      key={`${platform.id}-${row.question}`}
+                      className={`p-3.5 text-slate-400 align-top ${
+                        platform.id === "flowos"
+                          ? "bg-blue-950/20 border-x border-blue-500/20 text-emerald-200"
+                          : ""
+                      }`}
+                    >
+                      {row.answers[platform.id]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

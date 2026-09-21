@@ -43,5 +43,42 @@ public class DomainEventRepository : IDomainEventRepository
             .ToListAsync(cancellationToken);
     }
 
+    public Task<List<DomainEvent>> ListForAgentEvaluationAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> correlationIds,
+        DateTime fromUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (tenantId == Guid.Empty)
+            throw new ArgumentException("TenantId is required.", nameof(tenantId));
+        if (correlationIds.Count == 0)
+            return Task.FromResult(new List<DomainEvent>());
+
+        var ids = correlationIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        if (ids.Length == 0)
+            return Task.FromResult(new List<DomainEvent>());
+
+        var normalizedFrom = fromUtc.Kind switch
+        {
+            DateTimeKind.Utc => fromUtc,
+            DateTimeKind.Local => fromUtc.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc)
+        };
+
+        return _context.Events
+            .AsNoTracking()
+            .Where(e =>
+                e.TenantId == tenantId &&
+                e.CorrelationId.HasValue &&
+                ids.Contains(e.CorrelationId.Value) &&
+                e.Timestamp >= normalizedFrom)
+            .OrderBy(e => e.Timestamp)
+            .ThenBy(e => e.EventId)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Add(DomainEvent domainEvent) => _context.Events.Add(domainEvent);
 }

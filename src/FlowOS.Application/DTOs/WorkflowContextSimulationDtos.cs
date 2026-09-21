@@ -8,6 +8,11 @@ public sealed record WorkflowContextSimulationEventRequest(
     object? Payload = null,
     IReadOnlyList<string>? Roles = null);
 
+public sealed record WorkflowContextSimulationAgentRequest(
+    string? Event = null,
+    double Confidence = 1.0,
+    string AgentId = "RiskAnalysisAgent");
+
 public sealed record WorkflowContextSimulationRequest(
     Guid? ContextBindingId = null,
     string? ContextType = null,
@@ -16,7 +21,9 @@ public sealed record WorkflowContextSimulationRequest(
     IReadOnlyList<string>? Roles = null,
     IReadOnlyList<WorkflowContextSimulationEventRequest>? Events = null,
     int MaxSteps = 25,
-    bool AutoAdvanceTimers = false);
+    bool AutoAdvanceTimers = false,
+    bool AutoAdvanceAgents = true,
+    WorkflowContextSimulationAgentRequest? SimulatedAgent = null);
 
 public sealed record WorkflowContextSimulationProjectionItemDto(
     string CanonicalField,
@@ -38,6 +45,20 @@ public sealed record WorkflowContextSimulationPendingWorkDto(
     string StepId,
     string? TriggerEvent,
     string Description);
+
+public sealed record WorkflowContextSimulationAutoCommitDto(
+    double MinConfidence,
+    IReadOnlyList<string> AllowedEvents);
+
+public sealed record WorkflowContextSimulationPendingAgentTaskDto(
+    string StepId,
+    string Actor,
+    string AgentId,
+    string? SuggestedEvent,
+    double Confidence,
+    string ParkReason,
+    string DecisionKind,
+    WorkflowContextSimulationAutoCommitDto? AutoCommit);
 
 public sealed record WorkflowContextSimulationTraceDto(
     int Index,
@@ -100,4 +121,5 @@ public sealed record WorkflowContextSimulationResultDto(
     IReadOnlyDictionary<string, object?> FinalCanonicalContext,
     IReadOnlyList<WorkflowContextSimulationTraceDto> Trace,
     IReadOnlyList<WorkflowContextSimulationPendingWorkDto> PendingWork,
-    WorkflowContextSimulationGraphDto Graph);
+    WorkflowContextSimulationGraphDto Graph,
+    WorkflowContextSimulationPendingAgentTaskDto? PendingAgentTask = null);

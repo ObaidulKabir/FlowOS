@@ -90,6 +90,7 @@ public class WorkflowCommandHandlers_StateMachineGapTests : IDisposable
         definition.Publish();
 
         var workflowClass = new WorkflowClass(tenantId, "GapTestClass", "1.0.0", new WorkflowClassBlueprint());
+        definition.SetClassLineage(workflowClass.Id, Guid.NewGuid());
         var instance = new WorkflowInstance(tenantId, definition.Id, workflowClass.Id, 1, "Start");
 
         _context.WorkflowDefinitions.Add(definition);

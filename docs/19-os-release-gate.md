@@ -162,3 +162,5 @@ Each row is **must-pass**. The gate stays RED while any status is `partial` or `
 3. Later items (`L-PAY`, `L-SSO`, `L-USERS`, `L-OTEL`, `L-LAW-STATIC`, `L-POLICY`, `L-INBOX-UX`) do not reopen the gate.
 
 README, landing copy, and agents may use the GREEN sentence while this contract stays GREEN.
+
+The buyer-facing scoreboard against Temporal, Camunda, Step Functions, Conductor/Orkes, and n8n/Zapier is [Chapter 21](21-competitive-comparison.md).

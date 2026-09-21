@@ -29,6 +29,12 @@ public static class ToolRegistration
         registry.Register("run_agent_task", McpToolDescriptions.For("run_agent_task"), McpToolSchemas.RunAgentTask(),
             async (args) => await ExecuteScopedAsync<AgentTools>(serviceProvider, t => t.RunAgentTask(args)));
 
+        registry.Register("get_agent_execution_history", McpToolDescriptions.For("get_agent_execution_history"), McpToolSchemas.GetAgentExecutionHistory(),
+            async (args) => await ExecuteScopedAsync<AgentObservabilityMcpTools>(serviceProvider, t => t.GetAgentExecutionHistory(args)));
+
+        registry.Register("get_agent_evaluation_metrics", McpToolDescriptions.For("get_agent_evaluation_metrics"), McpToolSchemas.GetAgentEvaluationMetrics(),
+            async (args) => await ExecuteScopedAsync<AgentObservabilityMcpTools>(serviceProvider, t => t.GetAgentEvaluationMetrics(args)));
+
         registry.Register("get_agent_context", McpToolDescriptions.For("get_agent_context"), McpToolSchemas.GetAgentContext(),
             async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.GetAgentContext(args)));
 

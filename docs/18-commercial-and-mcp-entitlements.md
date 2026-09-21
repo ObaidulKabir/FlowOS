@@ -1,6 +1,7 @@
 # 18. Commercial policy and MCP entitlements
 
 FlowOS sells a **tenant subscription**. MCP is included: a paid Managed Cloud or Enterprise tenant includes dashboard, REST API, tenant API keys, and every MCP tool. There is no per-call or per-transition overage in this model.
+No usage fees are charged for MCP calls; hosted LLM automation is governed by the daily completion cap described below.
 
 ## Plans
 

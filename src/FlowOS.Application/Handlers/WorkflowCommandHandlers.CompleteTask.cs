@@ -114,12 +114,10 @@ public partial class WorkflowCommandHandlers
         AddCurrentRolesToContext(context);
         await EnrichExecutionContextWithPluginBindingsAsync(context, request.TenantId, cancellationToken);
         var smDef = await ResolveStateMachineDefinitionAsync(
+            definition,
             instance.WorkflowClassId,
-            request.TenantId,
-            definition.Name,
-            cancellationToken,
-            definition.StateMachineDefinitionId);
-        EnsureClassBackedLaw(instance, smDef);
+            cancellationToken);
+        EnsureClassBackedLaw(definition, instance.WorkflowClassId, smDef);
         var currentEntityState = instance.CurrentState ?? instance.CurrentStepId;
 
         var previousStepId = instance.CurrentStepId;
@@ -211,6 +209,10 @@ public partial class WorkflowCommandHandlers
                 context.Payload,
                 cancellationToken);
             await CheckAndScheduleTimerAsync(instance, definition, request.TenantId, context.Payload, cancellationToken);
+            await StageBoundedAutonomyAsync(
+                instance,
+                definition,
+                cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
@@ -218,7 +220,6 @@ public partial class WorkflowCommandHandlers
                 await _idempotencyService.CompleteAsync(
                     request.TenantId, CompleteTaskOperation, request.IdempotencyKey, true, cancellationToken);
             }
-            await TryRunBoundedAutonomyAsync(request.TenantId, instance.Id, cancellationToken);
             return true;
         }
         else

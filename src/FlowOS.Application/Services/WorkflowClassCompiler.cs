@@ -19,6 +19,8 @@ public static class WorkflowClassCompiler
 {
     public static WorkflowDefinition MapToRuntimeDefinition(WorkflowClass wc)
     {
+        if (wc == null) throw new ArgumentNullException(nameof(wc));
+
         var version = WorkflowVersion.Parse(wc.Version);
 
         var def = new WorkflowDefinition(
@@ -86,6 +88,118 @@ public static class WorkflowClassCompiler
         ApplyTemplateBusinessRoles(def, wc.Definition);
         def.Publish();
         return def;
+    }
+
+    /// <summary>
+    /// Compiles the ordinary (non-context) runtime pair. The WorkflowDefinition is pinned to the
+    /// exact published StateMachineDefinition so Work and Law can be persisted atomically.
+    /// </summary>
+    public static WorkflowClassCompilationPackage MapToRuntimePackage(WorkflowClass wc)
+    {
+        if (wc == null) throw new ArgumentNullException(nameof(wc));
+
+        var version = WorkflowVersion.Parse(wc.Version).RuntimeVersion;
+        var stateMachineBlueprint = wc.Definition.StateMachine;
+        var stateMachine = new StateMachineDefinition(
+            wc.TenantId,
+            string.IsNullOrWhiteSpace(stateMachineBlueprint.EntityType)
+                ? wc.Name
+                : stateMachineBlueprint.EntityType.Trim(),
+            stateMachineBlueprint.InitialState,
+            version);
+
+        foreach (var state in stateMachineBlueprint.States)
+        {
+            if (!string.Equals(state, stateMachine.InitialState, StringComparison.Ordinal))
+                stateMachine.AddState(state);
+        }
+
+        foreach (var transition in stateMachineBlueprint.Transitions)
+        {
+            var constraints = transition.Constraints != null
+                ? new Dictionary<string, string>(transition.Constraints, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(transition.Condition))
+            {
+                if (TryGetValue(constraints, "Expression", out var existingExpression) &&
+                    !string.Equals(existingExpression, transition.Condition, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Transition '{transition.FromState}' -> '{transition.ToState}' declares conflicting Condition and Expression values.");
+                }
+
+                constraints["Expression"] = transition.Condition;
+            }
+
+            stateMachine.AddTransition(new StateTransition
+            {
+                FromState = transition.FromState,
+                ToState = transition.ToState,
+                EventId = transition.EventId,
+                Constraints = constraints
+            });
+        }
+
+        stateMachine.Publish();
+
+        var workflow = MapToRuntimeDefinition(wc);
+        workflow.SetClassLineage(wc.Id, stateMachine.Id);
+        return new WorkflowClassCompilationPackage(workflow, stateMachine);
+    }
+
+    public static WorkflowClassCompilationPackage CompileRuntimePackage(WorkflowClass wc)
+        => MapToRuntimePackage(wc);
+
+    public static bool IsUsablePublishedLaw(StateMachineDefinition? stateMachine)
+        => stateMachine != null &&
+           stateMachine.Status == StateMachineStatus.Published &&
+           HasUsableLawGraph(stateMachine);
+
+    /// <summary>
+    /// A running instance remains pinned to its exact Law revision even after a
+    /// newer context revision archives that Law. Archived Law cannot be selected
+    /// for new publication, but it is still authoritative for existing instances.
+    /// </summary>
+    public static bool IsUsablePinnedLaw(StateMachineDefinition? stateMachine)
+        => stateMachine != null &&
+           stateMachine.Status is StateMachineStatus.Published or StateMachineStatus.Archived &&
+           HasUsableLawGraph(stateMachine);
+
+    private static bool HasUsableLawGraph(StateMachineDefinition stateMachine)
+        =>
+           !string.IsNullOrWhiteSpace(stateMachine.InitialState) &&
+           stateMachine.States.Contains(stateMachine.InitialState) &&
+           stateMachine.Transitions.Count > 0 &&
+           stateMachine.Transitions.All(transition =>
+               stateMachine.States.Contains(transition.FromState) &&
+               stateMachine.States.Contains(transition.ToState) &&
+               (!string.IsNullOrWhiteSpace(transition.EventId) ||
+                !string.IsNullOrWhiteSpace(transition.TriggerEventType)));
+
+    public static bool HasSameLawGraph(
+        StateMachineDefinition? left,
+        StateMachineDefinition? right)
+    {
+        if (left == null ||
+            right == null ||
+            left.TenantId != right.TenantId ||
+            left.Version != right.Version ||
+            !string.Equals(left.EntityType, right.EntityType, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(left.InitialState, right.InitialState, StringComparison.Ordinal) ||
+            !left.States.SetEquals(right.States) ||
+            left.Transitions.Count != right.Transitions.Count)
+        {
+            return false;
+        }
+
+        return left.Transitions.All(leftTransition =>
+            right.Transitions.Any(rightTransition =>
+                string.Equals(leftTransition.FromState, rightTransition.FromState, StringComparison.Ordinal) &&
+                string.Equals(leftTransition.ToState, rightTransition.ToState, StringComparison.Ordinal) &&
+                string.Equals(leftTransition.EventId, rightTransition.EventId, StringComparison.Ordinal) &&
+                string.Equals(leftTransition.TriggerEventType, rightTransition.TriggerEventType, StringComparison.Ordinal) &&
+                ConstraintsEqual(leftTransition.Constraints, rightTransition.Constraints)));
     }
 
     public static WorkflowContextCompilationPackage MapToContextRuntimePackage(
@@ -537,5 +651,18 @@ public static class WorkflowClassCompiler
 
         value = string.Empty;
         return false;
+    }
+
+    private static bool ConstraintsEqual(
+        IReadOnlyDictionary<string, string>? left,
+        IReadOnlyDictionary<string, string>? right)
+    {
+        left ??= new Dictionary<string, string>();
+        right ??= new Dictionary<string, string>();
+        return left.Count == right.Count &&
+               left.All(pair =>
+                   right.Any(other =>
+                       string.Equals(pair.Key, other.Key, StringComparison.OrdinalIgnoreCase) &&
+                       string.Equals(pair.Value, other.Value, StringComparison.Ordinal)));
     }
 }

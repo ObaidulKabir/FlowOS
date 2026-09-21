@@ -3,6 +3,7 @@ using System.Text;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
+using FlowOS.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -448,6 +449,80 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Run_agent_task_claims_and_completes_durable_job_synchronously()
+    {
+        Guid instanceId;
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            var definition = new FlowOS.Workflows.Domain.WorkflowDefinition(
+                TenantId,
+                $"McpDurableAgent{Guid.NewGuid():N}",
+                1,
+                "AgentReview");
+            definition.AddStep(new FlowOS.Workflows.Domain.WorkflowStepDefinition(
+                "AgentReview",
+                FlowOS.Workflows.Enums.WorkflowStepType.HumanTask)
+            {
+                Actor = FlowOS.Domain.Enums.StepActor.Agent,
+                AgentProvider = FlowOS.Core.Common.Interfaces.AgentProviderKinds.FlowosRisk,
+                DecisionGuideline = "Choose a legal event only when risk facts justify it.",
+                NextSteps = new Dictionary<string, string>
+                {
+                    ["APPROVE"] = "END"
+                }
+            });
+            definition.Publish();
+            var instance = new FlowOS.Workflows.Domain.WorkflowInstance(
+                TenantId,
+                definition.Id,
+                Guid.Empty,
+                definition.Version,
+                "AgentReview");
+            instance.Wait();
+            db.AddRange(definition, instance);
+            await db.SaveChangesAsync();
+            instanceId = instance.Id;
+        }
+
+        var response = await SendAsync(
+            $$"""
+            {
+              "jsonrpc":"2.0",
+              "id":77,
+              "method":"tools/call",
+              "params":{
+                "name":"run_agent_task",
+                "arguments":{"workflowInstanceId":"{{instanceId}}"}
+              }
+            }
+            """);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(json["result"]?["isError"]?.Value<bool>(), json.ToString());
+        var envelope = JObject.Parse(
+            json["result"]?["content"]?[0]?["text"]?.ToString() ?? "{}");
+        var data = Assert.IsType<JObject>(envelope["data"]);
+        var jobId = Guid.Parse(data["jobId"]!.ToString());
+        Assert.True(Guid.TryParse(data["executionId"]?.ToString(), out _));
+
+        using var verificationScope = _app.Services.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider
+            .GetRequiredService<FlowOSDbContext>();
+        var job = await verificationDb.AgentTaskJobs
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == jobId);
+        var execution = await verificationDb.AgentExecutionRecords
+            .AsNoTracking()
+            .SingleAsync(x => x.JobId == jobId);
+        Assert.Equal(
+            FlowOS.Domain.Enums.AgentTaskJobStatus.Completed,
+            job.Status);
+        Assert.StartsWith("mcp-run:", execution.Claimant);
     }
 
     [Fact]

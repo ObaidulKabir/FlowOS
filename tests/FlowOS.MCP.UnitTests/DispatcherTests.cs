@@ -93,6 +93,10 @@ public sealed class DispatcherTests
         Assert.Contains("upsert_agent_prompt", initResult["instructions"]!.ToString());
         Assert.Contains("upsert_agent_provider", initResult["instructions"]!.ToString());
         Assert.Contains("run_agent_task", initResult["instructions"]!.ToString());
+        Assert.Contains("get_agent_execution_history", initResult["instructions"]!.ToString());
+        Assert.Contains("get_agent_evaluation_metrics", initResult["instructions"]!.ToString());
+        Assert.Contains("PostgreSQL-backed job", initResult["instructions"]!.ToString());
+        Assert.Contains("HOSTED_QUOTA_DENIED", initResult["instructions"]!.ToString());
         Assert.Contains("state-only catch-up", initResult["instructions"]!.ToString());
         Assert.Contains("autoAdvanceTimers", initResult["instructions"]!.ToString());
         Assert.Contains("autoAdvanceAgents", initResult["instructions"]!.ToString());
@@ -199,6 +203,10 @@ public sealed class DispatcherTests
         Assert.Contains("run_agent_task", automationGuide);
         Assert.Contains("QuoteAutoReview", automationGuide);
         Assert.Contains("Application", automationGuide);
+        Assert.Contains("jobId", automationGuide);
+        Assert.Contains("executionId", automationGuide);
+        Assert.Contains("get_agent_execution_history", automationGuide);
+        Assert.Contains("does not train itself", automationGuide);
 
         var osGateRead = await dispatcher.DispatchAsync(Request(9, "resources/read", new { uri = "flowos://guides/os-release-gate" }));
         var osGateText = JObject.FromObject(((JsonRpcResponse)osGateRead.Response!).Result!)["contents"]![0]!["text"]!.ToString();

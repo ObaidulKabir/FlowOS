@@ -8,7 +8,7 @@ import {
   ResendVerificationResponse, TenantUserDto, TenantDto,
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
   WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
-  TenantApiKeyDto, CreateKeyResponse
+  TenantApiKeyDto, CreateKeyResponse, AgentEvaluationMetrics
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -344,6 +344,16 @@ export const api = {
     const tenantId = getActiveTenantId();
     const response = await authorizedFetch(`/api/workflows?tenantId=${tenantId}`, {}, role);
     return handleResponse(response, 'Failed to list workflow instances');
+  },
+
+  getAgentEvaluationMetrics: async (
+    fromUtc: string,
+    toUtc: string,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<AgentEvaluationMetrics> => {
+    const params = new URLSearchParams({ fromUtc, toUtc });
+    const response = await authorizedFetch(`/api/agents/metrics?${params.toString()}`, {}, role);
+    return handleResponse(response, 'Failed to load agent evaluation metrics');
   },
 
   startInstance: async (workflowName: string, version?: number, correlationId?: string, role?: 'Tenant' | 'Admin'): Promise<any> => {

@@ -10,5 +10,10 @@ public interface IDomainEventRepository
 {
     Task<List<DomainEvent>> ListByCorrelationIdAsync(Guid correlationId, CancellationToken cancellationToken = default);
     Task<List<DomainEvent>> ListByTenantAsync(Guid tenantId, Guid? correlationId = null, int limit = 50, CancellationToken cancellationToken = default);
+    Task<List<DomainEvent>> ListForAgentEvaluationAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> correlationIds,
+        DateTime fromUtc,
+        CancellationToken cancellationToken = default);
     void Add(DomainEvent domainEvent);
 }

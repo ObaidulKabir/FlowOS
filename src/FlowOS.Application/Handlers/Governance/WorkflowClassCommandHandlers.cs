@@ -85,12 +85,59 @@ public class WorkflowClassCommandHandlers :
         if (!result.IsValid)
             throw new WorkflowClassValidationException(result);
 
-        var definition = WorkflowClassCompiler.MapToRuntimeDefinition(wc);
+        var package = WorkflowClassCompiler.MapToRuntimePackage(wc);
+        var definition = package.WorkflowDefinition;
         var existing = await _unitOfWork.WorkflowDefinitions
-            .GetByNameAndVersionAsync(definition.Name, definition.Version, definition.TenantId, cancellationToken);
+            .GetByNameAndVersionForUpdateAsync(
+                definition.Name,
+                definition.Version,
+                definition.TenantId,
+                cancellationToken);
 
         if (existing == null)
+        {
+            _unitOfWork.StateMachines.Add(package.StateMachineDefinition);
             _unitOfWork.WorkflowDefinitions.Add(definition);
+        }
+        else
+        {
+            if (existing.ContextBindingRevisionId.HasValue)
+                throw new InvalidOperationException("A context-materialized definition cannot be reused for a WorkflowClass publication.");
+
+            FlowOS.Domain.Entities.StateMachineDefinition? existingLaw = null;
+            if (existing.StateMachineDefinitionId.HasValue)
+            {
+                existingLaw = await _unitOfWork.StateMachines.GetByIdAsync(
+                    existing.StateMachineDefinitionId.Value,
+                    cancellationToken);
+            }
+
+            if (existingLaw?.Status == StateMachineStatus.Draft &&
+                WorkflowClassCompiler.HasSameLawGraph(
+                    existingLaw,
+                    package.StateMachineDefinition))
+            {
+                existingLaw.Publish();
+            }
+
+            var lawMatchesClass =
+                WorkflowClassCompiler.IsUsablePublishedLaw(existingLaw) &&
+                WorkflowClassCompiler.HasSameLawGraph(
+                    existingLaw,
+                    package.StateMachineDefinition);
+
+            if (!lawMatchesClass)
+            {
+                existingLaw = package.StateMachineDefinition;
+                _unitOfWork.StateMachines.Add(existingLaw);
+            }
+
+            existing.SetClassLineage(wc.Id, existingLaw!.Id);
+            if (existing.Status == FlowOS.Workflows.Enums.WorkflowStatus.Draft)
+                existing.Publish();
+            else if (existing.Status != FlowOS.Workflows.Enums.WorkflowStatus.Published)
+                throw new InvalidOperationException("The existing runtime definition is not publishable.");
+        }
 
         if (wc.Definition?.Events != null)
         {

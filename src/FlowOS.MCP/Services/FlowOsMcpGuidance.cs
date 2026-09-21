@@ -98,8 +98,12 @@ public static class FlowOsMcpGuidance
         - Register the tenant model with `upsert_agent_provider` (alias = step `agentProvider`, write-only `apiKey`). Create/edit the prompt with `upsert_agent_prompt` (alias = step `agentPrompt`). Dashboard: Application → select workflow → AI Context → Prompts / Providers. Never paste the key into MCP chat or the blueprint.
         - Inspect Agent Context without running the agent: `get_agent_context` (live instance) or `preview_agent_context` (draft/published class + stepId). The payload is one object: Prompt + Data + Tools + redacted Provider (`hasApiKey`, never the secret).
         - Live automation: publish the human gate that reaches the Agent step (e.g. `EVT-SUBMIT` on QuoteAutoReview), then `run_agent_task`. Paid tenants default to FlowOS hosted OpenAI (`flowos-hosted`, platform key + daily quota). BYO `openai`/`anthropic` still wins when the step alias is a tenant binding with a key. Omit `agentId` unless you want `flowos-risk`. `suggest_agent_action` is the same call without publishing.
-        - Simulate Agent progress without a live LLM: `simulate_workflowclass` hosts AutoCommitEvaluator when the waiting step is actor Agent/Either and no completing business event is queued. Default suggestion is the first `autoCommit.allowedEvents` at confidence 1.0. Override with `simulatedAgent` `{event,confidence,agentId}`. Set `autoAdvanceAgents: false` to park and inspect `pendingAgentTask`. Explicit events still win. Timeout stays timer-owned.
+        - Hybrid execution: API workflow entry enqueues a PostgreSQL-backed job for the API worker; MCP `run_agent_task` / `suggest_agent_action` uses the same durable job and lease path but waits synchronously for a terminal result. A timed-out MCP wait does not erase the queued job.
+        - Save `jobId` and `executionId` from run responses. Query `get_agent_execution_history` for sanitized per-run status and `get_agent_evaluation_metrics` for a bounded UTC window. Agent commits are attributed as `Agent:{id}`; a later human event remains attributable to that human and may be evaluated as an override.
+        - Hosted failures: `MCP-PLAN-REQUIRED` means entitlement, `MCP-HOSTED-LLM-QUOTA` is the persistent per-tenant UTC-day cap, and `MCP-HOSTED-LLM-UNAVAILABLE` is host configuration. Persisted execution codes are sanitized (`ENTITLEMENT_DENIED`, `HOSTED_QUOTA_DENIED`, `PROVIDER_CONFIGURATION`, or provider taxonomy codes).
+        - Simulate Agent progress without a live LLM: `simulate_workflowclass` and `simulate_context_binding` use the shared deterministic evaluator when a waiting HumanTask/Command is actor Agent/Either and no completing event is queued. Default suggestion is the first `autoCommit.allowedEvents` at confidence 1.0. Override with `simulatedAgent` `{event,confidence,agentId}`. Set `autoAdvanceAgents: false` to wait and inspect `pendingAgentTask`. Explicit events still win. Timeout stays timer-owned.
         - Declarative tools: step `agentTools` lists resource plugins (`LookupRecord:<connector>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `connector:*` writes (legacy `capability:*`). FlowOS prefetches read tools into Agent Context. The model does not call HTTP or see URLs.
+        - Observability is evaluation, not self-learning. FlowOS never retrains a model or silently mutates prompts, auto-commit policy, workflow events, or execution records from these metrics. Outcomes without immutable evidence remain explicitly unevaluated.
         - Preferred prompts: `automate_waiting_task_with_ai_agent` (live loop) and `design_agent_handled_step` (step JSON). Preferred resources: `flowos://guides/ai-task-automation` and `flowos://guides/bounded-autonomy-tasks`.
 
         OS claim law (read before calling FlowOS an operating system):
@@ -977,13 +981,30 @@ public static class FlowOsMcpGuidance
         6. `suggest_agent_action` is the same hosted call **without** publishing (advisory).
         7. If parked (`parkReason`), a human uses `complete_task` / `publish_event` on a legal nextSteps event. Either steps allow that override.
 
-        The start/publish entry hook may already run the hosted loop. `run_agent_task` is the explicit retry.
+        The start/publish entry hook enqueues a PostgreSQL job for the API worker. `run_agent_task` is the explicit MCP path: it uses the same durable queue and distributed lease, then waits synchronously. If that wait times out, the job can still complete in the worker. Do not submit a different event merely because the MCP call timed out.
+
+        Every run response includes `jobId` and `executionId`. Keep both:
+        - `jobId` identifies queue/retry ownership.
+        - `executionId` identifies one provider attempt and its sanitized telemetry.
+        - Auto-committed events carry actor `Agent:{id}`. Human follow-up events retain human provenance.
+        - `get_agent_execution_history` reads per-run status without prompt bodies, response bodies, API keys, or raw failures.
+        - `get_agent_evaluation_metrics` reports bounded-window latency/tokens/quota/outcome calibration. Unevaluated means no immutable workflow outcome can yet be derived; it is not a negative label.
 
         ## What success looks like
 
         - Auto-commit: `autoCommitted: true`, actor `Agent:{id}`, current step leaves {STEP_ID}.
         - Park: `autoCommitted: false` plus `parkReason` (low confidence, illegal event, missing key, or event not in `allowedEvents`).
         - Missing key: `TenantLlmWorkflowAgent` fails with provider missing an API key — register it on the tenant, do not put it in chat.
+
+        ## Failure troubleshooting
+
+        - `MCP-PLAN-REQUIRED` / persisted `ENTITLEMENT_DENIED`: activate Managed/Enterprise; no provider call was made.
+        - `MCP-HOSTED-LLM-QUOTA` / persisted `HOSTED_QUOTA_DENIED`: the durable UTC-day tenant cap is exhausted. Wait for UTC reset, raise the operator cap, or bind BYO. BYO usage is not charged to hosted quota.
+        - `MCP-HOSTED-LLM-UNAVAILABLE` / persisted `PROVIDER_CONFIGURATION`: configure the platform key on the process that executes the job.
+        - `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`: inspect provider/BYO configuration and retry policy. Failed provider runs never generate a successful AgentInsight.
+        - `simulate_*` remains deterministic and never calls or verifies a paid provider.
+
+        History and metrics are read-only evaluation. FlowOS does not train itself or automatically rewrite prompts, workflow policy, auto-commit thresholds, execution rows, or immutable workflow events.
 
         ## What not to do
 
@@ -1015,7 +1036,7 @@ public static class FlowOsMcpGuidance
 
         ## Simulate automated Agent progress (no live LLM)
 
-        `simulate_workflowclass` does not call a tenant model. When the current waiting step is actor `Agent`/`Either` and no completing business event is queued, the simulator runs `AutoCommitEvaluator`:
+        `simulate_workflowclass` and `simulate_context_binding` do not call a tenant model. When the current waiting HumanTask/Command is actor `Agent`/`Either` and no completing event is queued, the simulator runs the shared deterministic agent policy:
 
         | Input | Result |
         | --- | --- |

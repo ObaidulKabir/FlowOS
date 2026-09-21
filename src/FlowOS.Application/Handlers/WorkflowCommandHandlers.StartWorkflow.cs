@@ -125,6 +125,12 @@ public partial class WorkflowCommandHandlers
              
              if (wc == null || (wc.TenantId != request.TenantId && wc.Scope != Domain.Enums.WorkflowClassScope.Public))
                  throw new ArgumentException($"WorkflowClass '{request.WorkflowClassId}' not found.");
+             if (wc.Status != Domain.Enums.WorkflowClassStatus.Published &&
+                 wc.Status != Domain.Enums.WorkflowClassStatus.Public)
+             {
+                 throw new ArgumentException(
+                     $"No definition found for class '{wc.Name}'. The class is in status '{wc.Status}' - it must be Published or Public to start.");
+             }
              
              int version = WorkflowVersion.Parse(wc.Version).RuntimeVersion;
 
@@ -146,7 +152,8 @@ public partial class WorkflowCommandHandlers
                     throw new ArgumentException($"Definition found for {wc.Name} but version mismatch (Class: {wc.Version} -> {version}, Def: {anyDef.Version}). Ensure Publish creates the definition.");
                  else
                  {
-                    if (wc.Status == Domain.Enums.WorkflowClassStatus.Published)
+                    if (wc.Status == Domain.Enums.WorkflowClassStatus.Published ||
+                        wc.Status == Domain.Enums.WorkflowClassStatus.Public)
                         throw new ArgumentException($"WorkflowClass '{wc.Name}' is Published but no Runtime Definition exists. Please re-publish to generate the definition.");
                     else
                         throw new ArgumentException($"No definition found for class '{wc.Name}'. The class is in status '{wc.Status}' - it must be Published to start.");
@@ -196,26 +203,47 @@ public partial class WorkflowCommandHandlers
         }
         // -----------------------------------------
 
-        Guid resolvedClassId = activeContextBinding?.Revision.SourceWorkflowClassId ?? request.WorkflowClassId;
-        string? resolvedInitialState = activeContextBinding?.SourceWorkflowClass.Definition.StateMachine.InitialState;
+        Guid resolvedClassId =
+            fullDefinition?.SourceWorkflowClassId ??
+            activeContextBinding?.Revision.SourceWorkflowClassId ??
+            request.WorkflowClassId;
 
         if (resolvedClassId == Guid.Empty && fullDefinition != null)
         {
             var publishedClasses = await _unitOfWork.WorkflowClasses.ListAsync(
                 request.TenantId,
                 null,
-                Domain.Enums.WorkflowClassStatus.Published,
+                null,
                 cancellationToken);
-            var matchingClass = publishedClasses.FirstOrDefault(c =>
-                string.Equals(c.Name, fullDefinition.Name, StringComparison.OrdinalIgnoreCase) &&
-                (c.TenantId == request.TenantId || c.Scope == Domain.Enums.WorkflowClassScope.Public));
+            var matchingClass = publishedClasses
+                .Where(c =>
+                    string.Equals(c.Name, fullDefinition.Name, StringComparison.OrdinalIgnoreCase) &&
+                    WorkflowVersion.Parse(c.Version).RuntimeVersion == fullDefinition.Version &&
+                    (c.Status == Domain.Enums.WorkflowClassStatus.Published ||
+                     c.Status == Domain.Enums.WorkflowClassStatus.Public) &&
+                    (c.TenantId == request.TenantId || c.Scope == Domain.Enums.WorkflowClassScope.Public))
+                .OrderByDescending(c => c.TenantId == request.TenantId)
+                .FirstOrDefault();
             if (matchingClass != null)
             {
                 resolvedClassId = matchingClass.Id;
-                if (string.IsNullOrWhiteSpace(resolvedInitialState))
-                    resolvedInitialState = matchingClass.Definition.StateMachine.InitialState;
             }
         }
+
+        var startStateMachine = fullDefinition == null
+            ? null
+            : await ResolveStateMachineDefinitionAsync(
+                fullDefinition,
+                resolvedClassId,
+                cancellationToken);
+        if (fullDefinition != null)
+            EnsureClassBackedLaw(fullDefinition, resolvedClassId, startStateMachine);
+
+        var resolvedInitialState =
+            fullDefinition != null &&
+            (fullDefinition.StateMachineDefinitionId.HasValue || resolvedClassId != Guid.Empty)
+                ? startStateMachine?.InitialState
+                : null;
 
         var instance = new WorkflowInstance(
             request.TenantId,
@@ -316,14 +344,6 @@ public partial class WorkflowCommandHandlers
                 autoAdvanceContext.Payload,
                 cancellationToken);
 
-            var startStateMachine = fullDefinition.StateMachineDefinitionId.HasValue
-                ? await ResolveStateMachineDefinitionAsync(
-                    instance.WorkflowClassId,
-                    request.TenantId,
-                    fullDefinition.Name,
-                    cancellationToken,
-                    fullDefinition.StateMachineDefinitionId)
-                : null;
             RunAutoAdvance(instance, fullDefinition, request.TenantId, autoAdvanceContext, startStateMachine);
             var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
                 ? instance.ActiveStepIds.ToList()
@@ -335,10 +355,13 @@ public partial class WorkflowCommandHandlers
                 autoAdvanceContext.Payload,
                 cancellationToken);
             await CheckAndScheduleTimerAsync(instance, fullDefinition, request.TenantId, autoAdvanceContext.Payload, cancellationToken);
+            await StageBoundedAutonomyAsync(
+                instance,
+                fullDefinition,
+                cancellationToken);
         }
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        await TryRunBoundedAutonomyAsync(request.TenantId, instance.Id, cancellationToken);
 
         if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {

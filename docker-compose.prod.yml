@@ -18,6 +18,11 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-c#6uSkcs}
       - SMTP_ENABLE_SSL=${SMTP_ENABLE_SSL:-true}
       - SMTP_FROM=${SMTP_FROM:-admin@flowosbd.com}
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_ENDPOINT=${FLOWOS_HOSTED_LLM_ENDPOINT:-}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
     volumes:
       - ./flowos-config:/app/flowos-config
     depends_on:
@@ -72,6 +77,11 @@ services:
       - UseInMemoryDatabase=false
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-flowos};Username=${POSTGRES_USER:-root};Password=${POSTGRES_PASSWORD:-toor};
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_ENDPOINT=${FLOWOS_HOSTED_LLM_ENDPOINT:-}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
     depends_on:
       postgres:
         condition: service_healthy

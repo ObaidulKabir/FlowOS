@@ -306,6 +306,299 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("WorkflowTimerJobs", (string)null);
                 });
 
+            modelBuilder.Entity("FlowOS.Domain.Entities.AgentExecutionRecord", b =>
+                {
+                    b.Property<Guid>("ExecutionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Claimant")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<double?>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid?>("ContextBindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ContextBindingRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("ContextVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DecisionOutcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long?>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("HttpStatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long?>("InputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ObservedOutcome")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("OutcomeEvaluatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("OutcomeMatchedSuggestion")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("OutputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("OverriddenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OverrideActor")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OverrideEvent")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ParkReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("PromptAlias")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderAlias")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("RuntimeIdentifier")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("RuntimeVersion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SanitizedFailure")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("StepId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool?>("Success")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SuggestedEvent")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("WasCommitted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("WasOverridden")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("WasParked")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("WorkflowDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("WorkflowDefinitionVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ExecutionId");
+
+                    b.HasIndex("JobId");
+
+                    b.HasIndex("TenantId", "StartedAtUtc")
+                        .HasDatabaseName("IX_AgentExecutionRecords_Tenant_Time");
+
+                    b.HasIndex("TenantId", "WorkflowInstanceId", "StartedAtUtc")
+                        .HasDatabaseName("IX_AgentExecutionRecords_Tenant_Instance_Time");
+
+                    b.ToTable("AgentExecutionRecords", (string)null);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.AgentTaskJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActiveKey")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<bool>("AllowAutoCommit")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ClaimExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Claimant")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ClaimedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DueAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Objective")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("RequestedAgentId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("RequireAgentActor")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("StepId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveKey")
+                        .IsUnique()
+                        .HasFilter("\"ActiveKey\" IS NOT NULL");
+
+                    b.HasIndex("Status", "ClaimExpiresAtUtc")
+                        .HasDatabaseName("IX_AgentTaskJobs_ExpiredClaims");
+
+                    b.HasIndex("Status", "DueAtUtc", "RequestedAtUtc")
+                        .HasDatabaseName("IX_AgentTaskJobs_Polling");
+
+                    b.HasIndex("TenantId", "WorkflowInstanceId", "StepId");
+
+                    b.ToTable("AgentTaskJobs", (string)null);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.DistributedLease", b =>
+                {
+                    b.Property<string>("LeaseKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("AcquiredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("LeaseKey");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.ToTable("DistributedLeases", (string)null);
+                });
+
             modelBuilder.Entity("FlowOS.Domain.Entities.EventDefinition", b =>
                 {
                     b.Property<string>("EventId")
@@ -353,6 +646,57 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("EventDefinitions");
                 });
 
+            modelBuilder.Entity("FlowOS.Domain.Entities.HostedLlmDailyUsage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FailedRequests")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FinalizedRequests")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ReservedRequests")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SuccessfulRequests")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("UsageDateUtc")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsageDateUtc");
+
+                    b.HasIndex("TenantId", "UsageDateUtc", "Model")
+                        .IsUnique();
+
+                    b.ToTable("HostedLlmDailyUsages", (string)null);
+                });
+
             modelBuilder.Entity("FlowOS.Domain.Entities.StateMachineDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -395,19 +739,19 @@ namespace FlowOS.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("ConfigurationJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("BillingStatus")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasDefaultValue("Active");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1060,6 +1404,10 @@ namespace FlowOS.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BusinessRoles")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("ContextBindingRevisionId")
                         .HasColumnType("uuid");
 
@@ -1144,6 +1492,10 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("PathTravelCounts")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RoleAssignments")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -1335,6 +1687,20 @@ namespace FlowOS.Infrastructure.Migrations
                                 .ValueGeneratedOnAdd()
                                 .HasColumnType("integer");
 
+                            b1.Property<string>("Actor")
+                                .IsRequired()
+                                .HasColumnType("text");
+
+                            b1.Property<string>("AgentPrompt")
+                                .HasColumnType("text");
+
+                            b1.Property<string>("AgentProvider")
+                                .HasColumnType("text");
+
+                            b1.Property<string>("AgentTools")
+                                .IsRequired()
+                                .HasColumnType("text");
+
                             b1.Property<List<string>>("AllowedRoles")
                                 .IsRequired()
                                 .HasColumnType("text[]");
@@ -1347,7 +1713,14 @@ namespace FlowOS.Infrastructure.Migrations
                                 .IsRequired()
                                 .HasColumnType("text");
 
+                            b1.Property<string>("DecisionGuideline")
+                                .HasColumnType("text");
+
                             b1.Property<string>("DecisionProvider")
+                                .HasColumnType("text");
+
+                            b1.Property<string>("EventRequiredCapabilities")
+                                .IsRequired()
                                 .HasColumnType("text");
 
                             b1.Property<string>("InboundSteps")
@@ -1374,6 +1747,14 @@ namespace FlowOS.Infrastructure.Migrations
                                 .IsRequired()
                                 .HasColumnType("text");
 
+                            b1.Property<string>("PathLimits")
+                                .IsRequired()
+                                .HasColumnType("text");
+
+                            b1.Property<string>("RequiredCapabilities")
+                                .IsRequired()
+                                .HasColumnType("text");
+
                             b1.Property<string>("StepId")
                                 .IsRequired()
                                 .HasColumnType("text");
@@ -1389,6 +1770,29 @@ namespace FlowOS.Infrastructure.Migrations
 
                             b1.WithOwner()
                                 .HasForeignKey("WorkflowDefinitionId");
+
+                            b1.OwnsOne("FlowOS.Workflows.Domain.StepAutoCommitDefinition", "AutoCommit", b2 =>
+                                {
+                                    b2.Property<Guid>("WorkflowStepDefinitionWorkflowDefinitionId")
+                                        .HasColumnType("uuid");
+
+                                    b2.Property<int>("WorkflowStepDefinitionId")
+                                        .HasColumnType("integer");
+
+                                    b2.Property<string>("AllowedEvents")
+                                        .IsRequired()
+                                        .HasColumnType("text");
+
+                                    b2.Property<double>("MinConfidence")
+                                        .HasColumnType("double precision");
+
+                                    b2.HasKey("WorkflowStepDefinitionWorkflowDefinitionId", "WorkflowStepDefinitionId");
+
+                                    b2.ToTable("WorkflowDefinitions");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("WorkflowStepDefinitionWorkflowDefinitionId", "WorkflowStepDefinitionId");
+                                });
 
                             b1.OwnsOne("FlowOS.Workflows.Domain.StepSlaDefinition", "Sla", b2 =>
                                 {
@@ -1462,6 +1866,8 @@ namespace FlowOS.Infrastructure.Migrations
                                     b2.WithOwner()
                                         .HasForeignKey("WorkflowStepDefinitionWorkflowDefinitionId", "WorkflowStepDefinitionId");
                                 });
+
+                            b1.Navigation("AutoCommit");
 
                             b1.Navigation("Sla");
 

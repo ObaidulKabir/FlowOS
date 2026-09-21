@@ -9,5 +9,5 @@ namespace FlowOS.Agents.Abstractions;
 public interface IWorkflowAgent : IAgent
 {
     Task<AgentResult> ExecuteAsync(DecisionPacket packet, CancellationToken cancellationToken = default) =>
-        ExecuteAsync(AgentContext.FromPacket(packet));
+        ExecuteAsync(AgentContext.FromPacket(packet), cancellationToken);
 }

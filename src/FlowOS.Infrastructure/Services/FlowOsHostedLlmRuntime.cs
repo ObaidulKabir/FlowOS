@@ -1,22 +1,26 @@
-using System.Collections.Concurrent;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using Microsoft.Extensions.Configuration;
 
 namespace FlowOS.Infrastructure.Services;
 
 public sealed class FlowOsHostedLlmRuntime : IFlowOsHostedLlmRuntime
 {
-    private static readonly ConcurrentDictionary<string, int> DailyCounts = new(StringComparer.Ordinal);
-
     private readonly IConfiguration _configuration;
     private readonly ITenantEntitlementService _entitlement;
+    private readonly IHostedLlmUsageStore _usageStore;
+    private readonly TimeProvider _timeProvider;
 
     public FlowOsHostedLlmRuntime(
         IConfiguration configuration,
-        ITenantEntitlementService entitlement)
+        ITenantEntitlementService entitlement,
+        IHostedLlmUsageStore usageStore,
+        TimeProvider? timeProvider = null)
     {
         _configuration = configuration;
         _entitlement = entitlement;
+        _usageStore = usageStore;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public bool IsConfigured => PublicSettings.Enabled && PublicSettings.HasApiKey;
@@ -59,11 +63,15 @@ public sealed class FlowOsHostedLlmRuntime : IFlowOsHostedLlmRuntime
                 plan.Message ?? TenantEntitlementPolicy.PlanRequiredMessage);
         }
 
-        var bucket = $"{tenantId:N}:{DateTime.UtcNow:yyyyMMdd}";
-        var used = DailyCounts.AddOrUpdate(bucket, 1, (_, current) => current + 1);
-        if (used > settings.MaxCompletionsPerDay)
+        var usageDateUtc = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
+        var reservation = await _usageStore.TryReserveAsync(
+            tenantId,
+            usageDateUtc,
+            settings.Model,
+            settings.MaxCompletionsPerDay,
+            cancellationToken: cancellationToken);
+        if (!reservation.Allowed)
         {
-            DailyCounts.AddOrUpdate(bucket, 0, (_, current) => Math.Max(0, current - 1));
             return new FlowOsHostedLlmLease(
                 false, null, settings.Model, settings.Endpoint,
                 FlowOsHostedLlmCodes.Quota,
@@ -76,7 +84,35 @@ public sealed class FlowOsHostedLlmRuntime : IFlowOsHostedLlmRuntime
             settings.Model,
             settings.Endpoint,
             null,
-            null);
+            null,
+            tenantId,
+            usageDateUtc);
+    }
+
+    public async Task FinalizeAsync(
+        FlowOsHostedLlmLease lease,
+        bool succeeded,
+        long inputTokens = 0,
+        long outputTokens = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        if (!lease.Allowed ||
+            !lease.TenantId.HasValue ||
+            !lease.UsageDateUtc.HasValue ||
+            string.IsNullOrWhiteSpace(lease.Model))
+        {
+            return;
+        }
+
+        await _usageStore.FinalizeAsync(
+            lease.TenantId.Value,
+            lease.UsageDateUtc.Value,
+            lease.Model,
+            succeeded,
+            Math.Max(0, inputTokens),
+            Math.Max(0, outputTokens),
+            cancellationToken: cancellationToken);
     }
 
     private bool ReadEnabled()

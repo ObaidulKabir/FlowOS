@@ -84,6 +84,28 @@ public class WorkflowDefinition
         StateMachineDefinitionId = stateMachineDefinitionId;
     }
 
+    /// <summary>
+    /// Pins an ordinary WorkflowClass runtime definition to the exact class and Law artifact
+    /// it was compiled from. Unlike context lineage, this intentionally has no binding revision.
+    /// The operation is idempotent and may repair an existing non-context runtime definition.
+    /// </summary>
+    public void SetClassLineage(
+        Guid sourceWorkflowClassId,
+        Guid stateMachineDefinitionId)
+    {
+        if (sourceWorkflowClassId == Guid.Empty)
+            throw new ArgumentException("SourceWorkflowClassId is required.", nameof(sourceWorkflowClassId));
+        if (stateMachineDefinitionId == Guid.Empty)
+            throw new ArgumentException("StateMachineDefinitionId is required.", nameof(stateMachineDefinitionId));
+        if (ContextBindingRevisionId.HasValue)
+            throw new InvalidOperationException("Context-materialized definitions cannot be assigned class-only lineage.");
+        if (SourceWorkflowClassId.HasValue && SourceWorkflowClassId.Value != sourceWorkflowClassId)
+            throw new InvalidOperationException("Workflow definition is already pinned to a different WorkflowClass.");
+
+        SourceWorkflowClassId = sourceWorkflowClassId;
+        StateMachineDefinitionId = stateMachineDefinitionId;
+    }
+
     public void Publish()
     {
         if (Steps.Count == 0)

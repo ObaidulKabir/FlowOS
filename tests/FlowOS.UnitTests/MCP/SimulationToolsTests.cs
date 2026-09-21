@@ -1235,7 +1235,47 @@ public class SimulationToolsTests
         Assert.Contains("minConfidence", data["pendingAgentTask"]?["parkReason"]?.ToString());
     }
 
-    private static JObject AgentReviewBlueprint(string actor)
+    [Fact]
+    public async Task SimulateWorkflowClass_DisabledAgentLeavesInspectablePendingTask()
+    {
+        var result = await _tools.SimulateWorkflowClass(new JObject
+        {
+            ["blueprint"] = AgentReviewBlueprint(StepActor.Agent),
+            ["events"] = new JArray(),
+            ["autoAdvanceAgents"] = false
+        });
+
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("WaitingForHumanTask", data["status"]?.ToString());
+        Assert.Contains("disabled", data["pendingAgentTask"]?["parkReason"]?.ToString());
+    }
+
+    [Fact]
+    public async Task SimulateWorkflowClass_AgentWaitingCommand_AutoCommitsWithCapabilityBypass()
+    {
+        var result = await _tools.SimulateWorkflowClass(new JObject
+        {
+            ["blueprint"] = AgentReviewBlueprint(StepActor.Agent, "Command", requireCapability: true),
+            ["events"] = new JArray(),
+            ["role"] = "Unprivileged"
+        });
+
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Contains(
+            (data["executionTrace"] as JArray ?? new JArray())
+                .Select(token => token["action"]?.ToString() ?? ""),
+            action => action.Contains("[Agent Auto-Commit]") && action.Contains("EVT-ACCEPT"));
+    }
+
+    private static JObject AgentReviewBlueprint(
+        string actor,
+        string stepType = "HumanTask",
+        bool requireCapability = false)
     {
         var blueprint = new WorkflowClassBlueprint
         {
@@ -1260,9 +1300,12 @@ public class SimulationToolsTests
                     new()
                     {
                         StepId = "AgentReview",
-                        StepType = "HumanTask",
+                        StepType = stepType,
                         Actor = actor,
                         DecisionGuideline = "Accept in-bound quotes.",
+                        RequiredCapabilities = requireCapability
+                            ? new List<string> { "event.publish.EVT-ACCEPT" }
+                            : new List<string>(),
                         AutoCommit = new StepAutoCommitBlueprint
                         {
                             MinConfidence = 0.9,

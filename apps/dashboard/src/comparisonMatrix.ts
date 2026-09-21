@@ -33,7 +33,7 @@ export const COMPARISON_PLATFORMS: ComparisonPlatform[] = [
     pickWhen:
       "Tenant SaaS where AI agents must author, simulate, and run legal work under dual-kernel Law plus a HumanTask inbox, over MCP.",
     theyWin:
-      "Declarative JSON blueprints, native MCP, fail-closed Law, hosted DecisionPacket / autoCommit, side-effect-free simulation, .NET 8 + Postgres footprint.",
+      "Declarative JSON blueprints, native MCP, fail-closed Law, hosted DecisionPacket / autoCommit, paid-plan FlowOS OpenAI (flowos-hosted, daily cap) plus optional BYO, side-effect-free simulation, .NET 8 + Postgres footprint.",
     theyLose:
       "Not BPMN. Not polyglot durable-execution at Temporal/Zeebe scale. No 200+ AWS-native service catalog. OIDC, Stripe checkout, OTEL, and SCIM are later.",
   },
@@ -47,7 +47,7 @@ export const COMPARISON_PLATFORMS: ComparisonPlatform[] = [
     theyWin:
       "Battle-tested durable execution, multi-language SDKs, automatic retries, proven hyperscale.",
     theyLose:
-      "Deterministic-code tax. No separate FSM Law. No native HumanTask OS. No MCP authoring/simulation surface. Heavy server + Elasticsearch footprint.",
+      "Deterministic-code tax. No separate FSM Law. No native HumanTask OS. No MCP authoring/simulation surface. AI is an activity you write, not a hosted DecisionPacket / autoCommit loop. Heavy server + Elasticsearch footprint.",
   },
   {
     id: "camunda",
@@ -59,7 +59,7 @@ export const COMPARISON_PLATFORMS: ComparisonPlatform[] = [
     theyWin:
       "Industry notation, visual modeler, mature Tasklist, Operate, Keycloak identity, connector catalog.",
     theyLose:
-      "Verbose BPMN XML is a poor LLM authoring target. Cluster sprawl. Dual-kernel purity is mixed into one BPMN token graph.",
+      "Verbose BPMN XML is a poor LLM authoring target. Cluster sprawl. Dual-kernel purity is mixed into one BPMN token graph. Copilot/connectors are not a legal-event autoCommit kernel.",
   },
   {
     id: "aws",
@@ -71,7 +71,7 @@ export const COMPARISON_PLATFORMS: ComparisonPlatform[] = [
     theyWin:
       "Zero infra, IAM, 200+ AWS integrations, console visualization, pay-per-transition.",
     theyLose:
-      "AWS lock-in. ASL is a single state machine, not Law+Work. Human wait is callback tokens. No tenant MCP OS.",
+      "AWS lock-in. ASL is a single state machine, not Law+Work. Human wait is callback tokens. Bedrock in a state is not a tenant MCP DecisionPacket loop.",
   },
   {
     id: "conductor",
@@ -94,7 +94,57 @@ export const COMPARISON_PLATFORMS: ComparisonPlatform[] = [
       "Departmental SaaS glue (Slack, Sheets, CRM) without a legal state machine or tenant OS.",
     theyWin: "Fast connector catalog, visual recipes, low training cost.",
     theyLose:
-      "Not a process OS. Weak isolation, no dual-kernel Law, no governed HumanTask inbox, no fail-closed legal simulation.",
+      "Not a process OS. Weak isolation, no dual-kernel Law, no governed HumanTask inbox, no fail-closed legal simulation. AI nodes call HTTP; they do not restrict to legal nextSteps or auto-commit under Law.",
+  },
+];
+
+export const AI_TASK_AUTOMATION_ROWS: Array<{
+  question: string;
+  answers: Record<string, string>;
+}> = [
+  {
+    question: "Who hosts decide → commit?",
+    answers: {
+      flowos: "Native — DecisionPacket → tenant or FlowOS OpenAI → autoCommit or park",
+      temporal: "Custom — you write an activity",
+      camunda: "Custom — Copilot / connectors",
+      aws: "Custom — Bedrock in a state",
+      conductor: "—",
+      n8n: "Custom — AI node, not legal nextSteps",
+    },
+  },
+  {
+    question: "Run without the tenant’s LLM key?",
+    answers: {
+      flowos: "Yes on paid plan — flowos-hosted, daily cap (default 200)",
+      temporal: "Only if you wire a key in worker code",
+      camunda: "Vendor AI add-ons; not a tenant OS default",
+      aws: "Uses the AWS account bill",
+      conductor: "—",
+      n8n: "Bring a key or n8n Cloud credits",
+    },
+  },
+  {
+    question: "Can the model invent a transition?",
+    answers: {
+      flowos: "No — illegal nextSteps dropped; TimeoutEvent never auto-commits",
+      temporal: "Your code must reject it",
+      camunda: "Your process must reject it",
+      aws: "Your state machine must reject it",
+      conductor: "Your worker must reject it",
+      n8n: "The recipe can fire any connected action",
+    },
+  },
+  {
+    question: "Design-time proof without live tokens?",
+    answers: {
+      flowos: "simulate_* + AutoCommitEvaluator; no OpenAI call",
+      temporal: "Unit tests / time-skipping",
+      camunda: "Play / Operate, not a side-effect-free OS sim",
+      aws: "Express/Standard test executions still bill",
+      conductor: "Workflow test harness",
+      n8n: "Manual pin data; still a recipe runner",
+    },
   },
 ];
 

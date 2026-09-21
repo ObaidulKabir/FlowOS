@@ -59,12 +59,14 @@ public partial class Program
             })
             .Build();
 
+        await InitializePostgresPersistenceAsync(host.Services);
         await host.RunAsync();
     }
 
     static async Task RunHttpAsync(string[] args)
     {
         var app = BuildHttpApp(args);
+        await InitializePostgresPersistenceAsync(app.Services);
         await app.RunAsync();
     }
 
@@ -619,6 +621,7 @@ public partial class Program
         services.AddScoped<SimulationTools>();
         services.AddScoped<LifecycleActionMcpTools>();
         services.AddScoped<AgentTools>();
+        services.AddScoped<AgentObservabilityMcpTools>();
         services.AddScoped<AgentContextMcpTools>();
         services.AddScoped<ExecutionTools>();
         services.AddScoped<CapabilityRegistryMcpTools>();
@@ -632,6 +635,37 @@ public partial class Program
         services.AddScoped<DeadLetterMcpTools>();
         services.AddScoped<WebhookSecurityMcpTools>();
         services.AddScoped<ActionObservabilityMcpTools>();
+    }
+
+    private static async Task InitializePostgresPersistenceAsync(
+        IServiceProvider serviceProvider,
+        CancellationToken cancellationToken = default)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+        if (!context.Database.IsRelational())
+            return;
+
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("FlowOS.MCP.Startup");
+        try
+        {
+            await context.Database.MigrateAsync(cancellationToken);
+            var backfill = scope.ServiceProvider.GetRequiredService<WorkflowDefinitionLineageBackfillService>();
+            var result = await backfill.BackfillAsync(cancellationToken);
+            logger.LogInformation(
+                "MCP workflow lineage backfill scanned {Scanned}, repaired {Repaired}, and created {Created} state-machine definitions.",
+                result.DefinitionsScanned,
+                result.DefinitionsRepaired,
+                result.StateMachinesCreated);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "MCP PostgreSQL migration/lineage backfill failed; class-backed definitions remain fail-closed.");
+        }
     }
 
     private static string ResolvePublicMcpUrl(HttpContext context)

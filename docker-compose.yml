@@ -9,6 +9,10 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - UseInMemoryDatabase=false
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
     volumes:
       - ./flowos-config:/app/flowos-config
     ports:
@@ -48,6 +52,10 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - UseInMemoryDatabase=false
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
     ports:
       - "8081:8080"
     restart: unless-stopped

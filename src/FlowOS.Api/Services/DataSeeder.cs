@@ -238,8 +238,7 @@ public static class DataSeeder
                     manager.Publish(wc);
                 }
                 
-                var def = WorkflowClassCompiler.MapToRuntimeDefinition(wc);
-                context.WorkflowDefinitions.Add(def);
+                await EnsureWorkflowClassRuntimePackageAsync(context, wc);
 
                 await context.SaveChangesAsync();
             }
@@ -293,7 +292,10 @@ public static class DataSeeder
                     var existingClass = await context.WorkflowClasses.FirstOrDefaultAsync(
                         w => w.TenantId == clientTenantId && w.Name == "ExpenseApproval");
                     if (existingClass != null)
+                    {
                         SetPrivateProperty(existingClass, "Definition", demoBpFix);
+                        await EnsureWorkflowClassRuntimePackageAsync(context, existingClass);
+                    }
 
                     WorkflowClassCompiler.ApplyTemplateBusinessRoles(existingDef, demoBpFix);
                     SetPrivateProperty(existingDef, "Status", WorkflowStatus.Published);
@@ -332,8 +334,7 @@ public static class DataSeeder
         manager2.Publish(v2Wc);
         context.WorkflowClasses.Add(v2Wc);
         
-        var def = WorkflowClassCompiler.MapToRuntimeDefinition(v2Wc);
-        context.WorkflowDefinitions.Add(def);
+        await EnsureWorkflowClassRuntimePackageAsync(context, v2Wc);
         await context.SaveChangesAsync();
     }
 
@@ -578,9 +579,6 @@ public static class DataSeeder
             manager.ApproveAsPublic(sagaWc);
             context.WorkflowClasses.Add(sagaWc);
 
-            var sagaDef = WorkflowClassCompiler.MapToRuntimeDefinition(sagaWc);
-            sagaDef.Publish();
-            context.WorkflowDefinitions.Add(sagaDef);
         }
 
         // -------------------------------------------------------------------------------------------------
@@ -749,9 +747,6 @@ public static class DataSeeder
             manager.ApproveAsPublic(loanWc);
             context.WorkflowClasses.Add(loanWc);
 
-            var loanDef = WorkflowClassCompiler.MapToRuntimeDefinition(loanWc);
-            loanDef.Publish();
-            context.WorkflowDefinitions.Add(loanDef);
         }
 
         // -------------------------------------------------------------------------------------------------
@@ -945,9 +940,6 @@ public static class DataSeeder
             manager.ApproveAsPublic(secOpsWc);
             context.WorkflowClasses.Add(secOpsWc);
 
-            var secOpsDef = WorkflowClassCompiler.MapToRuntimeDefinition(secOpsWc);
-            secOpsDef.Publish();
-            context.WorkflowDefinitions.Add(secOpsDef);
         }
 
         // -------------------------------------------------------------------------------------------------
@@ -963,9 +955,6 @@ public static class DataSeeder
             manager.ApproveAsPublic(incidentWc);
             context.WorkflowClasses.Add(incidentWc);
 
-            var incidentDef = WorkflowClassCompiler.MapToRuntimeDefinition(incidentWc);
-            incidentDef.Publish();
-            context.WorkflowDefinitions.Add(incidentDef);
         }
 
         // -------------------------------------------------------------------------------------------------
@@ -981,9 +970,15 @@ public static class DataSeeder
             manager.ApproveAsPublic(quoteWc);
             context.WorkflowClasses.Add(quoteWc);
 
-            var quoteDef = WorkflowClassCompiler.MapToRuntimeDefinition(quoteWc);
-            quoteDef.Publish();
-            context.WorkflowDefinitions.Add(quoteDef);
+        }
+
+        foreach (var name in new[] { sagaName, loanName, secOpsName, incidentName, quoteName })
+        {
+            var workflowClass = context.WorkflowClasses.Local.FirstOrDefault(item =>
+                    item.TenantId == clientTenantId && item.Name == name)
+                ?? await context.WorkflowClasses.FirstAsync(item =>
+                    item.TenantId == clientTenantId && item.Name == name);
+            await EnsureWorkflowClassRuntimePackageAsync(context, workflowClass);
         }
 
         await RepairExpenseApprovalV2GraphAsync(context, clientTenantId);
@@ -1563,42 +1558,91 @@ public static class DataSeeder
             role.AddPermission(permission);
     }
 
+    private static async Task<WorkflowDefinition> EnsureWorkflowClassRuntimePackageAsync(
+        FlowOSDbContext context,
+        WorkflowClass workflowClass)
+    {
+        var package = WorkflowClassCompiler.MapToRuntimePackage(workflowClass);
+        var expectedDefinition = package.WorkflowDefinition;
+        var existing = context.WorkflowDefinitions.Local.FirstOrDefault(definition =>
+                definition.TenantId == expectedDefinition.TenantId &&
+                definition.Name == expectedDefinition.Name &&
+                definition.Version == expectedDefinition.Version)
+            ?? await context.WorkflowDefinitions.FirstOrDefaultAsync(definition =>
+                definition.TenantId == expectedDefinition.TenantId &&
+                definition.Name == expectedDefinition.Name &&
+                definition.Version == expectedDefinition.Version);
+
+        if (existing == null)
+        {
+            context.StateMachineDefinitions.Add(package.StateMachineDefinition);
+            context.WorkflowDefinitions.Add(expectedDefinition);
+            return expectedDefinition;
+        }
+
+        if (existing.ContextBindingRevisionId.HasValue)
+            throw new InvalidOperationException(
+                $"Runtime definition '{existing.Name}' v{existing.Version} is context-materialized and cannot be repaired as a class definition.");
+
+        StateMachineDefinition? existingLaw = null;
+        if (existing.StateMachineDefinitionId.HasValue)
+        {
+            existingLaw = context.StateMachineDefinitions.Local.FirstOrDefault(
+                    law => law.Id == existing.StateMachineDefinitionId.Value)
+                ?? await context.StateMachineDefinitions.FirstOrDefaultAsync(
+                    law => law.Id == existing.StateMachineDefinitionId.Value);
+        }
+
+        if (existingLaw?.Status == StateMachineStatus.Draft &&
+            WorkflowClassCompiler.HasSameLawGraph(
+                existingLaw,
+                package.StateMachineDefinition))
+        {
+            existingLaw.Publish();
+        }
+
+        var lawMatchesClass =
+            WorkflowClassCompiler.IsUsablePublishedLaw(existingLaw) &&
+            WorkflowClassCompiler.HasSameLawGraph(
+                existingLaw,
+                package.StateMachineDefinition);
+
+        if (!lawMatchesClass)
+        {
+            existingLaw = package.StateMachineDefinition;
+            context.StateMachineDefinitions.Add(existingLaw);
+        }
+
+        existing.SetClassLineage(workflowClass.Id, existingLaw!.Id);
+        if (existing.Status == WorkflowStatus.Draft)
+            existing.Publish();
+        else if (existing.Status != WorkflowStatus.Published)
+            throw new InvalidOperationException(
+                $"Runtime definition '{existing.Name}' v{existing.Version} is not publishable.");
+
+        return existing;
+    }
+
     private static async Task EnsurePublishedRuntimeDefinitionsAsync(FlowOSDbContext context, Guid tenantId)
     {
         foreach (var name in SandboxSampleWorkflowNames)
         {
             try
             {
-                var existing = await context.WorkflowDefinitions
-                    .Where(d => d.TenantId == tenantId && d.Name == name)
-                    .OrderByDescending(d => d.Version)
-                    .FirstOrDefaultAsync();
-                if (existing != null)
-                {
-                    if (existing.Status != WorkflowStatus.Published)
-                    {
-                        existing.Publish();
-                        await context.SaveChangesAsync();
-                    }
-                    continue;
-                }
-
                 var workflowClass = await context.WorkflowClasses.FirstOrDefaultAsync(
                     w => w.TenantId == tenantId && w.Name == name);
                 if (workflowClass == null)
                     continue;
 
-                var definition = WorkflowClassCompiler.MapToRuntimeDefinition(workflowClass);
-                if (definition.Status != WorkflowStatus.Published)
-                    definition.Publish();
-                context.WorkflowDefinitions.Add(definition);
-                await context.SaveChangesAsync();
+                await EnsureWorkflowClassRuntimePackageAsync(context, workflowClass);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[DataSeeder] Skipping runtime definition for '{name}': {ex.Message}");
             }
         }
+
+        await context.SaveChangesAsync();
     }
 
     public static async Task RepairExpenseApprovalV2GraphAsync(FlowOSDbContext context, Guid tenantId)

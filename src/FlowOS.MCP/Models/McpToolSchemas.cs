@@ -65,6 +65,36 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject GetAgentExecutionHistory() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Optional workflow instance filter. Omit for tenant-wide history."},
+            "fromUtc":{"type":"string","format":"date-time","description":"Inclusive UTC start. Defaults to 30 days before toUtc."},
+            "toUtc":{"type":"string","format":"date-time","description":"Exclusive UTC end. Defaults to the current UTC time."},
+            "status":{"type":"string","enum":["Running","Succeeded","Failed","Cancelled"]},
+            "limit":{"type":"integer","minimum":1,"maximum":200,"default":100},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetAgentEvaluationMetrics() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["fromUtc","toUtc"],
+          "properties":{
+            "fromUtc":{"type":"string","format":"date-time","description":"Inclusive UTC execution-start boundary."},
+            "toUtc":{"type":"string","format":"date-time","description":"Exclusive UTC execution-start boundary. Window maximum is 90 days."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject GetAgentContext() => JObject.Parse(
         """
         {
@@ -657,16 +687,17 @@ public static class McpToolSchemas
             "autoAdvanceAgents":{
               "type":"boolean",
               "default":true,
-              "description":"When a waiting step has actor Agent/Either and no completing business event is queued, host AutoCommitEvaluator without a live LLM. Default suggestion is the first autoCommit.allowedEvents at confidence 1.0."
+              "description":"When a waiting HumanTask/Command has actor Agent/Either and no completing event is queued, run the shared deterministic agent policy without a live LLM. Default suggestion is the first autoCommit.allowedEvents at confidence 1.0. Set false to wait and inspect pendingAgentTask."
             },
             "simulatedAgent":{
               "type":"object",
               "properties":{
-                "event":{"type":"string"},
-                "confidence":{"type":"number","minimum":0,"maximum":1,"default":1},
-                "agentId":{"type":"string","default":"RiskAnalysisAgent"}
+                "event":{"type":"string","description":"Contextual legal nextSteps event to evaluate."},
+                "confidence":{"type":"number","minimum":0,"maximum":1,"default":1,"description":"Compared with autoCommit.minConfidence."},
+                "agentId":{"type":"string","default":"RiskAnalysisAgent","description":"Agent identity used for trace attribution."}
               },
-              "additionalProperties":false
+              "additionalProperties":false,
+              "description":"Optional deterministic suggestion. Explicit queued completing events still win, agent commits bypass human capability checks, and timer events remain timer-owned."
             },
             "tenantId":{"type":"string","format":"uuid"}
           },

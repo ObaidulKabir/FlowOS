@@ -123,6 +123,50 @@ public static class DecisionPacketFactory
         return packet with { CanonicalContext = canonical };
     }
 
+    public static DecisionPacket CreateForSimulation(
+        StepBlueprint step,
+        string? currentState = null,
+        string? objective = null)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+
+        var legalNext = (step.NextSteps ?? new Dictionary<string, string>())
+            .Keys
+            .Where(key => !IsReservedRoute(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var reminders = (step.Sla?.Reminders ?? new List<StepReminderBlueprint>())
+            .Select(reminder => new SlaReminderFact(reminder.Duration, reminder.TriggerEvent))
+            .ToList();
+        var autoCommit = step.AutoCommit == null
+            ? null
+            : new AutoCommitPolicy(
+                step.AutoCommit.MinConfidence,
+                step.AutoCommit.AllowedEvents ?? new List<string>());
+
+        return new DecisionPacket(
+            Guid.Empty,
+            Guid.Empty,
+            step.StepId,
+            currentState,
+            step.StepType,
+            FlowOS.Domain.Enums.StepActor.Normalize(step.Actor),
+            step.DecisionGuideline,
+            null,
+            new Dictionary<string, object?>(),
+            legalNext,
+            Array.Empty<string>(),
+            step.AllowedRoles ?? step.RequiredRoles ?? new List<string>(),
+            reminders,
+            step.Sla?.TimeoutEvent,
+            new Dictionary<string, object>(),
+            string.IsNullOrWhiteSpace(objective)
+                ? "Simulate bounded-autonomy auto-commit"
+                : objective,
+            autoCommit,
+            Tools: AgentToolCatalog.FromStep(legalNext, step.AgentTools));
+    }
+
     private static StateMachineDefinition? TryMapStateMachine(WorkflowClass workflowClass)
     {
         var blueprint = workflowClass.Definition.StateMachine;

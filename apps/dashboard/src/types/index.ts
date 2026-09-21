@@ -62,6 +62,77 @@ export interface WorkflowInstance {
   completedAt?: string;
 }
 
+export interface AgentLatencyMetrics {
+  samples: number;
+  averageMs?: number;
+  p50Ms?: number;
+  p95Ms?: number;
+}
+
+export interface AgentTokenMetrics {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface AgentConfidenceBin {
+  label: string;
+  lowerBound: number;
+  upperBound: number;
+  upperBoundInclusive: boolean;
+  samples: number;
+  matchedOutcomes: number;
+  meanConfidence?: number;
+  observedMatchRate?: number;
+  brierScore?: number;
+}
+
+export interface AgentConfidenceCalibration {
+  samples: number;
+  brierScore?: number;
+  bins: AgentConfidenceBin[];
+}
+
+export interface AgentProviderModelMetrics {
+  providerAlias?: string;
+  providerName?: string;
+  model?: string;
+  runs: number;
+  succeededRuns: number;
+  failedRuns: number;
+  commits: number;
+  parks: number;
+  hostedQuotaDenials: number;
+  overrides: number;
+  suggestions: number;
+  evaluatedOutcomes: number;
+  matchedOutcomes: number;
+  latency: AgentLatencyMetrics;
+  tokens: AgentTokenMetrics;
+}
+
+export interface AgentEvaluationMetrics {
+  fromUtc: string;
+  toUtc: string;
+  runs: number;
+  succeededRuns: number;
+  failedRuns: number;
+  cancelledRuns: number;
+  runningRuns: number;
+  commits: number;
+  parks: number;
+  hostedQuotaDenials: number;
+  overrides: number;
+  suggestions: number;
+  evaluatedOutcomes: number;
+  unevaluatedOutcomes: number;
+  matchedOutcomes: number;
+  unmatchedOutcomes: number;
+  latency: AgentLatencyMetrics;
+  tokens: AgentTokenMetrics;
+  confidenceCalibration: AgentConfidenceCalibration;
+  providerModelBreakdown: AgentProviderModelMetrics[];
+}
+
 export interface TenantApiKeyDto {
   id: string;
   name: string;

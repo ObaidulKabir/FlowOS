@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult, CreateDraftRequest, TenantDto } from '../types';
+import {
+  AgentEvaluationMetrics,
+  AuthSession,
+  WorkflowClass,
+  WorkflowClassStatus,
+  WorkflowInstance,
+  ValidationResult,
+  CreateDraftRequest,
+  TenantDto
+} from '../types';
 import { api, setActiveTenantId } from '../api/client';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
@@ -12,7 +21,8 @@ import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { DemoVisualSimulator } from './DemoVisualSimulator';
 import { 
   Building2, Plus, RefreshCw, Key, Activity, 
-  Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical
+  Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
+  Bot, CheckCircle, AlertTriangle, Database
 } from 'lucide-react';
 
 interface Props {
@@ -21,11 +31,34 @@ interface Props {
   onTenantChange?: (newTenantId: string, newTenantName: string) => void;
 }
 
+const countFormatter = new Intl.NumberFormat();
+
+const formatCount = (value?: number) =>
+  value === undefined ? '—' : countFormatter.format(value);
+
+const blueprintStatusName = (status: WorkflowClass['status']) =>
+  (typeof status === 'number' ? WorkflowClassStatus[status] : String(status)).toLowerCase();
+
+const summarizeInstances = (instances: WorkflowInstance[]) => {
+  const counts = { running: 0, waiting: 0, completed: 0, failed: 0 };
+  instances.forEach(instance => {
+    const status = typeof instance.status === 'number'
+      ? ['running', 'waiting', 'completed', 'failed'][instance.status]
+      : String(instance.status ?? '').toLowerCase();
+
+    if (status in counts) {
+      counts[status as keyof typeof counts] += 1;
+    }
+  });
+  return { ...counts, active: counts.running + counts.waiting };
+};
+
 export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
   const [activeTab, setActiveTab] = useState<'Application' | 'Instances' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Application');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
+  const [agentMetrics, setAgentMetrics] = useState<AgentEvaluationMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedTenantId, setCopiedTenantId] = useState(false);
@@ -73,20 +106,26 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
   const loadData = async () => {
     setLoading(true);
     setError(null);
+    setAgentMetrics(null);
     try {
-      if (activeTab === 'Instances' || activeTab === 'Application' || activeTab === 'Simulator') {
-        const [instResult, bpResult] = await Promise.allSettled([
-          api.listInstances('Tenant'),
-          api.list(undefined, undefined, 'Tenant')
-        ]);
-        if (instResult.status === 'fulfilled') setInstances(instResult.value);
-        if (bpResult.status === 'fulfilled') setBlueprints(bpResult.value);
-        const failed = [instResult, bpResult].find(result => result.status === 'rejected') as PromiseRejectedResult | undefined;
-        if (failed && instResult.status === 'rejected' && bpResult.status === 'rejected') {
-          throw failed.reason;
-        }
-        if (failed) setError(failed.reason?.message || 'Failed to load workspace data');
+      const toUtc = new Date();
+      const fromUtc = new Date(toUtc.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const [instResult, bpResult, metricsResult] = await Promise.allSettled([
+        api.listInstances('Tenant'),
+        api.list(undefined, undefined, 'Tenant'),
+        api.getAgentEvaluationMetrics(fromUtc.toISOString(), toUtc.toISOString(), 'Tenant')
+      ]);
+
+      if (instResult.status === 'fulfilled') setInstances(instResult.value);
+      if (bpResult.status === 'fulfilled') setBlueprints(bpResult.value);
+      if (metricsResult.status === 'fulfilled') setAgentMetrics(metricsResult.value);
+
+      const results = [instResult, bpResult, metricsResult];
+      const failed = results.find(result => result.status === 'rejected') as PromiseRejectedResult | undefined;
+      if (failed && results.every(result => result.status === 'rejected')) {
+        throw failed.reason;
       }
+      if (failed) setError(failed.reason?.message || 'Some workspace counts could not be loaded');
     } catch (err: any) {
       setError(err.message || 'Failed to load workspace data');
     } finally {
@@ -157,6 +196,17 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
       alert(`Failed to save draft: ${err.message}`);
     }
   };
+
+  const instanceCounts = summarizeInstances(instances);
+  const publishedBlueprints = blueprints.filter(item =>
+    ['published', 'public'].includes(blueprintStatusName(item.status))
+  ).length;
+  const draftBlueprints = blueprints.filter(item =>
+    blueprintStatusName(item.status) === 'draft'
+  ).length;
+  const totalAgentTokens = agentMetrics
+    ? agentMetrics.tokens.inputTokens + agentMetrics.tokens.outputTokens
+    : undefined;
 
   return (
     <div className="space-y-6">
@@ -269,23 +319,111 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           </div>
         </div>
 
-        {/* 4 Stat Counters */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-800/80">
-          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-            <div className="text-[11px] text-slate-400">Running Instances</div>
-            <div className="text-lg font-bold text-white mt-0.5">{instances.length}</div>
+        {/* Workflow and bounded-agent operational counts */}
+        <div className="mt-6 pt-5 border-t border-slate-800/80">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Operational counts
+            </span>
+            <span className="text-[10px] text-cyan-300 flex items-center gap-1.5">
+              <Bot size={12} />
+              Agent telemetry uses a rolling 30-day window
+            </span>
           </div>
-          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-            <div className="text-[11px] text-slate-400">Applications</div>
-            <div className="text-lg font-bold text-blue-400 mt-0.5">{blueprints.length}</div>
-          </div>
-          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-            <div className="text-[11px] text-slate-400">Tenant Authority</div>
-            <div className="text-lg font-bold text-emerald-400 mt-0.5">Enforced</div>
-          </div>
-          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-            <div className="text-[11px] text-slate-400">Kernel Role</div>
-            <div className="text-lg font-bold text-slate-200 mt-0.5">Tenant</div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Layers size={12} className="text-blue-400" />
+                Applications
+              </div>
+              <div className="text-xl font-bold text-blue-300 mt-1">{formatCount(blueprints.length)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(publishedBlueprints)} published · {formatCount(draftBlueprints)} drafts
+              </div>
+            </div>
+
+            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Activity size={12} className="text-purple-400" />
+                Workflow Instances
+              </div>
+              <div className="text-xl font-bold text-white mt-1">{formatCount(instances.length)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(instanceCounts.active)} active · {formatCount(instanceCounts.completed)} completed
+              </div>
+            </div>
+
+            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Activity size={12} className="text-emerald-400" />
+                Active Work
+              </div>
+              <div className="text-xl font-bold text-emerald-300 mt-1">{formatCount(instanceCounts.active)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(instanceCounts.running)} running · {formatCount(instanceCounts.waiting)} waiting
+              </div>
+            </div>
+
+            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <CheckCircle size={12} className="text-emerald-400" />
+                Completed Work
+              </div>
+              <div className="text-xl font-bold text-emerald-300 mt-1">{formatCount(instanceCounts.completed)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                <span className={instanceCounts.failed > 0 ? 'text-rose-400' : ''}>
+                  {formatCount(instanceCounts.failed)} failed
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Bot size={12} className="text-cyan-400" />
+                Agent Runs
+              </div>
+              <div className="text-xl font-bold text-cyan-300 mt-1">{formatCount(agentMetrics?.runs)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(agentMetrics?.succeededRuns)} succeeded ·{' '}
+                <span className={agentMetrics?.failedRuns ? 'text-rose-400' : ''}>
+                  {formatCount(agentMetrics?.failedRuns)} failed
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <CheckCircle size={12} className="text-cyan-400" />
+                Auto-commits
+              </div>
+              <div className="text-xl font-bold text-cyan-300 mt-1">{formatCount(agentMetrics?.commits)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(agentMetrics?.overrides)} human overrides
+              </div>
+            </div>
+
+            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <AlertTriangle size={12} className="text-amber-400" />
+                Parked Suggestions
+              </div>
+              <div className="text-xl font-bold text-amber-300 mt-1">{formatCount(agentMetrics?.parks)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(agentMetrics?.hostedQuotaDenials)} quota denials
+              </div>
+            </div>
+
+            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Database size={12} className="text-violet-400" />
+                Agent Tokens
+              </div>
+              <div className="text-xl font-bold text-violet-300 mt-1">{formatCount(totalAgentTokens)}</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(agentMetrics?.tokens.inputTokens)} in · {formatCount(agentMetrics?.tokens.outputTokens)} out
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -316,7 +454,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               }`}
             >
               <Activity size={15} />
-              <span>⚡ Live Instances ({instances.length})</span>
+              <span>⚡ Workflow Instances ({instances.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('Events')}

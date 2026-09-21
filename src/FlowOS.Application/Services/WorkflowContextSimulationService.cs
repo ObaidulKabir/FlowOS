@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlowOS.Agents.Abstractions;
 using FlowOS.Application.Common.Exceptions;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
@@ -98,17 +99,29 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             initialPrepared.Payload,
             globalRoles,
             cancellationToken);
+        var eventQueue = new Queue<WorkflowContextSimulationEventRequest>(
+            request.Events ?? Array.Empty<WorkflowContextSimulationEventRequest>());
+        var agentEvents = new Dictionary<WorkflowContextSimulationEventRequest, AgentDecisionEnvelope>(
+            ReferenceEqualityComparer.Instance);
+        var evaluatedAgentSteps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        WorkflowContextSimulationPendingAgentTaskDto? pendingAgentTask = null;
         AppendAutomaticAdvances(
             trace,
             runtime,
             instance,
             initialExecutionContext,
             canonicalContext);
+        TryQueueAgentDecision(
+            runtime,
+            instance,
+            request,
+            eventQueue,
+            agentEvents,
+            evaluatedAgentSteps,
+            ref pendingAgentTask);
 
         var denied = false;
         var processedEvents = 0;
-        var eventQueue = new Queue<WorkflowContextSimulationEventRequest>(
-            request.Events ?? Array.Empty<WorkflowContextSimulationEventRequest>());
         var slaClockApplied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         InjectSlaClockEvents(
             runtime.WorkflowDefinition,
@@ -122,6 +135,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             if (processedEvents >= request.MaxSteps) break;
             processedEvents++;
             var scenarioEvent = eventQueue.Dequeue();
+            var isAgentCommit = agentEvents.Remove(scenarioEvent, out var agentDecision);
 
             if (string.IsNullOrWhiteSpace(scenarioEvent.EventType))
                 throw new ArgumentException($"Simulation event {processedEvents} must declare EventType.");
@@ -182,7 +196,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 break;
             }
 
-            var roleFailure = IsSlaClockEvent(beforeStep, eventType)
+            var roleFailure = isAgentCommit || IsSlaClockEvent(beforeStep, eventType)
                 ? null
                 : await ValidateHumanActivityAsync(runtime, beforeStep, eventType, eventRoles, tenantId, cancellationToken);
             if (roleFailure != null)
@@ -251,7 +265,9 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 fromState,
                 instance.CurrentState ?? fromState,
                 true,
-                result.Message,
+                isAgentCommit
+                    ? $"Agent:{agentDecision!.AgentId} auto-committed '{eventType}' at confidence {agentDecision.Candidate!.Confidence:0.00}."
+                    : result.Message,
                 null,
                 ToSourceDictionary(scenarioEvent.Payload),
                 ToObjectDictionary(prepared.Delta),
@@ -260,12 +276,27 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 PlanTransitionActions(beforeStep, afterStep, succeeded: true),
                 PendingWork(runtime.WorkflowDefinition, instance)));
 
+            if (!string.Equals(fromStep, instance.CurrentStepId, StringComparison.OrdinalIgnoreCase) ||
+                instance.Status is WorkflowInstanceStatus.Completed or WorkflowInstanceStatus.Failed)
+            {
+                pendingAgentTask = null;
+                evaluatedAgentSteps.Remove(fromStep);
+            }
+
             AppendAutomaticAdvances(
                 trace,
                 runtime,
                 instance,
                 executionContext,
                 canonicalContext);
+            TryQueueAgentDecision(
+                runtime,
+                instance,
+                request,
+                eventQueue,
+                agentEvents,
+                evaluatedAgentSteps,
+                ref pendingAgentTask);
             InjectSlaClockEvents(
                 runtime.WorkflowDefinition,
                 instance,
@@ -320,7 +351,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     runtime.StateMachineDefinition.Version,
                     runtime.StateMachineDefinition.InitialState,
                     runtime.StateMachineDefinition.States.OrderBy(state => state).ToList(),
-                    runtime.StateMachineDefinition.Transitions)));
+                    runtime.StateMachineDefinition.Transitions)),
+            pendingAgentTask);
     }
 
     private async Task<ResolvedSimulationRuntime> ResolveRuntimeAsync(
@@ -436,6 +468,113 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         }
 
         return context;
+    }
+
+    private static void TryQueueAgentDecision(
+        ResolvedSimulationRuntime runtime,
+        WorkflowInstance instance,
+        WorkflowContextSimulationRequest request,
+        Queue<WorkflowContextSimulationEventRequest> eventQueue,
+        IDictionary<WorkflowContextSimulationEventRequest, AgentDecisionEnvelope> agentEvents,
+        ISet<string> evaluatedAgentSteps,
+        ref WorkflowContextSimulationPendingAgentTaskDto? pendingAgentTask)
+    {
+        if (instance.Status is WorkflowInstanceStatus.Completed or WorkflowInstanceStatus.Failed)
+            return;
+
+        var step = FindCurrentStep(runtime.WorkflowDefinition, instance);
+        if (!DecisionPacketFactory.IsWaitingStep(step) ||
+            !StepActor.IsAgentHandled(step!.Actor) ||
+            HasQueuedCompletingEvent(step, eventQueue) ||
+            !evaluatedAgentSteps.Add(step.StepId))
+        {
+            return;
+        }
+
+        var packet = DecisionPacketFactory.Create(
+            instance,
+            runtime.WorkflowDefinition,
+            runtime.StateMachineDefinition,
+            Array.Empty<DomainEvent>(),
+            canonicalData: null,
+            policyGuideline: runtime.Revision.Definition.PolicyGuideline,
+            objective: "Simulate bounded-autonomy auto-commit");
+        var simulatedAgent = request.SimulatedAgent == null
+            ? null
+            : new AgentSimulationSuggestion(
+                request.SimulatedAgent.Event,
+                request.SimulatedAgent.Confidence,
+                request.SimulatedAgent.AgentId);
+        var decision = AgentDecisionPolicy.EvaluateSimulation(
+            packet,
+            request.AutoAdvanceAgents,
+            simulatedAgent);
+
+        if (decision.Evaluation.ShouldCommit)
+        {
+            var queued = new WorkflowContextSimulationEventRequest(
+                decision.Candidate!.EventType);
+            PrependEvent(eventQueue, queued);
+            agentEvents[queued] = decision;
+            pendingAgentTask = null;
+            return;
+        }
+
+        pendingAgentTask = ToPendingAgentTask(step, decision);
+    }
+
+    private static bool HasQueuedCompletingEvent(
+        WorkflowStepDefinition step,
+        IEnumerable<WorkflowContextSimulationEventRequest> eventQueue)
+    {
+        foreach (var queued in eventQueue)
+        {
+            if (string.IsNullOrWhiteSpace(queued.EventType) ||
+                SlaSimulationClock.IsReminderEvent(step.Sla, queued.EventType))
+            {
+                continue;
+            }
+
+            if (step.NextSteps.Keys.Any(key =>
+                    string.Equals(key, queued.EventType, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void PrependEvent(
+        Queue<WorkflowContextSimulationEventRequest> eventQueue,
+        WorkflowContextSimulationEventRequest scenarioEvent)
+    {
+        var remaining = eventQueue.ToList();
+        eventQueue.Clear();
+        eventQueue.Enqueue(scenarioEvent);
+        foreach (var item in remaining)
+            eventQueue.Enqueue(item);
+    }
+
+    private static WorkflowContextSimulationPendingAgentTaskDto ToPendingAgentTask(
+        WorkflowStepDefinition step,
+        AgentDecisionEnvelope decision)
+    {
+        var suggested = decision.Candidate ?? decision.OriginalCandidate;
+        var autoCommit = step.AutoCommit == null
+            ? null
+            : new WorkflowContextSimulationAutoCommitDto(
+                step.AutoCommit.MinConfidence,
+                step.AutoCommit.AllowedEvents);
+        return new WorkflowContextSimulationPendingAgentTaskDto(
+            step.StepId,
+            StepActor.Normalize(step.Actor),
+            decision.AgentId,
+            suggested?.EventType,
+            suggested?.Confidence ?? 0.0,
+            decision.Evaluation.Reason,
+            decision.Evaluation.Kind.ToString(),
+            autoCommit);
     }
 
     private void AppendAutomaticAdvances(
@@ -689,6 +828,14 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         return step.StepType switch
         {
             WorkflowStepType.HumanTask => DescribeHumanTaskPendingWork(step),
+            WorkflowStepType.Command when DecisionPacketFactory.IsWaitingStep(step) => new[]
+            {
+                new WorkflowContextSimulationPendingWorkDto(
+                    "Command",
+                    step.StepId,
+                    step.NextSteps.Keys.FirstOrDefault(),
+                    $"Waiting Command is handled by actor {StepActor.Normalize(step.Actor)}.")
+            },
             WorkflowStepType.Timer => new[]
             {
                 new WorkflowContextSimulationPendingWorkDto(

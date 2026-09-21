@@ -86,6 +86,9 @@ builder.Services.AddMediatR(cfg =>
 builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.OutboxProcessorService>();
 builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.WorkflowTimerProcessorService>();
 builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.InMemoryDataCleanupService>();
+builder.Services.Configure<AgentTaskProcessorOptions>(
+    builder.Configuration.GetSection(AgentTaskProcessorOptions.ConfigurationSection));
+builder.Services.AddHostedService<AgentTaskProcessorService>();
 
 builder.Services.AddCors(options =>
 {
@@ -241,6 +244,22 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         logger.LogError(ex, "Data seeding failed; the API will still listen so /api is not a 502.");
+        context.ChangeTracker.Clear();
+    }
+
+    try
+    {
+        var backfill = scope.ServiceProvider.GetRequiredService<WorkflowDefinitionLineageBackfillService>();
+        var result = await backfill.BackfillAsync();
+        logger.LogInformation(
+            "Workflow lineage backfill scanned {Scanned}, repaired {Repaired}, and created {Created} state-machine definitions.",
+            result.DefinitionsScanned,
+            result.DefinitionsRepaired,
+            result.StateMachinesCreated);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Workflow lineage backfill failed; class-backed definitions remain fail-closed.");
     }
 }
 

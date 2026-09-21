@@ -28,6 +28,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 18 | [Commercial Policy & MCP Entitlements](18-commercial-and-mcp-entitlements.md) | Subscription plans, trial vs paid runtime, and how MCP is included |
 | 19 | [OS-1 Honesty Gate](19-os-release-gate.md) | When FlowOS may be called a business automation OS vs a workflow engine |
 | 20 | [Hosted LLM & Automation Policy](20-hosted-llm-and-automation-policy.md) | Paid-plan FlowOS OpenAI default, daily quota, BYO opt-in, host key rules |
+| 21 | [Competitive Comparison](21-competitive-comparison.md) | OS-1 vs Temporal, Camunda 8, Step Functions, Conductor/Orkes, n8n/Zapier |
 
 ## Reading paths
 
@@ -39,6 +40,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 * **"I want one workflow template for many business domains"** → [WorkflowClass Governance](09-workflow-class-governance.md) → [Workflow Context Bindings](17-workflow-context-bindings.md).
 * **"I need to know exactly what is and isn't enforced today"** → [Known Limitations & Gaps](15-known-limitations-and-gaps.md).
 * **"Can we call this a business automation OS?"** → [OS-1 Honesty Gate](19-os-release-gate.md) (MCP: `flowos://guides/os-release-gate`).
+* **"How does FlowOS compare to Temporal / Camunda / Step Functions?"** → [Competitive Comparison](21-competitive-comparison.md).
 
 ## Documentation conventions
 

@@ -65,6 +65,7 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
             db.Roles.Add(financeManager);
             var hrManager = new Role(_tenantId, "HRManager");
             hrManager.AddPermission("event.publish.EVT-APPROVE");
+            hrManager.AddPermission("event.publish.EVT-LEAVE-APPROVE");
             db.Roles.Add(hrManager);
             await db.SaveChangesAsync();
             sourceId = source.Id;
@@ -133,7 +134,7 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
         var roleDeniedSimulation = await roleDeniedSimulationResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Denied", roleDeniedSimulation.GetProperty("status").GetString());
         Assert.Contains(
-            "FinanceManager",
+            "required capability",
             roleDeniedSimulation.GetProperty("trace")[1].GetProperty("reason").GetString());
 
         var validateResponse = await client.PostAsync($"/api/context-bindings/{bindingId}/validate", null);
@@ -188,8 +189,12 @@ public class Workflow_Context_Binding_E2E_Tests : IClassFixture<WebApplicationFa
         var leaveBindingId = createdLeave.GetProperty("id").GetGuid();
         (await client.PostAsync($"/api/context-bindings/{leaveBindingId}/validate", null))
             .EnsureSuccessStatusCode();
-        (await client.PostAsync($"/api/context-bindings/{leaveBindingId}/activate", null))
-            .EnsureSuccessStatusCode();
+        var activateLeaveResponse = await client.PostAsync(
+            $"/api/context-bindings/{leaveBindingId}/activate",
+            null);
+        Assert.True(
+            activateLeaveResponse.IsSuccessStatusCode,
+            await activateLeaveResponse.Content.ReadAsStringAsync());
 
         var startResponse = await client.PostAsJsonAsync("/api/workflows/start", new
         {

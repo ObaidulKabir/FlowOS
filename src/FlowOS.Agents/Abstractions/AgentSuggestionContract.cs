@@ -31,6 +31,151 @@ public static class AgentSuggestionContract
     }
 }
 
+public enum AgentDecisionKind
+{
+    Skipped,
+    Commit,
+    Park
+}
+
+public sealed record AgentSimulationSuggestion(
+    string? Event,
+    double Confidence = 1.0,
+    string AgentId = AgentDecisionPolicy.DefaultAgentId);
+
+public sealed record AgentDecisionEvaluation(
+    AgentDecisionKind Kind,
+    SuggestedAction? Candidate,
+    string Reason)
+{
+    public bool ShouldCommit => Kind == AgentDecisionKind.Commit;
+    public bool IsParked => Kind == AgentDecisionKind.Park;
+    public string? ParkReason => IsParked ? Reason : null;
+}
+
+public sealed record AgentDecisionEnvelope(
+    string AgentId,
+    AgentResult Result,
+    AgentDecisionEvaluation Evaluation,
+    SuggestedAction? OriginalCandidate = null)
+{
+    public SuggestedAction? Candidate => Evaluation.Candidate;
+}
+
+/// <summary>
+/// Shared bounded-autonomy policy used by live execution and deterministic simulation.
+/// Provider execution stays outside this class; it only filters and evaluates suggestions.
+/// </summary>
+public static class AgentDecisionPolicy
+{
+    public const string DefaultAgentId = "RiskAnalysisAgent";
+
+    public static AgentDecisionEnvelope Evaluate(
+        DecisionPacket packet,
+        AgentResult result,
+        string? agentId = null)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+        ArgumentNullException.ThrowIfNull(result);
+
+        var originalCandidate = HighestConfidence(result.SuggestedActions);
+        var filtered = AgentSuggestionContract.RestrictToLegalEvents(
+            result,
+            packet.LegalNextStepEvents);
+        var candidate = HighestConfidence(filtered.SuggestedActions);
+        var resolvedAgentId = NormalizeAgentId(agentId);
+
+        if (candidate == null)
+        {
+            return new AgentDecisionEnvelope(
+                resolvedAgentId,
+                filtered,
+                new AgentDecisionEvaluation(
+                    AgentDecisionKind.Park,
+                    null,
+                    "No legal suggestion."),
+                originalCandidate);
+        }
+
+        var canCommit = AutoCommitEvaluator.CanCommit(packet, candidate, out var reason);
+        return new AgentDecisionEnvelope(
+            resolvedAgentId,
+            filtered,
+            new AgentDecisionEvaluation(
+                canCommit ? AgentDecisionKind.Commit : AgentDecisionKind.Park,
+                candidate,
+                reason),
+            originalCandidate);
+    }
+
+    public static AgentDecisionEnvelope EvaluateSimulation(
+        DecisionPacket packet,
+        bool autoAdvanceAgents,
+        AgentSimulationSuggestion? simulatedAgent = null)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        var agentId = NormalizeAgentId(simulatedAgent?.AgentId);
+        if (!StepActorIsAgentHandled(packet.Actor))
+        {
+            return Skipped(
+                agentId,
+                $"Step actor '{packet.Actor}' does not allow agent handling.");
+        }
+
+        if (!autoAdvanceAgents && simulatedAgent == null)
+        {
+            return Skipped(agentId, "Agent auto-advance is disabled.");
+        }
+
+        var suggestedEvent = string.IsNullOrWhiteSpace(simulatedAgent?.Event)
+            ? packet.AutoCommit?.AllowedEvents.FirstOrDefault()
+            : simulatedAgent.Event.Trim();
+        var confidence = Math.Clamp(simulatedAgent?.Confidence ?? 1.0, 0.0, 1.0);
+        var result = new AgentResult
+        {
+            Success = true,
+            Insight = "Deterministic simulation suggestion.",
+            SuggestedActions = string.IsNullOrWhiteSpace(suggestedEvent)
+                ? new List<SuggestedAction>()
+                :
+                [
+                    new SuggestedAction(
+                        suggestedEvent,
+                        "Simulated agent suggestion.",
+                        confidence)
+                ]
+        };
+
+        return Evaluate(packet, result, agentId);
+    }
+
+    private static AgentDecisionEnvelope Skipped(string agentId, string reason) =>
+        new(
+            agentId,
+            new AgentResult
+            {
+                Success = true,
+                Insight = reason
+            },
+            new AgentDecisionEvaluation(AgentDecisionKind.Skipped, null, reason));
+
+    private static SuggestedAction? HighestConfidence(IEnumerable<SuggestedAction> actions) =>
+        actions
+            .Select((action, index) => new { Action = action, Index = index })
+            .OrderByDescending(item => item.Action.Confidence)
+            .ThenBy(item => item.Index)
+            .Select(item => item.Action)
+            .FirstOrDefault();
+
+    private static bool StepActorIsAgentHandled(string actor) =>
+        string.Equals(actor, "Agent", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(actor, "Either", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeAgentId(string? agentId) =>
+        string.IsNullOrWhiteSpace(agentId) ? DefaultAgentId : agentId.Trim();
+}
+
 public static class AutoCommitEvaluator
 {
     public static bool CanCommit(DecisionPacket packet, SuggestedAction action, out string reason)
