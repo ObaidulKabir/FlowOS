@@ -343,26 +343,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </button>
 
         {/* Modal Header & Navigation */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400">
-              FlowOS Tenant Control Plane
-            </span>
+        <div className="flex items-start gap-3 pr-10">
+          <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-slate-950 to-cyan-950 border border-cyan-500/25 p-0.5 shadow-lg shadow-cyan-500/10">
+            <img
+              src="/brand/flowos-icon.png"
+              alt=""
+              aria-hidden="true"
+              className="w-full h-full object-contain"
+            />
           </div>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400">
+                FlowOS Tenant Control Plane
+              </span>
+            </div>
 
-          <h2 className="text-2xl font-extrabold text-white tracking-tight">
-            {mode === 'login' && 'Sign In to FlowOS'}
-            {mode === 'register' && 'Register New Tenant'}
-            {mode === 'verify' && 'Verify Email Address'}
-            {mode === 'admin' && 'Platform Governance Login'}
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            {mode === 'login' && 'Access your isolated enterprise workspace and live workflow pipelines.'}
-            {mode === 'register' && 'Provision an isolated multi-tenant environment with private API keys.'}
-            {mode === 'verify' && 'Verification dispatched from official address: admin@flowosbd.com'}
-            {mode === 'admin' && 'Root platform administrator access for fleet management and audits.'}
-          </p>
+            <h2 className="text-2xl font-extrabold text-white tracking-tight">
+              {mode === 'login' && 'Sign In to FlowOS'}
+              {mode === 'register' && 'Register New Tenant'}
+              {mode === 'verify' && 'Verify Email Address'}
+              {mode === 'admin' && 'Platform Governance Login'}
+            </h2>
+            <p className="text-xs text-slate-400 mt-1">
+              {mode === 'login' && 'Access your isolated enterprise workspace and live workflow pipelines.'}
+              {mode === 'register' && 'Provision an isolated multi-tenant environment with private API keys.'}
+              {mode === 'verify' && 'Verification dispatched from official address: admin@flowosbd.com'}
+              {mode === 'admin' && 'Root platform administrator access for fleet management and audits.'}
+            </p>
+          </div>
         </div>
 
         {/* Top Mode Tabs */}

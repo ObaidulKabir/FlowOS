@@ -35,8 +35,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           
           {/* Logo */}
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/25">
-              F
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-900 to-cyan-950/70 border border-cyan-500/20 flex items-center justify-center shadow-lg shadow-cyan-500/10 p-0.5">
+              <img
+                src="/brand/flowos-icon.png"
+                alt=""
+                aria-hidden="true"
+                className="w-full h-full object-contain drop-shadow-md"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -110,6 +115,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Hero Section */}
       <header className="relative pt-16 pb-20 px-6 max-w-7xl mx-auto text-center z-10">
+        <img
+          src="/brand/flowos-logo.png"
+          alt="FlowOS"
+          className="h-24 sm:h-28 w-auto object-contain mx-auto mb-5 drop-shadow-[0_18px_35px_rgba(34,211,238,0.16)]"
+        />
         
         {/* Status Pill */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 text-xs font-medium text-slate-300 mb-6 shadow-sm">

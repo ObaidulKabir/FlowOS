@@ -147,10 +147,22 @@ function App() {
               <div className="flex items-center space-x-3">
                 <button
                   onClick={() => setCurrentView('landing')}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-lg bg-blue-600 shadow-blue-500/30 hover:scale-105 transition-all"
+                  className="relative w-10 h-10 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-slate-950 to-cyan-950 border border-cyan-500/30 shadow-cyan-500/10 hover:scale-105 transition-all p-0.5"
                   title="Return to FlowOS Landing Page"
                 >
-                  {session.role === 'Admin' ? '👑' : 'F'}
+                  <img
+                    src="/brand/flowos-icon.png"
+                    alt="FlowOS"
+                    className="w-full h-full object-contain drop-shadow-md"
+                  />
+                  {session.role === 'Admin' && (
+                    <span
+                      aria-label="Platform administrator"
+                      className="absolute -top-1.5 -right-1.5 text-[11px] leading-none"
+                    >
+                      👑
+                    </span>
+                  )}
                 </button>
                 <div>
                   <div className="flex items-center gap-2">
