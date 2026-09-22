@@ -15,6 +15,20 @@ export function mcpRpcPath(origin = typeof window !== 'undefined' ? window.locat
 }
 
 export function mcpRpcUrl(origin = typeof window !== 'undefined' ? window.location.origin : ''): string {
+  const configuredUrl = import.meta.env.VITE_MCP_URL?.trim();
+  if (configuredUrl)
+    return configuredUrl;
+
+  try {
+    const local = new URL(origin);
+    const isLocalHost = local.hostname === 'localhost' || local.hostname === '127.0.0.1';
+    const isDashboardPort = ['3000', '4173', '4174', '5173'].includes(local.port);
+    if (isLocalHost && isDashboardPort)
+      return `${local.protocol}//${local.hostname}:8081/mcp`;
+  } catch {
+    // Fall through to same-origin resolution for relative or malformed input.
+  }
+
   const base = (origin || '').replace(/\/$/, '');
   if (!base)
     return mcpRpcPath(origin);

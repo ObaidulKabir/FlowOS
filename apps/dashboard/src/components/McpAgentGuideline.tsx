@@ -93,7 +93,7 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <a
-            href={mcpPath}
+            href={mcpUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg shadow-blue-500/20 transition-all border border-blue-400/30"

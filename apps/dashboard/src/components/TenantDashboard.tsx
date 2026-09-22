@@ -19,6 +19,7 @@ import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { DemoVisualSimulator } from './DemoVisualSimulator';
+import { TenantMcpConfiguration } from './TenantMcpConfiguration';
 import { 
   Building2, Plus, RefreshCw, Key, Activity, 
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
@@ -54,7 +55,7 @@ const summarizeInstances = (instances: WorkflowInstance[]) => {
 };
 
 export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
-  const [activeTab, setActiveTab] = useState<'Application' | 'Instances' | 'Events' | 'Keys' | 'Simulator' | 'Capabilities' | 'Comparison'>('Application');
+  const [activeTab, setActiveTab] = useState<'Application' | 'Instances' | 'Events' | 'Keys' | 'Mcp' | 'Simulator' | 'Capabilities' | 'Comparison'>('Application');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
@@ -310,6 +311,13 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               <span>API Keys</span>
             </button>
             <button
+              onClick={() => setActiveTab('Mcp')}
+              className="px-3.5 py-2.5 bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-700/50 text-cyan-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <Bot size={14} />
+              <span>MCP Config</span>
+            </button>
+            <button
               onClick={loadData}
               className="p-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl transition-colors"
               title="Refresh workspace"
@@ -475,6 +483,15 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
               <span>🔑 Applications & API Keys</span>
             </button>
             <button
+              onClick={() => setActiveTab('Mcp')}
+              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
+                activeTab === 'Mcp' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white' : 'text-cyan-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <Bot size={15} />
+              <span>🤖 Cursor / Claude MCP</span>
+            </button>
+            <button
               type="button"
               onClick={() => setActiveTab('Simulator')}
               className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
@@ -585,6 +602,15 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
 
           {activeTab === 'Keys' && (
             <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
+          )}
+
+          {activeTab === 'Mcp' && (
+            <TenantMcpConfiguration
+              tenantId={session.tenantId}
+              tenantName={session.tenantName}
+              sessionApiKey={session.apiKey}
+              onOpenApiKeys={() => setActiveTab('Keys')}
+            />
           )}
 
           {activeTab === 'Simulator' && (
