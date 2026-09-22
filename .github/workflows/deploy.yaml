@@ -22,9 +22,9 @@ jobs:
           script: |
             set -euo pipefail
             cd  ${{ secrets.APP_PATH }}
-            git fetch -p
-            git checkout ${{ github.ref_name }}
-            git reset --hard origin/${{ github.ref_name }}
+            git fetch origin
+            git checkout -B main origin/main
+            docker network create traefik-network || true
 
       - name: Build and Deploy Containers 
         uses: appleboy/ssh-action@v1

@@ -68,8 +68,8 @@ services:
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
       - MCP_TRANSPORT=http
-      - MCP_API_KEY=${MCP_API_KEY:?MCP_API_KEY is required}
-      - MCP_ROLE=${MCP_ROLE:?MCP_ROLE is required}
+      - MCP_API_KEY=${MCP_API_KEY:-}
+      - MCP_ROLE=${MCP_ROLE:-}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-*}
       - FLOWOS_DOMAIN=${FLOWOS_DOMAIN}
       - FLOWOS_PUBLIC_ORIGIN=${FLOWOS_PUBLIC_ORIGIN:-}
