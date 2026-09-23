@@ -168,6 +168,21 @@ public static class ToolRegistration
         registry.Register("publish_workflowclass", McpToolDescriptions.For("publish_workflowclass"), McpToolSchemas.PublishWorkflowClass(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.Publish(args)));
 
+        registry.Register("diagnose_caller_permissions", McpToolDescriptions.For("diagnose_caller_permissions"), McpToolSchemas.DiagnoseCallerPermissions(),
+            async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.DiagnoseCallerPermissions(args)));
+
+        registry.Register("list_tenant_roles", McpToolDescriptions.For("list_tenant_roles"), McpToolSchemas.TenantOptional(),
+            async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.ListTenantRoles(args)));
+
+        registry.Register("create_tenant_role", McpToolDescriptions.For("create_tenant_role"), McpToolSchemas.CreateTenantRole(),
+            async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.CreateTenantRole(args)));
+
+        registry.Register("grant_role_capability", McpToolDescriptions.For("grant_role_capability"), McpToolSchemas.ChangeRoleCapability(),
+            async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.GrantRoleCapability(args)));
+
+        registry.Register("revoke_role_capability", McpToolDescriptions.For("revoke_role_capability"), McpToolSchemas.ChangeRoleCapability(),
+            async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.RevokeRoleCapability(args)));
+
         registry.Register("start_workflow", McpToolDescriptions.For("start_workflow"), McpToolSchemas.StartWorkflow(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.StartWorkflow(args)));
 

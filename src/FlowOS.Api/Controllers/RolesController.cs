@@ -41,6 +41,19 @@ public class RolesController : ControllerBase
         return Ok();
     }
 
+    [HttpDelete("{id}/capabilities/{capabilityCode}")]
+    public async Task<IActionResult> RemoveCapability(Guid id, string capabilityCode)
+    {
+        var command = new RemoveCapabilityFromRoleCommand(
+            _currentUser.TenantId,
+            id,
+            Uri.UnescapeDataString(capabilityCode));
+        var success = await _mediator.Send(command);
+
+        if (!success) return NotFound();
+        return NoContent();
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> GetRole(Guid id)
     {

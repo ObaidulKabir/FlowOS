@@ -57,7 +57,10 @@ public class TenantAuthTests : IDisposable
             _jwtTokenService,
             _emailSender,
             _configuration,
-            NullLogger<TenantAuthService>.Instance);
+            NullLogger<TenantAuthService>.Instance,
+            new TenantSecurityProvisioningService(
+                _context,
+                NullLogger<TenantSecurityProvisioningService>.Instance));
     }
 
     public void Dispose()
@@ -99,6 +102,15 @@ public class TenantAuthTests : IDisposable
         Assert.Equal("TechCorp Lead", user.FullName);
         Assert.Equal("Admin", user.Role);
         Assert.True(_passwordHasher.VerifyPassword("SecurePassword123!", user.PasswordHash));
+
+        var roles = await _context.Roles
+            .Where(role => role.TenantId == result.TenantId)
+            .ToListAsync();
+        var admin = Assert.Single(roles, role => role.Name == "Admin");
+        var apiKey = Assert.Single(roles, role => role.Name == "ApiKey");
+        Assert.Contains("workflow.start", admin.Permissions);
+        Assert.Contains("iam.manage", admin.Permissions);
+        Assert.Contains("workflow.start", apiKey.Permissions);
 
         // Verify Email Sent via IEmailSender
         Assert.Single(_emailSender.SentEmails);

@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
+using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
 using FlowOS.Domain.Entities;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Services.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,18 +16,29 @@ namespace FlowOS.Api.Controllers;
 
 [ApiController]
 [Route("api/tenants")]
+[Authorize]
 public class TenantsController : ControllerBase
 {
     private readonly FlowOSDbContext _context;
+    private readonly ICurrentUser _currentUser;
+    private readonly TenantSecurityProvisioningService _securityProvisioning;
 
-    public TenantsController(FlowOSDbContext context)
+    public TenantsController(
+        FlowOSDbContext context,
+        ICurrentUser currentUser,
+        TenantSecurityProvisioningService securityProvisioning)
     {
         _context = context;
+        _currentUser = currentUser;
+        _securityProvisioning = securityProvisioning;
     }
 
     [HttpGet]
     public async Task<IActionResult> ListTenants()
     {
+        if (!IsPlatformAdmin())
+            return Forbid();
+
         var tenants = await _context.Tenants
             .AsNoTracking()
             .OrderByDescending(t => t.CreatedAt)
@@ -72,6 +87,9 @@ public class TenantsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> RegisterTenant([FromBody] RegisterTenantRequest request)
     {
+        if (!IsPlatformAdmin())
+            return Forbid();
+
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("Tenant name is required.");
 
@@ -96,6 +114,7 @@ public class TenantsController : ControllerBase
         _context.TenantApiKeys.Add(apiKey);
 
         await _context.SaveChangesAsync();
+        await _securityProvisioning.EnsureTenantAsync(tenant.TenantId);
 
         return CreatedAtAction(nameof(GetTenantById), new { id = tenant.TenantId }, new RegisterTenantResponse
         {
@@ -136,6 +155,9 @@ public class TenantsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetTenantById(Guid id)
     {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
         var tenant = await _context.Tenants.FindAsync(id);
         if (tenant == null) return NotFound("Tenant not found.");
 
@@ -177,6 +199,9 @@ public class TenantsController : ControllerBase
     [HttpGet("{id}/keys")]
     public async Task<IActionResult> ListKeys(Guid id)
     {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
         var tenantExists = await _context.Tenants.AnyAsync(t => t.TenantId == id);
         if (!tenantExists) return NotFound("Tenant not found.");
 
@@ -207,6 +232,9 @@ public class TenantsController : ControllerBase
     [HttpPost("{id}/keys")]
     public async Task<IActionResult> GenerateKey(Guid id, [FromBody] GenerateKeyRequest request)
     {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
         var tenant = await _context.Tenants.FindAsync(id);
         if (tenant == null) return NotFound("Tenant not found.");
 
@@ -242,6 +270,9 @@ public class TenantsController : ControllerBase
     [HttpDelete("{id}/keys/{keyId}")]
     public async Task<IActionResult> RevokeKey(Guid id, Guid keyId)
     {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
         var key = await _context.TenantApiKeys.FirstOrDefaultAsync(k => k.TenantId == id && k.Id == keyId);
         if (key == null) return NotFound("API Key not found.");
 
@@ -250,6 +281,14 @@ public class TenantsController : ControllerBase
 
         return NoContent();
     }
+
+    private bool CanAccessTenant(Guid tenantId)
+        => tenantId != Guid.Empty &&
+           (_currentUser.TenantId == tenantId || IsPlatformAdmin());
+
+    private bool IsPlatformAdmin()
+        => _currentUser.TenantId == TenantIdentityRules.PlatformTenantId &&
+           _currentUser.Roles.Any(TenantIdentityRules.IsPrivilegedRole);
 }
 
 public class RegisterTenantRequest

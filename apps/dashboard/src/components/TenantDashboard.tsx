@@ -13,6 +13,7 @@ import { api, setActiveTenantId } from '../api/client';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { TenantApiKeyManager } from './TenantApiKeyManager';
+import { TenantRuntimeRolesPanel } from './TenantRuntimeRolesPanel';
 import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
@@ -601,7 +602,10 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           )}
 
           {activeTab === 'Keys' && (
-            <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
+            <div className="space-y-6">
+              <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
+              <TenantRuntimeRolesPanel />
+            </div>
           )}
 
           {activeTab === 'Mcp' && (

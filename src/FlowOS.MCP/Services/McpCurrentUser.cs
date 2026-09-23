@@ -12,6 +12,8 @@ public static class McpRequestContext
 {
     private static readonly AsyncLocal<Guid> TenantIdCurrent = new();
     private static readonly AsyncLocal<string?> RoleCurrent = new();
+    private static readonly AsyncLocal<IReadOnlyCollection<string>?> ScopesCurrent = new();
+    private static readonly AsyncLocal<bool> ApiKeyCurrent = new();
     private static readonly AsyncLocal<bool> AuthenticatedTransportCurrent = new();
 
     public static Guid TenantId
@@ -26,6 +28,18 @@ public static class McpRequestContext
         set => RoleCurrent.Value = value;
     }
 
+    public static IReadOnlyCollection<string> Scopes
+    {
+        get => ScopesCurrent.Value ?? Array.Empty<string>();
+        set => ScopesCurrent.Value = value;
+    }
+
+    public static bool IsApiKey
+    {
+        get => ApiKeyCurrent.Value;
+        set => ApiKeyCurrent.Value = value;
+    }
+
     public static bool IsAuthenticatedTransport
     {
         get => AuthenticatedTransportCurrent.Value;
@@ -36,6 +50,8 @@ public static class McpRequestContext
     {
         TenantIdCurrent.Value = Guid.Empty;
         RoleCurrent.Value = null;
+        ScopesCurrent.Value = null;
+        ApiKeyCurrent.Value = false;
         AuthenticatedTransportCurrent.Value = false;
     }
 }
@@ -55,4 +71,8 @@ public class McpCurrentUser : ICurrentUser
                 : new List<string> { McpRequestContext.Role! };
         }
     }
+
+    public IReadOnlyCollection<string> Scopes => McpRequestContext.Scopes;
+
+    public bool IsApiKey => McpRequestContext.IsApiKey;
 }

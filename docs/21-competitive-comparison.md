@@ -12,7 +12,7 @@ The defensible FlowOS position is the complete governed chain:
 
 > MCP authoring → validation → side-effect-free simulation → the same live decision policy → confirmation/idempotency → dual-kernel legal transition → durable audit and outcome metrics.
 
-FlowOS should lead with **governed outcomes over MCP**, not “we have MCP” or “we have more tools.” The 74-tool registry is useful breadth and is contract-tested, but breadth becomes an advantage only when agents can select the right journey safely.
+FlowOS should lead with **governed outcomes over MCP**, not “we have MCP” or “we have more tools.” The 79-tool registry is useful breadth and is contract-tested, but breadth becomes an advantage only when agents can select the right journey safely.
 
 ## Buy FlowOS when
 
@@ -46,7 +46,7 @@ The buyer needs tenant SaaS where AI agents author, simulate, and run **legal** 
 
 | Platform | Current MCP position | Strongest MCP capability | Gap relative to the FlowOS target |
 | --- | --- | --- | --- |
-| **FlowOS** | Built-in Streamable HTTP control plane; **74 contract-tested tools** across design, validation, publication, execution, simulation, agents, and administration | Lifecycle breadth plus tenant/capability checks, risk metadata, confirmation, idempotency, Law enforcement, and shared simulation/live agent policy | Does not yet expose every published workflow as its own dynamic MCP tool; OAuth/OIDC and broader client conformance evidence remain later |
+| **FlowOS** | Built-in Streamable HTTP control plane; **79 contract-tested tools** across design, validation, publication, execution, simulation, agents, and administration | Lifecycle breadth plus tenant/capability checks, risk metadata, confirmation, idempotency, Law enforcement, and shared simulation/live agent policy | Does not yet expose every published workflow as its own dynamic MCP tool; OAuth/OIDC and broader client conformance evidence remain later |
 | **Temporal** | Official Code Exchange operations server, documentation MCP, and first-party durable-MCP guidance | Workflow operations and using Temporal durability behind custom MCP tools | Workflow authoring stays code-first; legal-event policy, HumanTask OS, and agent evaluation are application code |
 | **Camunda 8** | Built-in Orchestration Cluster MCP from 8.9; Processes MCP in 8.10 | Strong operations plus automatic process-as-tool exposure | One BPMN process model rather than separately pinned Law and Work; no shared FlowOS-style legal-event simulation/commit evaluator |
 | **AWS Step Functions** | AWS Labs Step Functions Tool MCP Server and broader Serverless MCP tooling | IAM-governed, allowlisted state machines as tools; AWS resource creation/operations | AWS lock-in; ASL combines authority and work; bounded tenant agent policy and HumanTask fallback are custom |
@@ -76,7 +76,7 @@ The buyer needs tenant SaaS where AI agents author, simulate, and run **legal** 
 | --- | --- | --- |
 | P0 | Contract truth | Generate discovery count, schemas, examples, errors, and deprecations from one registry; prevent dashboard/docs drift. |
 | P0 | Simulation → execution proof | Present dry-run, decision diff, confirmation, idempotency, legal commit, and audit as one visible safety chain. |
-| P1 | Guided tool packs | Group 74 tools into design, publish, operate, incident, and agent journeys so clients choose outcomes rather than isolated endpoints. |
+| P1 | Guided tool packs | Group 79 tools into design, publish, operate, incident, and agent journeys so clients choose outcomes rather than isolated endpoints. |
 | P1 | Measured reliability | Publish task success, invalid-call rate, p95 latency, overrides, and outcome-match rate by MCP client and release. |
 | P1 | Workflow-as-tool publication | Safely advertise selected published WorkflowClasses as narrowly scoped MCP tools without bypassing Law or tenant policy. |
 
@@ -130,7 +130,7 @@ The buyer needs tenant SaaS where AI agents author, simulate, and run **legal** 
 ## Claims not to make
 
 - Do not say competitors lack MCP. That statement is now false.
-- Do not present 74 tools as the moat; present the governed lifecycle and evidence.
+- Do not present 79 tools as the moat; present the governed lifecycle and evidence.
 - Do not claim generic simulation is unique. The distinction is simulation/live **policy parity under pinned Law**.
 - Do not claim dynamic workflow-as-tool publication yet; several competitors are ahead here.
 - Do not claim BPMN, Temporal-scale replay, an AWS-sized integration catalog, OIDC, OTEL, Stripe checkout, or SCIM.

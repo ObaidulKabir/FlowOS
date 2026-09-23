@@ -1445,5 +1445,46 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    public static JObject DiagnoseCallerPermissions() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "requiredCapability":{"type":"string","minLength":1,"description":"Optional capability to evaluate, such as workflow.start or event.publish.EVT-SUBMIT."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject CreateTenantRole() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["roleName","confirmHumanApproval"],
+          "properties":{
+            "roleName":{"type":"string","minLength":1,"description":"Unique tenant IAM role name."},
+            "confirmHumanApproval":{"type":"boolean","const":true,"description":"Explicit approval required for tenant IAM mutation."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ChangeRoleCapability() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["roleId","capabilityCode","confirmHumanApproval"],
+          "properties":{
+            "roleId":{"type":"string","format":"uuid","description":"Tenant IAM role UUID."},
+            "capabilityCode":{"type":"string","minLength":1,"description":"Runtime capability code, such as workflow.start."},
+            "confirmHumanApproval":{"type":"boolean","const":true,"description":"Explicit approval required for tenant IAM mutation."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
 }
 

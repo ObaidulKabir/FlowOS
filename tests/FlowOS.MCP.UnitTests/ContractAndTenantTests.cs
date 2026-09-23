@@ -10,7 +10,7 @@ public sealed class ContractAndTenantTests
     [Fact]
     public void Every_tool_has_self_describing_behavior_and_valid_example()
     {
-        Assert.Equal(74, McpToolDescriptions.All.Count);
+        Assert.Equal(79, McpToolDescriptions.All.Count);
 
         Assert.All(McpToolDescriptions.All, contract =>
         {
@@ -51,6 +51,9 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.DraftById("publicId"),
             McpToolSchemas.BlueprintSchema(),
             McpToolSchemas.StartWorkflow(),
+            McpToolSchemas.DiagnoseCallerPermissions(),
+            McpToolSchemas.CreateTenantRole(),
+            McpToolSchemas.ChangeRoleCapability(),
             McpToolSchemas.CreateContextBinding(),
             McpToolSchemas.UpdateContextBinding(),
             McpToolSchemas.ContextBindingById(),
@@ -102,6 +105,14 @@ public sealed class ContractAndTenantTests
             ["properties"]?["events"]?["items"]?["properties"]?["category"]?["enum"]!
             .Values<string>();
         Assert.Equal(new[] { "Decision", "System", "Human", "Agent" }, categories);
+    }
+
+    [Fact]
+    public void Runtime_and_iam_tools_publish_required_capabilities()
+    {
+        Assert.Contains("workflow.start", McpToolDescriptions.RequiredCapabilitiesFor("start_workflow"));
+        Assert.Contains("iam.read", McpToolDescriptions.RequiredCapabilitiesFor("list_tenant_roles"));
+        Assert.Contains("iam.manage", McpToolDescriptions.RequiredCapabilitiesFor("grant_role_capability"));
     }
 
     [Fact]

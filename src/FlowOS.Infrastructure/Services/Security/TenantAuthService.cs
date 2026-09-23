@@ -23,6 +23,7 @@ public class TenantAuthService : ITenantAuthService
     private readonly IEmailSender _emailSender;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TenantAuthService> _logger;
+    private readonly TenantSecurityProvisioningService _securityProvisioning;
 
     public const string OfficialFlowOsEmail = "admin@flowosbd.com";
 
@@ -32,7 +33,8 @@ public class TenantAuthService : ITenantAuthService
         IJwtTokenService jwtTokenService,
         IEmailSender emailSender,
         IConfiguration configuration,
-        ILogger<TenantAuthService> logger)
+        ILogger<TenantAuthService> logger,
+        TenantSecurityProvisioningService securityProvisioning)
     {
         _context = context;
         _passwordHasher = passwordHasher;
@@ -40,6 +42,7 @@ public class TenantAuthService : ITenantAuthService
         _emailSender = emailSender;
         _configuration = configuration;
         _logger = logger;
+        _securityProvisioning = securityProvisioning;
     }
 
     public async Task<RegisterTenantUserResult> RegisterTenantAsync(RegisterTenantUserRequest request, CancellationToken ct = default)
@@ -95,6 +98,7 @@ public class TenantAuthService : ITenantAuthService
         _context.TenantApiKeys.Add(apiKey);
 
         await _context.SaveChangesAsync(ct);
+        await _securityProvisioning.EnsureTenantAsync(tenant.TenantId, ct);
 
         // Dispatch verification email from official address
         await SendVerificationEmailInternalAsync(tenant, user, token, ct);

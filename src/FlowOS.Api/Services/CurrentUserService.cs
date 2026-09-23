@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using FlowOS.Core.Interfaces;
 using FlowOS.Core.Security;
@@ -78,4 +79,19 @@ public class CurrentUserService : ICurrentUser
             return roles;
         }
     }
+
+    public IReadOnlyCollection<string> Scopes =>
+        _httpContextAccessor.HttpContext?.User?.Claims
+            .Where(claim => string.Equals(claim.Type, "scope", StringComparison.OrdinalIgnoreCase))
+            .Select(claim => claim.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()
+        ?? Array.Empty<string>();
+
+    public bool IsApiKey =>
+        string.Equals(
+            _httpContextAccessor.HttpContext?.User?.Identity?.AuthenticationType,
+            "ApiKey",
+            StringComparison.OrdinalIgnoreCase);
 }

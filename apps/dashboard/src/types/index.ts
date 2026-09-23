@@ -179,6 +179,12 @@ export interface CreateKeyResponse {
   expiresAt?: string;
 }
 
+export interface TenantRoleDto {
+  id: string;
+  name: string;
+  capabilities: string[];
+}
+
 export interface PublishedEventDto {
   eventId: string;
   tenantId: string;

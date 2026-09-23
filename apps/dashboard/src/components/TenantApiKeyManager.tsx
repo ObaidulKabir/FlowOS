@@ -3,6 +3,8 @@ import { api } from '../api/client';
 import { CreateKeyResponse, TenantApiKeyDto } from '../types';
 import { Key, Plus, Copy, Check, Trash2, ShieldCheck, Terminal, AlertCircle, RefreshCw, Code2, LockKeyhole } from 'lucide-react';
 import { mcpRpcUrl } from '../mcpUrl';
+import { ApiKeyScopePicker } from './ApiKeyScopePicker';
+import { API_KEY_SCOPE_PRESETS, effectiveCapabilitiesForScopes } from '../lib/apiKeyScopes';
 
 interface Props {
   tenantId: string;
@@ -20,7 +22,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
   const [name, setName] = useState('My Application Key');
   const [applicationName, setApplicationName] = useState('Web App Backend');
   const [environment, setEnvironment] = useState('Production');
-  const [scopes] = useState<string[]>(['*']);
+  const [scopes, setScopes] = useState<string[]>([...API_KEY_SCOPE_PRESETS.operator]);
   const [expiresInDays, setExpiresInDays] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
@@ -144,6 +146,13 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
           <p className="text-xs text-slate-300">
             Please copy this full key now. FlowOS stores only its SHA-256 hash; after this notice is dismissed or the page is reloaded, the secret cannot be recovered. Use it only against this environment&apos;s MCP URL ({mcpRpcUrl()}) — staging and production keys are not interchangeable.
           </p>
+          <div className="flex flex-wrap gap-1">
+            {effectiveCapabilitiesForScopes(createdKey.scopes || []).map(capability => (
+              <span key={capability} className="rounded border border-emerald-800 bg-slate-950 px-1.5 py-0.5 font-mono text-[9px] text-emerald-300">
+                {capability}
+              </span>
+            ))}
+          </div>
           <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-xl flex items-center justify-between font-mono text-xs text-emerald-300">
             <span className="break-all select-all font-bold">{createdKey.apiKey}</span>
             <button
@@ -262,6 +271,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
                         </span>
                       ))}
                     </div>
+                    <div className="mt-1 text-[9px] text-slate-500">Locked; rotate key to change</div>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400 text-[11px]">
                     <div>Created: {new Date(k.createdAt).toLocaleDateString()}</div>
@@ -385,6 +395,8 @@ headers = {
                   <option value="Development">Development</option>
                 </select>
               </div>
+
+              <ApiKeyScopePicker value={scopes} onChange={setScopes} />
 
               <div className="space-y-1">
                 <label className="text-slate-300 font-medium">Expires In (Days)</label>

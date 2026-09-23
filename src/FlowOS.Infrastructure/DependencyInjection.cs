@@ -115,6 +115,7 @@ public static class DependencyInjection
         services.AddSingleton<FlowOS.Security.Interfaces.IPasswordHasher, FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher>();
         services.AddSingleton<FlowOS.Security.Interfaces.IJwtTokenService, FlowOS.Infrastructure.Services.Security.JwtTokenService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantAuthService, FlowOS.Infrastructure.Services.Security.TenantAuthService>();
+        services.AddScoped<FlowOS.Infrastructure.Services.Security.TenantSecurityProvisioningService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantEntitlementService, FlowOS.Infrastructure.Services.TenantEntitlementService>();
         return services;
     }

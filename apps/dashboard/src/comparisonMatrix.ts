@@ -158,7 +158,7 @@ export const MCP_CONTROL_PLANE_ROWS: Array<{
     capability: "Product MCP surface",
     whyItMatters: "Protocol availability is now table stakes.",
     answers: {
-      flowos: "Built in — Streamable HTTP control plane; 74 verified lifecycle tools",
+      flowos: "Built in — Streamable HTTP control plane; 79 verified lifecycle tools",
       temporal: "Official Code Exchange operations server plus docs MCP",
       camunda: "Built in — cluster MCP (8.9) and processes MCP (8.10)",
       aws: "AWS Labs Step Functions and Serverless MCP packages",
@@ -278,7 +278,7 @@ export const MCP_STRATEGIC_PRIORITIES = [
   {
     priority: "P1",
     title: "Guided tool packs",
-    outcome: "Group 74 tools into lifecycle journeys so agents select outcomes, not isolated endpoints.",
+    outcome: "Group 79 tools into lifecycle journeys so agents select outcomes, not isolated endpoints.",
   },
   {
     priority: "P1",

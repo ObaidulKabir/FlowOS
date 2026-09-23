@@ -22,19 +22,22 @@ public class ExecutionTools
     private readonly FlowOS.Core.Common.Interfaces.IWorkflowTimeTravelService? _timeTravelService;
     private readonly FlowOS.Core.Common.Interfaces.IIdempotencyService? _idempotencyService;
     private readonly FlowOS.Core.Common.Interfaces.IRetryPolicyService? _retryPolicyService;
+    private readonly McpAuthorizationErrorMapper? _authorizationErrorMapper;
 
     public ExecutionTools(
         IMediator mediator,
         FlowOS.Core.Common.Interfaces.IWorkflowActionHistoryService? actionHistoryService = null,
         FlowOS.Core.Common.Interfaces.IWorkflowTimeTravelService? timeTravelService = null,
         FlowOS.Core.Common.Interfaces.IIdempotencyService? idempotencyService = null,
-        FlowOS.Core.Common.Interfaces.IRetryPolicyService? retryPolicyService = null)
+        FlowOS.Core.Common.Interfaces.IRetryPolicyService? retryPolicyService = null,
+        McpAuthorizationErrorMapper? authorizationErrorMapper = null)
     {
         _mediator = mediator;
         _actionHistoryService = actionHistoryService;
         _timeTravelService = timeTravelService;
         _idempotencyService = idempotencyService;
         _retryPolicyService = retryPolicyService;
+        _authorizationErrorMapper = authorizationErrorMapper;
     }
 
     public async Task<CallToolResult> StartWorkflow(JObject args)
@@ -146,6 +149,10 @@ public class ExecutionTools
         {
             return McpToolResults.Fail("MCP-NOTFOUND-001", ex.Message);
         }
+        catch (PolicyViolationException ex)
+        {
+            return await MapAuthorizationAsync(ex, "start_workflow");
+        }
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to start workflow instance: {ex.Message}");
@@ -219,6 +226,10 @@ public class ExecutionTools
         {
             return McpToolResults.Fail("MCP-NOTFOUND-001", ex.Message);
         }
+        catch (PolicyViolationException ex)
+        {
+            return await MapAuthorizationAsync(ex, "publish_event");
+        }
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to publish event: {ex.Message}");
@@ -276,10 +287,37 @@ public class ExecutionTools
         {
             return McpToolResults.Fail(ex.Code, ex.Message);
         }
+        catch (PolicyViolationException ex)
+        {
+            return await MapAuthorizationAsync(ex, "complete_task");
+        }
         catch (Exception ex)
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to complete task: {ex.Message}");
         }
+    }
+
+    private Task<CallToolResult> MapAuthorizationAsync(
+        PolicyViolationException exception,
+        string activity)
+    {
+        if (_authorizationErrorMapper != null)
+        {
+            return _authorizationErrorMapper.MapAsync(
+                exception,
+                activity,
+                McpRequestContext.TenantId);
+        }
+
+        return Task.FromResult(McpToolResults.Fail(
+            "MCP-AUTHZ-001",
+            exception.Reason,
+            new
+            {
+                policyName = exception.PolicyName ?? "Policy",
+                activity,
+                tenantId = McpRequestContext.TenantId
+            }));
     }
 
     public async Task<CallToolResult> ListWorkflowInstances(JObject args)

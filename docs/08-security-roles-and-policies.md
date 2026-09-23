@@ -89,8 +89,10 @@ is resolved per running workflow instance.
 
 * `workflow.start` — required to start a new workflow instance.
 * `event.publish` — required to publish events (e.g. approvals).
-* `role.create` — required to create new roles (admin only, by convention — not currently enforced by an attribute on `RolesController`).
+* `iam.read` / `iam.manage` — inspect and mutate tenant IAM roles.
 * `task.approve` — domain-specific capability example.
+
+API-key scopes use colon notation (`workflow:start`) and never expand reserved role grants. A scoped SalesFlow key can start workflows only when the tenant `ApiKey` role already holds `workflow.start` and the key includes `workflow:start` or `*`.
 
 ## Capability enforcement: `[RequiresCapability]`
 

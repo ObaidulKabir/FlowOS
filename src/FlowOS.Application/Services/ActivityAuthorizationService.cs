@@ -1,5 +1,6 @@
 using FlowOS.Application.Common.Exceptions;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces;
 using FlowOS.Security.Interfaces;
 
 namespace FlowOS.Application.Services;
@@ -7,10 +8,14 @@ namespace FlowOS.Application.Services;
 public sealed class ActivityAuthorizationService : IActivityAuthorizationService
 {
     private readonly ICapabilityService _capabilityService;
+    private readonly ICurrentUser? _currentUser;
 
-    public ActivityAuthorizationService(ICapabilityService capabilityService)
+    public ActivityAuthorizationService(
+        ICapabilityService capabilityService,
+        ICurrentUser? currentUser = null)
     {
         _capabilityService = capabilityService;
+        _currentUser = currentUser;
     }
 
     public async Task AuthorizeAsync(
@@ -47,7 +52,13 @@ public sealed class ActivityAuthorizationService : IActivityAuthorizationService
         if (required.Count == 0)
             return !failClosed;
 
-        var callerCaps = await _capabilityService.GetCapabilitiesAsync(tenantId, roles);
+        var callerCaps = _currentUser?.IsApiKey == true && _currentUser.TenantId == tenantId
+            ? await _capabilityService.GetEffectiveCapabilitiesAsync(
+                tenantId,
+                roles,
+                _currentUser.Scopes,
+                isApiKey: true)
+            : await _capabilityService.GetCapabilitiesAsync(tenantId, roles);
         return ActivityAuthorization.HasGrant(callerCaps, required);
     }
 }

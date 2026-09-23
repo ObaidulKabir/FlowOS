@@ -249,6 +249,18 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
+        var securityProvisioning = scope.ServiceProvider
+            .GetRequiredService<FlowOS.Infrastructure.Services.Security.TenantSecurityProvisioningService>();
+        await securityProvisioning.BackfillAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Tenant IAM role backfill failed; capability checks remain fail-closed.");
+        context.ChangeTracker.Clear();
+    }
+
+    try
+    {
         var backfill = scope.ServiceProvider.GetRequiredService<WorkflowDefinitionLineageBackfillService>();
         var result = await backfill.BackfillAsync();
         logger.LogInformation(

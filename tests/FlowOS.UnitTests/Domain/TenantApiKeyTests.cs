@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlowOS.Core.Security;
 using FlowOS.Domain.Entities;
 using Xunit;
 
@@ -81,6 +82,30 @@ public class TenantApiKeyTests
         Assert.True(key.HasScope("workflow:read"));
         Assert.False(key.HasScope("workflow:start"));
         Assert.False(key.HasScope("event:publish"));
+    }
+
+    [Fact]
+    public void ScopeCatalog_MapsColonScopes_ToRuntimeCapabilities()
+    {
+        var mapped = ApiKeyScopeCatalog.MapToCapabilities(
+            new[] { "workflow:start", "event:publish" });
+
+        Assert.Contains("workflow.start", mapped);
+        Assert.Contains("event.publish", mapped);
+        Assert.True(ApiKeyScopeCatalog.AllowsCapability(
+            new[] { "event:publish" },
+            "event.publish.EVT-SUBMIT"));
+        Assert.False(ApiKeyScopeCatalog.AllowsCapability(
+            new[] { "workflow:read" },
+            "workflow.start"));
+    }
+
+    [Fact]
+    public void ScopeCatalog_Wildcard_PreservesFullRoleAccess()
+    {
+        Assert.True(ApiKeyScopeCatalog.AllowsCapability(
+            new[] { "*" },
+            "iam.manage"));
     }
 
     [Fact]

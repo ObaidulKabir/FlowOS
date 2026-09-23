@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using FlowOS.Core.Security;
 using FlowOS.Security.Interfaces; // Updated namespace
 using FlowOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -24,10 +25,10 @@ public class CapabilityService : ICapabilityService
     {
         if (roles == null || !roles.Any())
         {
-            return new HashSet<string>();
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var capabilities = new HashSet<string>();
+        var capabilities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         
         foreach (var roleName in roles)
         {
@@ -68,5 +69,26 @@ public class CapabilityService : ICapabilityService
         }
 
         return capabilities;
+    }
+
+    public async Task<HashSet<string>> GetEffectiveCapabilitiesAsync(
+        Guid tenantId,
+        IEnumerable<string> roles,
+        IEnumerable<string>? scopes,
+        bool isApiKey)
+    {
+        var roleCapabilities = await GetCapabilitiesAsync(tenantId, roles);
+        if (!isApiKey || ApiKeyScopeCatalog.HasFullAccess(scopes))
+            return roleCapabilities;
+
+        return roleCapabilities
+            .Where(capability => ApiKeyScopeCatalog.AllowsCapability(scopes, capability))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public void Invalidate(Guid tenantId, IEnumerable<string> roles)
+    {
+        foreach (var role in roles.Where(role => !string.IsNullOrWhiteSpace(role)))
+            _cache.Remove($"roles:{tenantId}:{role}");
     }
 }

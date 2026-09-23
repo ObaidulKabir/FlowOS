@@ -8,7 +8,7 @@ import {
   ResendVerificationResponse, TenantUserDto, TenantDto,
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
   WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
-  TenantApiKeyDto, CreateKeyResponse, AgentEvaluationMetrics
+  TenantApiKeyDto, CreateKeyResponse, TenantRoleDto, AgentEvaluationMetrics
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -460,6 +460,47 @@ export const api = {
     });
     if (!response.ok) {
       throw new Error(`Failed to revoke API key (HTTP ${response.status})`);
+    }
+  },
+
+  listRoles: async (): Promise<TenantRoleDto[]> => {
+    const response = await authorizedFetch('/api/roles');
+    const data = await handleResponse(response, 'Failed to list tenant roles');
+    return (Array.isArray(data) ? data : []).map((role: any) => ({
+      id: String(role.id ?? role.Id ?? ''),
+      name: String(role.name ?? role.Name ?? ''),
+      capabilities: Array.isArray(role.capabilities ?? role.Capabilities)
+        ? (role.capabilities ?? role.Capabilities)
+        : []
+    }));
+  },
+
+  createRole: async (roleName: string): Promise<string> => {
+    const response = await authorizedFetch('/api/roles', {
+      method: 'POST',
+      body: JSON.stringify({ roleName })
+    });
+    const data = await handleResponse(response, 'Failed to create tenant role');
+    return String(data.id ?? data.Id ?? '');
+  },
+
+  addRoleCapability: async (roleId: string, capabilityCode: string): Promise<void> => {
+    const response = await authorizedFetch(`/api/roles/${roleId}/capabilities`, {
+      method: 'POST',
+      body: JSON.stringify({ capabilityCode })
+    });
+    if (!response.ok) {
+      await handleResponse(response, 'Failed to grant role capability');
+    }
+  },
+
+  removeRoleCapability: async (roleId: string, capabilityCode: string): Promise<void> => {
+    const response = await authorizedFetch(
+      `/api/roles/${roleId}/capabilities/${encodeURIComponent(capabilityCode)}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      await handleResponse(response, 'Failed to revoke role capability');
     }
   },
 

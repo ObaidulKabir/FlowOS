@@ -3,6 +3,8 @@ import { api, getActiveTenantId, setActiveTenantId } from '../api/client';
 import { TenantDto } from '../types';
 import { mcpRpcUrl } from '../mcpUrl';
 import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles } from 'lucide-react';
+import { ApiKeyScopePicker } from './ApiKeyScopePicker';
+import { API_KEY_SCOPE_PRESETS } from '../lib/apiKeyScopes';
 
 interface TenantManagerProps {
   onTenantChange?: (newTenantId: string) => void;
@@ -28,7 +30,7 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   const [newKeyName, setNewKeyName] = useState('Primary Key');
   const [newAppName, setNewAppName] = useState('Web Portal');
   const [newEnv, setNewEnv] = useState<'Production' | 'Staging' | 'Development'>('Production');
-  const [newScopes, setNewScopes] = useState<string[]>(['*']);
+  const [newScopes, setNewScopes] = useState<string[]>([...API_KEY_SCOPE_PRESETS.operator]);
   const [newExpiresInDays, setNewExpiresInDays] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
 
@@ -50,7 +52,7 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   const [generateKeyName, setGenerateKeyName] = useState('Production Key');
   const [generateAppName, setGenerateAppName] = useState('ERP Sync');
   const [generateEnv, setGenerateEnv] = useState<'Production' | 'Staging' | 'Development'>('Production');
-  const [generateScopes, setGenerateScopes] = useState<string[]>(['*']);
+  const [generateScopes, setGenerateScopes] = useState<string[]>([...API_KEY_SCOPE_PRESETS.operator]);
   const [generateExpiresInDays, setGenerateExpiresInDays] = useState<number>(0);
 
   // Key Generated Alert Modal
@@ -700,72 +702,7 @@ headers = {
                 </div>
               </div>
 
-              {/* Permissions & Scopes Presets */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-300">Permission Scopes</label>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setNewScopes(['*'])}
-                      className="text-[10px] text-blue-400 hover:underline"
-                    >
-                      Full Access
-                    </button>
-                    <span className="text-slate-600">•</span>
-                    <button
-                      type="button"
-                      onClick={() => setNewScopes(['workflow:start', 'event:publish', 'task:complete', 'workflow:read'])}
-                      className="text-[10px] text-blue-400 hover:underline"
-                    >
-                      Operator
-                    </button>
-                    <span className="text-slate-600">•</span>
-                    <button
-                      type="button"
-                      onClick={() => setNewScopes(['workflow:read'])}
-                      className="text-[10px] text-blue-400 hover:underline"
-                    >
-                      Read-Only
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-800/60 rounded-lg border border-slate-700/60 text-xs">
-                  {[
-                    { id: '*', label: 'Full Admin (*)' },
-                    { id: 'workflow:start', label: 'Start Workflows' },
-                    { id: 'event:publish', label: 'Publish Events' },
-                    { id: 'task:complete', label: 'Complete Tasks' },
-                    { id: 'workflow:read', label: 'Read Telemetry' },
-                    { id: 'governance:manage', label: 'Manage Blueprints' },
-                  ].map((scope) => {
-                    const checked = newScopes.includes('*') || newScopes.includes(scope.id);
-                    return (
-                      <label key={scope.id} className="flex items-center gap-2 cursor-pointer text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={newScopes.includes('*') && scope.id !== '*'}
-                          onChange={(e) => {
-                            if (scope.id === '*') {
-                              setNewScopes(e.target.checked ? ['*'] : ['workflow:read']);
-                            } else {
-                              if (e.target.checked) {
-                                setNewScopes([...newScopes.filter(s => s !== '*'), scope.id]);
-                              } else {
-                                setNewScopes(newScopes.filter(s => s !== scope.id));
-                              }
-                            }
-                          }}
-                          className="rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-0"
-                        />
-                        <span className="text-[11px]">{scope.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+              <ApiKeyScopePicker value={newScopes} onChange={setNewScopes} />
 
               {/* Expiration Selector */}
               <div>
@@ -884,72 +821,7 @@ headers = {
                 </div>
               </div>
 
-              {/* Permissions & Scopes Presets */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-300">Permission Scopes</label>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setGenerateScopes(['*'])}
-                      className="text-[10px] text-blue-400 hover:underline"
-                    >
-                      Full Access
-                    </button>
-                    <span className="text-slate-600">•</span>
-                    <button
-                      type="button"
-                      onClick={() => setGenerateScopes(['workflow:start', 'event:publish', 'task:complete', 'workflow:read'])}
-                      className="text-[10px] text-blue-400 hover:underline"
-                    >
-                      Operator
-                    </button>
-                    <span className="text-slate-600">•</span>
-                    <button
-                      type="button"
-                      onClick={() => setGenerateScopes(['workflow:read'])}
-                      className="text-[10px] text-blue-400 hover:underline"
-                    >
-                      Read-Only
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-800/60 rounded-lg border border-slate-700/60 text-xs">
-                  {[
-                    { id: '*', label: 'Full Admin (*)' },
-                    { id: 'workflow:start', label: 'Start Workflows' },
-                    { id: 'event:publish', label: 'Publish Events' },
-                    { id: 'task:complete', label: 'Complete Tasks' },
-                    { id: 'workflow:read', label: 'Read Telemetry' },
-                    { id: 'governance:manage', label: 'Manage Blueprints' },
-                  ].map((scope) => {
-                    const checked = generateScopes.includes('*') || generateScopes.includes(scope.id);
-                    return (
-                      <label key={scope.id} className="flex items-center gap-2 cursor-pointer text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={generateScopes.includes('*') && scope.id !== '*'}
-                          onChange={(e) => {
-                            if (scope.id === '*') {
-                              setGenerateScopes(e.target.checked ? ['*'] : ['workflow:read']);
-                            } else {
-                              if (e.target.checked) {
-                                setGenerateScopes([...generateScopes.filter(s => s !== '*'), scope.id]);
-                              } else {
-                                setGenerateScopes(generateScopes.filter(s => s !== scope.id));
-                              }
-                            }
-                          }}
-                          className="rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-0"
-                        />
-                        <span className="text-[11px]">{scope.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+              <ApiKeyScopePicker value={generateScopes} onChange={setGenerateScopes} />
 
               {/* Expiration Selector */}
               <div>

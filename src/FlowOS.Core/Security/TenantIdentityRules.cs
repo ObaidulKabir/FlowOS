@@ -9,6 +9,7 @@ namespace FlowOS.Core.Security;
 public static class TenantIdentityRules
 {
     public const string AllowMockAuthKey = "FlowOS:Identity:AllowMockAuth";
+    public static readonly Guid PlatformTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid DemoTenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     public static bool AllowMockAuth(string? environmentName, string? configuredValue)

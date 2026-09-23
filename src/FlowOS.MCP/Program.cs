@@ -86,7 +86,10 @@ public partial class Program
                              !string.Equals(apiKey, "disabled", StringComparison.OrdinalIgnoreCase) &&
                              !string.Equals(apiKey, "none", StringComparison.OrdinalIgnoreCase);
 
-        var serviceRole = builder.Configuration["MCP_ROLE"] ?? "Admin";
+        var configuredServiceRole = builder.Configuration["MCP_ROLE"];
+        var serviceRole = string.IsNullOrWhiteSpace(configuredServiceRole)
+            ? "Admin"
+            : configuredServiceRole.Trim();
 
         var allowedOrigins = (builder.Configuration["MCP_ALLOWED_ORIGINS"] ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -156,6 +159,8 @@ public partial class Program
 
             string? suppliedApiKey = null;
             Guid? dbResolvedTenantId = null;
+            IReadOnlyCollection<string> resolvedScopes = Array.Empty<string>();
+            var isTenantApiKeyCredential = false;
 
             if (isAuthRequired)
             {
@@ -189,6 +194,8 @@ public partial class Program
                 if (isValidKey && FlowOS.Core.Security.TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
                 {
                     dbResolvedTenantId = FlowOS.Core.Security.TenantIdentityRules.DemoTenantId;
+                    resolvedScopes = new[] { FlowOS.Core.Security.ApiKeyScopeCatalog.FullAccess };
+                    isTenantApiKeyCredential = true;
                 }
 
                 var tenantKeyLookupFailed = false;
@@ -208,6 +215,8 @@ public partial class Program
                             {
                                 isValidKey = true;
                                 dbResolvedTenantId = apiKeyRecord.TenantId;
+                                resolvedScopes = apiKeyRecord.Scopes.ToArray();
+                                isTenantApiKeyCredential = true;
                                 apiKeyRecord.RecordUsage();
                                 await db.SaveChangesAsync();
                             }
@@ -283,7 +292,13 @@ public partial class Program
             }
 
             McpRequestContext.TenantId = tenantId;
-            McpRequestContext.Role = serviceRole;
+            McpRequestContext.Role = isTenantApiKeyCredential
+                ? FlowOS.Core.Security.TenantIdentityRules.ResolveApiKeyRole(
+                    resolvedScopes,
+                    FlowOS.Core.Security.TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
+                : serviceRole;
+            McpRequestContext.Scopes = resolvedScopes;
+            McpRequestContext.IsApiKey = isTenantApiKeyCredential;
             McpRequestContext.IsAuthenticatedTransport = true;
             try
             {
@@ -382,6 +397,7 @@ public partial class Program
                         profile.TenantScoped,
                         profile.RiskLevel,
                         profile.RequiresHumanConfirmation,
+                        McpToolDescriptions.RequiredCapabilitiesFor(t.Name),
                         t.InputSchema
                     );
                 })
@@ -428,11 +444,26 @@ public partial class Program
                     tenantScoped = t.TenantScoped,
                     riskLevel = t.RiskLevel,
                     requiresHumanConfirmation = t.RequiresHumanConfirmation,
+                    requiredCapabilities = t.RequiredCapabilities,
                     inputSchema = t.InputSchema
                 }).ToList(),
                 securityContract = new
                 {
                     description = "Formal policy contract governing autonomous agent tool execution and safety boundaries.",
+                    authorizationModel = new
+                    {
+                        capabilityGate = "Tenant role capabilities are the maximum grant.",
+                        apiKeyScopeBoundary = "Scoped API keys further restrict role capabilities. For example workflow:start permits workflow.start; * preserves full role access.",
+                        businessRoleGate = "Workflow business roles govern inbox/context participation and do not create tenant IAM grants.",
+                        policyLayer = "Deny-only tenant policies are evaluated after capability authorization.",
+                        remediation = "Call diagnose_caller_permissions after MCP-AUTHZ-*; use a tenant Admin credential for governed IAM changes."
+                    },
+                    authorizationErrors = new
+                    {
+                        MCP_AUTHZ_001 = "Missing tenant capability or API-key scope.",
+                        MCP_AUTHZ_002 = "Missing workflow business-context role.",
+                        MCP_AUTHZ_003 = "Denied by a tenant policy."
+                    },
                     riskLevels = new
                     {
                         low = "Safe read-only query, informational inspection, or non-destructive draft operations. Eligible for autonomous agent execution.",
@@ -635,6 +666,8 @@ public partial class Program
         services.AddScoped<DeadLetterMcpTools>();
         services.AddScoped<WebhookSecurityMcpTools>();
         services.AddScoped<ActionObservabilityMcpTools>();
+        services.AddScoped<McpAuthorizationErrorMapper>();
+        services.AddScoped<TenantIamMcpTools>();
     }
 
     private static async Task InitializePostgresPersistenceAsync(
@@ -652,6 +685,9 @@ public partial class Program
         try
         {
             await context.Database.MigrateAsync(cancellationToken);
+            var securityProvisioning = scope.ServiceProvider
+                .GetRequiredService<FlowOS.Infrastructure.Services.Security.TenantSecurityProvisioningService>();
+            await securityProvisioning.BackfillAsync(cancellationToken);
             var backfill = scope.ServiceProvider.GetRequiredService<WorkflowDefinitionLineageBackfillService>();
             var result = await backfill.BackfillAsync(cancellationToken);
             logger.LogInformation(
@@ -664,7 +700,7 @@ public partial class Program
         {
             logger.LogError(
                 ex,
-                "MCP PostgreSQL migration/lineage backfill failed; class-backed definitions remain fail-closed.");
+                "MCP PostgreSQL migration/security/lineage backfill failed; authorization and class-backed definitions remain fail-closed.");
         }
     }
 
@@ -943,6 +979,7 @@ public record ToolDiscoveryItem(
     bool TenantScoped,
     string RiskLevel,
     bool RequiresHumanConfirmation,
+    IReadOnlyCollection<string> RequiredCapabilities,
     object? InputSchema
 );
 
@@ -961,7 +998,10 @@ public class McpHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        McpRequestContext.Role = Environment.GetEnvironmentVariable("MCP_ROLE") ?? "Admin";
+        var configuredRole = Environment.GetEnvironmentVariable("MCP_ROLE");
+        McpRequestContext.Role = string.IsNullOrWhiteSpace(configuredRole) ? "Admin" : configuredRole.Trim();
+        McpRequestContext.Scopes = Array.Empty<string>();
+        McpRequestContext.IsApiKey = false;
         ToolRegistration.RegisterAll(_registry, _serviceProvider);
         await _server.RunAsync(stoppingToken);
     }

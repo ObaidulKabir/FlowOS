@@ -42,4 +42,9 @@ public class Role
             Permissions.Add(capability.Code);
         }
     }
+
+    public bool RemovePermission(string permission)
+        => !string.IsNullOrWhiteSpace(permission) &&
+           Permissions.RemoveWhere(existing =>
+               string.Equals(existing, permission.Trim(), StringComparison.OrdinalIgnoreCase)) > 0;
 }

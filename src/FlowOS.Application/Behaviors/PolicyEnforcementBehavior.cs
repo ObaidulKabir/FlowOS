@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System;
 using System.Reflection;
 using System.Collections.Generic;
+using System.Linq;
 using FlowOS.Application.Common.Attributes;
 
 namespace FlowOS.Application.Behaviors;
@@ -50,11 +51,17 @@ public class PolicyEnforcementBehavior<TRequest, TResponse> : IPipelineBehavior<
                 Console.WriteLine($"[PolicyEnforcement] User: {_currentUser.Id}, Roles: {string.Join(",", userRoles)}");
                 Console.WriteLine($"[PolicyEnforcement] Tenant: {tenantId}");
 
-                var capabilities = await _capabilityService.GetCapabilitiesAsync(tenantId, userRoles);
+                var capabilities = _currentUser.IsApiKey
+                    ? await _capabilityService.GetEffectiveCapabilitiesAsync(
+                        tenantId,
+                        userRoles,
+                        _currentUser.Scopes,
+                        isApiKey: true)
+                    : await _capabilityService.GetCapabilitiesAsync(tenantId, userRoles);
                 
                 Console.WriteLine($"[PolicyEnforcement] Resolved Capabilities: {string.Join(", ", capabilities)}");
 
-                if (!capabilities.Contains(attribute.Capability))
+                if (!capabilities.Contains(attribute.Capability, StringComparer.OrdinalIgnoreCase))
                 {
                     // Fail if user does not have the required capability
                      Console.WriteLine($"[PolicyEnforcement] FAILED: Missing capability {attribute.Capability}");

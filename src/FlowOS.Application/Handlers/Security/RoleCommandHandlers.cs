@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using MediatR;
 using FlowOS.Application.Commands.Security;
 using FlowOS.Application.Common.Interfaces.Persistence;
+using FlowOS.Security.Interfaces;
 using FlowOS.Security.Models;
 
 namespace FlowOS.Application.Handlers.Security;
@@ -12,6 +13,7 @@ namespace FlowOS.Application.Handlers.Security;
 public class RoleCommandHandlers : 
     IRequestHandler<CreateRoleCommand, Guid>,
     IRequestHandler<AddCapabilityToRoleCommand, bool>,
+    IRequestHandler<RemoveCapabilityFromRoleCommand, bool>,
     IRequestHandler<AssignRoleToUserCommand, bool>,
     IRequestHandler<RevokeRoleFromUserCommand, bool>,
     IRequestHandler<GetRoleByIdQuery, Role?>,
@@ -19,10 +21,12 @@ public class RoleCommandHandlers :
     IRequestHandler<ListUserRolesQuery, IReadOnlyList<string>>
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICapabilityService _capabilityService;
 
-    public RoleCommandHandlers(IUnitOfWork unitOfWork)
+    public RoleCommandHandlers(IUnitOfWork unitOfWork, ICapabilityService capabilityService)
     {
         _unitOfWork = unitOfWork;
+        _capabilityService = capabilityService;
     }
 
     public async Task<Guid> Handle(CreateRoleCommand request, CancellationToken cancellationToken)
@@ -39,6 +43,7 @@ public class RoleCommandHandlers :
 
         _unitOfWork.Roles.Add(role);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _capabilityService.Invalidate(request.TenantId, new[] { request.RoleName });
 
         return role.Id;
     }
@@ -54,6 +59,24 @@ public class RoleCommandHandlers :
         _unitOfWork.Roles.MarkPermissionsModified(role);
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _capabilityService.Invalidate(request.TenantId, new[] { role.Name });
+        return true;
+    }
+
+    public async Task<bool> Handle(RemoveCapabilityFromRoleCommand request, CancellationToken cancellationToken)
+    {
+        var role = await _unitOfWork.Roles
+            .GetByIdAsync(request.RoleId, request.TenantId, cancellationToken);
+
+        if (role == null) return false;
+
+        if (role.RemovePermission(request.CapabilityCode))
+        {
+            _unitOfWork.Roles.MarkPermissionsModified(role);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _capabilityService.Invalidate(request.TenantId, new[] { role.Name });
+        }
+
         return true;
     }
 

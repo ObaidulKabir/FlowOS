@@ -137,10 +137,10 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS advertises **74 tool names**: 71 canonical tools plus 3 deprecated
+FlowOS advertises **79 tool names**: 76 canonical tools plus 3 deprecated
 capability-binding aliases retained for compatibility. They cover governance
 lifecycle, context-aware simulation, Copilot synthesis, time-travel debugging,
-operational execution, and runtime advisory intelligence:
+operational execution, tenant IAM, and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|
@@ -166,9 +166,14 @@ operational execution, and runtime advisory intelligence:
 | `get_workflow_instance_status` | `low` | `none` | No | `InfoTools.GetWorkflowInstanceStatus` | Queries runtime instance execution status, current step, state machine status, and timestamps. |
 | `fork_public_workflowclass` | `low` | `reversible` | No | `GovernanceTools.ForkPublic` | Clones a public template into the caller's private tenant drafts. |
 | `publish_workflowclass` | `high` | `irreversible` | **YES** | `GovernanceTools.Publish` | **Publishes draft to immutable versioned fleet status.** Mandates explicit `confirmHumanApproval: true`. |
-| `start_workflow` | `medium` | `irreversible` | No | `ExecutionTools.StartWorkflow` | Instantiates and executes a workflow instance. Supports cross-tenant public blueprints with caller data isolation. |
+| `start_workflow` | `medium` | `irreversible` | No | `ExecutionTools.StartWorkflow` | Instantiates and executes a workflow instance. Requires tenant capability `workflow.start`. Missing authority returns `MCP-AUTHZ-001`. |
 | `publish_event` | `medium` | `irreversible` | No | `ExecutionTools.PublishEvent` | Emits an event to advance an active workflow instance and state machine. |
 | `complete_task` | `medium` | `irreversible` | No | `ExecutionTools.CompleteTask` | Completes an assigned human or service task step. |
+| `diagnose_caller_permissions` | `low` | `none` | No | `TenantIamMcpTools.DiagnoseCallerPermissions` | Reports caller roles, scopes, role capabilities, and the effective API-key intersection. |
+| `list_tenant_roles` | `low` | `none` | No | `TenantIamMcpTools.ListTenantRoles` | Lists tenant IAM roles and capabilities. Requires `iam.read`. This is not a WorkflowClass business-role catalog. |
+| `create_tenant_role` | `medium` | `reversible` | **YES** | `TenantIamMcpTools.CreateTenantRole` | Creates a tenant IAM role. Requires `iam.manage` and `confirmHumanApproval: true`. |
+| `grant_role_capability` | `medium` | `reversible` | **YES** | `TenantIamMcpTools.GrantRoleCapability` | Grants one runtime capability such as `workflow.start`. Requires `iam.manage` and `confirmHumanApproval: true`. |
+| `revoke_role_capability` | `medium` | `reversible` | **YES** | `TenantIamMcpTools.RevokeRoleCapability` | Revokes one runtime capability from a tenant IAM role. Requires `iam.manage` and `confirmHumanApproval: true`. |
 | `list_workflow_instances` | `low` | `none` | No | `ExecutionTools.ListWorkflowInstances` | Lists workflow instances filtered by status (`Active`, `Completed`, `Failed`) and workflow name. |
 | `get_workflow_history` | `low` | `none` | No | `ExecutionTools.GetWorkflowHistory` | Retrieves immutable audit trail and state machine transition history for a tenant's workflow instance. |
 | `generate_workflow_blueprint_from_nl` | `low` | `none` | No | `GovernanceTools.GenerateBlueprintFromNaturalLanguage` | Synthesizes or refines a valid `WorkflowClassBlueprint` from a natural-language prompt. |
@@ -190,7 +195,7 @@ tenant-scoped tool requires an explicit `tenantId` argument.
 ### Enforced Governance & Safety Policy
 
 1. **Human Confirmation Gate (`confirmHumanApproval`)**:
-   `publish_workflowclass` has a high risk profile and creates immutable fleet-wide artifacts. It mandates `confirmHumanApproval: true`. Invocations without this parameter are blocked before executing domain logic:
+   `publish_workflowclass` and tenant IAM mutations (`create_tenant_role`, `grant_role_capability`, `revoke_role_capability`) mandate `confirmHumanApproval: true`. Invocations without this parameter are blocked before executing domain logic:
    ```json
    {
      "ok": false,
@@ -204,6 +209,9 @@ tenant-scoped tool requires an explicit `tenantId` argument.
 
 3. **Anti-Enumeration & Uniformity (`MCP-NOTFOUND-001`)**:
    Attempts to access foreign tenant resources (drafts, instances, histories) return the exact same `MCP-NOTFOUND-001` error as non-existent random GUIDs. Zero metadata (existence, title, or status) is leaked.
+
+4. **Authorization (`MCP-AUTHZ-001`)**:
+   `start_workflow` requires tenant capability `workflow.start`. API-key scopes such as `workflow:start` are an outer boundary, not a grant. Diagnose with `diagnose_caller_permissions`, then grant the capability on the reserved `Admin` or `ApiKey` role.
 
 ### Compensation governance MCP guideline (recommended authoring loop)
 

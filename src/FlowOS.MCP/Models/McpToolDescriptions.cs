@@ -246,25 +246,58 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-VALIDATION, CTX-STATE-001, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"revision\":\"draft\",\"initialPayload\":{\"expense\":{\"amount\":1500}},\"roles\":[\"FinanceManager\"],\"events\":[{\"eventType\":\"EVT-EXP-SUBMIT\"}],\"autoAdvanceTimers\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["diagnose_caller_permissions"] =
+                "[Tenant IAM] Reports the authenticated caller's roles, immutable API-key scopes, role capabilities, effective intersection, and whether an optional requiredCapability is authorized. This is the first remediation step after MCP-AUTHZ-*. " +
+                "Returns: {ok:true,data:{tenantId,credentialType,roles,scopes,roleCapabilities,effectiveCapabilities,requiredCapability,authorized,scopeBoundary,guidance}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"requiredCapability\":\"workflow.start\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["list_tenant_roles"] =
+                "[Tenant IAM] Lists tenant IAM roles and runtime capabilities. Requires iam.read; WorkflowClass/business-context roles and connector bindings are separate concepts. " +
+                "Returns: {ok:true,data:{tenantId,roles:[{id,name,capabilities,reserved}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["create_tenant_role"] =
+                "[Tenant IAM] Creates a tenant IAM role. Requires iam.manage and confirmHumanApproval:true. This does not create a WorkflowClass business role. " +
+                "Returns: {ok:true,data:{tenantId,roleId,roleName,created}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, MCP-APPROVAL-REQUIRED, MCP-IAM-001, MCP-INTERNAL. " +
+                "Input example: {\"roleName\":\"SalesFlowOperator\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["grant_role_capability"] =
+                "[Tenant IAM] Grants one runtime capability to an existing tenant IAM role. Requires iam.manage and confirmHumanApproval:true. API-key scopes remain an immutable outer boundary. " +
+                "Returns: {ok:true,data:{tenantId,roleId,capabilityCode,operation}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, MCP-APPROVAL-REQUIRED, MCP-IAM-002, MCP-INTERNAL. " +
+                "Input example: {\"roleId\":\"33333333-3333-3333-3333-333333333333\",\"capabilityCode\":\"workflow.start\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["revoke_role_capability"] =
+                "[Tenant IAM] Revokes one runtime capability from an existing tenant IAM role. Requires iam.manage and confirmHumanApproval:true. " +
+                "Returns: {ok:true,data:{tenantId,roleId,capabilityCode,operation}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, MCP-APPROVAL-REQUIRED, MCP-IAM-002, MCP-INTERNAL. " +
+                "Input example: {\"roleId\":\"33333333-3333-3333-3333-333333333333\",\"capabilityCode\":\"workflow.start\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
             ["start_workflow"] =
                 "[Lifecycle Step 4: Run Instance] Starts a live runtime execution instance through exactly one workflow or active context-binding selector. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Authorization: requires effective capability workflow.start. For API keys, role permissions are restricted by workflow:start (or *). On MCP-AUTHZ-001 call diagnose_caller_permissions. " +
                 "Returns: {ok:true,data:{workflowInstanceId,tenantId,status,correlationId,message}}. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500}}}",
 
             ["publish_event"] =
                 "[Lifecycle Step 5: State Transition] Publishes an event to advance the state machine and workflow step of an active workflow instance. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Authorization: requires the event-specific runtime capability (or event.publish umbrella); API keys also require event:publish or *. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,eventType,message}}. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-EXEC-001, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-EXEC-001, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["complete_task"] =
                 "[Lifecycle Step 5: Task Execution] Completes a manual or human-in-the-loop task step within an active workflow instance. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Authorization: requires the task/step runtime capability and business-context role; API keys also require task:complete or *. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,taskId,message}}. " +
-                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"taskId\":\"66666666-6666-6666-6666-666666666666\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["list_workflow_instances"] =
@@ -616,15 +649,37 @@ public static class McpToolDescriptions
             ["list_context_bindings"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["get_context_binding"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_context_binding"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["diagnose_caller_permissions"] = new("security", "authenticated", true, true, false, "none", true, "low"),
+            ["list_tenant_roles"] = new("security", "authenticated", true, true, false, "none", true, "low"),
+            ["create_tenant_role"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
+            ["grant_role_capability"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
+            ["revoke_role_capability"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
             ["start_workflow"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["publish_event"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["complete_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium")
+        };
+
+    private static readonly IReadOnlyDictionary<string, string[]> RequiredCapabilities =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["list_tenant_roles"] = new[] { "iam.read" },
+            ["create_tenant_role"] = new[] { "iam.manage" },
+            ["grant_role_capability"] = new[] { "iam.manage" },
+            ["revoke_role_capability"] = new[] { "iam.manage" },
+            ["start_workflow"] = new[] { "workflow.start" },
+            ["publish_event"] = new[] { "event.publish or event.publish.<eventId>" },
+            ["complete_task"] = new[] { "task/step required capability" }
         };
 
     public static ToolSecurityProfile ProfileFor(string toolName) =>
         SecurityProfiles.TryGetValue(toolName, out var profile)
             ? profile
             : new ToolSecurityProfile("unknown", "authenticated", true, true, false, "none", true, "medium", false);
+
+    public static IReadOnlyCollection<string> RequiredCapabilitiesFor(string toolName) =>
+        RequiredCapabilities.TryGetValue(toolName, out var capabilities)
+            ? capabilities
+            : Array.Empty<string>();
 }
 
 public record ToolSecurityProfile(

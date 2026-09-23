@@ -17,6 +17,7 @@ using FlowOS.Events.Models; // For StandardEvent
 using FlowOS.Application.Services;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.ValueObjects;
+using FlowOS.Core.Security;
 using System.Text.Json;
 
 namespace FlowOS.API.Services;
@@ -86,14 +87,8 @@ public static class DataSeeder
         if (!await context.Roles.AnyAsync(r => r.Name == "Admin" && r.TenantId == DefaultTenantId))
         {
             var adminRole = new Role(DefaultTenantId, "Admin");
-            adminRole.AddPermission("workflow.start");
-            adminRole.AddPermission("workflow.create");
-            adminRole.AddPermission("workflow.read");
-            adminRole.AddPermission("event.publish");
-            adminRole.AddPermission("task.complete");
-            adminRole.AddPermission("workflow.approve_public");
-            adminRole.AddPermission("role.create"); // Just in case
-            adminRole.AddPermission("agent.insight.publish"); // For notifications
+            foreach (var permission in TenantSecurityDefaults.AdminCapabilities)
+                adminRole.AddPermission(permission);
             
             context.Roles.Add(adminRole);
             await context.SaveChangesAsync();
@@ -344,8 +339,8 @@ public static class DataSeeder
     await EnsureRoleWithPermissionsAsync(
         context,
         clientTenantId,
-        "Admin",
-        "workflow.start", "workflow.create", "workflow.read", "event.publish", "task.complete", "workflow.approve_public");
+        TenantSecurityDefaults.AdminRole,
+        TenantSecurityDefaults.AdminCapabilities.ToArray());
     await EnsureRoleWithPermissionsAsync(
         context,
         clientTenantId,
@@ -354,8 +349,8 @@ public static class DataSeeder
     await EnsureRoleWithPermissionsAsync(
         context,
         clientTenantId,
-        "ApiKey",
-        "workflow.start", "workflow.create", "workflow.read", "event.publish", "task.complete");
+        TenantSecurityDefaults.ApiKeyRole,
+        TenantSecurityDefaults.ApiKeyCapabilities.ToArray());
     
     await EnsureRoleWithPermissionsAsync(
         context,

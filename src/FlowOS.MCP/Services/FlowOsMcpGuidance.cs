@@ -689,6 +689,9 @@ public static class FlowOsMcpGuidance
         - `simulate_workflowclass` authorizes the **event**, not the inbox label. Command `Default`/`true` auto-routes stay authorized.
         - Payload-decided inbox: dual Law transitions on the same EventId with different `condition` (Amount > 5000 → PendingDirector, else PendingManager) plus a Work Decision. Simulate with the matching role for the landing inbox, or a role that holds that event's capability.
         - WorkflowClass roles are never FlowOS tenant IAM roles. `CTX-ROLE-002` is an empty override name, not a missing tenant Role row.
+        - Tenant API-key scopes are a second, restrictive boundary: `workflow:start` permits `workflow.start`, `event:publish` permits event publication, and `*` preserves the full reserved role grant. Scopes never expand a role.
+        - `MCP-AUTHZ-001` means a tenant capability or key scope is missing; `MCP-AUTHZ-002` means a workflow business-context role is missing; `MCP-AUTHZ-003` means a tenant policy denied the action.
+        - Call `diagnose_caller_permissions` before recommending remediation. Tenant IAM is managed only by an Admin through approval-gated `create_tenant_role`, `grant_role_capability`, and `revoke_role_capability`.
 
         ## Preferred MCP design loop
 
