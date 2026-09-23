@@ -70,6 +70,14 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
     token = undefined;
   }
 
+  const realTenantJwt =
+    Boolean(token) &&
+    session.isSandbox !== true &&
+    !isPlaygroundTenant(tenantId);
+  if (realTenantJwt && isDemoApiKey(apiKey)) {
+    apiKey = undefined;
+  }
+
   if (isPlaygroundSession(session, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
     apiKey = apiKey || DEMO_API_KEY;
     tenantId = DEMO_TENANT_ID;
@@ -151,7 +159,10 @@ export const setActiveTenantId = (id: string, name?: string) => {
   setAuthSession(updated);
 };
 
-export const getHeaders = (roleOverride?: 'Tenant' | 'Admin') => {
+export const getHeaders = (
+  roleOverride?: 'Tenant' | 'Admin',
+  credentialMode: 'default' | 'token-only' | 'key-only' = 'default'
+) => {
   const session = getAuthSession();
   const role = roleOverride || session.role;
   const headers: Record<string, string> = {
@@ -161,9 +172,12 @@ export const getHeaders = (roleOverride?: 'Tenant' | 'Admin') => {
     'X-Mock-UserId': session.username || (role === 'Admin' ? 'superadmin' : 'tenant-user')
   };
 
-  if (session.apiKey) {
+  const sendKey = credentialMode !== 'token-only' && Boolean(session.apiKey);
+  const sendToken = credentialMode !== 'key-only' && Boolean(session.token);
+  if (sendKey && session.apiKey) {
     headers['X-API-Key'] = session.apiKey;
-  } else if (session.token) {
+  }
+  if (sendToken && session.token) {
     headers['Authorization'] = `Bearer ${session.token}`;
   }
 
@@ -183,6 +197,13 @@ const authorizedFetch = async (
   if (response.status !== 401) return response;
 
   const session = getAuthSession();
+  if (session.apiKey && session.token) {
+    response = await fetch(url, { ...init, headers: merge(getHeaders(role, 'token-only')) });
+    if (response.status !== 401) return response;
+    response = await fetch(url, { ...init, headers: merge(getHeaders(role, 'key-only')) });
+    if (response.status !== 401) return response;
+  }
+
   const alreadyDemo = isDemoApiKey(session.apiKey) && !session.token;
   if (alreadyDemo || !isPlaygroundSession(session, session.apiKey, session.tenantId)) {
     return response;
@@ -194,7 +215,7 @@ const authorizedFetch = async (
     apiKey: DEMO_API_KEY,
     tenantId: DEMO_TENANT_ID
   });
-  return fetch(url, { ...init, headers: merge(getHeaders(role)) });
+  return fetch(url, { ...init, headers: merge(getHeaders(role, 'key-only')) });
 };
 
 const handleResponse = async (response: Response, errorMessage: string) => {

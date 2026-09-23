@@ -27,78 +27,38 @@ public class MockAuthMiddleware
             config[TenantIdentityRules.AllowMockAuthKey]);
 
         var headerTenant = ReadRequestedTenant(context);
-
-        string? suppliedApiKey = null;
-        if (context.Request.Headers.TryGetValue("X-API-Key", out var h1) && !string.IsNullOrWhiteSpace(h1))
-            suppliedApiKey = h1.ToString();
-        else if (context.Request.Headers.TryGetValue("X-MCP-API-Key", out var h2) && !string.IsNullOrWhiteSpace(h2))
-            suppliedApiKey = h2.ToString();
-        else if (context.Request.Headers.TryGetValue("ApiKey", out var h3) && !string.IsNullOrWhiteSpace(h3))
-            suppliedApiKey = h3.ToString();
-        else if (context.Request.Headers.TryGetValue("Authorization", out var authHeader) && !string.IsNullOrWhiteSpace(authHeader))
-        {
-            var authStr = authHeader.ToString();
-            if (authStr.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                var bearerToken = authStr.Substring(7).Trim();
-                var jwtService = context.RequestServices.GetService<FlowOS.Security.Interfaces.IJwtTokenService>();
-                var principal = jwtService?.ValidateToken(bearerToken);
-                if (principal != null)
-                {
-                    if (!await EnsureTenantMatchAsync(context, TenantIdentityRules.CredentialTenant(principal.FindFirst("tenant_id")?.Value), headerTenant))
-                        return;
-                    context.User = principal;
-                    await _next(context);
-                    return;
-                }
-
-                suppliedApiKey = bearerToken;
-            }
-        }
-        else if (context.Request.Query.TryGetValue("apiKey", out var qKey) && !string.IsNullOrWhiteSpace(qKey))
-            suppliedApiKey = qKey.ToString();
-
-        Guid? credentialTenant = null;
+        var suppliedApiKey = ReadExplicitApiKey(context);
         var extraClaims = new List<Claim>();
+        Guid? credentialTenant = null;
 
         if (!string.IsNullOrWhiteSpace(suppliedApiKey))
         {
-            if (TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
+            credentialTenant = await LookupApiKeyAsync(context, suppliedApiKey, extraClaims);
+            if (!credentialTenant.HasValue)
             {
-                credentialTenant = TenantIdentityRules.DemoTenantId;
-                extraClaims.Add(new Claim("scope", ApiKeyScopeCatalog.FullAccess));
-            }
-            else
-            {
-                try
+                var shadowedJwt = await TryAuthenticateJwtAsync(context, headerTenant);
+                if (shadowedJwt == JwtAuthAttempt.Forbidden)
+                    return;
+                if (shadowedJwt == JwtAuthAttempt.Authenticated)
                 {
-                    var db = context.RequestServices.GetService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
-                    if (db != null)
-                    {
-                        var keyHash = FlowOS.Domain.Entities.TenantApiKey.HashKey(suppliedApiKey);
-                        var apiKeyRecord = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
-                            db.TenantApiKeys,
-                            k => k.KeyHash == keyHash && !k.IsRevoked && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow));
+                    await _next(context);
+                    return;
+                }
+            }
+        }
+        else if (TryReadBearerToken(context, out var bearerToken))
+        {
+            var jwtAttempt = await TryAuthenticateJwtAsync(context, headerTenant);
+            if (jwtAttempt == JwtAuthAttempt.Forbidden)
+                return;
+            if (jwtAttempt == JwtAuthAttempt.Authenticated)
+            {
+                await _next(context);
+                return;
+            }
 
-                        if (apiKeyRecord != null)
-                        {
-                            credentialTenant = apiKeyRecord.TenantId;
-                            extraClaims.Add(new Claim("app_name", apiKeyRecord.ApplicationName));
-                            extraClaims.Add(new Claim("environment", apiKeyRecord.Environment));
-                            foreach (var scope in apiKeyRecord.Scopes)
-                            {
-                                extraClaims.Add(new Claim("scope", scope));
-                            }
-                            apiKeyRecord.RecordUsage();
-                            await db.SaveChangesAsync();
-                        }
-                    }
-                }
-                catch
-                {
-                    // Ignore DB lookup errors; unauthenticated callers fail closed outside Development.
-                }
-            }
+            suppliedApiKey = bearerToken;
+            credentialTenant = await LookupApiKeyAsync(context, suppliedApiKey, extraClaims);
         }
 
         if (credentialTenant.HasValue)
@@ -144,6 +104,105 @@ public class MockAuthMiddleware
 
         context.User = new ClaimsPrincipal(new ClaimsIdentity(mockClaims, "Mock"));
         await _next(context);
+    }
+
+    private enum JwtAuthAttempt
+    {
+        None,
+        Forbidden,
+        Authenticated
+    }
+
+    private static string? ReadExplicitApiKey(HttpContext context)
+    {
+        if (context.Request.Headers.TryGetValue("X-API-Key", out var headerKey) && !string.IsNullOrWhiteSpace(headerKey))
+            return headerKey.ToString();
+        if (context.Request.Headers.TryGetValue("X-MCP-API-Key", out var mcpKey) && !string.IsNullOrWhiteSpace(mcpKey))
+            return mcpKey.ToString();
+        if (context.Request.Headers.TryGetValue("ApiKey", out var altKey) && !string.IsNullOrWhiteSpace(altKey))
+            return altKey.ToString();
+        if (context.Request.Query.TryGetValue("apiKey", out var queryKey) && !string.IsNullOrWhiteSpace(queryKey))
+            return queryKey.ToString();
+        return null;
+    }
+
+    private static bool TryReadBearerToken(HttpContext context, out string token)
+    {
+        token = string.Empty;
+        if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) ||
+            string.IsNullOrWhiteSpace(authHeader))
+        {
+            return false;
+        }
+
+        var authStr = authHeader.ToString();
+        if (!authStr.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        token = authStr.Substring(7).Trim();
+        return !string.IsNullOrWhiteSpace(token);
+    }
+
+    private static async Task<JwtAuthAttempt> TryAuthenticateJwtAsync(HttpContext context, Guid headerTenant)
+    {
+        if (!TryReadBearerToken(context, out var bearerToken))
+            return JwtAuthAttempt.None;
+
+        var jwtService = context.RequestServices.GetService<FlowOS.Security.Interfaces.IJwtTokenService>();
+        var principal = jwtService?.ValidateToken(bearerToken);
+        if (principal == null)
+            return JwtAuthAttempt.None;
+
+        if (!await EnsureTenantMatchAsync(
+                context,
+                TenantIdentityRules.CredentialTenant(principal.FindFirst("tenant_id")?.Value),
+                headerTenant))
+        {
+            return JwtAuthAttempt.Forbidden;
+        }
+
+        context.User = principal;
+        return JwtAuthAttempt.Authenticated;
+    }
+
+    private static async Task<Guid?> LookupApiKeyAsync(HttpContext context, string suppliedApiKey, List<Claim> extraClaims)
+    {
+        if (TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
+        {
+            extraClaims.Add(new Claim("scope", ApiKeyScopeCatalog.FullAccess));
+            return TenantIdentityRules.DemoTenantId;
+        }
+
+        try
+        {
+            var db = context.RequestServices.GetService<FlowOS.Infrastructure.Persistence.FlowOSDbContext>();
+            if (db == null)
+                return null;
+
+            var keyHash = FlowOS.Domain.Entities.TenantApiKey.HashKey(suppliedApiKey);
+            var apiKeyRecord = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
+                db.TenantApiKeys,
+                k => k.KeyHash == keyHash && !k.IsRevoked && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow));
+
+            if (apiKeyRecord == null)
+                return null;
+
+            extraClaims.Add(new Claim("app_name", apiKeyRecord.ApplicationName));
+            extraClaims.Add(new Claim("environment", apiKeyRecord.Environment));
+            foreach (var scope in apiKeyRecord.Scopes)
+            {
+                extraClaims.Add(new Claim("scope", scope));
+            }
+
+            apiKeyRecord.RecordUsage();
+            await db.SaveChangesAsync();
+            return apiKeyRecord.TenantId;
+        }
+        catch
+        {
+            // Ignore DB lookup errors; unauthenticated callers fail closed outside Development.
+            return null;
+        }
     }
 
     private static async Task<bool> EnsureTenantMatchAsync(HttpContext context, Guid? credentialTenant, Guid headerTenant)

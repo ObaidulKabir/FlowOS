@@ -21,6 +21,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.flowos-api.rule=Host(`${FLOWOS_DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.flowos-api.entrypoints=web"
+      - "traefik.http.routers.flowos-api.priority=20"
       - "traefik.http.services.flowos-api.loadbalancer.server.port=8080"
     networks:
       - traefik-network
@@ -34,7 +35,7 @@ services:
       dockerfile: docker/dashboard.Dockerfile
     command: npm run dev -- --host --port 3000
     environment:
-      - VITE_API_TARGET=${VITE_API_TARGET}
+      - VITE_API_TARGET=${VITE_API_TARGET:-http://flowos-api:8080}
     depends_on:
       - flowos-api
     labels:

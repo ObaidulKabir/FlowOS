@@ -1,5 +1,8 @@
 using System.Net;
+using System.Net.Http.Headers;
+using FlowOS.Core.Security;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Security.Interfaces;
 using FlowOS.UnitTests.Workflows;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -40,10 +43,50 @@ public class IdentityGateTests : IClassFixture<CustomWebApplicationFactory<Progr
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task MockAuthDisabled_Audit_AcceptsDemoApiKey()
+    {
+        var client = CreateInMemoryClient(allowMockAuth: false);
+        client.DefaultRequestHeaders.Add("x-tenant-id", TenantIdentityRules.DemoTenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-API-Key", "flowos_prod_secret_key_32_chars_min");
+
+        var response = await client.GetAsync($"/api/workflows/{Guid.NewGuid()}/audit");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MockAuthDisabled_Audit_AcceptsJwtWhenApiKeyIsInvalid()
+    {
+        var tenantId = Guid.NewGuid();
+        var factory = CreateInMemoryFactory(allowMockAuth: false);
+        var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var jwt = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+        var token = jwt.GenerateToken(
+            Guid.NewGuid(),
+            "audit@flowos.test",
+            "Audit User",
+            tenantId,
+            "Audit Tenant",
+            "Tenant");
+
+        client.DefaultRequestHeaders.Add("x-tenant-id", tenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-API-Key", "stale-or-unknown-key");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync($"/api/workflows/{Guid.NewGuid()}/audit");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private HttpClient CreateInMemoryClient(bool allowMockAuth = true)
+        => CreateInMemoryFactory(allowMockAuth).CreateClient();
+
+    private WebApplicationFactory<Program> CreateInMemoryFactory(bool allowMockAuth = true)
     {
         var dbName = "FlowOS_IdentityGate_" + Guid.NewGuid();
-        var factory = _factory.WithWebHostBuilder(builder =>
+        return _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureAppConfiguration((_, config) =>
             {
@@ -71,7 +114,5 @@ public class IdentityGateTests : IClassFixture<CustomWebApplicationFactory<Progr
                 });
             });
         });
-
-        return factory.CreateClient();
     }
 }
