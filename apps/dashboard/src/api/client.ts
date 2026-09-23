@@ -373,18 +373,25 @@ export const api = {
   },
 
   listEvents: async (workflowInstanceId?: string, limit: number = 50, role?: 'Tenant' | 'Admin'): Promise<any[]> => {
-    const headers = getHeaders(role);
     const params = new URLSearchParams();
     if (workflowInstanceId) params.append('workflowInstanceId', workflowInstanceId);
     params.append('limit', limit.toString());
-    const response = await fetch(`/api/events?${params.toString()}`, { headers });
+    const response = await authorizedFetch(`/api/events?${params.toString()}`, {}, role);
     return handleResponse(response, 'Failed to list events');
   },
 
   getWorkflowAudit: async (instanceId: string, role?: 'Tenant' | 'Admin'): Promise<any> => {
-    const headers = getHeaders(role);
-    const response = await fetch(`/api/workflows/${instanceId}/audit`, { headers });
+    const response = await authorizedFetch(`/api/workflows/${instanceId}/audit`, {}, role);
     return handleResponse(response, 'Failed to get workflow audit history');
+  },
+
+  getWorkflowActions: async (instanceId: string, role?: 'Tenant' | 'Admin'): Promise<any[]> => {
+    const response = await authorizedFetch(`/api/workflows/${instanceId}/actions`, {}, role);
+    const data = await handleResponse(response, 'Failed to load lifecycle action audit logs');
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.Items)) return data.Items;
+    return [];
   },
 
   listTenants: async (): Promise<TenantDto[]> => {
@@ -663,8 +670,7 @@ export const api = {
   },
 
   getTimeTravelReplay: async (id: string, role?: 'Tenant' | 'Admin'): Promise<TimeTravelReplay> => {
-    const headers = getHeaders(role);
-    const response = await fetch(`/api/workflows/${id}/time-travel`, { headers });
+    const response = await authorizedFetch(`/api/workflows/${id}/time-travel`, {}, role);
     return handleResponse(response, 'Failed to load time-travel replay');
   },
 
@@ -676,17 +682,15 @@ export const api = {
     simulatedRoles?: string[],
     role?: 'Tenant' | 'Admin'
   ): Promise<TimeTravelForkResult> => {
-    const headers = getHeaders(role);
-    const response = await fetch(`/api/workflows/${id}/time-travel/fork`, {
+    const response = await authorizedFetch(`/api/workflows/${id}/time-travel/fork`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({
         targetStepIndex: stepIndex,
         alternativeEvent: event,
         alternativePayload: payload ?? null,
         simulatedRoles: simulatedRoles ?? []
       })
-    });
+    }, role);
     return handleResponse(response, 'Failed to simulate what-if fork');
   },
 

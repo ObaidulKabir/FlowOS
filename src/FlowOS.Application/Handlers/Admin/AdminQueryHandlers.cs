@@ -125,8 +125,11 @@ public class AdminQueryHandlers :
         var definition = await _unitOfWork.WorkflowDefinitions
             .GetByIdAsNoTrackingAsync(instance.WorkflowDefinitionId, cancellationToken);
 
-        var events = await _unitOfWork.Events
-            .ListByCorrelationIdAsync(request.WorkflowInstanceId, cancellationToken);
+        var events = await LoadTimelineEventsAsync(
+            request.TenantId,
+            instance.Id,
+            instance.CorrelationId,
+            cancellationToken);
 
         var timeline = events.Select(MapToTimeline).ToList();
 
@@ -137,10 +140,37 @@ public class AdminQueryHandlers :
             DefinitionName = definition?.Name ?? "Unknown",
             Version = instance.WorkflowVersion,
             CurrentStepId = instance.CurrentStepId,
+            CurrentState = instance.CurrentState,
             Status = instance.Status.ToString(),
             CorrelationId = instance.CorrelationId,
+            CreatedAt = instance.CreatedAt,
             Timeline = timeline
         };
+    }
+
+    private async Task<List<DomainEvent>> LoadTimelineEventsAsync(
+        Guid tenantId,
+        Guid instanceId,
+        Guid? correlationId,
+        CancellationToken cancellationToken)
+    {
+        var events = await _unitOfWork.Events.ListByCorrelationIdAsync(instanceId, cancellationToken);
+        if (correlationId.HasValue &&
+            correlationId.Value != Guid.Empty &&
+            correlationId.Value != instanceId)
+        {
+            var correlated = await _unitOfWork.Events
+                .ListByCorrelationIdAsync(correlationId.Value, cancellationToken);
+            events = events.Concat(correlated).ToList();
+        }
+
+        return events
+            .Where(evt => evt.TenantId == tenantId)
+            .GroupBy(evt => evt.EventId)
+            .Select(group => group.First())
+            .OrderBy(evt => evt.Timestamp)
+            .ThenBy(evt => evt.EventId)
+            .ToList();
     }
 
     private AdminTimelineEventDto MapToTimeline(DomainEvent evt)

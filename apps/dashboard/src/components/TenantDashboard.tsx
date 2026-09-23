@@ -10,6 +10,7 @@ import {
   TenantDto
 } from '../types';
 import { api, setActiveTenantId } from '../api/client';
+import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { TenantApiKeyManager } from './TenantApiKeyManager';
@@ -64,6 +65,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedTenantId, setCopiedTenantId] = useState(false);
+  const [auditFocus, setAuditFocus] = useState<{ instanceId: string; requestId: number } | null>(null);
 
   // Tenant Filter for development / testing
   const [availableTenants, setAvailableTenants] = useState<TenantDto[]>([]);
@@ -542,7 +544,14 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
                   <Sparkles size={13} /> Launch Demo Workflow
                 </button>
               </div>
-              <WorkflowInstanceTable items={instances} blueprints={blueprints} />
+              <WorkflowInstanceTable
+                key={auditFocus?.requestId ?? 'instances'}
+                items={instances}
+                blueprints={blueprints}
+                inspectInstanceId={auditFocus?.instanceId}
+                inspectRequestId={auditFocus?.requestId}
+                onInspectConsumed={() => setAuditFocus(null)}
+              />
             </div>
           )}
 
@@ -598,7 +607,15 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           )}
 
           {activeTab === 'Events' && (
-            <EventAuditViewer role="Tenant" onInspectWorkflow={() => setActiveTab('Instances')} />
+            <EventAuditViewer
+              role="Tenant"
+              onInspectWorkflow={(instanceId) => {
+                const resolved = resolveWorkflowInstanceId(instances, instanceId);
+                if (!resolved) return;
+                setAuditFocus({ instanceId: resolved, requestId: Date.now() });
+                setActiveTab('Instances');
+              }}
+            />
           )}
 
           {activeTab === 'Keys' && (

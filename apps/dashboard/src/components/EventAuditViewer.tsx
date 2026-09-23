@@ -184,7 +184,7 @@ export const EventAuditViewer: React.FC<Props> = ({ role, onInspectWorkflow }) =
             <tr>
               <th className="py-3 px-4 rounded-l-lg">Timestamp (UTC)</th>
               <th className="py-3 px-4">Event Type</th>
-              <th className="py-3 px-4">Workflow Instance</th>
+              <th className="py-3 px-4">Instance / Correlation</th>
               <th className="py-3 px-4">Transition Context</th>
               <th className="py-3 px-4">Payload Status</th>
               <th className="py-3 px-4 text-right rounded-r-lg">Investigation</th>

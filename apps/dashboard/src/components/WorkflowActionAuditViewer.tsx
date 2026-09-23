@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle2, XCircle, ChevronDown, ChevronRight, Zap, Globe, Bell, Send, RefreshCw } from 'lucide-react';
-import { getActiveTenantId } from '../api/client';
+import { api } from '../api/client';
 
 export interface WorkflowActionExecutionLogItem {
   id: string;
@@ -36,17 +36,7 @@ export const WorkflowActionAuditViewer: React.FC<Props> = ({ workflowInstanceId 
     setLoading(true);
     setError(null);
     try {
-      const tenantId = getActiveTenantId();
-      const res = await fetch(`/api/workflows/${workflowInstanceId}/actions`, {
-        headers: {
-          'x-tenant-id': tenantId,
-          'X-Mock-Role': 'Admin'
-        }
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to load lifecycle action audit logs.`);
-      }
-      const data = await res.json();
+      const data = await api.getWorkflowActions(workflowInstanceId);
       setLogs(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || 'Error loading action history.');

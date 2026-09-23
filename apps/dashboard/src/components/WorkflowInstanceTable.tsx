@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { WorkflowInstance, WorkflowClass, TimeTravelSnapshot } from '../types';
 import { Activity, Copy, Check, Clock, History, X, ShieldAlert, Sparkles, FileJson, Layers, ChevronDown, ChevronRight, Zap, Rewind } from 'lucide-react';
-import { getActiveTenantId, api } from '../api/client';
+import { api } from '../api/client';
+import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { WorkflowActionAuditViewer } from './WorkflowActionAuditViewer';
 import { TimeTravelPlayer } from './TimeTravelPlayer';
@@ -9,7 +10,19 @@ import { TimeTravelPlayer } from './TimeTravelPlayer';
 interface Props {
   items: WorkflowInstance[];
   blueprints?: WorkflowClass[];
+  inspectInstanceId?: string | null;
+  inspectRequestId?: number | null;
+  onInspectConsumed?: () => void;
 }
+
+const engineStatusLabel = (status: unknown): string => {
+  if (status === 0 || status === 'Running') return 'Running';
+  if (status === 1 || status === 'Waiting') return 'Waiting';
+  if (status === 2 || status === 'Completed') return 'Completed';
+  if (status === 3 || status === 'Failed') return 'Failed';
+  if (typeof status === 'string' && status.trim()) return status;
+  return 'Unknown';
+};
 
 interface AuditTimelineEvent {
   eventId: string;
@@ -25,11 +38,41 @@ interface AuditDetail {
   definitionName: string;
   version: number;
   currentStepId: string;
+  currentState?: string;
   status: string;
   correlationId?: string;
   createdAt: string;
   timeline: AuditTimelineEvent[];
 }
+
+const readString = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+const normalizeAuditDetail = (data: any): AuditDetail => {
+  const timelineSource = Array.isArray(data?.timeline)
+    ? data.timeline
+    : Array.isArray(data?.Timeline)
+      ? data.Timeline
+      : [];
+
+  return {
+    id: readString(data?.id || data?.Id),
+    definitionId: readString(data?.definitionId || data?.DefinitionId) || undefined,
+    definitionName: readString(data?.definitionName || data?.DefinitionName) || 'Unknown',
+    version: Number(data?.version ?? data?.Version ?? 0),
+    currentStepId: readString(data?.currentStepId || data?.CurrentStepId),
+    currentState: readString(data?.currentState || data?.CurrentState) || undefined,
+    status: readString(data?.status || data?.Status),
+    correlationId: readString(data?.correlationId || data?.CorrelationId) || undefined,
+    createdAt: readString(data?.createdAt || data?.CreatedAt),
+    timeline: timelineSource.map((evt: any) => ({
+      eventId: readString(evt?.eventId || evt?.EventId),
+      eventType: readString(evt?.eventType || evt?.EventType),
+      timestamp: readString(evt?.timestamp || evt?.Timestamp),
+      summary: readString(evt?.summary || evt?.Summary) || 'System event recorded',
+      keyData: evt?.keyData || evt?.KeyData || {}
+    }))
+  };
+};
 
 const TimelineEventItem: React.FC<{ evt: AuditTimelineEvent }> = ({ evt }) => {
   const [expanded, setExpanded] = useState(false);
@@ -119,7 +162,13 @@ const TimelineEventItem: React.FC<{ evt: AuditTimelineEvent }> = ({ evt }) => {
   );
 };
 
-export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] }) => {
+export const WorkflowInstanceTable: React.FC<Props> = ({
+  items,
+  blueprints = [],
+  inspectInstanceId = null,
+  inspectRequestId = null,
+  onInspectConsumed
+}) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [inspectingInstance, setInspectingInstance] = useState<string | null>(null);
   const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
@@ -135,16 +184,17 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleInspect = async (instanceId: string) => {
+  const handleInspect = useCallback(async (instanceId: string) => {
     setInspectingInstance(instanceId);
     setLoadingAudit(true);
     setAuditError(null);
     setAuditDetail(null);
-    setInspectTab('visual');
+    setInspectTab('timeline');
     setReplaySnapshot(null);
 
-    // Pre-resolve blueprint definition if available in passed blueprints
-    const matchedInstance = items.find(i => (i.id || i.workflowId) === instanceId);
+    const matchedInstance = items.find(i =>
+      (i.id || i.workflowId) === instanceId || i.correlationId === instanceId
+    );
     let bp = blueprints.find(b => 
       b.id === matchedInstance?.workflowClassId || 
       b.name.toLowerCase() === (matchedInstance?.workflowClassName || '').toLowerCase()
@@ -157,20 +207,10 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
     }
 
     try {
-      const tenantId = getActiveTenantId();
-      const res = await fetch(`/api/workflows/${instanceId}/audit`, {
-        headers: {
-          'x-tenant-id': tenantId,
-          'X-Mock-Role': 'Admin'
-        }
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to load audit trail (${res.status} ${res.statusText})`);
-      }
-      const data = await res.json();
+      const raw = await api.getWorkflowAudit(instanceId);
+      const data = normalizeAuditDetail(raw);
       setAuditDetail(data);
 
-      // Attempt to resolve blueprint if not yet resolved
       if (!bp?.definition) {
         let foundBp = blueprints.find(b => 
           b.name.toLowerCase() === (data.definitionName || '').toLowerCase() ||
@@ -194,11 +234,10 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
           }
         }
 
-        // Fallback: If no blueprint found, synthesize a visual step graph from audit timeline
         if (!foundBp?.definition) {
           const stepSet = new Set<string>();
           if (data.currentStepId) stepSet.add(data.currentStepId);
-          (data.timeline || []).forEach((t: any) => {
+          data.timeline.forEach((t) => {
             if (t.keyData?.CurrentStep) stepSet.add(t.keyData.CurrentStep);
             if (t.keyData?.TargetStep) stepSet.add(t.keyData.TargetStep);
             if (t.keyData?.Step) stepSet.add(t.keyData.Step);
@@ -216,8 +255,8 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
               },
               stateMachine: {
                 entityType: data.definitionName || 'WorkflowProcess',
-                initialState: 'Draft',
-                states: ['Draft', data.status || 'Active'],
+                initialState: data.currentState || 'Draft',
+                states: ['Draft', data.currentState || data.status || 'Active'],
                 transitions: []
               }
             });
@@ -229,6 +268,18 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
     } finally {
       setLoadingAudit(false);
     }
+  }, [blueprints, items]);
+
+  useEffect(() => {
+    if (!inspectInstanceId) return;
+    const targetId = resolveWorkflowInstanceId(items, inspectInstanceId) || inspectInstanceId;
+    void handleInspect(targetId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspectInstanceId, inspectRequestId]);
+
+  const closeInspect = () => {
+    setInspectingInstance(null);
+    onInspectConsumed?.();
   };
 
   return (
@@ -251,13 +302,14 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
             const className = item.workflowClassName || item.workflowClassId || 'Workflow';
             const step = item.currentStepId || item.currentStep || 'Start';
             const state = item.currentState || 'Draft';
-            const status = (item.status === 0 || item.status === 'Running') ? 'Running' :
-                           (item.status === 1 || item.status === 'Completed') ? 'Completed' : 'Terminated';
+            const status = engineStatusLabel(item.status);
 
             const statusBadge = status === 'Completed'
               ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-              : status === 'Terminated'
+              : status === 'Failed'
               ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+              : status === 'Waiting'
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
               : 'bg-blue-500/20 text-blue-300 border-blue-500/30 animate-pulse';
 
             return (
@@ -371,7 +423,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
               </div>
 
               <button
-                onClick={() => setInspectingInstance(null)}
+                onClick={closeInspect}
                 className="text-slate-400 hover:text-white p-1 rounded transition-colors"
               >
                 <X size={18} />
@@ -383,12 +435,24 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
                 Instance UUID: <span className="font-mono text-slate-200">{inspectingInstance}</span>
               </div>
               {auditDetail && (
-                <div className="flex items-center gap-3 pt-1">
+                <div className="flex items-center gap-3 pt-1 flex-wrap">
                   <span>Class: <strong className="text-white">{auditDetail.definitionName} v{auditDetail.version}</strong></span>
                   <span>•</span>
                   <span>Current Step: <strong className="text-amber-400 font-mono">{auditDetail.currentStepId}</strong></span>
+                  {auditDetail.currentState && (
+                    <>
+                      <span>•</span>
+                      <span>Legal State: <strong className="text-emerald-300 font-mono">{auditDetail.currentState}</strong></span>
+                    </>
+                  )}
                   <span>•</span>
                   <span>Status: <strong className="text-emerald-400">{auditDetail.status}</strong></span>
+                  {auditDetail.correlationId && auditDetail.correlationId !== inspectingInstance && (
+                    <>
+                      <span>•</span>
+                      <span>Correlation: <strong className="font-mono text-slate-200">{auditDetail.correlationId}</strong></span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -409,7 +473,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
                     <WorkflowGraphVisualizer
                       definition={resolvedDefinition}
                       currentStepId={replaySnapshot?.toStepId || auditDetail?.currentStepId}
-                      currentState={replaySnapshot?.toState || auditDetail?.status}
+                      currentState={replaySnapshot?.toState || auditDetail?.currentState}
                       completedSteps={Array.from(new Set((auditDetail?.timeline || []).map(e => e.keyData?.CurrentStep || e.keyData?.Step || e.keyData?.TargetStep || '').filter(Boolean)))}
                     />
                   ) : (
@@ -441,7 +505,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({ items, blueprints = [] 
 
             <div className="pt-3 border-t border-slate-800 flex justify-end">
               <button
-                onClick={() => setInspectingInstance(null)}
+                onClick={closeInspect}
                 className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold"
               >
                 Close

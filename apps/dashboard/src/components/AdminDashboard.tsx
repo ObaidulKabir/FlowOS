@@ -3,6 +3,7 @@ import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult } from '
 import { api } from '../api/client';
 import { TenantManager } from './TenantManager';
 import { WorkflowTable } from './WorkflowTable';
+import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { DetailView } from './DetailView';
@@ -30,6 +31,7 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [auditFocus, setAuditFocus] = useState<{ instanceId: string; requestId: number } | null>(null);
 
   // Register Modal Trigger for TenantManager
   const [openRegisterModal, setOpenRegisterModal] = useState(false);
@@ -356,12 +358,27 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
               <div className="text-xs text-slate-400">
                 Fleet-wide workflow instance executions across all tenant clusters.
               </div>
-              <WorkflowInstanceTable items={instances} blueprints={blueprints} />
+              <WorkflowInstanceTable
+                key={auditFocus?.requestId ?? 'instances'}
+                items={instances}
+                blueprints={blueprints}
+                inspectInstanceId={auditFocus?.instanceId}
+                inspectRequestId={auditFocus?.requestId}
+                onInspectConsumed={() => setAuditFocus(null)}
+              />
             </div>
           )}
 
           {activeTab === 'Events' && (
-            <EventAuditViewer role="Admin" onInspectWorkflow={() => setActiveTab('Instances')} />
+            <EventAuditViewer
+              role="Admin"
+              onInspectWorkflow={(instanceId) => {
+                const resolved = resolveWorkflowInstanceId(instances, instanceId);
+                if (!resolved) return;
+                setAuditFocus({ instanceId: resolved, requestId: Date.now() });
+                setActiveTab('Instances');
+              }}
+            />
           )}
 
           {activeTab === 'Kernel' && (

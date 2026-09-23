@@ -10,9 +10,10 @@ public class AdminWorkflowDetailDto
     public string DefinitionName { get; set; } = string.Empty;
     public int Version { get; set; }
     public string CurrentStepId { get; set; } = string.Empty;
+    public string? CurrentState { get; set; }
     public string Status { get; set; } = string.Empty;
     public Guid? CorrelationId { get; set; }
-    public DateTime CreatedAt { get; set; } // Derived from first event or audit
+    public DateTime CreatedAt { get; set; }
     public List<AdminTimelineEventDto> Timeline { get; set; } = new();
 }
 
