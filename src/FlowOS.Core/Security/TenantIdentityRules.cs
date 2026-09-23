@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace FlowOS.Core.Security;
 
@@ -35,6 +36,14 @@ public static class TenantIdentityRules
     public static bool IsPrivilegedRole(string? role) =>
         string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsPlatformAdministrator(Guid tenantId, IEnumerable<string>? roles)
+    {
+        if (roles == null || !roles.Any(IsPrivilegedRole))
+            return false;
+
+        return tenantId == PlatformTenantId || tenantId == DemoTenantId;
+    }
 
     public static bool IsDemoApiKey(string? suppliedApiKey) =>
         string.Equals(suppliedApiKey, "flowos_prod_secret_key_32_chars_min", StringComparison.Ordinal) ||

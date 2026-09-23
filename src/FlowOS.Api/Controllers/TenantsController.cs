@@ -287,8 +287,7 @@ public class TenantsController : ControllerBase
            (_currentUser.TenantId == tenantId || IsPlatformAdmin());
 
     private bool IsPlatformAdmin()
-        => _currentUser.TenantId == TenantIdentityRules.PlatformTenantId &&
-           _currentUser.Roles.Any(TenantIdentityRules.IsPrivilegedRole);
+        => TenantIdentityRules.IsPlatformAdministrator(_currentUser.TenantId, _currentUser.Roles);
 }
 
 public class RegisterTenantRequest

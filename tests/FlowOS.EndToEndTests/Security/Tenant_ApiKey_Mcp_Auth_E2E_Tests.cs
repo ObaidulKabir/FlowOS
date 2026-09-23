@@ -82,13 +82,13 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
     [Fact]
     public async Task Specific_tenant_api_key_authenticates_api_and_mcp_tools()
     {
-        var register = await _api.PostAsJsonAsync("/api/tenants", new
+        var register = await _api.SendAsync(PlatformAdminApi(HttpMethod.Post, "/api/tenants", new
         {
             name = $"E2E MCP Tenant {Guid.NewGuid():N}",
             keyName = "Registration Key",
             applicationName = "Dashboard",
             environment = "Production"
-        });
+        }));
         Assert.Equal(HttpStatusCode.Created, register.StatusCode);
 
         using var registerJson = JsonDocument.Parse(await register.Content.ReadAsStringAsync());
@@ -97,18 +97,18 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         Assert.False(string.IsNullOrWhiteSpace(registrationKey));
         Assert.StartsWith("flw_live_", registrationKey);
 
-        var lookup = await _api.GetAsync($"/api/tenants/{tenantId}");
+        var lookup = await _api.SendAsync(PlatformAdminApi(HttpMethod.Get, $"/api/tenants/{tenantId}"));
         Assert.Equal(HttpStatusCode.OK, lookup.StatusCode);
         using var lookupJson = JsonDocument.Parse(await lookup.Content.ReadAsStringAsync());
         Assert.Equal(tenantId, lookupJson.RootElement.GetProperty("tenantId").GetGuid());
 
-        var generate = await _api.PostAsJsonAsync($"/api/tenants/{tenantId}/keys", new
+        var generate = await _api.SendAsync(PlatformAdminApi(HttpMethod.Post, $"/api/tenants/{tenantId}/keys", new
         {
             name = "Cursor MCP Key",
             applicationName = "Cursor",
             environment = "Production",
             scopes = new[] { "*" }
-        });
+        }));
         Assert.Equal(HttpStatusCode.OK, generate.StatusCode);
 
         using var generateJson = JsonDocument.Parse(await generate.Content.ReadAsStringAsync());
@@ -171,7 +171,7 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         var registrationAuth = await SendMcpAsync(_mcpClient, "/mcp", InitializeBody, tenantId, registrationKey!);
         AssertMcpSuccess(registrationAuth.response, registrationAuth.body);
 
-        var keysAfterUse = await _api.GetAsync($"/api/tenants/{tenantId}/keys");
+        var keysAfterUse = await _api.SendAsync(PlatformAdminApi(HttpMethod.Get, $"/api/tenants/{tenantId}/keys"));
         Assert.Equal(HttpStatusCode.OK, keysAfterUse.StatusCode);
         using var keysJson = JsonDocument.Parse(await keysAfterUse.Content.ReadAsStringAsync());
         var usedKey = keysJson.RootElement.EnumerateArray()
@@ -191,7 +191,7 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized, splitBrain.response.StatusCode);
         Assert.Contains("Invalid or unknown tenant API key", splitBrain.body);
 
-        var revoke = await _api.DeleteAsync($"/api/tenants/{tenantId}/keys/{generatedKeyId}");
+        var revoke = await _api.SendAsync(PlatformAdminApi(HttpMethod.Delete, $"/api/tenants/{tenantId}/keys/{generatedKeyId}"));
         Assert.Equal(HttpStatusCode.NoContent, revoke.StatusCode);
 
         var revoked = await SendMcpAsync(_mcpClient, "/mcp", InitializeBody, tenantId, generatedKey!);
@@ -255,6 +255,16 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-API-Key", apiKey);
         request.Headers.Add("x-tenant-id", tenantId.ToString());
+        return request;
+    }
+
+    private static HttpRequestMessage PlatformAdminApi(HttpMethod method, string path, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Add("X-Mock-Role", "Admin");
+        request.Headers.Add("x-tenant-id", FlowOS.Core.Security.TenantIdentityRules.DemoTenantId.ToString());
+        if (body != null)
+            request.Content = JsonContent.Create(body);
         return request;
     }
 

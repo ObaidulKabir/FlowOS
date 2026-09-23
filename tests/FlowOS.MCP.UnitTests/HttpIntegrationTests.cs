@@ -369,7 +369,8 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
             var requiresHumanConfirmation = tool["requiresHumanConfirmation"];
             Assert.NotNull(requiresHumanConfirmation);
-            if (name is "publish_workflowclass" or "activate_context_binding" or "archive_context_binding")
+            if (name is "publish_workflowclass" or "activate_context_binding" or "archive_context_binding"
+                or "create_tenant_role" or "grant_role_capability" or "revoke_role_capability")
             {
                 Assert.True(requiresHumanConfirmation.Value<bool>());
                 Assert.NotNull(schema["properties"]?["confirmHumanApproval"]);

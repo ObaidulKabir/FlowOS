@@ -66,6 +66,7 @@ public class MockAuthMiddleware
             if (TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
             {
                 credentialTenant = TenantIdentityRules.DemoTenantId;
+                extraClaims.Add(new Claim("scope", ApiKeyScopeCatalog.FullAccess));
             }
             else
             {

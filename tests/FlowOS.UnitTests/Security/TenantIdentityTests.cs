@@ -48,6 +48,19 @@ public class TenantIdentityTests
     }
 
     [Fact]
+    public void IsPlatformAdministrator_AllowsPlatformAndDemoPrivilegedRoles()
+    {
+        Assert.True(TenantIdentityRules.IsPlatformAdministrator(
+            TenantIdentityRules.PlatformTenantId, new[] { "Admin" }));
+        Assert.True(TenantIdentityRules.IsPlatformAdministrator(
+            TenantIdentityRules.DemoTenantId, new[] { "SuperAdmin" }));
+        Assert.False(TenantIdentityRules.IsPlatformAdministrator(
+            Guid.NewGuid(), new[] { "Admin" }));
+        Assert.False(TenantIdentityRules.IsPlatformAdministrator(
+            TenantIdentityRules.PlatformTenantId, new[] { "ApiKey" }));
+    }
+
+    [Fact]
     public void ResolveApiKeyRole_MapsDemoAndWildcardKeysToAdmin()
     {
         Assert.Equal("Admin", TenantIdentityRules.ResolveApiKeyRole(Array.Empty<string>(), isDemoKey: true));
