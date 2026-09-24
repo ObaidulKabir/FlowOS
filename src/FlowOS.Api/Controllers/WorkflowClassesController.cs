@@ -198,15 +198,37 @@ public class WorkflowClassesController : ControllerBase
     }
 
     [HttpPost("{id}/new-version")]
-    public async Task<IActionResult> CreateNewVersion(Guid id)
+    public async Task<IActionResult> CreateNewVersion(Guid id, [FromQuery] VersionBumpType bump = VersionBumpType.Minor, [FromBody] NewVersionRequest? request = null)
     {
         try
         {
-            var result = await _mediator.Send(new CreateNewWorkflowClassVersionCommand(_currentUser.TenantId, id));
+            var result = await _mediator.Send(new CreateNewWorkflowClassVersionCommand(
+                _currentUser.TenantId, id, bump, request?.ChangeLog));
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
         catch (KeyNotFoundException) { return NotFound(); }
         catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPost("{id}/rollback")]
+    public async Task<IActionResult> Rollback(Guid id)
+    {
+        try
+        {
+            var result = await _mediator.Send(new RollbackWorkflowClassCommand(_currentUser.TenantId, id));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { Error = ex.Message }); }
+        catch (WorkflowClassValidationException ex) { return BadRequest(new { Errors = ex.ValidationResult.Errors }); }
+    }
+
+    [HttpGet("by-name/{name}/version-tree")]
+    public async Task<IActionResult> GetVersionTree(string name)
+    {
+        var list = await _mediator.Send(new GetWorkflowClassVersionTreeQuery(_currentUser.TenantId, name));
+        return Ok(list);
     }
 
     private async Task<IActionResult> Mutate(IRequest<WorkflowClassResponseDto> command)
@@ -220,4 +242,9 @@ public class WorkflowClassesController : ControllerBase
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (WorkflowClassValidationException ex) { return BadRequest(new { Errors = ex.ValidationResult.Errors }); }
     }
+}
+
+public record NewVersionRequest
+{
+    public string? ChangeLog { get; init; }
 }

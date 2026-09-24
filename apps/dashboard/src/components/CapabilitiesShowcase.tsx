@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Sparkles, RotateCcw, ShieldCheck, RefreshCw, 
   Clock, Cpu, FileCheck2, ArrowRight,
-  Zap, CheckCircle2, ChevronRight
+  Zap, CheckCircle2, ChevronRight, GitBranch
 } from 'lucide-react';
 import { usePlatformMetrics } from '../platformMetrics';
 
@@ -49,15 +49,15 @@ export const CapabilitiesShowcase: React.FC = () => {
     },
     {
       id: 4,
-      title: "Human Approval Governance with Enforced SLAs",
+      title: "Proactive Multi-Tier SLAs & Dynamic Timers",
       badge: "SLA Governance",
       badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
       icon: Clock,
-      summary: "Time-bound human approvals with automatic escalation and zero zombie states.",
-      situation: "High-value approvals (CapEx > $10k, compliance sign-offs) that risk stalling due to unavailable approvers.",
-      solution: "Hybrid HumanTask steps bind to specific user roles with deterministic SLA timers. On timeout, the engine auto-transitions to escalation steps and fires urgent notification webhooks.",
-      example: "Purchase order remains pending for 48 hours. Timer fires EVT-ESCALATE, reassigns approval to VP of Finance, and pings the emergency Slack channel with order details.",
-      tags: ["Role-Based HumanTasks", "SLA Timers", "Auto-Escalation", "State Transitions"]
+      summary: "Multi-tier countdown warnings, payload-driven relative timers, and automatic cancellation.",
+      situation: "High-value approvals and time-sensitive operations (CapEx approvals, appointments, patient check-ins) that risk stalling without proactive warnings.",
+      solution: "Declarative SLAs combine hard timeout events with intermediate multi-tier countdown reminders (-24h, -2h). Standalone Timer steps compute dynamic UTC schedules from instance payload properties (e.g. appointmentDate - 24h). Completing the task atomically cancels all intermediate timer jobs in the database.",
+      example: "High-priority contract approval: FlowOS alerts the manager 24 hours and 2 hours before deadline. If approved at 22 hours, the 2-hour reminder and 48-hour timeout jobs are cancelled atomically. If neglected, EVT-ESCALATE transfers the task to executive authority.",
+      tags: ["Multi-Tier Reminders", "Payload-Driven Timers", "Atomic Timer Cancellation", "Deterministic Escalation"]
     },
     {
       id: 5,
@@ -82,6 +82,18 @@ export const CapabilitiesShowcase: React.FC = () => {
       solution: "WorkflowActionExecutionLog records exact execution timestamps, duration in ms, HTTP response codes, sanitized request/response snippets, and correlated instance state.",
       example: "Compliance auditor requests verification of patient record access revocation. Dashboard displays exact timestamp, 84ms latency, and HTTP 200 response from the identity provider.",
       tags: ["Latency Tracking", "HTTP Forensics", "SOC-2 / HIPAA Ready", "Interactive Drawer"]
+    },
+    {
+      id: 7,
+      title: "Zero-Downtime Workflow Version Control & Safe Rollback",
+      badge: "Version Governance",
+      badgeColor: "bg-teal-500/20 text-teal-300 border-teal-500/30",
+      icon: GitBranch,
+      summary: "Semantic versioning (Major/Minor/Patch) with deterministic instance pinning and 1-click safe rollback.",
+      situation: "Constantly evolving business requirements (shortened SLAs, updated approval tiers, restructured steps) where thousands of in-flight workflow instances must complete safely without corruption.",
+      solution: "Workflows enforce strict domain immutability after publication. Every running instance is permanently pinned to its exact version definition. Teams publish non-breaking policy changes via Patch versions (1.0.0 -> 1.0.1) or Context Binding Revisions, while 1-click rollback deprecates flawed versions without stranding running instances.",
+      example: "Company reduces standard procurement SLA from 48h to 24h: Admin publishes Patch v1.0.1 with changelog. Existing in-flight orders safely finish on v1.0.0 under the original 48h terms, while all new orders immediately enforce the 24h SLA. If needed, 1-click rollback safely restores prior standards.",
+      tags: ["SemVer (Major/Minor/Patch)", "Deterministic Instance Pinning", "1-Click Safe Rollback", "Context Parameterization", "ChangeLog Audit"]
     }
   ];
 
@@ -100,7 +112,7 @@ export const CapabilitiesShowcase: React.FC = () => {
               </span>
               <span className="text-xs text-slate-500">•</span>
               <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                <CheckCircle2 size={13} /> 6 Enterprise Pillars Online
+                <CheckCircle2 size={13} /> {capabilities.length} Enterprise Pillars Online
               </span>
             </div>
             <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">

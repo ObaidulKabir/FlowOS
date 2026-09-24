@@ -174,11 +174,13 @@ All routes are rooted at `/api/workflow-classes` and require `[Authorize]` (send
 | `POST /api/workflow-classes/{id}/withdraw` | Withdraw submission | `Shared` → back to owner scope. |
 | `POST /api/workflow-classes/{id}/validate` | Validate only | Returns `{ isValid, errors }` — always `200 OK`, even when invalid (the *validate action* succeeded). |
 | `POST /api/workflow-classes/lint` | Advisory lint | `{ jsonContent }` → structural warnings (not authoritative). |
-| `POST /api/workflow-classes/{id}/deprecate` | Deprecate | No new instances/copies afterward. |
+| `POST /api/workflow-classes/{id}/deprecate` | Deprecate | Marks status `Deprecated` with optional reason and migration target pointer. No new instances. |
 | `POST /api/workflow-classes/{id}/abandon` | Abandon | Owner-initiated retirement. |
 | `POST /api/workflow-classes/{id}/approve` | Approve as Public | Promotes `Shared` → `Public` (admin action; not currently gated by an explicit role check in code — see [Chapter 15](15-known-limitations-and-gaps.md)). |
 | `POST /api/workflow-classes/{id}/copy` | Copy to tenant | `{ newTenantId }`. Only `Public` classes can be copied; `newTenantId` must equal the caller's own tenant. Resets to Draft, version reset. |
-| `POST /api/workflow-classes/{id}/new-version` | New version | Auto-increments the minor version (`1.0.0` → `1.1.0`); links `PreviousVersionId`. |
+| `POST /api/workflow-classes/{id}/new-version` | New version | Query: `?bump=Major\|Minor\|Patch` (default `Minor`). Body: `{ "changeLog": "..." }`. Creates new Draft and links `PreviousVersionId`. |
+| `POST /api/workflow-classes/{id}/rollback` | Safe Rollback | Deprecates current version in favor of previous version without interrupting running instances. |
+| `GET /api/workflow-classes/by-name/{name}/version-tree` | Version tree | Returns all versions and lineage for a named workflow class. |
 | `DELETE /api/workflow-classes/{id}` | Delete | `400` if instances already exist for it. |
 
 ### Publish

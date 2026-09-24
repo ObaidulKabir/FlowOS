@@ -94,7 +94,7 @@ public class WorkflowClassManager : IWorkflowClassManager
         return result;
     }
 
-    public ValidationResult Deprecate(WorkflowClass workflowClass)
+    public ValidationResult Deprecate(WorkflowClass workflowClass, string? reason = null, Guid? migrationTargetId = null)
     {
         var result = new ValidationResult();
         if (workflowClass.Status == Enums.WorkflowClassStatus.Deprecated)
@@ -102,7 +102,36 @@ public class WorkflowClassManager : IWorkflowClassManager
             return result; // Already deprecated
         }
 
+        workflowClass.SetDeprecation(reason, migrationTargetId);
         workflowClass.Status = Enums.WorkflowClassStatus.Deprecated;
+
+        return result;
+    }
+
+    public ValidationResult Rollback(WorkflowClass currentVersion, WorkflowClass previousVersion)
+    {
+        var result = new ValidationResult();
+
+        if (previousVersion.Status != Enums.WorkflowClassStatus.Published &&
+            previousVersion.Status != Enums.WorkflowClassStatus.Deprecated)
+        {
+            result.AddError("ROLLBACK", "Lifecycle", 
+                $"Cannot rollback to version {previousVersion.Version} — it is in status {previousVersion.Status}. Only Published or Deprecated versions can be rollback targets.", 
+                "Lifecycle");
+            return result;
+        }
+
+        if (currentVersion.Status == Enums.WorkflowClassStatus.Draft)
+        {
+            result.AddError("ROLLBACK", "Lifecycle",
+                "Cannot rollback a Draft version. Delete it instead.",
+                "Lifecycle");
+            return result;
+        }
+
+        // Deprecate the current version
+        currentVersion.SetDeprecation($"Rolled back in favor of version {previousVersion.Version}.", previousVersion.Id);
+        currentVersion.Status = Enums.WorkflowClassStatus.Deprecated;
 
         return result;
     }

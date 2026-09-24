@@ -20,6 +20,15 @@ public class WorkflowClass
     // Lineage Metadata
     public Guid? PreviousVersionId { get; internal set; }
 
+    /// <summary>Human-readable summary of what changed in this version.</summary>
+    public string? ChangeLog { get; private set; }
+
+    /// <summary>Optional deprecation reason and migration guidance.</summary>
+    public string? DeprecationReason { get; private set; }
+
+    /// <summary>Optional target version to migrate to when this version is deprecated.</summary>
+    public Guid? DeprecationMigrationTargetId { get; private set; }
+
     // The Configuration Pack (Immutable after publish)
     public WorkflowClassBlueprint Definition { get; private set; }
 
@@ -48,7 +57,7 @@ public class WorkflowClass
 
     // Lifecycle Transitions (Strict)
 
-    public void UpdateDraft(string name, string version, WorkflowClassBlueprint definition)
+    public void UpdateDraft(string name, string version, WorkflowClassBlueprint definition, string? changeLog = null)
     {
         if (Status != WorkflowClassStatus.Draft)
             throw new InvalidOperationException("Only Drafts can be updated.");
@@ -59,6 +68,7 @@ public class WorkflowClass
         Name = name;
         if (!string.IsNullOrWhiteSpace(version)) Version = version;
         Definition = definition;
+        ChangeLog = changeLog;
     }
 
     public void Delete(bool hasInstances)
@@ -85,5 +95,11 @@ public class WorkflowClass
             return; // Idempotent
 
         Status = WorkflowClassStatus.Abandoned;
+    }
+
+    public void SetDeprecation(string? reason, Guid? migrationTargetId)
+    {
+        DeprecationReason = reason;
+        DeprecationMigrationTargetId = migrationTargetId;
     }
 }

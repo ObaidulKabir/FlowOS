@@ -14,6 +14,9 @@ public record WorkflowClassResponseDto
     public WorkflowClassStatus Status { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime? PublishedAt { get; init; }
-    public Guid? PreviousVersionId { get; init; } // Added
+    public Guid? PreviousVersionId { get; init; }
+    public string? ChangeLog { get; init; }
+    public string? DeprecationReason { get; init; }
+    public Guid? DeprecationMigrationTargetId { get; init; }
     public WorkflowClassBlueprint Definition { get; init; } = new();
 }

@@ -31,6 +31,7 @@ public class WorkflowClassCommandHandlers :
     IRequestHandler<ApproveWorkflowClassCommand, WorkflowClassResponseDto>,
     IRequestHandler<CopyWorkflowClassCommand, WorkflowClassResponseDto>,
     IRequestHandler<CreateNewWorkflowClassVersionCommand, WorkflowClassResponseDto>,
+    IRequestHandler<RollbackWorkflowClassCommand, WorkflowClassResponseDto>,
     IRequestHandler<LintWorkflowClassCommand, IReadOnlyList<LintError>>
 {
     private readonly IUnitOfWork _unitOfWork;
@@ -254,11 +255,31 @@ public class WorkflowClassCommandHandlers :
     public async Task<WorkflowClassResponseDto> Handle(CreateNewWorkflowClassVersionCommand request, CancellationToken cancellationToken)
     {
         var wc = await GetOwnedAsync(request.Id, request.TenantId, cancellationToken);
-        var current = WorkflowVersion.Parse(wc.Version);
-        var newVersion = _versionManager.CreateNewVersion(wc, current.BumpMinor().ToString());
+        var newVersion = _versionManager.CreateNewVersion(wc, request.BumpType, request.ChangeLog);
         _unitOfWork.WorkflowClasses.Add(newVersion);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return MapToDto(newVersion);
+    }
+
+    public async Task<WorkflowClassResponseDto> Handle(RollbackWorkflowClassCommand request, CancellationToken cancellationToken)
+    {
+        var wc = await GetOwnedAsync(request.Id, request.TenantId, cancellationToken);
+
+        if (!wc.PreviousVersionId.HasValue)
+            throw new InvalidOperationException("This version has no previous version to rollback to.");
+
+        var previous = await _unitOfWork.WorkflowClasses.GetByIdAsync(wc.PreviousVersionId.Value, cancellationToken)
+            ?? throw new KeyNotFoundException($"Previous version {wc.PreviousVersionId.Value} not found.");
+
+        if (previous.TenantId != request.TenantId)
+            throw new UnauthorizedAccessException("Previous version is not owned by the current tenant.");
+
+        var result = _manager.Rollback(wc, previous);
+        if (!result.IsValid)
+            throw new WorkflowClassValidationException(result);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return MapToDto(wc);
     }
 
     public Task<IReadOnlyList<LintError>> Handle(LintWorkflowClassCommand request, CancellationToken cancellationToken)
@@ -297,6 +318,9 @@ public class WorkflowClassCommandHandlers :
         CreatedAt = wc.CreatedAt,
         PublishedAt = wc.PublishedAt,
         PreviousVersionId = wc.PreviousVersionId,
+        ChangeLog = wc.ChangeLog,
+        DeprecationReason = wc.DeprecationReason,
+        DeprecationMigrationTargetId = wc.DeprecationMigrationTargetId,
         Definition = wc.Definition
     };
 }

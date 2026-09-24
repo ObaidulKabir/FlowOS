@@ -121,14 +121,45 @@ curl -X POST "http://localhost:5183/api/events/publish" \
 
 Check `currentStepId` again via the Admin endpoint above to confirm the transition.
 
-## Versioning
+## Versioning & Safe Evolution
 
-FlowOS supports semantic versioning for workflows: each version is a distinct, immutable definition.
+FlowOS supports semantic versioning (SemVer) for workflows: each published version is a distinct, immutable definition.
 
-* **Deploying a new version** — create a new JSON file with an incremented `version` field, then load it via `POST /api/admin/config/publish`.
+* **Deploying a new version** — create a new version via `POST /api/workflow-classes/{id}/new-version?bump=Major|Minor|Patch`, attach an optional `changeLog`, update the draft blueprint, and publish.
 * **Starting a specific version** — include `"version": 1` in the start request.
-* **Starting the latest version** — omit `version` entirely; FlowOS resolves and starts the highest available version number.
-* **Verifying which version ran** — `GET /api/admin/workflows` returns the actual `version` for each running instance; an instance never silently migrates to a newer version once started (see [Chapter 2](02-core-concepts.md#versioning--immutability)).
+* **Starting the latest version** — omit `version` entirely; FlowOS resolves and starts the highest available published version.
+* **Verifying which version ran** — `GET /api/admin/workflows` returns the actual `version` for each running instance.
+
+### Instance Pinning Guarantee
+Once a workflow instance starts, **it is permanently pinned to its exact version definition**. An instance never silently migrates or mutates mid-flight, ensuring absolute audit integrity and deterministic state transitions.
+
+### How to Change Operational Values (SLAs, Reminders, Thresholds)
+Published definitions cannot be edited in place. When business rules or SLA policies change, FlowOS provides three distinct adaptation mechanisms:
+
+1. **Patch Versioning (`1.0.0` → `1.0.1`) — Process-Wide Policy Shifts**:
+   When standard SLA times or reminder schedules change (e.g. shortening manager approval SLA from 48h to 24h), create a **Patch version**:
+   ```bash
+   POST /api/workflow-classes/{id}/new-version?bump=Patch
+   Content-Type: application/json
+   { "changeLog": "Shortened ManagerReview SLA from 48h to 24h per Q4 operational guidelines" }
+   ```
+   * Existing in-flight instances finish under their original `1.0.0` agreement.
+   * All new instances immediately execute the updated `1.0.1` SLA.
+
+2. **Workflow Context Bindings — Tenant / Environment Parameterization**:
+   To vary SLAs, roles, or approval limits across tenants or customer tiers without touching the workflow template, bind parameters in a **Workflow Context Binding Revision** (see [Chapter 17](17-workflow-context-bindings.md)). Updating a context binding revision updates runtime parameters without forking the template.
+
+3. **Dynamic Payload Timers — Instance-Specific Deadlines**:
+   Standalone `Timer` steps support dynamic schedules computed from instance payloads (e.g. `conditions: { targetTimestampProperty: "appointmentDate", leadTime: "-24h" }`). The deadline is calculated per-instance at runtime.
+
+### Safe Rollback
+If a newly published workflow version exhibits flaws, administrators can trigger a safe rollback:
+```bash
+POST /api/workflow-classes/{id}/rollback
+```
+* Safely marks the current version as `Deprecated` with a pointer to the previous version (`DeprecationMigrationTargetId`).
+* **Running instances are never interrupted** — they complete on their pinned definition.
+* New instance starts fall back to the prior stable published version.
 
 ```json
 // Start latest

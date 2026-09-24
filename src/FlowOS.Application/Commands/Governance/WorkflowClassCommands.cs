@@ -44,8 +44,14 @@ public record ApproveWorkflowClassCommand(Guid TenantId, Guid Id)
 public record CopyWorkflowClassCommand(Guid TenantId, Guid Id, Guid NewTenantId)
     : IRequest<WorkflowClassResponseDto>, IPolicySecuredCommand;
 
-public record CreateNewWorkflowClassVersionCommand(Guid TenantId, Guid Id)
+public record CreateNewWorkflowClassVersionCommand(Guid TenantId, Guid Id, VersionBumpType BumpType = VersionBumpType.Minor, string? ChangeLog = null)
     : IRequest<WorkflowClassResponseDto>, IPolicySecuredCommand;
+
+public record RollbackWorkflowClassCommand(Guid TenantId, Guid Id)
+    : IRequest<WorkflowClassResponseDto>, IPolicySecuredCommand;
+
+public record GetWorkflowClassVersionTreeQuery(Guid TenantId, string Name)
+    : IRequest<IReadOnlyList<WorkflowClassResponseDto>>;
 
 public record LintWorkflowClassCommand(string JsonContent)
     : IRequest<IReadOnlyList<LintError>>;

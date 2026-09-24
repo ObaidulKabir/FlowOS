@@ -151,7 +151,18 @@ You can start by `workflowName` **or** `workflowDefinitionId` — omit `version`
 
 ## 8. WorkflowClasses (design-time governance) — `WorkflowClassesController` (`/api/workflow-classes`, `[Authorize]`)
 
-See the full endpoint table, lifecycle diagram, and blueprint schema in [Chapter 9 — WorkflowClass Governance](09-workflow-class-governance.md#rest-api--verified-against-workflowclassescontroller).
+* `POST /api/workflow-classes` — create a new private draft blueprint (`CreateWorkflowClassCommand`).
+* `PUT /api/workflow-classes/{id}` — update an existing draft.
+* `POST /api/workflow-classes/{id}/publish` — compile and publish draft to immutable versioned runtime status (`PublishWorkflowClassCommand`).
+* `POST /api/workflow-classes/{id}/new-version?bump=Major|Minor|Patch` — create a new draft copy bumping SemVer (`Major`, `Minor`, or `Patch`). Body: `{ "changeLog": "..." }`. Links `PreviousVersionId`.
+* `POST /api/workflow-classes/{id}/rollback` — safe rollback: deprecates the current version with a pointer to the previous version without interrupting running instances (`RollbackWorkflowClassCommand`).
+* `GET /api/workflow-classes/by-name/{name}/version-tree` — returns full version history and lineage DAG for a workflow.
+* `POST /api/workflow-classes/{id}/deprecate` — mark as deprecated with optional reason and migration target pointer.
+* `POST /api/workflow-classes/{id}/copy` — clone a `Public` template into caller's tenant with version reset to `1.0.0`.
+* `POST /api/workflow-classes/{id}/validate` — run authoritative validation without modifying anything.
+* `POST /api/workflow-classes/lint` — structural advisory linting.
+
+See the full lifecycle diagram and blueprint schema in [Chapter 9 — WorkflowClass Governance](09-workflow-class-governance.md#rest-api--verified-against-workflowclassescontroller).
 
 ---
 
