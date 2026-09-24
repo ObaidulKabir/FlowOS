@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthSession } from './types';
 import { getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession, getAuthSession } from './api/client';
 import { LandingPage } from './components/LandingPage';
@@ -23,6 +23,10 @@ function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentView, session.role]);
 
   const openAuth = (mode: AuthModalMode) => {
     setAuthModalMode(mode);
