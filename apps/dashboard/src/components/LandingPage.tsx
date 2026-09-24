@@ -49,11 +49,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Flow<span className="text-blue-500">OS</span>
                 </span>
                 <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30">
-                  Dual-Kernel Engine
+                  Agent control plane
                 </span>
               </div>
               <div className="text-[11px] text-slate-400">
-                Separating State from Execution
+                Law · Work · Truth
               </div>
             </div>
           </div>
@@ -124,15 +124,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {/* Status Pill */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 text-xs font-medium text-slate-300 mb-6 shadow-sm">
           <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-emerald-400 font-bold">FlowOS 2.0 Live:</span>
-          <span>Native {mcpTools}-Tool MCP Server & Verified Multi-Tenant Mesh</span>
+          <span className="text-emerald-400 font-bold">FlowOS:</span>
+          <span>Design, validate, simulate, execute, recover, and govern</span>
         </div>
 
         {/* Hero Title */}
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-[1.15]">
-          The Dual-Kernel Orchestration Platform for{' '}
+          Build reliable workflows with{' '}
           <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
-            Autonomous AI & Core Workflows
+            your AI agent
           </span>
         </h1>
 
@@ -147,8 +147,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Subtitle */}
         <p className="mt-5 text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          FlowOS separates mathematical finite state machine invariants from declarative step execution. 
-          Equipped with zero-trust multi-tenancy, transactional event outboxes, and a native Model Context Protocol (MCP) control plane for Claude, Cursor, and autonomous agents.
+          Design, validate, simulate, execute, recover, and govern workflows through MCP.
+          {mcpTools} capabilities cover that lifecycle. The dual-kernel split — state authority plus workflow orchestration — is how FlowOS keeps an agent inside what the system allows.
         </p>
 
         {/* Primary CTAs */}
@@ -228,13 +228,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold mb-3">
             <Layers size={13} />
-            <span>Dual-Kernel Core Axioms</span>
+            <span>Law, Work, and Truth</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-            Engineered to Eliminate Race Conditions & Orphaned Steps
+            The agent decides. FlowOS decides what is allowed.
           </h2>
           <p className="text-sm text-slate-400 max-w-2xl mx-auto mt-2">
-            Traditional workflow orchestrators blur the boundary between business state and step execution. FlowOS strictly decouples them into two orthogonal kernels.
+            State is Law, the workflow is Work, and the event log is Truth. Under the hood that split is a dual-kernel architecture: state authority stays separate from step orchestration.
           </p>
         </div>
 
@@ -340,8 +340,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     "flowos": {
       "url": "${mcpUrl}",
       "headers": {
-        "x-tenant-id": "YOUR_TENANT_ID",
-        "X-MCP-API-Key": "YOUR_TENANT_API_KEY",
+        "x-tenant-id": "<YOUR_TENANT_ID>",
+        "X-MCP-API-Key": "<YOUR_MCP_API_KEY>",
         "MCP-Protocol-Version": "2025-03-26"
       }
     }

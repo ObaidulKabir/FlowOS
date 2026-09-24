@@ -165,20 +165,21 @@
             </tr>
           </table>
 
-          <h3 style="color: #ffffff; font-size: 1rem; margin-bottom: 0.5rem;">Pre-Configured Client Configuration (mcp.json)</h3>
-          <p style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.5rem;">Copy and paste this client configuration directly into Claude Desktop, Cursor, or your AI Agent config:</p>
+          <h3 style="color: #ffffff; font-size: 1rem; margin-bottom: 0.5rem;">Client configuration (mcp.json)</h3>
+          <p style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.5rem;">Paste this into Cursor or Claude, then replace the placeholders with a key you created for your tenant. These values are not credentials.</p>
           <pre id="mcp-client-config" style="background: #020617; padding: 1rem; border-radius: 0.5rem; border: 1px solid #1e293b; color: #e2e8f0; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin-bottom: 1rem;">{
   "mcpServers": {
     "flowos": {
-      "url": "https://flowos.prospectbdltd.com/mcp",
+      "url": "https://flowosbd.com/mcp",
       "headers": {
-        "x-tenant-id": "22222222-2222-2222-2222-222222222222",
-        "X-MCP-API-Key": "flowos_prod_secret_key_32_chars_min",
+        "x-tenant-id": "<YOUR_TENANT_ID>",
+        "X-MCP-API-Key": "<YOUR_MCP_API_KEY>",
         "MCP-Protocol-Version": "2025-03-26"
       }
     }
   }
 }</pre>
+          <p style="color: #fbbf24; font-size: 0.8rem; margin: 0 0 1rem 0;">One-click sandbox: open the dashboard and choose Launch Live Sandbox. That guest workspace is disposable and is separate from this configuration.</p>
 
           <div style="text-align: center; margin: 1.25rem 0;">
             <a href="/mcp" id="connect-now-btn" style="background: #2563eb; color: #ffffff; padding: 0.75rem 2rem; border-radius: 0.5rem; font-weight: bold; text-decoration: none; font-size: 1rem; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37,99,235,0.4);">
@@ -204,15 +205,15 @@
               All agent mutations, task completions, and status inspections run via <code>POST /mcp</code> over Streamable HTTP:
             </p>
             <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0.75rem;">
-              <li><strong>Transport URL:</strong> <code>https://flowos.prospectbdltd.com/mcp</code></li>
-              <li><strong>Required Headers:</strong> <code>x-tenant-id: &lt;tenant-guid&gt;</code>, <code>X-MCP-API-Key: &lt;key&gt;</code>, <code>MCP-Protocol-Version: 2025-03-26</code></li>
-              <li><strong>Sandbox Mode:</strong> When API key is unconfigured or set to "disabled", full tool execution is open for instant evaluation!</li>
+              <li><strong>Transport URL:</strong> <code>https://flowosbd.com/mcp</code></li>
+              <li><strong>Required Headers:</strong> <code>x-tenant-id: &lt;YOUR_TENANT_ID&gt;</code>, <code>X-MCP-API-Key: &lt;YOUR_MCP_API_KEY&gt;</code>, <code>MCP-Protocol-Version: 2025-03-26</code></li>
+              <li><strong>Sandbox:</strong> Launch Live Sandbox on the dashboard. Leaving the API key blank does not open production execution.</li>
             </ul>
-            <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #34d399; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s -X POST https://flowos.prospectbdltd.com/mcp \
+            <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #34d399; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s -X POST https://flowosbd.com/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "x-tenant-id: 22222222-2222-2222-2222-222222222222" \
-  -H "X-MCP-API-Key: flowos_prod_secret_key_32_chars_min" \
+  -H "x-tenant-id: &lt;YOUR_TENANT_ID&gt;" \
+  -H "X-MCP-API-Key: &lt;YOUR_MCP_API_KEY&gt;" \
   -H "MCP-Protocol-Version: 2025-03-26" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
           </div>

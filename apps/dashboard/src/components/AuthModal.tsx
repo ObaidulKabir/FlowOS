@@ -35,8 +35,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loginApiKey, setLoginApiKey] = useState('flowos_prod_secret_key_32_chars_min');
-  const [loginTenantId, setLoginTenantId] = useState('22222222-2222-2222-2222-222222222222');
+  const [loginApiKey, setLoginApiKey] = useState('');
+  const [loginTenantId, setLoginTenantId] = useState('');
 
   // Register form state
   const [regOrgName, setRegOrgName] = useState('');
@@ -569,7 +569,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="22222222-2222-2222-2222-222222222222"
+                    placeholder="<YOUR_TENANT_ID>"
                     value={loginTenantId}
                     onChange={(e) => setLoginTenantId(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500"
@@ -583,7 +583,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="flowos_prod_secret_key_32_chars_min"
+                    placeholder="<YOUR_MCP_API_KEY>"
                     value={loginApiKey}
                     onChange={(e) => setLoginApiKey(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500"

@@ -15,7 +15,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   // Tenant Login Form
   const [selectedTenantId, setSelectedTenantId] = useState<string>('22222222-2222-2222-2222-222222222222');
   const [customTenantId, setCustomTenantId] = useState<string>('');
-  const [apiKey, setApiKey] = useState<string>('flowos_prod_secret_key_32_chars_min');
+  const [apiKey, setApiKey] = useState<string>('');
   const [useCustomTenant, setUseCustomTenant] = useState(false);
 
   // Admin Login Form

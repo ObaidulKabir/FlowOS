@@ -21,8 +21,8 @@ export const McpAgentGuideline: React.FC = () => {
   const curlToolList = `curl -s -X POST ${mcpUrl} \\
   -H "Content-Type: application/json" \\
   -H "Accept: application/json, text/event-stream" \\
-  -H "x-tenant-id: 22222222-2222-2222-2222-222222222222" \\
-  -H "X-MCP-API-Key: flowos_prod_secret_key_32_chars_min" \\
+  -H "x-tenant-id: <YOUR_TENANT_ID>" \\
+  -H "X-MCP-API-Key: <YOUR_MCP_API_KEY>" \\
   -H "MCP-Protocol-Version: 2025-03-26" \\
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'`;
 
@@ -31,8 +31,9 @@ export const McpAgentGuideline: React.FC = () => {
       flowos: {
         url: mcpUrl,
         headers: {
-          "x-tenant-id": "22222222-2222-2222-2222-222222222222",
-          "X-MCP-API-Key": "flowos_prod_secret_key_32_chars_min"
+          "x-tenant-id": "<YOUR_TENANT_ID>",
+          "X-MCP-API-Key": "<YOUR_MCP_API_KEY>",
+          "MCP-Protocol-Version": "2025-03-26"
         }
       }
     }
@@ -51,8 +52,8 @@ const rpcResponse = await fetch('${mcpUrl}', {
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/event-stream',
-    'x-tenant-id': '22222222-2222-2222-2222-222222222222',
-    'X-MCP-API-Key': 'flowos_prod_secret_key_32_chars_min',
+    'x-tenant-id': '<YOUR_TENANT_ID>',
+    'X-MCP-API-Key': '<YOUR_MCP_API_KEY>',
     'MCP-Protocol-Version': '2025-03-26'
   },
   body: JSON.stringify({
@@ -80,14 +81,14 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
               AI Agent & Browser Guideline: How to Get MCP Tools
             </h2>
             <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
-              {mcpTools} Production Tools
+              {mcpTools} lifecycle capabilities
             </span>
             <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
               {tests.total} Tests Passing
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-            FlowOS is an authoritative, multi-tenant workflow control plane. Autonomous AI agents, browser bots, and LLM crawlers can discover schemas, inspect invariants, and orchestrate stateful processes under zero-trust governance. JSON-RPC must be posted to <code className="text-blue-300">{mcpUrl}</code> exactly — {MCP_JSONRPC_RULE} A paid Managed Cloud or Enterprise tenant includes every MCP tool. Trial keys may discover, lint, validate, and simulate — they cannot start instances until activated.
+            Your agent can design, validate, simulate, execute, recover, and govern a workflow through MCP. Copy the snippets below with placeholders, then paste a key you created. Launch Live Sandbox is a separate disposable guest workspace: it does not publish a production credential, and a blank API key does not open production execution. JSON-RPC must be posted to <code className="text-blue-300">{mcpUrl}</code> exactly — {MCP_JSONRPC_RULE} A paid Managed Cloud or Enterprise tenant includes the full lifecycle. Trial keys may discover, lint, validate, and simulate — they cannot start instances until activated.
           </p>
         </div>
 
