@@ -55,7 +55,7 @@ public sealed class EntitlementHttpTests
             new { workflowClassId = Guid.NewGuid() });
         Assert.Equal(HttpStatusCode.PaymentRequired, startStatus);
         Assert.Contains(TenantEntitlementPolicy.PlanRequiredCode, startBody);
-        Assert.Contains("MCP is included in the tenant subscription", startBody);
+        Assert.Contains("MCP is included on every package", startBody);
 
         using (var scope = app.Services.CreateScope())
         {

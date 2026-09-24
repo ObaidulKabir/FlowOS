@@ -138,7 +138,7 @@ Each row is **must-pass**. The gate stays RED while any status is `partial` or `
 
 | | |
 |---|---|
-| **Capability** | MCP is included in the tenant subscription. Trial may discover/lint/validate/simulate. Runtime tools and REST `[RequireRuntimePlan]` return `MCP-PLAN-REQUIRED` (HTTP 402) until Managed/Enterprise + `BillingStatus=Active`. |
+| **Capability** | MCP is included on every package. Free/Trial may discover/lint/validate/simulate. Runtime tools and REST `[RequireRuntimePlan]` return `MCP-PLAN-REQUIRED` (HTTP 402) until a paid Active plan (`Managed` for Starter–Scale, or `Enterprise`). |
 | **Status** | **done** |
 | **Proof** | [Chapter 18](18-commercial-and-mcp-entitlements.md); `ITenantEntitlementService`; `tests/FlowOS.UnitTests/Infrastructure/TenantEntitlementServiceTests.cs`; `tests/FlowOS.MCP.UnitTests/EntitlementHttpTests.cs`. Admin `POST /api/admin/tenants/{id}/plan`. |
 | **Engine blocker** | None for v1. A payment provider is later (`L-PAY`). Entitlement without checkout is still an OS kernel. |

@@ -8,6 +8,7 @@ import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { AuthModalMode } from './AuthModal';
 import { usePlatformMetrics } from '../platformMetrics';
 import { mcpRpcUrl, mcpRpcPath } from '../mcpUrl';
+import { PRICING_METERS, PRICING_TIERS } from '../pricingLadder';
 
 interface LandingPageProps {
   onOpenAuth: (mode: AuthModalMode) => void;
@@ -417,32 +418,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Pricing Matrix */}
       <section id="pricing" className="py-16 px-6 max-w-7xl mx-auto border-t border-slate-900">
-        <div className="text-center mb-12">
+        <div className="text-center mb-10">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-            Simple, Transparent Pricing
+            Try, build, then grow with usage
           </h2>
           <p className="text-sm text-slate-400 max-w-2xl mx-auto mt-2">
-            Charge a tenant subscription, not MCP usage. Playground is discovery and simulate. Register starts a design-time Trial. Managed Cloud $299/month includes the full MCP runtime with no per-call fee.
+            Free → Starter → Builder → Team → Growth → Scale → Enterprise.
+            You pay for publications, events, and generous MCP calls — not seats first, and not every retry or simulation.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-xs">
-          
-          {/* Plan 1: Developer Sandbox */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+          {PRICING_METERS.map(meter => (
+            <div key={meter.title} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1">{meter.weight}</div>
+              <h3 className="text-sm font-bold text-white mb-2">{meter.title}</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">{meter.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10 text-xs">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
             <div>
-              <div className="inline-block px-2.5 py-1 bg-slate-800 rounded-lg text-slate-300 font-semibold mb-3">
-                Playground
-              </div>
-              <h3 className="text-lg font-bold text-white mb-1">Developer Sandbox</h3>
+              <div className="inline-block px-2.5 py-1 bg-slate-800 rounded-lg text-slate-300 font-semibold mb-3">Explore</div>
+              <h3 className="text-lg font-bold text-white mb-1">Free</h3>
               <div className="text-2xl font-extrabold text-white mb-4">
-                $0 <span className="text-xs font-normal text-slate-400">/ forever</span>
+                $0 <span className="text-xs font-normal text-slate-400">/ month</span>
               </div>
               <ul className="space-y-2.5 text-slate-400 mb-6">
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Guest sandbox dashboard, no signup</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Public GET discovery, initialize, tools/list</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Simulate, lint, and validate (no production keys)</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Time-Travel Fork Simulator</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Launch Live Sandbox with no signup</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 2 publications · 2.5K events · 2.5K MCP calls</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Simulate, lint, validate, and generate a first workflow</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Register stays design-time until a paid package is activated</li>
               </ul>
             </div>
             <button
@@ -454,61 +462,106 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </div>
 
-          {/* Plan 2: Managed Cloud */}
           <div className="bg-slate-900 border-2 border-blue-500 p-6 rounded-3xl flex flex-col justify-between relative shadow-2xl shadow-blue-500/10">
             <div className="absolute -top-3.5 right-6 bg-blue-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider shadow">
-              Most Popular
+              Most popular
             </div>
             <div>
-              <div className="inline-block px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg font-semibold mb-3">
-                Production
-              </div>
-              <h3 className="text-lg font-bold text-white mb-1">Managed Cloud Tenant</h3>
+              <div className="inline-block px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg font-semibold mb-3">Ship</div>
+              <h3 className="text-lg font-bold text-white mb-1">Builder</h3>
               <div className="text-2xl font-extrabold text-white mb-4">
-                $299 <span className="text-xs font-normal text-slate-400">/ month</span>
+                $29 <span className="text-xs font-normal text-slate-400">/ month</span>
               </div>
               <ul className="space-y-2.5 text-slate-300 mb-6">
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Dashboard, REST API, and tenant API keys</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Full MCP runtime included (start, publish, complete)</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> No per-call or usage fees</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Official Email from admin@flowosbd.com</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 99.9% Uptime SLA & Zombie Recovery</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 30 publications · 75K events · 75K MCP calls</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Simulation, replay, compensation, and DLQ included</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Soft overage, then a Team upgrade — not a hard cutoff</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Starter is $9 if you only need a first real product</li>
               </ul>
             </div>
             <button
               onClick={() => onOpenAuth('register')}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl text-center transition-all shadow-lg shadow-blue-500/25 flex items-center justify-center gap-1.5"
             >
-              <span>Register Trial (design-only until activated)</span>
+              <span>Register and request Builder</span>
               <ArrowRight size={14} />
             </button>
           </div>
 
-          {/* Plan 3: Enterprise Dedicated */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
             <div>
-              <div className="inline-block px-2.5 py-1 bg-purple-500/20 text-purple-300 rounded-lg font-semibold mb-3">
-                Custom
-              </div>
-              <h3 className="text-lg font-bold text-white mb-1">Enterprise Dedicated</h3>
-              <div className="text-2xl font-extrabold text-white mb-4">Custom</div>
+              <div className="inline-block px-2.5 py-1 bg-purple-500/20 text-purple-300 rounded-lg font-semibold mb-3">Strategic</div>
+              <h3 className="text-lg font-bold text-white mb-1">Enterprise</h3>
+              <div className="text-2xl font-extrabold text-white mb-1">Custom</div>
+              <p className="text-[11px] text-slate-500 mb-4">Typically $1,500–$5,000+ / month</p>
               <ul className="space-y-2.5 text-slate-400 mb-6">
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Same MCP runtime entitlement as Managed Cloud</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Air-Gapped / VPC On-Premise Deployment</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Custom commercial terms via admin@flowosbd.com</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 24/7 Priority SLA & Dedicated Engineering</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Private or VPC deploy, SSO, custom retention</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Custom limits, MCP policies, and data residency</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Security review, SLA, and dedicated support</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Student / local developer plans via the same inbox</li>
               </ul>
             </div>
             <a
-              href="mailto:admin@flowosbd.com?subject=FlowOS%20Enterprise%20Inquiry"
+              href="mailto:admin@flowosbd.com?subject=FlowOS%20Enterprise%20or%20paid%20plan"
               className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-center transition-all flex items-center justify-center gap-1.5"
             >
               <Mail size={14} />
-              <span>Contact Enterprise Sales</span>
+              <span>Talk through the right package</span>
             </a>
           </div>
-
         </div>
+
+        <div className="overflow-x-auto border border-slate-800 rounded-2xl bg-slate-950/60">
+          <table className="w-full min-w-[860px] text-left text-[11px] text-slate-300">
+            <thead>
+              <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-3 font-semibold">Package</th>
+                {PRICING_TIERS.map(tier => (
+                  <th key={tier.id} className={`px-3 py-3 font-semibold ${tier.highlight ? 'text-blue-300' : 'text-white'}`}>
+                    {tier.name}
+                    <div className="normal-case tracking-normal text-[10px] text-slate-500 font-normal">{tier.stage}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-slate-800/80">
+                <td className="px-4 py-2.5 text-slate-500">Price</td>
+                {PRICING_TIERS.map(tier => (
+                  <td key={tier.id} className="px-3 py-2.5">
+                    <div className="font-bold text-white">{tier.price}</div>
+                    <div className="text-[10px] text-slate-500">{tier.priceNote}</div>
+                  </td>
+                ))}
+              </tr>
+              {[
+                ['Publications', 'publications'],
+                ['Events / month', 'events'],
+                ['MCP calls / month', 'mcpCalls'],
+                ['Active workflows', 'activeWorkflows'],
+                ['Projects', 'projects'],
+                ['Concurrent runs', 'concurrency'],
+                ['Event retention', 'retention'],
+                ['Team members', 'members'],
+                ['Support', 'support']
+              ].map(([label, key]) => (
+                <tr key={key} className="border-b border-slate-800/60 last:border-0">
+                  <td className="px-4 py-2 text-slate-500">{label}</td>
+                  {PRICING_TIERS.map(tier => (
+                    <td key={tier.id} className="px-3 py-2">{tier[key as keyof typeof tier]}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-[11px] text-slate-500 mt-4 max-w-4xl leading-relaxed">
+          Simulation, recovery, and MCP stay on every package. Higher tiers add volume, retention, concurrency, collaboration, and support — not the core product.
+          Annual billing is two months free. Soft overage is the intended path past a limit; we will not charge per retry, per simulation, or per transition.
+          Register is Free (design-time). A platform Admin activates Starter through Scale as a paid runtime plan, or Enterprise for custom terms, until self-serve checkout and the usage dashboard ship.
+          Students and local developers can request a modest ৳ plan through the same inbox — an acquisition path, not a permanently cheaper edition.
+        </p>
       </section>
 
       {/* Footer */}

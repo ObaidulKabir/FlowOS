@@ -25,7 +25,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 15 | [Known Limitations & Gaps](15-known-limitations-and-gaps.md) | Honest list of enforcement gaps proven by regression tests |
 | 16 | [Sample Applications](16-sample-applications.md) | ExpenseApp, the Tenant Dashboard, and the Node.js demo client |
 | 17 | [Workflow Context Bindings](17-workflow-context-bindings.md) | Reuse and simulate one process template across tenant business contexts |
-| 18 | [Commercial Policy & MCP Entitlements](18-commercial-and-mcp-entitlements.md) | Subscription plans, trial vs paid runtime, and how MCP is included |
+| 18 | [Commercial Policy & MCP Entitlements](18-commercial-and-mcp-entitlements.md) | Usage ladder (publications, events, MCP), Free through Enterprise, trial vs paid runtime |
 | 19 | [OS-1 Honesty Gate](19-os-release-gate.md) | When FlowOS may be called a business automation OS vs a workflow engine |
 | 20 | [Hosted LLM & Automation Policy](20-hosted-llm-and-automation-policy.md) | Paid-plan FlowOS OpenAI default, daily quota, BYO opt-in, host key rules |
 | 21 | [Competitive Comparison](21-competitive-comparison.md) | OS-1 vs Temporal, Camunda 8, Step Functions, Conductor/Orkes, n8n/Zapier |

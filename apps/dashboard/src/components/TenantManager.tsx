@@ -503,7 +503,7 @@ headers = {
                         className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-60"
                       >
                         <Sparkles size={13} />
-                        {activatingId === t.tenantId ? 'Activating…' : 'Activate Managed'}
+                        {activatingId === t.tenantId ? 'Activating…' : 'Activate paid plan'}
                       </button>
                     )}
                   </div>

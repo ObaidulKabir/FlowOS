@@ -14,14 +14,16 @@ public class CommercialPolicyCopyTests
         var docs = File.ReadAllText(Path.Combine(root, "docs", "18-commercial-and-mcp-entitlements.md"));
         var chapter13 = File.ReadAllText(Path.Combine(root, "docs", "13-mcp-and-ai-agent-integration.md"));
 
-        Assert.Contains("MCP runtime included", landing);
-        Assert.Contains("No per-call or usage fees", landing);
-        Assert.Contains("design-only until activated", landing);
+        Assert.Contains("Try, build, then grow with usage", landing);
+        Assert.Contains("will not charge per retry, per simulation, or per transition", landing);
+        Assert.Contains("Register is Free (design-time)", landing);
         Assert.Contains("MCP is included", docs);
-        Assert.Contains("no per-call or per-transition overage", docs, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("No usage fees", docs);
-        Assert.Contains("MCP is included in a paid FlowOS tenant subscription", chapter13);
+        Assert.Contains("will not charge per retry, simulation, replay, or compensation", docs, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Free → Starter → Builder → Team → Growth → Scale → Enterprise", docs);
+        Assert.Contains("MCP is included on every package", chapter13);
         Assert.DoesNotContain("Pre-Payment Gateway", chapter13);
+        Assert.DoesNotContain("Managed Cloud $299", docs);
+        Assert.DoesNotContain("Managed Cloud $299", chapter13);
     }
 
     private static string FindRepoRoot()

@@ -58,7 +58,7 @@ Endpoints:
 | `OPTIONS`| `/mcp` or `/mcp/` | CORS preflight handling for web/browser agent environments. |
 | `GET` | `/health` | `200` `{ "status": "ok" }` |
 
-> **Commercial policy:** MCP is included in a paid FlowOS tenant subscription (Managed Cloud $299/month or Enterprise). Trial keys may discover, lint, validate, and simulate. Runtime tools (`start_workflow`, `publish_event`, `complete_task`, publish/activate) return `MCP-PLAN-REQUIRED` until a platform Admin sets the tenant plan to Managed/Enterprise with `BillingStatus=Active`. See [Chapter 18](18-commercial-and-mcp-entitlements.md).
+> **Commercial policy:** MCP is included on every package. The published ladder is Free → Starter ($9) → Builder ($29) → Team ($79) → Growth ($199) → Scale ($499) → Enterprise (custom), metered on publications, events, and generous MCP calls. Register without activation is Free (design-time). Runtime tools (`start_workflow`, `publish_event`, `complete_task`, publish/activate) return `MCP-PLAN-REQUIRED` until a platform Admin activates a paid plan (`Managed` or `Enterprise`, `BillingStatus=Active`). See [Chapter 18](18-commercial-and-mcp-entitlements.md).
 >
 > **Sandbox mode:** Setting `MCP_API_KEY=disabled` (or leaving `MCP_API_KEY` unconfigured in Development) bypasses the `X-MCP-API-Key` header requirement and billing enforcement for local evaluation. Every authenticated request still requires a valid `x-tenant-id` when keys are enabled.
 

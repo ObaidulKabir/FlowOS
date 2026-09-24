@@ -8,8 +8,8 @@ This is the durable commercial and product policy for **AI task automation** on 
 
 | Goal | Rule |
 | --- | --- |
-| Tenant ease | No OpenAI account and no AI Context key to complete a Quote (or any Agent step). Register → pay (or Admin activates Managed/Enterprise) → start instance → `run_agent_task`. |
-| FlowOS revenue | Subscription is the product (`Managed Cloud $299/month` or Enterprise). Hosted tokens are a **capped convenience** inside that fee, not an unlimited model. |
+| Tenant ease | No OpenAI account and no AI Context key to complete a Quote (or any Agent step). Register → pay (or Admin activates a paid package) → start instance → `run_agent_task`. |
+| FlowOS revenue | Packages are the product (Starter $9 through Scale $499, or Enterprise). Hosted tokens are a **capped convenience** inside that fee, not an unlimited model. |
 | FlowOS cost control | Trial never spends the platform key. Daily `MaxCompletionsPerDay` (default 200) stops one tenant from draining the host bill. Over cap → BYO or wait. |
 | Compliance | BYO (`openai`, `anthropic`, `azure-openai`, `google`, `custom`) still wins when the step alias is a tenant binding with a key. Regulated tenants keep residency and their own vendor contract. |
 
@@ -187,7 +187,7 @@ Do **not** paste a key into Application → AI Context → Providers for `flowos
 
 | Caller code | Persisted execution code | Meaning | Tenant/operator action |
 | --- | --- | --- | --- |
-| `MCP-PLAN-REQUIRED` | `ENTITLEMENT_DENIED` | Trial or unpaid; runtime and hosted tokens blocked | Activate Managed/Enterprise (`BillingStatus=Active`) |
+| `MCP-PLAN-REQUIRED` | `ENTITLEMENT_DENIED` | Trial or unpaid; runtime and hosted tokens blocked | Activate a paid package (`Managed` or `Enterprise`, `BillingStatus=Active`) |
 | `MCP-HOSTED-LLM-UNAVAILABLE` | `PROVIDER_CONFIGURATION` | Host key missing, hosted disabled, or provider cannot be resolved | Operator sets `FLOWOS_HOSTED_LLM_API_KEY` on the executing host; verify the provider alias |
 | `MCP-HOSTED-LLM-QUOTA` | `HOSTED_QUOTA_DENIED` | Tenant hit today's persistent hosted cap | Wait for UTC midnight, raise the cap, or bind BYO |
 | provider-specific response | `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, or `INVALID_MODEL_OUTPUT` | Provider transport/auth/output failed after resolution | Check the provider binding/vendor, then follow retry policy |

@@ -17,7 +17,7 @@ public static class FlowOsMcpGuidance
         - Never strip a trailing slash. Never follow HTTP 301/302 for POST; a slash redirect can switch to http:// and drop the body and API key.
         - Accept: application/json, text/event-stream. Headers: X-MCP-API-Key (or Authorization: Bearer) and x-tenant-id.
         - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com.
-        - Commercial policy: MCP is included in an active Managed Cloud or Enterprise tenant subscription. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, publish_event, complete_task, publish, activate) require a paid plan and return MCP-PLAN-REQUIRED until activated.
+        - Commercial policy: MCP is included on every package (Free through Enterprise). Packages progress Free → Starter → Builder → Team → Growth → Scale → Enterprise, metered on publications, events, and generous MCP calls. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, publish_event, complete_task, publish, activate) require a paid Active plan (stored as Managed Cloud or Enterprise) and return MCP-PLAN-REQUIRED until activated.
 
         FlowOS is a dual-kernel enterprise process operating system that strictly separates:
         1. State Authority (Mathematical State Machine) - Controls what state transitions are legally permitted.

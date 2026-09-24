@@ -19,7 +19,7 @@ public static class TenantEntitlementPolicy
 {
     public const string PlanRequiredCode = "MCP-PLAN-REQUIRED";
     public const string PlanRequiredMessage =
-        "Runtime execution requires an active Managed Cloud or Enterprise plan. MCP is included in the tenant subscription.";
+        "Runtime execution requires an active paid plan (Starter through Scale, or Enterprise). MCP is included on every package.";
 
     public static bool McpToolRequiresPaidPlan(string toolName, bool mutating, string sideEffect)
     {

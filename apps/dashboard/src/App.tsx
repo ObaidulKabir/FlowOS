@@ -102,13 +102,13 @@ function App() {
             <div className="bg-gradient-to-r from-amber-900/90 via-slate-900 to-orange-900/90 border-b border-amber-500/40 px-6 py-2.5 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-3 shadow-md z-50">
               <div className="flex items-center gap-2">
                 <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                <span className="font-bold">Trial / unpaid tenant:</span>
+                <span className="font-bold">Free / unpaid tenant:</span>
                 <span className="text-slate-200 hidden sm:inline">
-                  Runtime execution is blocked (start, publish, complete). Design-time simulate, lint, and drafts still work. MCP is included once a Managed Cloud or Enterprise plan is activated.
+                  Runtime execution is blocked (start, publish, complete). Design-time simulate, lint, and drafts still work. Ask admin@flowosbd.com to activate Starter through Scale, or Enterprise.
                 </span>
               </div>
               <a
-                href="mailto:admin@flowosbd.com?subject=FlowOS%20Managed%20Cloud%20activation"
+                href="mailto:admin@flowosbd.com?subject=FlowOS%20paid%20plan%20activation"
                 className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-all shadow"
               >
                 Contact admin@flowosbd.com
