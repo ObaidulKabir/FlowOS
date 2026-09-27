@@ -34,6 +34,13 @@ public class MockAuthMiddleware
         if (!string.IsNullOrWhiteSpace(suppliedApiKey))
         {
             credentialTenant = await LookupApiKeyAsync(context, suppliedApiKey, extraClaims);
+            if (!credentialTenant.HasValue && await TryAuthenticateJwtValueAsync(context, suppliedApiKey, headerTenant))
+            {
+                await _next(context);
+                return;
+            }
+            if (context.Response.HasStarted)
+                return;
             if (!credentialTenant.HasValue)
             {
                 var shadowedJwt = await TryAuthenticateJwtAsync(context, headerTenant);
@@ -148,21 +155,39 @@ public class MockAuthMiddleware
         if (!TryReadBearerToken(context, out var bearerToken))
             return JwtAuthAttempt.None;
 
+        return await TryAuthenticateJwtValueAsync(context, bearerToken, headerTenant)
+            ? JwtAuthAttempt.Authenticated
+            : context.Response.HasStarted
+                ? JwtAuthAttempt.Forbidden
+                : JwtAuthAttempt.None;
+    }
+
+    private static async Task<bool> TryAuthenticateJwtValueAsync(HttpContext context, string token, Guid headerTenant)
+    {
+        if (!LooksLikeJwt(token))
+            return false;
+
         var jwtService = context.RequestServices.GetService<FlowOS.Security.Interfaces.IJwtTokenService>();
-        var principal = jwtService?.ValidateToken(bearerToken);
+        var principal = jwtService?.ValidateToken(token);
         if (principal == null)
-            return JwtAuthAttempt.None;
+            return false;
 
         if (!await EnsureTenantMatchAsync(
                 context,
                 TenantIdentityRules.CredentialTenant(principal.FindFirst("tenant_id")?.Value),
                 headerTenant))
         {
-            return JwtAuthAttempt.Forbidden;
+            return false;
         }
 
         context.User = principal;
-        return JwtAuthAttempt.Authenticated;
+        return true;
+    }
+
+    private static bool LooksLikeJwt(string value)
+    {
+        var parts = value.Split('.');
+        return parts.Length == 3 && parts.All(part => part.Length > 0);
     }
 
     private static async Task<Guid?> LookupApiKeyAsync(HttpContext context, string suppliedApiKey, List<Claim> extraClaims)

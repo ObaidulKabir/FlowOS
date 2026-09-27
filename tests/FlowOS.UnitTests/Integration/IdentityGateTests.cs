@@ -80,6 +80,30 @@ public class IdentityGateTests : IClassFixture<CustomWebApplicationFactory<Progr
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task MockAuthDisabled_WorkflowList_AcceptsJwtInApiKeyHeader()
+    {
+        var tenantId = Guid.NewGuid();
+        var factory = CreateInMemoryFactory(allowMockAuth: false);
+        var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var jwt = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+        var token = jwt.GenerateToken(
+            Guid.NewGuid(),
+            "instances@flowos.test",
+            "Instance User",
+            tenantId,
+            "Instance Tenant",
+            "Tenant");
+
+        client.DefaultRequestHeaders.Add("x-tenant-id", tenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-API-Key", token);
+
+        var response = await client.GetAsync($"/api/workflows?tenantId={tenantId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     private HttpClient CreateInMemoryClient(bool allowMockAuth = true)
         => CreateInMemoryFactory(allowMockAuth).CreateClient();
 

@@ -39,17 +39,24 @@ const isDemoApiKey = (key?: string) =>
 const isPlaygroundTenant = (tenantId?: string) =>
   !tenantId || tenantId === DEMO_TENANT_ID || tenantId === PLATFORM_TENANT_ID;
 
+const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const bytes = Uint8Array.from(atob(padded), char => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
+};
+
 const tokenIsUnusable = (token?: string): boolean => {
   if (!token) return true;
-  const parts = token.split('.');
-  if (parts.length !== 3) return true;
-  try {
-    const json = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
-    const payload = JSON.parse(json);
-    return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
-  } catch {
-    return true;
-  }
+  const payload = decodeJwtPayload(token);
+  if (!payload) return false;
+  return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
 };
 
 const isPlaygroundSession = (session: AuthSession, apiKey?: string, tenantId?: string) =>
@@ -176,6 +183,8 @@ export const getHeaders = (
   const sendToken = credentialMode !== 'key-only' && Boolean(session.token);
   if (sendKey && session.apiKey) {
     headers['X-API-Key'] = session.apiKey;
+  } else if (sendToken && session.token) {
+    headers['X-API-Key'] = session.token;
   }
   if (sendToken && session.token) {
     headers['Authorization'] = `Bearer ${session.token}`;
