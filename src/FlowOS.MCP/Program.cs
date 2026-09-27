@@ -3,6 +3,7 @@ using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Services;
 using FlowOS.Application.Commands.Governance;
 using FlowOS.Core.Interfaces;
+using FlowOS.Domain;
 using FlowOS.Domain.Services;
 using FlowOS.Domain.Validation;
 using FlowOS.Infrastructure;
@@ -315,7 +316,7 @@ public partial class Program
             }
         });
 
-        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+        app.MapGet("/health", () => Results.Ok(new { status = "ok", flowOsVersion = FlowOsRelease.Version }));
 
         app.MapGet("/", (HttpContext context) => Results.Redirect(FlowOsPublicUrls.McpPath(ResolvePublicMcpUrl(context))));
 
@@ -334,6 +335,7 @@ public partial class Program
                 schema = "https://modelcontextprotocol.io/schema/discovery.json",
                 name = "FlowOS MCP Control Plane",
                 version = "1.0.0",
+                flowOsVersion = FlowOsRelease.Version,
                 description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction. " + FlowOsPublicUrls.AgentJsonRpcRule,
                 transport = "streamable-http",
                 protocolVersion = "2025-03-26",
@@ -418,6 +420,7 @@ public partial class Program
                 defaultProtocolVersion = McpJsonRpcDispatcher.DefaultProtocolVersion,
                 supportedProtocolVersions = McpJsonRpcDispatcher.SupportedProtocolVersions,
                 toolsCount = toolItems.Count,
+                flowOsVersion = FlowOsRelease.Version,
                 description = "FlowOS Agentic Control Plane: Multi-tenant state machine and declarative workflow engine. " + FlowOsPublicUrls.AgentJsonRpcRule,
                 endpoint = mcpPath,
                 jsonrpcUrl = mcpUrl,

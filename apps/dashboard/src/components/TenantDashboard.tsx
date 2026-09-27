@@ -22,10 +22,11 @@ import { CompetitiveComparison } from './CompetitiveComparison';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { DemoVisualSimulator } from './DemoVisualSimulator';
 import { TenantMcpConfiguration } from './TenantMcpConfiguration';
+import { TenantBackupDialog } from './TenantBackupDialog';
 import { 
   Building2, Plus, RefreshCw, Key, Activity, 
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
-  Bot, CheckCircle, AlertTriangle, Database
+  Bot, CheckCircle, AlertTriangle, Database, ShieldAlert
 } from 'lucide-react';
 
 interface Props {
@@ -99,6 +100,7 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
 
   // Start Instance Modal
   const [showStartModal, setShowStartModal] = useState(false);
+  const [showBackupDialog, setShowBackupDialog] = useState(false);
   const [startWorkflowName, setStartWorkflowName] = useState('ExpenseApprovalV2');
   const [startingInstance, setStartingInstance] = useState(false);
 
@@ -305,6 +307,15 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             >
               <Plus size={14} />
               <span>New Blueprint</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBackupDialog(true)}
+              className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              title="Download or restore this tenant with confirmation"
+            >
+              <ShieldAlert size={14} className="text-amber-300" />
+              <span>Site backup</span>
             </button>
             <button
               onClick={() => setActiveTab('Keys')}
@@ -644,6 +655,15 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           )}
         </div>
       </div>
+
+      {showBackupDialog && (
+        <TenantBackupDialog
+          tenantId={session.tenantId}
+          tenantName={session.tenantName}
+          onClose={() => setShowBackupDialog(false)}
+          onRestored={loadData}
+        />
+      )}
 
       {/* Start Instance Modal */}
       {showStartModal && (

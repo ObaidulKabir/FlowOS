@@ -172,7 +172,7 @@ export const ApplicationWorkspace: React.FC<Props> = ({
                 className={`w-full text-left p-3 ${selected?.id === item.id ? 'bg-blue-600/20' : 'hover:bg-slate-800/70'}`}
               >
                 <div className="text-sm font-semibold text-white truncate">{item.name}</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">v{item.version} · {WorkflowClassStatus[item.status] ?? item.status}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">v{item.version} · {WorkflowClassStatus[item.status] ?? item.status}{item.flowOsVersion ? ` · FlowOS ${item.flowOsVersion}` : ''}</div>
               </button>
             ))}
             {filtered.length === 0 && (
@@ -204,6 +204,10 @@ export const ApplicationWorkspace: React.FC<Props> = ({
                     <h4 className="text-lg font-bold text-white mt-0.5">{selected.name} <span className="text-slate-500 text-sm font-mono">v{selected.version}</span></h4>
                     <p className="text-[11px] text-slate-500 mt-1">
                       {WorkflowClassStatus[selected.status] ?? selected.status}
+                      {selected.flowOsVersion ? ` · depends on FlowOS ${selected.flowOsVersion}` : ''}
+                      {selected.flowOsCompatibility === 'NewerThanHost' || selected.flowOsCompatibility === 'IncompatibleMajor'
+                        ? ' · this host cannot run it'
+                        : ''}
                       {steps.length ? ` · ${steps.length} steps · ${steps.slice(0, 6).join(', ')}${steps.length > 6 ? '…' : ''}` : ''}
                       {' · '}{relatedInstances.length} live instance{relatedInstances.length === 1 ? '' : 's'}
                     </p>

@@ -279,5 +279,6 @@ public sealed class WorkflowContextBindingHandlers :
             revision.ContentHash,
             revision.CreatedAtUtc,
             revision.ActivatedAtUtc,
-            revision.SupersededAtUtc);
+            revision.SupersededAtUtc,
+            revision.FlowOsVersion);
 }

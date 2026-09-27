@@ -1,4 +1,5 @@
 using FlowOS.Core.Common.Models;
+using FlowOS.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -19,6 +20,7 @@ public class PluginBindingRecordConfiguration : IEntityTypeConfiguration<PluginB
         builder.Property(x => x.ConfigurationJson).HasColumnType("jsonb");
         builder.Property(x => x.CreatedAtUtc).IsRequired();
         builder.Property(x => x.UpdatedAtUtc).IsRequired();
+        builder.Property(x => x.FlowOsVersion).IsRequired().HasMaxLength(32).HasDefaultValue(FlowOsRelease.PreStampVersion);
 
         builder.HasIndex(x => new { x.TenantId, x.BindingType, x.SourceName }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.BindingType, x.IsEnabled });

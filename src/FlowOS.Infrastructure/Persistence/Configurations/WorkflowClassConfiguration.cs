@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlowOS.Domain;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public class WorkflowClassConfiguration : IEntityTypeConfiguration<WorkflowClass
         
         builder.Property(e => e.Name).IsRequired().HasMaxLength(200);
         builder.Property(e => e.Version).IsRequired().HasMaxLength(50);
+        builder.Property(e => e.FlowOsVersion).IsRequired().HasMaxLength(32).HasDefaultValue(FlowOsRelease.PreStampVersion);
         
         // Store Definition as JSON
         builder.Property(e => e.Definition)

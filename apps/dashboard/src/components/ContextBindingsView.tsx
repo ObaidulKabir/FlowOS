@@ -302,7 +302,7 @@ export const ContextBindingsView: React.FC<Props> = ({
                 <span className="text-[10px] uppercase text-blue-300">{binding.status}</span>
               </div>
               <div className="text-xs text-slate-400 mt-1">{binding.contextType}</div>
-              <div className="text-[10px] text-slate-500 mt-1">Active r{binding.activeRevision?.revision ?? '—'} · Draft r{binding.draftRevision?.revision ?? '—'}</div>
+              <div className="text-[10px] text-slate-500 mt-1">Active r{binding.activeRevision?.revision ?? '—'} · Draft r{binding.draftRevision?.revision ?? '—'}{(binding.draftRevision?.flowOsVersion || binding.activeRevision?.flowOsVersion) ? ` · FlowOS ${binding.draftRevision?.flowOsVersion || binding.activeRevision?.flowOsVersion}` : ''}</div>
             </button>
           ))}
           {!bindings.length && <div className="p-6 text-xs text-slate-500 text-center">No business contexts yet.</div>}

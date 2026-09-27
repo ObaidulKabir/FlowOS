@@ -1,3 +1,4 @@
+using FlowOS.Domain;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
 using Newtonsoft.Json;
@@ -113,8 +114,8 @@ public sealed class McpJsonRpcDispatcher : IMcpJsonRpcDispatcher
                             prompts = new { listChanged = false },
                             resources = new { listChanged = false }
                         },
-                        serverInfo = new { name = "FlowOS MCP Server", version = "1.1.0" },
-                        instructions = FlowOsMcpGuidance.SystemInstructions
+                        serverInfo = new { name = "FlowOS MCP Server", version = FlowOsRelease.Version },
+                        instructions = FlowOsMcpGuidance.InstructionsForHost()
                     };
                     break;
 

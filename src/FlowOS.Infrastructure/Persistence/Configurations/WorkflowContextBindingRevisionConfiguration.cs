@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlowOS.Domain;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.ValueObjects;
@@ -24,6 +25,7 @@ public class WorkflowContextBindingRevisionConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.Revision).IsRequired();
         builder.Property(x => x.SourceWorkflowClassId).IsRequired();
         builder.Property(x => x.SourceWorkflowClassVersion).IsRequired().HasMaxLength(50);
+        builder.Property(x => x.FlowOsVersion).IsRequired().HasMaxLength(32).HasDefaultValue(FlowOsRelease.PreStampVersion);
         builder.Property(x => x.Definition)
             .HasConversion(
                 value => JsonSerializer.Serialize(value, JsonOptions),

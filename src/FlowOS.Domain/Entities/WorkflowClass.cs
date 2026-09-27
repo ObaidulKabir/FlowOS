@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using FlowOS.Domain;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.Services;
@@ -29,6 +30,9 @@ public class WorkflowClass
     /// <summary>Optional target version to migrate to when this version is deprecated.</summary>
     public Guid? DeprecationMigrationTargetId { get; private set; }
 
+    /// <summary>FlowOS release this blueprint was last authored against. Not the blueprint's own <see cref="Version"/>.</summary>
+    public string FlowOsVersion { get; private set; } = FlowOsRelease.Version;
+
     // The Configuration Pack (Immutable after publish)
     public WorkflowClassBlueprint Definition { get; private set; }
 
@@ -52,6 +56,7 @@ public class WorkflowClass
         Scope = WorkflowClassScope.Private;
         Status = WorkflowClassStatus.Draft;
         Definition = definition;
+        FlowOsVersion = FlowOsRelease.Version;
         CreatedAt = DateTime.UtcNow;
     }
 
@@ -69,6 +74,7 @@ public class WorkflowClass
         if (!string.IsNullOrWhiteSpace(version)) Version = version;
         Definition = definition;
         ChangeLog = changeLog;
+        FlowOsVersion = FlowOsRelease.Version;
     }
 
     public void Delete(bool hasInstances)

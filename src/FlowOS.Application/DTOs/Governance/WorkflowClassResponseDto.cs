@@ -1,4 +1,5 @@
 using System;
+using FlowOS.Domain;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Enums;
 
@@ -18,5 +19,7 @@ public record WorkflowClassResponseDto
     public string? ChangeLog { get; init; }
     public string? DeprecationReason { get; init; }
     public Guid? DeprecationMigrationTargetId { get; init; }
+    public string FlowOsVersion { get; init; } = FlowOsRelease.Version;
+    public string FlowOsCompatibility { get; init; } = "Current";
     public WorkflowClassBlueprint Definition { get; init; } = new();
 }

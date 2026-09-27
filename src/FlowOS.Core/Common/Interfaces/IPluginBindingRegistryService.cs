@@ -60,7 +60,8 @@ public record PluginBindingDto(
     bool IsEnabled,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
-    object? Configuration = null);
+    object? Configuration = null,
+    string? FlowOsVersion = null);
 
 public interface IPluginBindingRegistryService
 {

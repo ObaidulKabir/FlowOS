@@ -360,3 +360,4 @@ Previously identified MCP control-plane gaps are covered by the maintained `Flow
 * [Chapter 9 — WorkflowClass Governance](09-workflow-class-governance.md) for the REST equivalent of the same lifecycle.
 * [Chapter 15 — Known Limitations](15-known-limitations-and-gaps.md) for core engine boundaries.
 * [Chapter 19 — OS-1 Honesty Gate](19-os-release-gate.md) before calling FlowOS a business automation OS (`check_os_release_gate` / `flowos://guides/os-release-gate`). If `VERDICT` is GREEN, use the OS sentence; otherwise it is a dual-kernel process engine with MCP.
+* [Chapter 23 — Tenant backup](23-tenant-backup.md) before moving a DesignedApp and its running instances (`backup_tenant_for_another_site` / `flowos://guides/tenant-backup`). The file is a download, not an MCP tool payload.

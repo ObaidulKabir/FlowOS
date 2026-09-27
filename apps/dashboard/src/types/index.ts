@@ -35,6 +35,8 @@ export interface WorkflowClass {
   createdAt: string;
   publishedAt?: string;
   previousVersionId?: string;
+  flowOsVersion?: string;
+  flowOsCompatibility?: string;
   definition: any; // We can type this strictly later if needed, for now 'any' allows rendering JSON
 }
 
@@ -334,6 +336,7 @@ export interface WorkflowContextBindingRevision {
   createdAtUtc: string;
   activatedAtUtc?: string;
   supersededAtUtc?: string;
+  flowOsVersion?: string;
 }
 
 export interface WorkflowContextBinding {

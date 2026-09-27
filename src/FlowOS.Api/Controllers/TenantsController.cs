@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Interfaces;
 using FlowOS.Core.Security;
 using FlowOS.Domain.Entities;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Services;
 using FlowOS.Infrastructure.Services.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,15 +24,18 @@ public class TenantsController : ControllerBase
     private readonly FlowOSDbContext _context;
     private readonly ICurrentUser _currentUser;
     private readonly TenantSecurityProvisioningService _securityProvisioning;
+    private readonly ITenantBackupService _backups;
 
     public TenantsController(
         FlowOSDbContext context,
         ICurrentUser currentUser,
-        TenantSecurityProvisioningService securityProvisioning)
+        TenantSecurityProvisioningService securityProvisioning,
+        ITenantBackupService backups)
     {
         _context = context;
         _currentUser = currentUser;
         _securityProvisioning = securityProvisioning;
+        _backups = backups;
     }
 
     [HttpGet]
@@ -280,6 +285,65 @@ public class TenantsController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    [HttpGet("{id}/backup")]
+    public async Task<IActionResult> DownloadBackup(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
+        var denied = RequireBackupConfirmation(TenantBackupConfirmation.Download);
+        if (denied != null)
+            return denied;
+
+        try
+        {
+            var json = await _backups.ExportJsonAsync(id, cancellationToken);
+            var fileName = $"flowos-tenant-backup-{id:N}-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
+            return File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", fileName);
+        }
+        catch (TenantBackupException ex)
+        {
+            return StatusCode(ex.StatusCode, new { code = ex.Code, message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id}/backup/restore")]
+    public async Task<IActionResult> RestoreBackup(Guid id, CancellationToken cancellationToken)
+    {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
+        var denied = RequireBackupConfirmation(TenantBackupConfirmation.Restore);
+        if (denied != null)
+            return denied;
+
+        string json;
+        using (var reader = new System.IO.StreamReader(Request.Body))
+            json = await reader.ReadToEndAsync(cancellationToken);
+
+        try
+        {
+            var result = await _backups.RestoreJsonAsync(id, json, cancellationToken);
+            return Ok(result);
+        }
+        catch (TenantBackupException ex)
+        {
+            return StatusCode(ex.StatusCode, new { code = ex.Code, message = ex.Message });
+        }
+    }
+
+    private IActionResult? RequireBackupConfirmation(string expected)
+    {
+        if (TenantBackupConfirmation.IsConfirmed(Request.Headers[TenantBackupConfirmation.HeaderName], expected))
+            return null;
+
+        return BadRequest(new
+        {
+            code = "BACKUP-CONFIRMATION",
+            message = $"Backup {expected} requires header {TenantBackupConfirmation.HeaderName}: {expected}. Acknowledge the confidential file in the dashboard before downloading or restoring it."
+        });
     }
 
     private bool CanAccessTenant(Guid tenantId)

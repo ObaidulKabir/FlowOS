@@ -1,4 +1,5 @@
 using System;
+using FlowOS.Domain;
 
 namespace FlowOS.Core.Common.Models;
 
@@ -13,6 +14,9 @@ public class PluginBindingRecord
     public string? ConfigurationJson { get; private set; }
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; private set; } = DateTime.UtcNow;
+
+    /// <summary>FlowOS release this AI Context binding was last authored against.</summary>
+    public string FlowOsVersion { get; private set; } = FlowOsRelease.Version;
 
     private PluginBindingRecord()
     {
@@ -31,6 +35,7 @@ public class PluginBindingRecord
         ProviderName = providerName?.Trim() ?? string.Empty;
         IsEnabled = isEnabled;
         ConfigurationJson = null;
+        FlowOsVersion = FlowOsRelease.Version;
     }
 
     public void Update(string providerName, bool isEnabled, string? configurationJson = null)
@@ -39,6 +44,7 @@ public class PluginBindingRecord
         IsEnabled = isEnabled;
         if (configurationJson != null)
             ConfigurationJson = configurationJson;
+        FlowOsVersion = FlowOsRelease.Version;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 

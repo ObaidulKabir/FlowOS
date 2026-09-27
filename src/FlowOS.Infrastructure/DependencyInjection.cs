@@ -117,6 +117,7 @@ public static class DependencyInjection
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantAuthService, FlowOS.Infrastructure.Services.Security.TenantAuthService>();
         services.AddScoped<FlowOS.Infrastructure.Services.Security.TenantSecurityProvisioningService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantEntitlementService, FlowOS.Infrastructure.Services.TenantEntitlementService>();
+        services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantBackupService, TenantBackupService>();
         return services;
     }
 }

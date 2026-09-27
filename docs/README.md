@@ -29,6 +29,8 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 19 | [OS-1 Honesty Gate](19-os-release-gate.md) | When FlowOS may be called a business automation OS vs a workflow engine |
 | 20 | [Hosted LLM & Automation Policy](20-hosted-llm-and-automation-policy.md) | Paid-plan FlowOS OpenAI default, daily quota, BYO opt-in, host key rules |
 | 21 | [Competitive Comparison](21-competitive-comparison.md) | OS-1 vs Temporal, Camunda 8, Step Functions, Conductor/Orkes, n8n/Zapier |
+| 22 | [DesignedApp & FlowOS release](22-designed-app-flowos-version.md) | Blueprint, Business Context, and AI Context record the FlowOS release they depend on |
+| 23 | [Tenant backup & site restore](23-tenant-backup.md) | Download a point-in-time Designed App and running instances, restore on another site |
 
 ## Reading paths
 

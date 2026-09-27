@@ -1,3 +1,4 @@
+using FlowOS.Domain;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
@@ -79,6 +80,8 @@ public sealed class DispatcherTests
         Assert.Contains("Never follow HTTP 301/302 for POST", initResult["instructions"]!.ToString());
         Assert.Contains("MCP-PLAN-REQUIRED", initResult["instructions"]!.ToString());
         Assert.Contains("Managed Cloud", initResult["instructions"]!.ToString());
+        Assert.Contains("DesignedApp contract", initResult["instructions"]!.ToString());
+        Assert.Equal(FlowOsRelease.Version, initResult["serverInfo"]!["version"]!.ToString());
         Assert.Contains("design_dual_kernel_workflow", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/dual-kernel-design", initResult["instructions"]!.ToString());
         Assert.Contains("test_sla_reminders_in_simulator", initResult["instructions"]!.ToString());
@@ -89,6 +92,11 @@ public sealed class DispatcherTests
         Assert.Contains("flowos://guides/ai-task-automation", initResult["instructions"]!.ToString());
         Assert.Contains("check_os_release_gate", initResult["instructions"]!.ToString());
         Assert.Contains("flowos://guides/os-release-gate", initResult["instructions"]!.ToString());
+        Assert.Contains("backup_tenant_for_another_site", initResult["instructions"]!.ToString());
+        Assert.Contains("flowos://guides/tenant-backup", initResult["instructions"]!.ToString());
+        Assert.Contains("BACKUP-CONFLICT", initResult["instructions"]!.ToString());
+        Assert.Contains("X-FlowOS-Backup-Confirm", initResult["instructions"]!.ToString());
+        Assert.Contains("BACKUP-VERSION", initResult["instructions"]!.ToString());
         Assert.Contains("get_agent_context", initResult["instructions"]!.ToString());
         Assert.Contains("upsert_agent_prompt", initResult["instructions"]!.ToString());
         Assert.Contains("upsert_agent_provider", initResult["instructions"]!.ToString());
@@ -219,6 +227,19 @@ public sealed class DispatcherTests
         var osGatePrompt = await dispatcher.DispatchAsync(Request(34, "prompts/get", new { name = "check_os_release_gate" }));
         var osGatePromptText = JObject.FromObject(((JsonRpcResponse)osGatePrompt.Response!).Result!)["messages"]![0]!["content"]!["text"]!.ToString();
         Assert.Equal(osGateText, osGatePromptText);
+
+        var backupRead = await dispatcher.DispatchAsync(Request(11, "resources/read", new { uri = "flowos://guides/tenant-backup" }));
+        var backupText = JObject.FromObject(((JsonRpcResponse)backupRead.Response!).Result!)["contents"]![0]!["text"]!.ToString();
+        Assert.Contains("flowos-tenant-backup", backupText);
+        Assert.Contains("GET /api/tenants/", backupText);
+        Assert.Contains("BACKUP-CONFLICT", backupText);
+        Assert.Contains("X-FlowOS-Backup-Confirm", backupText);
+        Assert.Contains("BACKUP-CONFIRMATION", backupText);
+        Assert.Contains("Do not ask an MCP tool", backupText);
+
+        var backupPrompt = await dispatcher.DispatchAsync(Request(35, "prompts/get", new { name = "backup_tenant_for_another_site", arguments = new { tenantId = "22222222-2222-2222-2222-222222222222" } }));
+        var backupPromptText = JObject.FromObject(((JsonRpcResponse)backupPrompt.Response!).Result!)["messages"]![0]!["content"]!["text"]!.ToString();
+        Assert.Contains("22222222-2222-2222-2222-222222222222", backupPromptText);
     }
 
     [Fact]

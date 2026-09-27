@@ -192,14 +192,14 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           <div className="grid md:grid-cols-2 gap-3">
             <BindingList title="Prompts" empty="No prompts yet." items={prompts.map(p => ({
               alias: p.sourceName,
-              detail: str(asRecord(p.configuration).title) || str(asRecord(p.configuration).Title) || 'markdown'
+              detail: `${str(asRecord(p.configuration).title) || str(asRecord(p.configuration).Title) || 'markdown'}${p.flowOsVersion ? ` · FlowOS ${p.flowOsVersion}` : ''}`
             }))} />
             <BindingList title="Providers" empty="No LLM providers yet. Add a BYO key on the Providers tab." items={providers.map(p => {
               const cfg = asRecord(p.configuration);
               const hasKey = Boolean(cfg.hasApiKey ?? cfg.HasApiKey);
               return {
                 alias: p.sourceName,
-                detail: `${p.providerName}${str(cfg.model || cfg.Model) ? ` · ${str(cfg.model || cfg.Model)}` : ''}${hasKey ? ' · key set' : ''}`
+                detail: `${p.providerName}${str(cfg.model || cfg.Model) ? ` · ${str(cfg.model || cfg.Model)}` : ''}${hasKey ? ' · key set' : ''}${p.flowOsVersion ? ` · FlowOS ${p.flowOsVersion}` : ''}`
               };
             })} />
             <BindingList title="Tools" empty="No resource tools yet. Bind LookupRecord / QueryRecords capabilities." items={tools.map(t => ({

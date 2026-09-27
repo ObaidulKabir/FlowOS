@@ -214,7 +214,8 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 ? AgentProviderConfiguration.Redact(x.ConfigurationJson)
                 : x.BindingType == PluginBindingTypes.Prompt
                     ? AgentPromptConfiguration.Public(x.ConfigurationJson)
-                    : null);
+                    : null,
+            x.FlowOsVersion);
 
     private static string? MergeConfiguration(string bindingType, string? existing, string? incoming)
     {

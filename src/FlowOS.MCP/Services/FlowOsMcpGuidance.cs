@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FlowOS.Domain;
 using FlowOS.MCP.Models;
 using Newtonsoft.Json.Linq;
 
@@ -6,6 +7,15 @@ namespace FlowOS.MCP.Services;
 
 public static class FlowOsMcpGuidance
 {
+    public static string InstructionsForHost() =>
+        "DesignedApp contract: this host is FlowOS " + FlowOsRelease.Version +
+        ". A DesignedApp is the WorkflowClass blueprint plus its Business Context plus its AI Context. " +
+        "Each of those records flowOsVersion, the FlowOS release it was authored against. " +
+        "That stamp is not the blueprint's own version. " +
+        "Move a DesignedApp only onto a host with the same major version that is not older than the stamp. " +
+        "Bump FlowOsRelease.Version for every contract change, including the smallest MCP, blueprint, business-context, or AI-context change.\n\n" +
+        SystemInstructions;
+
     public const string SystemInstructions =
         """
         FlowOS Process Operating System — Autonomous Agent Operating Guide
@@ -110,6 +120,14 @@ public static class FlowOsMcpGuidance
         - Load prompt `check_os_release_gate` or resource `flowos://guides/os-release-gate`.
         - If VERDICT is not GREEN, FlowOS is a dual-kernel process engine with an MCP control plane. Do not declare it a business automation OS.
         - Preferred prompt: `check_os_release_gate`. Preferred resource: `flowos://guides/os-release-gate`.
+
+        Tenant backup law (moving a DesignedApp and its running instances to another site):
+        - Do not put the backup inside an MCP tool call. The file is a download. Instances, events, and AI provider configuration make it too large, and too confidential, for chat.
+        - Download `GET /api/tenants/{tenantId}/backup` with header `X-FlowOS-Backup-Confirm: download`. Restore with `POST /api/tenants/{tenantId}/backup/restore`, the raw JSON body, and header `X-FlowOS-Backup-Confirm: restore`. Without that header the call is `BACKUP-CONFIRMATION`. The caller must be that tenant or a platform admin. Dashboard: Site backup, then acknowledge the confidential file before download, or preview the file and type RESTORE before restore.
+        - The file holds the DesignedApp (blueprint, Business Context, AI Context), compiled workflow and state-machine definitions, every instance and context snapshot, the event log, action history, and timer jobs. Tenant AI provider configuration is included. API keys, user passwords, the platform hosted-LLM key, and outbox messages are not.
+        - Restore keeps the original record ids and rewrites `tenantId`. `BACKUP-CONFLICT` means those ids already exist; use another site or an empty tenant. `BACKUP-VERSION` means this host is older than the backup or a different major.
+        - Pending timers are restored already processed so the destination does not fire the same side effect again.
+        - Preferred prompt: `backup_tenant_for_another_site`. Preferred resource: `flowos://guides/tenant-backup`.
         """;
 
     public static object GetPromptsList() => new
@@ -178,6 +196,15 @@ public static class FlowOsMcpGuidance
                 arguments = new[]
                 {
                     new { name = "audience", description = "Who is asking (agent or human). Does not change the verdict.", required = false }
+                }
+            },
+            new
+            {
+                name = "backup_tenant_for_another_site",
+                description = "How to download a point-in-time backup of a tenant's DesignedApp and running instances, and restore that file on another FlowOS site. The backup is a download, not an MCP tool payload.",
+                arguments = new[]
+                {
+                    new { name = "tenantId", description = "Tenant whose DesignedApp and running instances should move", required = false }
                 }
             },
             new
@@ -447,6 +474,23 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "backup_tenant_for_another_site" => new
+            {
+                description = "Tenant point-in-time backup and site restore",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = TenantBackupGuide.Replace("{TENANT_ID}", arguments?["tenantId"]?.ToString() ?? "<tenantId>")
+                        }
+                    }
+                }
+            },
+
             _ => null
         };
     }
@@ -499,6 +543,13 @@ public static class FlowOsMcpGuidance
             },
             new
             {
+                uri = "flowos://guides/tenant-backup",
+                name = "Tenant Backup and Site Restore",
+                description = "How to download a point-in-time DesignedApp and running-instance backup and restore it on another FlowOS site. The file is a download, not an MCP tool payload.",
+                mimeType = "text/markdown"
+            },
+            new
+            {
                 uri = "flowos://templates/expense-approval",
                 name = "Reference Blueprint: Expense Approval",
                 description = "Canonical declarative JSON blueprint featuring a 4-state dual-kernel approval process with roles and events.",
@@ -526,7 +577,7 @@ public static class FlowOsMcpGuidance
                     {
                         uri,
                         mimeType = "text/markdown",
-                        text = SystemInstructions
+                        text = InstructionsForHost()
                     }
                 }
             },
@@ -598,6 +649,19 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "flowos://guides/tenant-backup" => new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        uri,
+                        mimeType = "text/markdown",
+                        text = TenantBackupGuide.Replace("{TENANT_ID}", "<tenantId>")
+                    }
+                }
+            },
+
             "flowos://templates/expense-approval" => new
             {
                 contents = new[]
@@ -627,6 +691,53 @@ public static class FlowOsMcpGuidance
             _ => null
         };
     }
+
+    public const string TenantBackupGuide =
+        """
+        # FlowOS tenant backup and site restore
+
+        Tenant: {TENANT_ID}
+
+        A DesignedApp (WorkflowClass blueprint, Business Context, and AI Context) plus its running instances can move to another FlowOS site as one downloadable file. Do not ask an MCP tool to return or accept that file. The payload is the tenant's instances, event log, and AI provider configuration.
+
+        ## Download
+
+        `GET /api/tenants/{TENANT_ID}/backup`
+
+        Header: `X-FlowOS-Backup-Confirm: download`
+
+        A call without that header is refused (`BACKUP-CONFIRMATION`). The caller must be that tenant or a platform admin. The response is `flowos-tenant-backup` format version 1:
+
+        `flowos-tenant-backup-{tenantId}-{utc}.json`
+
+        On the dashboard, open **Site backup**, read what the file contains, and acknowledge that it holds tenant AI keys before the download starts.
+
+        ## Restore
+
+        On the destination site:
+
+        `POST /api/tenants/{destinationTenantId}/backup/restore`
+
+        Header: `X-FlowOS-Backup-Confirm: restore`
+
+        Send the file as the raw JSON body. On the dashboard, open **Site backup**, choose the file, read the preview (source tenant, FlowOS version, counts), and type RESTORE. The button stays disabled until that acknowledgement.
+
+        Restore keeps the original record ids and rewrites `tenantId` to the destination. It refuses the file when any workflow class, business context, instance, or event id already exists (`BACKUP-CONFLICT`). Restore onto another site, or an empty tenant. It refuses a newer FlowOS or a different major (`BACKUP-VERSION`). The destination must be the same major and must not be older than `flowOsVersion` on the file or on any blueprint, business-context revision, or AI Context binding inside it.
+
+        ## What is in the file
+
+        - DesignedApp: blueprint, business-context revisions, AI Context prompt and provider bindings
+        - Compiled workflow definitions and state machines
+        - Every workflow instance and its context snapshot
+        - Event log, action history, and timer jobs
+        - The tenant's own AI provider configuration, because the other site cannot run those steps without it
+
+        Left out: tenant API keys, user passwords, the platform hosted-LLM key, and outbox messages.
+
+        Pending timers are in the file and are marked processed on restore. The destination has the instance state and history, and it does not fire the same timer or webhook again while the source site might still be running.
+
+        This is the application snapshot at the moment of download. It is not a database write-ahead-log backup, and it does not roll the same site back to an earlier minute.
+        """;
 
     public const string DualKernelDesignGuide =
         """

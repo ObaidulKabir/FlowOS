@@ -11,4 +11,8 @@ public class StandardEvent : DomainEvent
     public StandardEvent(Guid tenantId, string eventType) : base(tenantId, eventType)
     {
     }
+
+    private StandardEvent()
+    {
+    }
 }

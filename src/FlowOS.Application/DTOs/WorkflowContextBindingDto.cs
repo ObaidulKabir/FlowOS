@@ -15,7 +15,8 @@ public sealed record WorkflowContextBindingRevisionDto(
     string? ContentHash,
     DateTime CreatedAtUtc,
     DateTime? ActivatedAtUtc,
-    DateTime? SupersededAtUtc);
+    DateTime? SupersededAtUtc,
+    string FlowOsVersion);
 
 public sealed record WorkflowContextBindingDto(
     Guid Id,

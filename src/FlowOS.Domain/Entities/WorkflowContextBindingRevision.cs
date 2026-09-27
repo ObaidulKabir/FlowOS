@@ -1,3 +1,4 @@
+using FlowOS.Domain;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.ValueObjects;
 
@@ -19,6 +20,9 @@ public class WorkflowContextBindingRevision
     public DateTime UpdatedAtUtc { get; private set; }
     public DateTime? ActivatedAtUtc { get; private set; }
     public DateTime? SupersededAtUtc { get; private set; }
+
+    /// <summary>FlowOS release this business context was last authored against.</summary>
+    public string FlowOsVersion { get; private set; } = FlowOsRelease.Version;
 
     protected WorkflowContextBindingRevision()
     {
@@ -44,6 +48,7 @@ public class WorkflowContextBindingRevision
         SourceWorkflowClassId = sourceWorkflowClassId;
         SourceWorkflowClassVersion = sourceWorkflowClassVersion.Trim();
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
+        FlowOsVersion = FlowOsRelease.Version;
         Status = WorkflowContextBindingRevisionStatus.Draft;
         CreatedAtUtc = DateTime.UtcNow;
         UpdatedAtUtc = CreatedAtUtc;
@@ -62,6 +67,7 @@ public class WorkflowContextBindingRevision
         SourceWorkflowClassId = sourceWorkflowClassId;
         SourceWorkflowClassVersion = sourceWorkflowClassVersion.Trim();
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
+        FlowOsVersion = FlowOsRelease.Version;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 

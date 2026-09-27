@@ -804,6 +804,46 @@ export const api = {
       body: JSON.stringify(req)
     });
     return handleResponse(response, 'Failed to save plugin binding');
+  },
+
+  downloadTenantBackup: async (tenantId: string): Promise<void> => {
+    const response = await authorizedFetch(`/api/tenants/${tenantId}/backup`, {
+      headers: { 'X-FlowOS-Backup-Confirm': 'download' }
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `Failed to download backup (${response.status})`);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename=\"?([^\"]+)\"?/);
+    const fileName = match?.[1] || `flowos-tenant-backup-${tenantId}.json`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
+
+  restoreTenantBackup: async (tenantId: string, json: string): Promise<{
+    destinationTenantId: string;
+    sourceTenantId: string;
+    takenAtUtc: string;
+    flowOsVersion: string;
+    flowOsCompatibility: string;
+    workflowClasses: number;
+    workflowInstances: number;
+  }> => {
+    const response = await authorizedFetch(`/api/tenants/${tenantId}/backup/restore`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-FlowOS-Backup-Confirm': 'restore'
+      },
+      body: json
+    });
+    return handleResponse(response, 'Failed to restore backup');
   }
 };
 
@@ -817,6 +857,7 @@ export interface PluginBindingDto {
   configuration?: Record<string, unknown> | null;
   createdAtUtc: string;
   updatedAtUtc: string;
+  flowOsVersion?: string;
 }
 
 export interface UpsertPluginBindingRequest {

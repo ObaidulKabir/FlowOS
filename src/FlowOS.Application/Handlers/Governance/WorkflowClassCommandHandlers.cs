@@ -9,6 +9,7 @@ using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Services;
 using FlowOS.Core.Interfaces;
 using FlowOS.Core.Security;
+using FlowOS.Domain;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.Services;
@@ -321,6 +322,8 @@ public class WorkflowClassCommandHandlers :
         ChangeLog = wc.ChangeLog,
         DeprecationReason = wc.DeprecationReason,
         DeprecationMigrationTargetId = wc.DeprecationMigrationTargetId,
+        FlowOsVersion = wc.FlowOsVersion,
+        FlowOsCompatibility = FlowOsRelease.Assess(wc.FlowOsVersion).ToString(),
         Definition = wc.Definition
     };
 }
