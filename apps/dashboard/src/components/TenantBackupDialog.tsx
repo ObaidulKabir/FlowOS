@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, Upload, ShieldAlert, X } from 'lucide-react';
 import { api } from '../api/client';
 
@@ -55,7 +56,6 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
   const [notice, setNotice] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
-  const canDownload = acknowledged && !busy;
   const canRestore = acknowledged && phrase === 'RESTORE' && !!preview && !busy;
 
   const chooseFile = async (file: File | undefined) => {
@@ -79,12 +79,16 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
   };
 
   const download = async () => {
+    if (!acknowledged) {
+      setFailure('Check the confidential-file box before downloading.');
+      return;
+    }
     setBusy(true);
     setFailure(null);
     setNotice(null);
     try {
       await api.downloadTenantBackup(tenantId);
-      setNotice('Download started. Store the file outside git and outside chat. It contains this tenant’s AI provider keys.');
+      setNotice('Download started. Check your browser downloads folder. Store the file outside git and outside chat. It contains this tenant’s AI provider keys.');
     } catch (err: any) {
       setFailure(err.message || 'Failed to download backup');
     } finally {
@@ -93,6 +97,10 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
   };
 
   const restore = async () => {
+    if (!canRestore) {
+      setFailure('Choose a backup file, confirm the checkbox, and type RESTORE.');
+      return;
+    }
     setBusy(true);
     setFailure(null);
     setNotice(null);
@@ -105,14 +113,19 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
       setAcknowledged(false);
       await onRestored();
     } catch (err: any) {
-      setFailure(err.message || 'Failed to restore backup');
+      const message = err.message || 'Failed to restore backup';
+      setFailure(
+        /BACKUP-CONFLICT|already exists/.test(message)
+          ? `${message} Restore is for a different FlowOS site (or an empty tenant), not a round-trip on this same tenant.`
+          : message
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -162,16 +175,23 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
             </label>
             <button
               type="button"
-              onClick={download}
-              disabled={!canDownload}
+              onClick={() => void download()}
+              disabled={busy}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-xl font-semibold flex items-center gap-1.5"
             >
               <Download size={14} />
               {busy ? 'Preparing…' : 'Download backup'}
             </button>
+            {!acknowledged && (
+              <p className="text-slate-500">Check the box above to confirm, then download.</p>
+            )}
           </div>
         ) : (
           <div className="space-y-3 text-xs">
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-400 leading-relaxed">
+              Restore writes this file into <strong className="text-slate-200">{tenantName}</strong> on this site.
+              Record ids are kept. If this tenant already has those workflows, restore is refused — use an empty tenant on another FlowOS host.
+            </div>
             <label className="block text-slate-300 font-semibold">
               Backup file
               <input
@@ -217,8 +237,8 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
             </label>
             <button
               type="button"
-              onClick={restore}
-              disabled={!canRestore}
+              onClick={() => void restore()}
+              disabled={busy}
               className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-xl font-semibold flex items-center gap-1.5"
             >
               <Upload size={14} />
@@ -230,6 +250,7 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
         {notice && <div className="p-3 bg-emerald-950/40 border border-emerald-700/40 rounded-xl text-xs text-emerald-200">{notice}</div>}
         {failure && <div className="p-3 bg-rose-950/40 border border-rose-700/40 rounded-xl text-xs text-rose-200">{failure}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

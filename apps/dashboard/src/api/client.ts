@@ -820,19 +820,28 @@ export const api = {
       headers: { 'X-FlowOS-Backup-Confirm': 'download' }
     });
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.message || `Failed to download backup (${response.status})`);
+      const body = await response.json().catch(() => ({} as Record<string, string>));
+      throw new Error(
+        body.message || body.title || body.detail || `Failed to download backup (${response.status})`
+      );
     }
     const blob = await response.blob();
+    if (blob.size < 8) {
+      throw new Error('Backup file was empty. Try again, or confirm you are signed into this tenant.');
+    }
     const disposition = response.headers.get('content-disposition') || '';
-    const match = disposition.match(/filename=\"?([^\"]+)\"?/);
-    const fileName = match?.[1] || `flowos-tenant-backup-${tenantId}.json`;
+    const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+    const fileName = decodeURIComponent(match?.[1] || '').replace(/["']/g, '')
+      || `flowos-tenant-backup-${tenantId}.json`;
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = fileName;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
   },
 
   restoreTenantBackup: async (tenantId: string, json: string): Promise<{
