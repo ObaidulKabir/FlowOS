@@ -19,9 +19,10 @@ import {
 interface Props {
   session: AuthSession;
   onSwitchWorkspace: () => void;
+  onRegisterNav?: (nav: React.ReactNode, owner: 'Tenant' | 'Admin') => void;
 }
 
-export const AdminDashboard: React.FC<Props> = ({ session }) => {
+export const AdminDashboard: React.FC<Props> = ({ session, onRegisterNav }) => {
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
   const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities' | 'Comparison'>('Tenants');
   const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Public' | 'Shared' | 'Published'>('All');
@@ -99,6 +100,64 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
     }
   };
 
+  useEffect(() => {
+    if (!onRegisterNav) return;
+    const itemClass = (active: boolean) =>
+      `w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
+        active ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+      }`;
+    const section = (id: typeof activeTab, label: string, icon: React.ReactNode) => (
+      <button type="button" onClick={() => setActiveTab(id)} className={itemClass(activeTab === id)}>
+        {icon}
+        <span className="truncate">{label}</span>
+      </button>
+    );
+
+    onRegisterNav(
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actions</p>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('Tenants');
+              setOpenRegisterModal(true);
+            }}
+            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Plus size={14} />
+            <span className="truncate">Register Tenant</span>
+          </button>
+          <button
+            type="button"
+            onClick={loadData}
+            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin text-purple-400' : ''} />
+            <span className="truncate">Refresh</span>
+          </button>
+        </div>
+        <div className="space-y-1">
+          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
+          {section('Tenants', `Tenants (${tenantsCount})`, <Building2 size={14} />)}
+          {section('ReviewQueue', `Review Queue (${pendingApprovals.length})`, <AlertTriangle size={14} />)}
+          {section('Catalog', 'Blueprint Catalog', <Globe size={14} />)}
+          {section('Instances', `Fleet Instances (${instances.length})`, <Activity size={14} />)}
+          {section('Events', 'Event Audit', <Terminal size={14} />)}
+          {section('Kernel', 'Engine Kernel', <Cpu size={14} />)}
+          {section('DeadLetters', 'Dead Letters', <AlertTriangle size={14} />)}
+          {section('Capabilities', 'Capabilities', <Sparkles size={14} />)}
+          {section('Comparison', 'vs Competitors', <Scale size={14} />)}
+        </div>
+      </div>,
+      'Admin'
+    );
+  }, [onRegisterNav, activeTab, tenantsCount, instances.length, loading, pendingApprovals.length]);
+
+  useEffect(() => {
+    return () => onRegisterNav?.(null, 'Admin');
+  }, [onRegisterNav]);
+
   const handleAbandon = async (id: string) => {
     try {
       await api.abandon(id, 'Admin');
@@ -131,25 +190,6 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={() => {
-                setActiveTab('Tenants');
-                setOpenRegisterModal(true);
-              }}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-blue-500/25 transition-all"
-            >
-              <Plus size={15} />
-              <span>Register New Tenant</span>
-            </button>
-            <button
-              onClick={loadData}
-              className="p-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-300 rounded-xl transition-colors"
-              title="Refresh platform telemetry"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin text-purple-400' : ''} />
-            </button>
-          </div>
         </div>
 
         {/* 4 Stat Cards */}
@@ -196,93 +236,6 @@ export const AdminDashboard: React.FC<Props> = ({ session }) => {
 
       {/* Admin Navigation Tabs */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
-        <div className="border-b border-slate-700 bg-slate-850">
-          <nav className="flex divide-x divide-slate-700 text-xs font-semibold">
-            <button
-              onClick={() => setActiveTab('Tenants')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Tenants' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Building2 size={15} />
-              <span>🏢 Multi-Tenant Fleet ({tenantsCount})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('ReviewQueue')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'ReviewQueue' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <AlertTriangle size={15} className={pendingApprovals.length > 0 ? 'text-amber-400' : ''} />
-              <span>📋 Review Queue ({pendingApprovals.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Catalog')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Catalog' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Globe size={15} />
-              <span>🌐 Blueprint Catalog</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Instances')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Instances' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Activity size={15} />
-              <span>⚡ Fleet Instances ({instances.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Events')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Events' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Terminal size={15} />
-              <span>📡 Global Event Audit</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Kernel')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Kernel' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Cpu size={15} />
-              <span>⚙️ Engine Kernel</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('DeadLetters')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'DeadLetters' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <AlertTriangle size={15} className="text-red-400" />
-              <span>🚨 Dead Letters (DLQ)</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Capabilities')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Capabilities' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white' : 'text-amber-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Sparkles size={15} className="text-amber-400" />
-              <span>✨ Engine Capabilities</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Comparison')}
-              className={`flex-1 py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'Comparison' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'text-indigo-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Scale size={15} className="text-indigo-400" />
-              <span>⚖️ vs Competitors</span>
-            </button>
-          </nav>
-        </div>
-
-        {/* Tab Contents */}
         <div className="p-6">
           {activeTab === 'Capabilities' && (
             <CapabilitiesShowcase />

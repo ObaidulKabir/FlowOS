@@ -33,6 +33,7 @@ interface Props {
   session: AuthSession;
   onSwitchWorkspace: () => void;
   onTenantChange?: (newTenantId: string, newTenantName: string) => void;
+  onRegisterNav?: (nav: React.ReactNode, owner: 'Tenant' | 'Admin') => void;
 }
 
 const countFormatter = new Intl.NumberFormat();
@@ -57,7 +58,7 @@ const summarizeInstances = (instances: WorkflowInstance[]) => {
   return { ...counts, active: counts.running + counts.waiting };
 };
 
-export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange }) => {
+export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange, onRegisterNav }) => {
   const [activeTab, setActiveTab] = useState<'Application' | 'Instances' | 'Events' | 'Keys' | 'Mcp' | 'Simulator' | 'Capabilities' | 'Comparison'>('Application');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
@@ -214,6 +215,92 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
     ? agentMetrics.tokens.inputTokens + agentMetrics.tokens.outputTokens
     : undefined;
 
+  useEffect(() => {
+    if (!onRegisterNav) return;
+    const itemClass = (active: boolean, activeClass: string) =>
+      `w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
+        active ? activeClass : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+      }`;
+    const section = (
+      id: typeof activeTab,
+      label: string,
+      icon: React.ReactNode,
+      activeClass = 'bg-blue-600 text-white'
+    ) => (
+      <button type="button" onClick={() => setActiveTab(id)} className={itemClass(activeTab === id, activeClass)}>
+        {icon}
+        <span className="truncate">{label}</span>
+      </button>
+    );
+
+    onRegisterNav(
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actions</p>
+          <button
+            type="button"
+            onClick={() => {
+              setSimulationTarget({});
+              setActiveTab('Simulator');
+            }}
+            className={itemClass(activeTab === 'Simulator', 'bg-emerald-600 text-white')}
+          >
+            <FlaskConical size={14} />
+            <span className="truncate">Visual Demo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowStartModal(true)}
+            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Sparkles size={14} />
+            <span className="truncate">Launch Instance</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCreatingBlueprint(true)}
+            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Plus size={14} />
+            <span className="truncate">New Blueprint</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowBackupDialog(true)}
+            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <ShieldAlert size={14} />
+            <span className="truncate">Site backup</span>
+          </button>
+          <button
+            type="button"
+            onClick={loadData}
+            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin text-blue-400' : ''} />
+            <span className="truncate">Refresh</span>
+          </button>
+        </div>
+        <div className="space-y-1">
+          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
+          {section('Application', 'Application', <Layers size={14} />)}
+          {section('Instances', `Instances (${instances.length})`, <Activity size={14} />)}
+          {section('Events', 'Event Stream', <Activity size={14} />)}
+          {section('Keys', 'API Keys', <Key size={14} />)}
+          {section('Mcp', 'MCP', <Bot size={14} />, 'bg-cyan-600 text-white')}
+          {section('Simulator', 'Simulator', <FlaskConical size={14} />, 'bg-emerald-600 text-white')}
+          {section('Capabilities', 'Capabilities', <Sparkles size={14} />, 'bg-indigo-600 text-white')}
+          {section('Comparison', 'vs Competitors', <Scale size={14} />, 'bg-indigo-600 text-white')}
+        </div>
+      </div>,
+      'Tenant'
+    );
+  }, [onRegisterNav, activeTab, instances.length, loading]);
+
+  useEffect(() => {
+    return () => onRegisterNav?.(null, 'Tenant');
+  }, [onRegisterNav]);
+
   return (
     <div className="space-y-6">
       
@@ -281,64 +368,6 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
             </p>
           </div>
 
-          {/* Quick Actions */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                setSimulationTarget({});
-                setActiveTab('Simulator');
-              }}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all hover:animate-none border border-emerald-400/30"
-            >
-              <FlaskConical size={14} className="text-emerald-200" />
-              <span>Visual Demo Simulator</span>
-            </button>
-            <button
-              onClick={() => setShowStartModal(true)}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-semibold rounded-xl text-xs flex items-center gap-2 transition-all"
-            >
-              <Sparkles size={14} className="text-emerald-300" />
-              <span>Launch Live Instance</span>
-            </button>
-            <button
-              onClick={() => setIsCreatingBlueprint(true)}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-blue-500/25 transition-all"
-            >
-              <Plus size={14} />
-              <span>New Blueprint</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowBackupDialog(true)}
-              className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-              title="Download or restore this tenant with confirmation"
-            >
-              <ShieldAlert size={14} className="text-amber-300" />
-              <span>Site backup</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Keys')}
-              className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-            >
-              <Key size={14} className="text-amber-400" />
-              <span>API Keys</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Mcp')}
-              className="px-3.5 py-2.5 bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-700/50 text-cyan-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-            >
-              <Bot size={14} />
-              <span>MCP Config</span>
-            </button>
-            <button
-              onClick={loadData}
-              className="p-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl transition-colors"
-              title="Refresh workspace"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin text-blue-400' : ''} />
-            </button>
-          </div>
         </div>
 
         {/* Workflow and bounded-agent operational counts */}
@@ -458,85 +487,6 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
 
       {/* Tenant Navigation Tabs */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
-        <div className="border-b border-slate-700 bg-slate-850">
-          <nav className="flex flex-wrap text-xs font-semibold">
-            <button
-              onClick={() => setActiveTab('Application')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Application' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Layers size={15} />
-              <span>Application</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Instances')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Instances' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Activity size={15} />
-              <span>⚡ Workflow Instances ({instances.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Events')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Events' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Activity size={15} />
-              <span>📡 Event Stream & Payloads</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Keys')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Keys' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Key size={15} />
-              <span>🔑 Applications & API Keys</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Mcp')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Mcp' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white' : 'text-cyan-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Bot size={15} />
-              <span>🤖 Cursor / Claude MCP</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('Simulator')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Simulator' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-inner' : 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-750 font-bold'
-              }`}
-            >
-              <FlaskConical size={15} />
-              <span>🧪 Visual Demo Simulator</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Capabilities')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Capabilities' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' : 'text-amber-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Sparkles size={15} className="text-amber-400" />
-              <span>✨ Engine Capabilities</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('Comparison')}
-              className={`py-3.5 px-4 text-center transition-all flex items-center justify-center gap-2 min-w-[140px] flex-1 ${
-                activeTab === 'Comparison' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'text-indigo-400 hover:text-white hover:bg-slate-750'
-              }`}
-            >
-              <Scale size={15} className="text-indigo-400" />
-              <span>⚖️ vs Competitors</span>
-            </button>
-          </nav>
-        </div>
-
-        {/* Tab Contents */}
         <div className="p-6">
           {activeTab === 'Capabilities' && (
             <CapabilitiesShowcase />
