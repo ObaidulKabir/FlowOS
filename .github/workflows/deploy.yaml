@@ -3,13 +3,20 @@ name: CD
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: 
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: string
+
 jobs:
   deploy:
-    name: Deploy to ${{ inputs.ENVIRONMENT }}
+    name: Deploy to ${{ inputs.ENVIRONMENT || 'production' }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.ENVIRONMENT }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: ${{ inputs.ENVIRONMENT || 'production' }}
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Update Code on Server
@@ -23,7 +30,8 @@ jobs:
             set -euo pipefail
             cd  ${{ secrets.APP_PATH }}
             git fetch origin
-            git checkout -B main origin/main
+            git checkout main
+            git reset --hard origin/main
             docker network create traefik-network || true
 
       - name: Build and Deploy Containers 
