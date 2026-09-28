@@ -10,6 +10,8 @@ import { DetailView } from './DetailView';
 import { DeadLetterQueueViewer } from './DeadLetterQueueViewer';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
+import { DashboardChrome, sidebarItemClass } from './DashboardChrome';
+import { McpAgentGuideline } from './McpAgentGuideline';
 import { usePlatformMetrics } from '../platformMetrics';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
@@ -18,11 +20,21 @@ import {
 
 interface Props {
   session: AuthSession;
-  onSwitchWorkspace: () => void;
-  onRegisterNav?: (nav: React.ReactNode, owner: 'Tenant' | 'Admin') => void;
+  onGoHome: () => void;
+  onSwitchRole: () => void;
+  onRegister: () => void;
+  onSignOut: () => void;
+  mcpUrl: string;
 }
 
-export const AdminDashboard: React.FC<Props> = ({ session, onRegisterNav }) => {
+export const AdminDashboard: React.FC<Props> = ({
+  session,
+  onGoHome,
+  onSwitchRole,
+  onRegister,
+  onSignOut,
+  mcpUrl
+}) => {
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
   const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities' | 'Comparison'>('Tenants');
   const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Public' | 'Shared' | 'Published'>('All');
@@ -100,64 +112,6 @@ export const AdminDashboard: React.FC<Props> = ({ session, onRegisterNav }) => {
     }
   };
 
-  useEffect(() => {
-    if (!onRegisterNav) return;
-    const itemClass = (active: boolean) =>
-      `w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
-        active ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-      }`;
-    const section = (id: typeof activeTab, label: string, icon: React.ReactNode) => (
-      <button type="button" onClick={() => setActiveTab(id)} className={itemClass(activeTab === id)}>
-        {icon}
-        <span className="truncate">{label}</span>
-      </button>
-    );
-
-    onRegisterNav(
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actions</p>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('Tenants');
-              setOpenRegisterModal(true);
-            }}
-            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <Plus size={14} />
-            <span className="truncate">Register Tenant</span>
-          </button>
-          <button
-            type="button"
-            onClick={loadData}
-            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-purple-400' : ''} />
-            <span className="truncate">Refresh</span>
-          </button>
-        </div>
-        <div className="space-y-1">
-          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
-          {section('Tenants', `Tenants (${tenantsCount})`, <Building2 size={14} />)}
-          {section('ReviewQueue', `Review Queue (${pendingApprovals.length})`, <AlertTriangle size={14} />)}
-          {section('Catalog', 'Blueprint Catalog', <Globe size={14} />)}
-          {section('Instances', `Fleet Instances (${instances.length})`, <Activity size={14} />)}
-          {section('Events', 'Event Audit', <Terminal size={14} />)}
-          {section('Kernel', 'Engine Kernel', <Cpu size={14} />)}
-          {section('DeadLetters', 'Dead Letters', <AlertTriangle size={14} />)}
-          {section('Capabilities', 'Capabilities', <Sparkles size={14} />)}
-          {section('Comparison', 'vs Competitors', <Scale size={14} />)}
-        </div>
-      </div>,
-      'Admin'
-    );
-  }, [onRegisterNav, activeTab, tenantsCount, instances.length, loading, pendingApprovals.length]);
-
-  useEffect(() => {
-    return () => onRegisterNav?.(null, 'Admin');
-  }, [onRegisterNav]);
-
   const handleAbandon = async (id: string) => {
     try {
       await api.abandon(id, 'Admin');
@@ -168,7 +122,87 @@ export const AdminDashboard: React.FC<Props> = ({ session, onRegisterNav }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <>
+      <DashboardChrome
+        session={session}
+        onGoHome={onGoHome}
+        onSwitchRole={onSwitchRole}
+        onRegister={onRegister}
+        onSignOut={onSignOut}
+        mcpUrl={mcpUrl}
+        nav={
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actions</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('Tenants');
+                  setOpenRegisterModal(true);
+                }}
+                className={sidebarItemClass(false, 'bg-purple-600 text-white')}
+              >
+                <Plus size={14} />
+                <span className="truncate">Register Tenant</span>
+              </button>
+              <button type="button" onClick={loadData} className={sidebarItemClass(false, 'bg-purple-600 text-white')}>
+                <RefreshCw size={14} className={loading ? 'animate-spin text-purple-400' : ''} />
+                <span className="truncate">Refresh</span>
+              </button>
+            </div>
+            <div className="space-y-1">
+              <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
+              <button type="button" onClick={() => setActiveTab('Tenants')} className={sidebarItemClass(activeTab === 'Tenants', 'bg-purple-600 text-white')}>
+                <Building2 size={14} />
+                <span className="truncate">Tenants ({tenantsCount})</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('ReviewQueue')} className={sidebarItemClass(activeTab === 'ReviewQueue', 'bg-purple-600 text-white')}>
+                <AlertTriangle size={14} />
+                <span className="truncate">Review Queue ({pendingApprovals.length})</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('Catalog')} className={sidebarItemClass(activeTab === 'Catalog', 'bg-purple-600 text-white')}>
+                <Globe size={14} />
+                <span className="truncate">Blueprint Catalog</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('Instances')} className={sidebarItemClass(activeTab === 'Instances', 'bg-purple-600 text-white')}>
+                <Activity size={14} />
+                <span className="truncate">Fleet Instances ({instances.length})</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('Events')} className={sidebarItemClass(activeTab === 'Events', 'bg-purple-600 text-white')}>
+                <Terminal size={14} />
+                <span className="truncate">Event Audit</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('Kernel')} className={sidebarItemClass(activeTab === 'Kernel', 'bg-purple-600 text-white')}>
+                <Cpu size={14} />
+                <span className="truncate">Engine Kernel</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('DeadLetters')} className={sidebarItemClass(activeTab === 'DeadLetters', 'bg-purple-600 text-white')}>
+                <AlertTriangle size={14} />
+                <span className="truncate">Dead Letters</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('Capabilities')} className={sidebarItemClass(activeTab === 'Capabilities', 'bg-purple-600 text-white')}>
+                <Sparkles size={14} />
+                <span className="truncate">Capabilities</span>
+              </button>
+              <button type="button" onClick={() => setActiveTab('Comparison')} className={sidebarItemClass(activeTab === 'Comparison', 'bg-purple-600 text-white')}>
+                <Scale size={14} />
+                <span className="truncate">vs Competitors</span>
+              </button>
+            </div>
+          </div>
+        }
+      />
+      <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col">
+        {session.isSandbox && (
+          <div className="bg-gradient-to-r from-emerald-900/90 via-slate-900 to-blue-900/90 border-b border-emerald-500/40 px-6 py-2.5 text-xs text-emerald-200 flex flex-wrap items-center gap-3 shadow-md">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-bold">Interactive Sandbox Playground:</span>
+            <span className="text-slate-300 hidden sm:inline">
+              You are exploring FlowOS as an unregistered guest user. State transitions, workflows, and simulations are active.
+            </span>
+          </div>
+        )}
+        <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full space-y-6">
       
       {/* Platform Admin Governance Banner */}
       <div className="bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/40 border border-purple-500/30 p-6 rounded-3xl shadow-2xl relative overflow-hidden">
@@ -443,7 +477,21 @@ export const AdminDashboard: React.FC<Props> = ({ session, onRegisterNav }) => {
           onReject={activeTab === 'ReviewQueue' ? handleAbandon : undefined}
         />
       )}
-
-    </div>
+        </main>
+        <section className="max-w-7xl mx-auto px-6 mb-8 w-full">
+          <McpAgentGuideline />
+        </section>
+        <footer className="py-8 border-t border-slate-800 text-center text-xs text-slate-500 bg-slate-950/50">
+          <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>© 2026 FlowOS — Prospect BD Ltd. Official system email: <a href="mailto:admin@flowosbd.com" className="text-blue-400 hover:underline">admin@flowosbd.com</a></div>
+            <div className="flex space-x-6">
+              <a href="/swagger" target="_blank" className="hover:underline">Swagger Docs</a>
+              <a href={mcpUrl} target="_blank" className="hover:underline">MCP Endpoint</a>
+              <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" className="hover:underline">GitHub</a>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </>
   );
 };

@@ -23,6 +23,8 @@ import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { DemoVisualSimulator } from './DemoVisualSimulator';
 import { TenantMcpConfiguration } from './TenantMcpConfiguration';
 import { TenantBackupDialog } from './TenantBackupDialog';
+import { DashboardChrome, sidebarItemClass } from './DashboardChrome';
+import { McpAgentGuideline } from './McpAgentGuideline';
 import { 
   Building2, Plus, RefreshCw, Key, Activity, 
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
@@ -33,7 +35,11 @@ interface Props {
   session: AuthSession;
   onSwitchWorkspace: () => void;
   onTenantChange?: (newTenantId: string, newTenantName: string) => void;
-  onRegisterNav?: (nav: React.ReactNode, owner: 'Tenant' | 'Admin') => void;
+  onGoHome: () => void;
+  onSwitchRole: () => void;
+  onRegister: () => void;
+  onSignOut: () => void;
+  mcpUrl: string;
 }
 
 const countFormatter = new Intl.NumberFormat();
@@ -58,7 +64,16 @@ const summarizeInstances = (instances: WorkflowInstance[]) => {
   return { ...counts, active: counts.running + counts.waiting };
 };
 
-export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, onTenantChange, onRegisterNav }) => {
+export const TenantDashboard: React.FC<Props> = ({
+  session,
+  onSwitchWorkspace,
+  onTenantChange,
+  onGoHome,
+  onSwitchRole,
+  onRegister,
+  onSignOut,
+  mcpUrl
+}) => {
   const [activeTab, setActiveTab] = useState<'Application' | 'Instances' | 'Events' | 'Keys' | 'Mcp' | 'Simulator' | 'Capabilities' | 'Comparison'>('Application');
   
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
@@ -215,94 +230,131 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
     ? agentMetrics.tokens.inputTokens + agentMetrics.tokens.outputTokens
     : undefined;
 
-  useEffect(() => {
-    if (!onRegisterNav) return;
-    const itemClass = (active: boolean, activeClass: string) =>
-      `w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
-        active ? activeClass : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-      }`;
-    const section = (
-      id: typeof activeTab,
-      label: string,
-      icon: React.ReactNode,
-      activeClass = 'bg-blue-600 text-white'
-    ) => (
-      <button type="button" onClick={() => setActiveTab(id)} className={itemClass(activeTab === id, activeClass)}>
-        {icon}
-        <span className="truncate">{label}</span>
-      </button>
-    );
-
-    onRegisterNav(
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actions</p>
-          <button
-            type="button"
-            onClick={() => {
-              setSimulationTarget({});
-              setActiveTab('Simulator');
-            }}
-            className={itemClass(activeTab === 'Simulator', 'bg-emerald-600 text-white')}
-          >
-            <FlaskConical size={14} />
-            <span className="truncate">Visual Demo</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowStartModal(true)}
-            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <Sparkles size={14} />
-            <span className="truncate">Launch Instance</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsCreatingBlueprint(true)}
-            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <Plus size={14} />
-            <span className="truncate">New Blueprint</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowBackupDialog(true)}
-            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <ShieldAlert size={14} />
-            <span className="truncate">Site backup</span>
-          </button>
-          <button
-            type="button"
-            onClick={loadData}
-            className="w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-blue-400' : ''} />
-            <span className="truncate">Refresh</span>
-          </button>
-        </div>
-        <div className="space-y-1">
-          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
-          {section('Application', 'Application', <Layers size={14} />)}
-          {section('Instances', `Instances (${instances.length})`, <Activity size={14} />)}
-          {section('Events', 'Event Stream', <Activity size={14} />)}
-          {section('Keys', 'API Keys', <Key size={14} />)}
-          {section('Mcp', 'MCP', <Bot size={14} />, 'bg-cyan-600 text-white')}
-          {section('Simulator', 'Simulator', <FlaskConical size={14} />, 'bg-emerald-600 text-white')}
-          {section('Capabilities', 'Capabilities', <Sparkles size={14} />, 'bg-indigo-600 text-white')}
-          {section('Comparison', 'vs Competitors', <Scale size={14} />, 'bg-indigo-600 text-white')}
-        </div>
-      </div>,
-      'Tenant'
-    );
-  }, [onRegisterNav, activeTab, instances.length, loading]);
-
-  useEffect(() => {
-    return () => onRegisterNav?.(null, 'Tenant');
-  }, [onRegisterNav]);
+  const sidebarNav = (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actions</p>
+        <button
+          type="button"
+          onClick={() => {
+            setSimulationTarget({});
+            setActiveTab('Simulator');
+          }}
+          className={sidebarItemClass(activeTab === 'Simulator', 'bg-emerald-600 text-white')}
+        >
+          <FlaskConical size={14} />
+          <span className="truncate">Visual Demo</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowStartModal(true)}
+          className={sidebarItemClass(false)}
+        >
+          <Sparkles size={14} />
+          <span className="truncate">Launch Instance</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsCreatingBlueprint(true)}
+          className={sidebarItemClass(false)}
+        >
+          <Plus size={14} />
+          <span className="truncate">New Blueprint</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowBackupDialog(true)}
+          className={sidebarItemClass(false)}
+        >
+          <ShieldAlert size={14} />
+          <span className="truncate">Site backup</span>
+        </button>
+        <button
+          type="button"
+          onClick={loadData}
+          className={sidebarItemClass(false)}
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin text-blue-400' : ''} />
+          <span className="truncate">Refresh</span>
+        </button>
+      </div>
+      <div className="space-y-1">
+        <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
+        <button type="button" onClick={() => setActiveTab('Application')} className={sidebarItemClass(activeTab === 'Application')}>
+          <Layers size={14} />
+          <span className="truncate">Application</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab('Instances')} className={sidebarItemClass(activeTab === 'Instances')}>
+          <Activity size={14} />
+          <span className="truncate">Instances ({instances.length})</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab('Events')} className={sidebarItemClass(activeTab === 'Events')}>
+          <Activity size={14} />
+          <span className="truncate">Event Stream</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab('Keys')} className={sidebarItemClass(activeTab === 'Keys')}>
+          <Key size={14} />
+          <span className="truncate">API Keys</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab('Mcp')} className={sidebarItemClass(activeTab === 'Mcp', 'bg-cyan-600 text-white')}>
+          <Bot size={14} />
+          <span className="truncate">MCP</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab('Simulator')} className={sidebarItemClass(activeTab === 'Simulator', 'bg-emerald-600 text-white')}>
+          <FlaskConical size={14} />
+          <span className="truncate">Simulator</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab('Capabilities')} className={sidebarItemClass(activeTab === 'Capabilities', 'bg-indigo-600 text-white')}>
+          <Sparkles size={14} />
+          <span className="truncate">Capabilities</span>
+        </button>
+        <button type="button" onClick={() => setActiveTab('Comparison')} className={sidebarItemClass(activeTab === 'Comparison', 'bg-indigo-600 text-white')}>
+          <Scale size={14} />
+          <span className="truncate">vs Competitors</span>
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
+    <>
+      <DashboardChrome
+        session={session}
+        onGoHome={onGoHome}
+        onSwitchRole={onSwitchRole}
+        onRegister={onRegister}
+        onSignOut={onSignOut}
+        mcpUrl={mcpUrl}
+        nav={sidebarNav}
+      />
+      <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col">
+        {session.isSandbox && (
+          <div className="bg-gradient-to-r from-emerald-900/90 via-slate-900 to-blue-900/90 border-b border-emerald-500/40 px-6 py-2.5 text-xs text-emerald-200 flex flex-wrap items-center gap-3 shadow-md">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-bold">Interactive Sandbox Playground:</span>
+            <span className="text-slate-300 hidden sm:inline">
+              You are exploring FlowOS as an unregistered guest user. State transitions, workflows, and simulations are active.
+            </span>
+          </div>
+        )}
+        {!session.isSandbox && (session.plan === 'Trial' || session.billingStatus === 'Unpaid' || session.canRunRuntime === false) && (
+          <div className="bg-gradient-to-r from-amber-900/90 via-slate-900 to-orange-900/90 border-b border-amber-500/40 px-6 py-2.5 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="font-bold">Free / unpaid tenant:</span>
+              <span className="text-slate-200 hidden sm:inline">
+                Runtime execution is blocked (start, publish, complete). Design-time simulate, lint, and drafts still work. Ask admin@flowosbd.com to activate Starter through Scale, or Enterprise.
+              </span>
+            </div>
+            <a
+              href="mailto:admin@flowosbd.com?subject=FlowOS%20paid%20plan%20activation"
+              className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-all shadow"
+            >
+              Contact admin@flowosbd.com
+            </a>
+          </div>
+        )}
+        <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full space-y-6">
       
       {/* Workspace Banner */}
       <div className="bg-gradient-to-r from-blue-900/40 via-slate-900 to-slate-900 border border-blue-500/30 p-6 rounded-3xl shadow-xl relative overflow-hidden">
@@ -756,7 +808,21 @@ export const TenantDashboard: React.FC<Props> = ({ session, onSwitchWorkspace, o
           onSave={handleSaveDraft}
         />
       )}
-
-    </div>
+        </main>
+        <section className="max-w-7xl mx-auto px-6 mb-8 w-full">
+          <McpAgentGuideline />
+        </section>
+        <footer className="py-8 border-t border-slate-800 text-center text-xs text-slate-500 bg-slate-950/50">
+          <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>© 2026 FlowOS — Prospect BD Ltd. Official system email: <a href="mailto:admin@flowosbd.com" className="text-blue-400 hover:underline">admin@flowosbd.com</a></div>
+            <div className="flex space-x-6">
+              <a href="/swagger" target="_blank" className="hover:underline">Swagger Docs</a>
+              <a href={mcpUrl} target="_blank" className="hover:underline">MCP Endpoint</a>
+              <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" className="hover:underline">GitHub</a>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </>
   );
 };
