@@ -29,7 +29,19 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
   mcpUrl,
   nav
 }) => (
-  <aside className="w-60 shrink-0 h-full border-r border-slate-800 bg-slate-950 flex flex-col overflow-hidden">
+  <aside
+    className="flowos-rail border-r border-slate-800 bg-slate-950 overflow-hidden"
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      zIndex: 40,
+      width: '15rem',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+    }}
+  >
     <div className="px-4 py-4 border-b border-slate-800 shrink-0">
       <button
         onClick={onGoHome}

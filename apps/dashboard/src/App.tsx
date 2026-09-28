@@ -90,7 +90,10 @@ function App() {
         />
       ) : (
         /* DASHBOARD VIEW */
-        <div className="h-screen flex overflow-hidden">
+        <div
+          className="h-screen w-full flex flex-row flex-nowrap overflow-hidden"
+          style={{ display: 'flex', flexDirection: 'row', height: '100vh' }}
+        >
           {session.role === 'Admin' ? (
             <AdminDashboard
               session={session}

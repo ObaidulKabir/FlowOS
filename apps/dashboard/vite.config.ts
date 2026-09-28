@@ -33,7 +33,7 @@ export default defineConfig({
     port: 5173,
     host: true, // Needed for Docker
     headers: {
-      "Cache-Control": "no-store",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     },
     proxy: apiProxy,
   },
@@ -41,7 +41,7 @@ export default defineConfig({
     port: 4173,
     host: true,
     headers: {
-      "Cache-Control": "no-store",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     },
     proxy: apiProxy,
   },

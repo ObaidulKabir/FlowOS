@@ -192,7 +192,7 @@ export const AdminDashboard: React.FC<Props> = ({
           </div>
         }
       />
-      <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col">
+      <div className="flowos-rail-content h-full overflow-y-auto flex flex-col" style={{ marginLeft: '15rem' }}>
         {session.isSandbox && (
           <div className="bg-gradient-to-r from-emerald-900/90 via-slate-900 to-blue-900/90 border-b border-emerald-500/40 px-6 py-2.5 text-xs text-emerald-200 flex flex-wrap items-center gap-3 shadow-md">
             <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
