@@ -102,8 +102,8 @@ function App() {
         />
       ) : (
         /* DASHBOARD VIEW */
-        <div className="min-h-screen flex flex-col md:flex-row">
-          <aside className="md:w-60 md:shrink-0 border-b md:border-b-0 md:border-r border-slate-800 bg-slate-950/80 md:sticky md:top-0 md:h-screen md:overflow-hidden flex flex-col">
+        <div className="h-screen flex overflow-hidden">
+          <aside className="w-60 shrink-0 h-full border-r border-slate-800 bg-slate-950 flex flex-col">
             <div className="px-4 py-4 border-b border-slate-800">
               <button
                 onClick={() => setCurrentView('landing')}
@@ -213,7 +213,7 @@ function App() {
             </div>
           </aside>
 
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col">
           {/* Trial / unpaid runtime banner */}
           {!session.isSandbox && session.role === 'Tenant' && (session.plan === 'Trial' || session.billingStatus === 'Unpaid' || session.canRunRuntime === false) && (
             <div className="bg-gradient-to-r from-amber-900/90 via-slate-900 to-orange-900/90 border-b border-amber-500/40 px-6 py-2.5 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-3 shadow-md z-50">
