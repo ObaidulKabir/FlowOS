@@ -51,9 +51,8 @@ const pages = [
   { href: '/acceptable-use', file: 'acceptable-use.html', label: 'Acceptable use' }
 ];
 
-const headerPages = pages.filter(page =>
-  ['/product', '/pricing', '/security', '/company', '/contact'].includes(page.href)
-);
+const headerHrefs = ['/product', '/pricing', '/ai-agents', '/security', '/contact'];
+const headerPages = headerHrefs.map(href => pages.find(page => page.href === href));
 
 const esc = value => String(value)
   .replaceAll('&', '&amp;')
@@ -83,14 +82,48 @@ const meterItems = pricing.meterDefinitions.map(meter =>
   `<li><strong>${esc(meter.name)}</strong> ${esc(meter.meaning.replace(`${meter.name} `, ''))}</li>`
 ).join('\n      ');
 
-const layout = ({ title, description, body }) => `<!doctype html>
+const siteUrl = entity.siteUrl.replace(/\/$/, '');
+
+const pricingOffers = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: entity.productName,
+  applicationCategory: 'BusinessApplication',
+  url: `${siteUrl}/pricing`,
+  offers: pricing.tiers
+    .filter(tier => typeof tier.monthlyUsd === 'number')
+    .map(tier => ({
+      '@type': 'Offer',
+      name: tier.name,
+      price: tier.monthlyUsd,
+      priceCurrency: entity.currencyCode,
+      url: `${siteUrl}/pricing`
+    }))
+};
+
+const layout = ({ href, title, description, body, jsonLd }) => {
+  const canonical = `${siteUrl}${href}`;
+  const fullTitle = `${title} — ${entity.productName}`;
+  const structuredData = jsonLd
+    ? `\n  <script type="application/ld+json">\n  ${JSON.stringify(jsonLd).replaceAll('<', '\\u003c')}\n  </script>`
+    : '';
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${esc(title)} — ${esc(entity.productName)}</title>
+  <title>${esc(fullTitle)}</title>
+  <link rel="canonical" href="${esc(canonical)}" />
   <meta name="description" content="${esc(description)}" />
-  <link rel="icon" type="image/png" href="/brand/flowos-icon.png" />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="${esc(entity.productName)}" />
+  <meta property="og:url" content="${esc(canonical)}" />
+  <meta property="og:title" content="${esc(fullTitle)}" />
+  <meta property="og:description" content="${esc(description)}" />
+  <meta property="og:image" content="${esc(siteUrl)}/brand/flowos-social.jpg" />
+  <meta property="og:image:alt" content="${esc(entity.productName)}" />
+  <link rel="icon" type="image/png" href="/brand/flowos-icon.png" />${structuredData}
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
@@ -150,9 +183,11 @@ const layout = ({ title, description, body }) => `<!doctype html>
 </body>
 </html>
 `;
+};
 
 const documents = {
   'terms.html': layout({
+    href: '/terms',
     title: 'Terms of Service',
     description: 'The contract for the hosted FlowOS workflow control plane.',
     body: `
@@ -186,6 +221,7 @@ const documents = {
     `
   }),
   'privacy.html': layout({
+    href: '/privacy',
     title: 'Privacy notice',
     description: 'How FlowOS uses account, tenant, and billing information.',
     body: `
@@ -212,6 +248,7 @@ const documents = {
     `
   }),
   'refunds.html': layout({
+    href: '/refunds',
     title: 'Refunds',
     description: 'When FlowOS subscription fees are refunded.',
     body: `
@@ -233,6 +270,7 @@ const documents = {
     `
   }),
   'acceptable-use.html': layout({
+    href: '/acceptable-use',
     title: 'Acceptable use',
     description: 'Rules for using the FlowOS sandbox, dashboard, API, and MCP control plane.',
     body: `
@@ -250,6 +288,7 @@ const documents = {
     `
   }),
   'contact.html': layout({
+    href: '/contact',
     title: 'Contact',
     description: 'How to reach FlowOS for support, billing, privacy, and security.',
     body: `
@@ -266,6 +305,7 @@ const documents = {
     `
   }),
   'cancellation.html': layout({
+    href: '/cancellation',
     title: 'Cancellation',
     description: 'How to cancel a FlowOS subscription and when it takes effect.',
     body: `
@@ -282,6 +322,7 @@ const documents = {
     `
   }),
   'product.html': layout({
+    href: '/product',
     title: 'Product',
     description: 'What FlowOS sells: governed workflow automation for people and AI agents.',
     body: `
@@ -299,8 +340,10 @@ const documents = {
     `
   }),
   'pricing.html': layout({
+    href: '/pricing',
     title: 'Pricing',
     description: 'FlowOS plans, what each price includes, and how billing works.',
+    jsonLd: pricingOffers,
     body: `
     <p>List prices are in ${esc(entity.currencyName)} (${esc(entity.currencyCode)}) and exclude VAT. Where VAT is due, it is added on the invoice or at card checkout. ${esc(pricing.copy.annualDetail)}</p>
     <p>The paid service is a hosted workspace that can run workflows. Free registration can design and simulate only.</p>
@@ -329,6 +372,7 @@ const documents = {
     `
   }),
   'security.html': layout({
+    href: '/security',
     title: 'Security',
     description: 'How FlowOS separates tenants and limits what an agent can do.',
     body: `
@@ -346,6 +390,7 @@ const documents = {
     `
   }),
   'ai-agents.html': layout({
+    href: '/ai-agents',
     title: 'AI agents',
     description: 'What an AI agent can and cannot do inside FlowOS.',
     body: `
@@ -369,6 +414,7 @@ const documents = {
     `
   }),
   'company.html': layout({
+    href: '/company',
     title: 'Company',
     description: 'Who operates FlowOS and how to reach the business.',
     body: `
@@ -389,4 +435,19 @@ for (const page of pages) {
   writeFileSync(join(root, 'public', page.file), documents[page.file]);
 }
 
-console.log(`Wrote ${pages.length} legal pages for ${entity.operatorName}.`);
+const sitemapUrls = ['/', ...pages.map(page => page.href)];
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${sitemapUrls.map(href => `  <url><loc>${siteUrl}${href}</loc></url>`).join('\n')}
+</urlset>
+`;
+writeFileSync(join(root, 'public', 'sitemap.xml'), sitemap);
+writeFileSync(join(root, 'public', 'robots.txt'), `User-agent: *
+Allow: /
+Disallow: /swagger
+Disallow: /health
+
+Sitemap: ${siteUrl}/sitemap.xml
+`);
+
+console.log(`Wrote ${pages.length} legal pages, robots.txt, and sitemap.xml for ${entity.operatorName}.`);

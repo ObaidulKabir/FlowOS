@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /swagger
+Disallow: /health
+
+Sitemap: https://flowosbd.com/sitemap.xml

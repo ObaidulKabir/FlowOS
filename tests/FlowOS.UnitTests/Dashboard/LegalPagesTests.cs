@@ -35,6 +35,8 @@ public class LegalPagesTests
             Assert.Contains("href=\"/refunds\"", html);
             Assert.Contains("href=\"/cancellation\"", html);
             Assert.Contains("href=\"/contact\"", html);
+            Assert.Contains($"<link rel=\"canonical\" href=\"{site}{PathFromPublicFile(file)}\" />", html);
+            Assert.Contains("href=\"/ai-agents\"", html);
             Assert.DoesNotContain("Coming soon", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("XXXX", html);
         }
@@ -46,6 +48,27 @@ public class LegalPagesTests
         Assert.Contains($"${builder.GetProperty("monthlyUsd").GetInt32()}", pricing);
         Assert.Contains(builder.GetProperty("name").GetString()!, pricing);
         Assert.Contains("USD", pricing);
+        Assert.Contains("application/ld+json", pricing);
+        Assert.Contains("\"@type\":\"Offer\"", pricing);
+        Assert.DoesNotContain("Organization", pricing);
+
+        var robots = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "public", "robots.txt"));
+        Assert.Contains($"Sitemap: {site}/sitemap.xml", robots);
+        Assert.Contains("Disallow: /swagger", robots);
+        Assert.Contains("Disallow: /health", robots);
+
+        var sitemap = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "public", "sitemap.xml"));
+        Assert.Contains($"{site}/", sitemap);
+        Assert.Contains($"{site}/pricing", sitemap);
+        Assert.Contains($"{site}/product", sitemap);
+        Assert.DoesNotContain("/swagger", sitemap);
+        Assert.DoesNotContain("/health", sitemap);
+
+        var home = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "index.html"));
+        Assert.Contains($"<link rel=\"canonical\" href=\"{site}/\" />", home);
+        Assert.DoesNotContain("no-store", home);
+        Assert.DoesNotContain("name=\"keywords\"", home);
+        Assert.DoesNotContain("648 automated", home);
         Assert.Contains("pricingCatalog.json", File.ReadAllText(Path.Combine(root, "apps", "dashboard", "src", "pricingLadder.ts")));
         Assert.Contains("pricingCatalog.json", File.ReadAllText(Path.Combine(root, "docs", "18-commercial-and-mcp-entitlements.md")));
 
@@ -59,6 +82,9 @@ public class LegalPagesTests
         Assert.Contains("exclude VAT", landing);
         Assert.Contains("Stripe", landing);
     }
+
+    private static string PathFromPublicFile(string file) =>
+        "/" + Path.GetFileNameWithoutExtension(file);
 
     private static string FindRepoRoot()
     {
