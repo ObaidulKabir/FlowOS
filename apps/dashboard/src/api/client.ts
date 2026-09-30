@@ -410,6 +410,41 @@ export const api = {
     return handleResponse(response, 'Failed to list events');
   },
 
+  publishEvent: async (
+    eventType: string,
+    workflowInstanceId?: string,
+    correlationId?: string,
+    payload?: any,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<any> => {
+    const response = await authorizedFetch(
+      '/api/events/publish',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType,
+          workflowInstanceId,
+          correlationId,
+          payload
+        })
+      },
+      role
+    );
+    return handleResponse(response, 'Failed to publish event');
+  },
+
+  listTasks: async (role?: 'Tenant' | 'Admin'): Promise<any[]> => {
+    const response = await authorizedFetch('/api/tasks', {}, role);
+    const data = await handleResponse(response, 'Failed to list tasks');
+    return Array.isArray(data) ? data : [];
+  },
+
+  completeTask: async (taskId: string, role?: 'Tenant' | 'Admin'): Promise<any> => {
+    const response = await authorizedFetch(`/api/tasks/${taskId}/complete`, { method: 'POST' }, role);
+    return handleResponse(response, 'Failed to complete task');
+  },
+
   getWorkflowAudit: async (instanceId: string, role?: 'Tenant' | 'Admin'): Promise<any> => {
     const response = await authorizedFetch(`/api/workflows/${instanceId}/audit`, {}, role);
     return handleResponse(response, 'Failed to get workflow audit history');

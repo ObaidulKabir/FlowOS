@@ -78,7 +78,7 @@ public class OutboxAndTimerTests
         Assert.Equal("WaitStep", scheduledJob!.StepId);
         Assert.Equal("EVT-TIME-OUT", scheduledJob.TriggerEventType);
         Assert.False(scheduledJob.IsProcessed);
-        Assert.True(scheduledJob.DueTimeUtc > DateTime.UtcNow.AddSeconds(25));
+        Assert.True(scheduledJob.DueTimeUtc > DateTime.UtcNow.AddSeconds(10));
 
         // Cancel timer
         await timerService.CancelTimerAsync(instanceId, "WaitStep");

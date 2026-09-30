@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   AgentEvaluationMetrics,
   AuthSession,
@@ -23,6 +23,9 @@ import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { DemoVisualSimulator } from './DemoVisualSimulator';
 import { TenantMcpConfiguration } from './TenantMcpConfiguration';
 import { TenantBackupDialog } from './TenantBackupDialog';
+import { HumanInTheLoopInbox } from './HumanInTheLoopInbox';
+import { DeadLetterQueueViewer } from './DeadLetterQueueViewer';
+import { AiContextView } from './AiContextView';
 import { legalEntity, sellerIdentity } from '../legalEntity';
 import { LegalFooterLinks } from './LegalFooterLinks';
 import { DashboardChrome, sidebarItemClass } from './DashboardChrome';
@@ -30,7 +33,8 @@ import { McpAgentGuideline } from './McpAgentGuideline';
 import { 
   Building2, Plus, RefreshCw, Key, Activity, 
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
-  Bot, CheckCircle, AlertTriangle, Database, ShieldAlert
+  Bot, AlertTriangle, ShieldAlert,
+  UserCheck, Clock, Shield
 } from 'lucide-react';
 
 interface Props {
@@ -43,6 +47,11 @@ interface Props {
   onSignOut: () => void;
   mcpUrl: string;
 }
+
+type HubId = 'design' | 'agents' | 'operations' | 'governance';
+type DesignTab = 'workflows' | 'simulator';
+type OpsTab = 'instances' | 'inbox' | 'events' | 'dlq';
+type GovTab = 'keys' | 'mcp' | 'capabilities' | 'comparison';
 
 const countFormatter = new Intl.NumberFormat();
 
@@ -76,8 +85,12 @@ export const TenantDashboard: React.FC<Props> = ({
   onSignOut,
   mcpUrl
 }) => {
-  const [activeTab, setActiveTab] = useState<'Application' | 'Instances' | 'Events' | 'Keys' | 'Mcp' | 'Simulator' | 'Capabilities' | 'Comparison'>('Application');
-  
+  // 4 Primary Functional Hubs
+  const [activeHub, setActiveHub] = useState<HubId>('design');
+  const [designTab, setDesignTab] = useState<DesignTab>('workflows');
+  const [opsTab, setOpsTab] = useState<OpsTab>('instances');
+  const [govTab, setGovTab] = useState<GovTab>('keys');
+
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [agentMetrics, setAgentMetrics] = useState<AgentEvaluationMetrics | null>(null);
@@ -159,7 +172,7 @@ export const TenantDashboard: React.FC<Props> = ({
 
   useEffect(() => {
     loadData();
-  }, [activeTab, session.tenantId]);
+  }, [activeHub, session.tenantId]);
 
   const handleCopyTenantId = () => {
     navigator.clipboard.writeText(session.tenantId);
@@ -174,7 +187,8 @@ export const TenantDashboard: React.FC<Props> = ({
       const instanceId = res.WorkflowInstanceId || res.workflowInstanceId || res.Id || res.id;
       alert(`Workflow Instance Started Successfully!\nInstance ID: ${instanceId}`);
       setShowStartModal(false);
-      setActiveTab('Instances');
+      setActiveHub('operations');
+      setOpsTab('instances');
       await loadData();
     } catch (err: any) {
       alert(`Failed to start instance: ${err.message}`);
@@ -222,6 +236,14 @@ export const TenantDashboard: React.FC<Props> = ({
   };
 
   const instanceCounts = summarizeInstances(instances);
+  const waitingInstances = useMemo(() => {
+    return instances.filter(i => {
+      if (i.status === 1 || i.status === 'Waiting') return true;
+      if (typeof i.status === 'string' && i.status.toLowerCase().includes('wait')) return true;
+      return false;
+    });
+  }, [instances]);
+
   const publishedBlueprints = blueprints.filter(item =>
     ['published', 'public'].includes(blueprintStatusName(item.status))
   ).length;
@@ -232,21 +254,12 @@ export const TenantDashboard: React.FC<Props> = ({
     ? agentMetrics.tokens.inputTokens + agentMetrics.tokens.outputTokens
     : undefined;
 
+  // Sidebar organized by 4 Functional Hubs & Quick Actions
   const sidebarNav = (
     <div className="space-y-4">
+      {/* Quick Actions */}
       <div className="space-y-1">
         <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Actions</p>
-        <button
-          type="button"
-          onClick={() => {
-            setSimulationTarget({});
-            setActiveTab('Simulator');
-          }}
-          className={sidebarItemClass(activeTab === 'Simulator', 'bg-emerald-600 text-white')}
-        >
-          <FlaskConical size={14} />
-          <span className="truncate">Visual Demo</span>
-        </button>
         <button
           type="button"
           onClick={() => setShowStartModal(true)}
@@ -269,7 +282,7 @@ export const TenantDashboard: React.FC<Props> = ({
           className={sidebarItemClass(false)}
         >
           <ShieldAlert size={14} />
-          <span className="truncate">Site backup</span>
+          <span className="truncate">Site Backup</span>
         </button>
         <button
           type="button"
@@ -280,37 +293,155 @@ export const TenantDashboard: React.FC<Props> = ({
           <span className="truncate">Refresh</span>
         </button>
       </div>
+
+      {/* Hub 1: Design Studio */}
       <div className="space-y-1">
-        <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workspace</p>
-        <button type="button" onClick={() => setActiveTab('Application')} className={sidebarItemClass(activeTab === 'Application')}>
+        <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+          <span>Design Studio</span>
+          <span className="text-[9px] text-slate-400 font-mono">{blueprints.length}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('design');
+            setDesignTab('workflows');
+          }}
+          className={sidebarItemClass(activeHub === 'design' && designTab === 'workflows')}
+        >
           <Layers size={14} />
-          <span className="truncate">Application</span>
+          <span className="truncate">Workflows & DAG</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('Instances')} className={sidebarItemClass(activeTab === 'Instances')}>
-          <Activity size={14} />
-          <span className="truncate">Instances ({instances.length})</span>
+        <button
+          type="button"
+          onClick={() => {
+            setSimulationTarget({});
+            setActiveHub('design');
+            setDesignTab('simulator');
+          }}
+          className={sidebarItemClass(activeHub === 'design' && designTab === 'simulator', 'bg-emerald-600 text-white')}
+        >
+          <FlaskConical size={14} />
+          <span className="truncate">Visual Simulator</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('Events')} className={sidebarItemClass(activeTab === 'Events')}>
+      </div>
+
+      {/* Hub 2: AI & Agent Studio */}
+      <div className="space-y-1">
+        <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+          <span>AI & Agents</span>
+          <span className="text-[9px] text-slate-400 font-mono">{agentMetrics?.runs ?? 0}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => setActiveHub('agents')}
+          className={sidebarItemClass(activeHub === 'agents', 'bg-cyan-600 text-white')}
+        >
+          <Bot size={14} />
+          <span className="truncate">Agent Studio</span>
+        </button>
+      </div>
+
+      {/* Hub 3: Operations & Runtime */}
+      <div className="space-y-1">
+        <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+          <span>Operations</span>
+          <span className="text-[9px] text-slate-400 font-mono">{instances.length}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('operations');
+            setOpsTab('instances');
+          }}
+          className={sidebarItemClass(activeHub === 'operations' && opsTab === 'instances')}
+        >
           <Activity size={14} />
+          <span className="truncate">Live Instances</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('operations');
+            setOpsTab('inbox');
+          }}
+          className={sidebarItemClass(activeHub === 'operations' && opsTab === 'inbox', 'bg-amber-600 text-white')}
+        >
+          <UserCheck size={14} />
+          <span className="truncate">Human Review</span>
+          {waitingInstances.length > 0 && (
+            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 font-mono animate-pulse">
+              {waitingInstances.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('operations');
+            setOpsTab('events');
+          }}
+          className={sidebarItemClass(activeHub === 'operations' && opsTab === 'events')}
+        >
+          <Clock size={14} />
           <span className="truncate">Event Stream</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('Keys')} className={sidebarItemClass(activeTab === 'Keys')}>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('operations');
+            setOpsTab('dlq');
+          }}
+          className={sidebarItemClass(activeHub === 'operations' && opsTab === 'dlq')}
+        >
+          <AlertTriangle size={14} />
+          <span className="truncate">Dead Letter Queue</span>
+        </button>
+      </div>
+
+      {/* Hub 4: Platform Governance */}
+      <div className="space-y-1">
+        <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Governance</p>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('governance');
+            setGovTab('keys');
+          }}
+          className={sidebarItemClass(activeHub === 'governance' && govTab === 'keys')}
+        >
           <Key size={14} />
-          <span className="truncate">API Keys</span>
+          <span className="truncate">API Keys & RBAC</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('Mcp')} className={sidebarItemClass(activeTab === 'Mcp', 'bg-cyan-600 text-white')}>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('governance');
+            setGovTab('mcp');
+          }}
+          className={sidebarItemClass(activeHub === 'governance' && govTab === 'mcp', 'bg-cyan-600 text-white')}
+        >
           <Bot size={14} />
-          <span className="truncate">MCP</span>
+          <span className="truncate">MCP Server</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('Simulator')} className={sidebarItemClass(activeTab === 'Simulator', 'bg-emerald-600 text-white')}>
-          <FlaskConical size={14} />
-          <span className="truncate">Simulator</span>
-        </button>
-        <button type="button" onClick={() => setActiveTab('Capabilities')} className={sidebarItemClass(activeTab === 'Capabilities', 'bg-indigo-600 text-white')}>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('governance');
+            setGovTab('capabilities');
+          }}
+          className={sidebarItemClass(activeHub === 'governance' && govTab === 'capabilities', 'bg-indigo-600 text-white')}
+        >
           <Sparkles size={14} />
           <span className="truncate">Capabilities</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('Comparison')} className={sidebarItemClass(activeTab === 'Comparison', 'bg-indigo-600 text-white')}>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('governance');
+            setGovTab('comparison');
+          }}
+          className={sidebarItemClass(activeHub === 'governance' && govTab === 'comparison', 'bg-indigo-600 text-white')}
+        >
           <Scale size={14} />
           <span className="truncate">vs Competitors</span>
         </button>
@@ -416,31 +547,56 @@ export const TenantDashboard: React.FC<Props> = ({
 
             <p className="text-xs text-slate-400 mt-1 max-w-2xl">
               Operating environment with strict zero-trust boundary. Currently filtered to <strong>{session.tenantName}</strong>.
-              <span className="text-slate-500 ml-1">
-                (Tenant filter active for multi-tenant testing; final release will automatically bind to authenticated user organization).
-              </span>
             </p>
           </div>
 
+          {/* Quick Hub Navigation Shortcuts */}
+          <div className="flex items-center gap-2">
+            {waitingInstances.length > 0 && (
+              <button
+                onClick={() => {
+                  setActiveHub('operations');
+                  setOpsTab('inbox');
+                }}
+                className="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-500/50 hover:bg-amber-500/30 text-amber-200 text-xs font-bold flex items-center gap-2 transition-all animate-pulse"
+              >
+                <UserCheck size={14} className="text-amber-400" />
+                <span>{waitingInstances.length} Waiting Review</span>
+              </button>
+            )}
+            <button
+              onClick={() => setShowStartModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-900/30 transition-all"
+            >
+              <Sparkles size={14} /> Launch Instance
+            </button>
+          </div>
         </div>
 
-        {/* Workflow and bounded-agent operational counts */}
+        {/* Cardinality-Driven Operational Counts Ribbon */}
         <div className="mt-6 pt-5 border-t border-slate-800/80">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Operational counts
+              Workspace Cardinality & Telemetry (Rolling 30-Day Window)
             </span>
             <span className="text-[10px] text-cyan-300 flex items-center gap-1.5">
               <Bot size={12} />
-              Agent telemetry uses a rolling 30-day window
+              Zero-trust tenant isolation active
             </span>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <Layers size={12} className="text-blue-400" />
-                Applications
+            {/* Workflows Blueprint Cardinality */}
+            <div 
+              onClick={() => { setActiveHub('design'); setDesignTab('workflows'); }}
+              className="bg-slate-900/60 hover:bg-slate-900/90 p-3 rounded-xl border border-slate-800 hover:border-blue-500/50 cursor-pointer transition-all"
+            >
+              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Layers size={12} className="text-blue-400" />
+                  Workflows
+                </span>
+                <span className="text-[10px] text-blue-400">Design Studio →</span>
               </div>
               <div className="text-xl font-bold text-blue-300 mt-1">{formatCount(blueprints.length)}</div>
               <div className="text-[10px] text-slate-500 mt-1">
@@ -448,10 +604,17 @@ export const TenantDashboard: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <Activity size={12} className="text-purple-400" />
-                Workflow Instances
+            {/* Workflow Instances Cardinality */}
+            <div 
+              onClick={() => { setActiveHub('operations'); setOpsTab('instances'); }}
+              className="bg-slate-900/60 hover:bg-slate-900/90 p-3 rounded-xl border border-slate-800 hover:border-purple-500/50 cursor-pointer transition-all"
+            >
+              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Activity size={12} className="text-purple-400" />
+                  Live Instances
+                </span>
+                <span className="text-[10px] text-purple-400">Runtime →</span>
               </div>
               <div className="text-xl font-bold text-white mt-1">{formatCount(instances.length)}</div>
               <div className="text-[10px] text-slate-500 mt-1">
@@ -459,74 +622,49 @@ export const TenantDashboard: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <Activity size={12} className="text-emerald-400" />
-                Active Work
-              </div>
-              <div className="text-xl font-bold text-emerald-300 mt-1">{formatCount(instanceCounts.active)}</div>
-              <div className="text-[10px] text-slate-500 mt-1">
-                {formatCount(instanceCounts.running)} running · {formatCount(instanceCounts.waiting)} waiting
-              </div>
-            </div>
-
-            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <CheckCircle size={12} className="text-emerald-400" />
-                Completed Work
-              </div>
-              <div className="text-xl font-bold text-emerald-300 mt-1">{formatCount(instanceCounts.completed)}</div>
-              <div className="text-[10px] text-slate-500 mt-1">
-                <span className={instanceCounts.failed > 0 ? 'text-rose-400' : ''}>
-                  {formatCount(instanceCounts.failed)} failed
+            {/* Human in the Loop Decisions */}
+            <div 
+              onClick={() => { setActiveHub('operations'); setOpsTab('inbox'); }}
+              className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                waitingInstances.length > 0
+                  ? 'bg-amber-950/30 border-amber-500/50 hover:bg-amber-950/50 shadow-sm'
+                  : 'bg-slate-900/60 hover:bg-slate-900/90 border-slate-800'
+              }`}
+            >
+              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <UserCheck size={12} className={waitingInstances.length > 0 ? 'text-amber-400' : 'text-slate-400'} />
+                  Human Review
+                </span>
+                <span className={`text-[10px] ${waitingInstances.length > 0 ? 'text-amber-400 font-bold' : 'text-slate-500'}`}>
+                  Decision Center →
                 </span>
               </div>
+              <div className={`text-xl font-bold mt-1 ${waitingInstances.length > 0 ? 'text-amber-300' : 'text-slate-300'}`}>
+                {formatCount(waitingInstances.length)}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {formatCount(instanceCounts.running)} executing · {formatCount(waitingInstances.length)} parked
+              </div>
             </div>
 
-            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <Bot size={12} className="text-cyan-400" />
-                Agent Runs
-              </div>
-              <div className="text-xl font-bold text-cyan-300 mt-1">{formatCount(agentMetrics?.runs)}</div>
-              <div className="text-[10px] text-slate-500 mt-1">
-                {formatCount(agentMetrics?.succeededRuns)} succeeded ·{' '}
-                <span className={agentMetrics?.failedRuns ? 'text-rose-400' : ''}>
-                  {formatCount(agentMetrics?.failedRuns)} failed
+            {/* Agent Autonomy & Token Usage */}
+            <div 
+              onClick={() => setActiveHub('agents')}
+              className="bg-cyan-950/20 hover:bg-cyan-950/40 p-3 rounded-xl border border-cyan-900/50 cursor-pointer transition-all"
+            >
+              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Bot size={12} className="text-cyan-400" />
+                  Agent Autonomy
                 </span>
+                <span className="text-[10px] text-cyan-400">Agent Studio →</span>
               </div>
-            </div>
-
-            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <CheckCircle size={12} className="text-cyan-400" />
-                Auto-commits
+              <div className="text-xl font-bold text-cyan-300 mt-1">
+                {formatCount(agentMetrics?.commits)} commits
               </div>
-              <div className="text-xl font-bold text-cyan-300 mt-1">{formatCount(agentMetrics?.commits)}</div>
               <div className="text-[10px] text-slate-500 mt-1">
-                {formatCount(agentMetrics?.overrides)} human overrides
-              </div>
-            </div>
-
-            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <AlertTriangle size={12} className="text-amber-400" />
-                Parked Suggestions
-              </div>
-              <div className="text-xl font-bold text-amber-300 mt-1">{formatCount(agentMetrics?.parks)}</div>
-              <div className="text-[10px] text-slate-500 mt-1">
-                {formatCount(agentMetrics?.hostedQuotaDenials)} quota denials
-              </div>
-            </div>
-
-            <div className="bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/50">
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                <Database size={12} className="text-violet-400" />
-                Agent Tokens
-              </div>
-              <div className="text-xl font-bold text-violet-300 mt-1">{formatCount(totalAgentTokens)}</div>
-              <div className="text-[10px] text-slate-500 mt-1">
-                {formatCount(agentMetrics?.tokens.inputTokens)} in · {formatCount(agentMetrics?.tokens.outputTokens)} out
+                {formatCount(agentMetrics?.overrides)} overrides · {formatCount(totalAgentTokens)} tokens
               </div>
             </div>
           </div>
@@ -535,128 +673,462 @@ export const TenantDashboard: React.FC<Props> = ({
 
       {error && (
         <div className="p-4 bg-rose-900/30 border border-rose-700 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+          <AlertTriangle size={15} className="shrink-0 text-rose-400" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Tenant Navigation Tabs */}
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
+      {/* 4 Functional Hub Navigation Switcher */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-1.5 flex flex-wrap gap-1 shadow-lg backdrop-blur">
+        <button
+          type="button"
+          onClick={() => setActiveHub('design')}
+          className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+            activeHub === 'design'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+          }`}
+        >
+          <Layers size={15} className={activeHub === 'design' ? 'text-white' : 'text-blue-400'} />
+          <span>Design Studio</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+            activeHub === 'design' ? 'bg-blue-700 text-blue-100' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {blueprints.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveHub('agents')}
+          className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+            activeHub === 'agents'
+              ? 'bg-cyan-600 text-white shadow-md shadow-cyan-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+          }`}
+        >
+          <Bot size={15} className={activeHub === 'agents' ? 'text-white' : 'text-cyan-400'} />
+          <span>AI & Agent Studio</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+            activeHub === 'agents' ? 'bg-cyan-700 text-cyan-100' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {agentMetrics?.runs ?? 0} runs
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveHub('operations')}
+          className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all relative ${
+            activeHub === 'operations'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+          }`}
+        >
+          <Activity size={15} className={activeHub === 'operations' ? 'text-white' : 'text-emerald-400'} />
+          <span>Operations & Runtime</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+            activeHub === 'operations' ? 'bg-emerald-700 text-emerald-100' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {instances.length}
+          </span>
+          {waitingInstances.length > 0 && (
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveHub('governance')}
+          className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+            activeHub === 'governance'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+          }`}
+        >
+          <Shield size={15} className={activeHub === 'governance' ? 'text-white' : 'text-indigo-400'} />
+          <span>Platform Governance</span>
+        </button>
+      </div>
+
+      {/* Main Hub Body Area */}
+      <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-6">
-          {activeTab === 'Capabilities' && (
-            <CapabilitiesShowcase />
-          )}
-          {activeTab === 'Comparison' && (
-            <CompetitiveComparison />
-          )}
-          {activeTab === 'Instances' && (
+
+          {/* HUB 1: DESIGN STUDIO */}
+          {activeHub === 'design' && (
             <div className="space-y-4">
-              <div className="flex justify-between items-center text-xs text-slate-400">
-                <span>Showing workflow executions owned by <strong>{session.tenantName}</strong></span>
-                <button
-                  onClick={() => setShowStartModal(true)}
-                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
-                >
-                  <Sparkles size={13} /> Launch Demo Workflow
-                </button>
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-700/80 pb-3 gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setDesignTab('workflows')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      designTab === 'workflows'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Layers size={13} />
+                    <span>Workflow Blueprints & DAG Studio</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSimulationTarget({});
+                      setDesignTab('simulator');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      designTab === 'simulator'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <FlaskConical size={13} />
+                    <span>Visual Demo Simulator</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsCreatingBlueprint(true)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition-all"
+                  >
+                    <Plus size={13} /> New Blueprint
+                  </button>
+                </div>
               </div>
-              <WorkflowInstanceTable
-                key={auditFocus?.requestId ?? 'instances'}
-                items={instances}
-                blueprints={blueprints}
-                inspectInstanceId={auditFocus?.instanceId}
-                inspectRequestId={auditFocus?.requestId}
-                onInspectConsumed={() => setAuditFocus(null)}
+
+              {designTab === 'workflows' && (
+                <ApplicationWorkspace
+                  tenantName={session.tenantName}
+                  blueprints={blueprints}
+                  instances={instances}
+                  onView={handleViewBlueprint}
+                  onEdit={handleEditBlueprint}
+                  onCreate={() => setIsCreatingBlueprint(true)}
+                  onDelete={async (id) => {
+                    if (confirm('Delete this draft?')) {
+                      await api.delete(id, 'Tenant');
+                      await loadData();
+                    }
+                  }}
+                  onPublish={async (id) => {
+                    await api.publish(id, 'Tenant');
+                    await loadData();
+                  }}
+                  onSubmit={async (id) => {
+                    await api.submit(id, 'Tenant');
+                    await loadData();
+                  }}
+                  onWithdraw={async (id) => {
+                    await api.withdraw(id, 'Tenant');
+                    await loadData();
+                  }}
+                  onDeprecate={async (id) => {
+                    await api.deprecate(id, 'Tenant');
+                    await loadData();
+                  }}
+                  onAbandon={async (id) => {
+                    await api.abandon(id, 'Tenant');
+                    await loadData();
+                  }}
+                  onNewVersion={async (id) => {
+                    const nv = await api.newVersion(id, 'Tenant');
+                    setEditorBlueprint(nv);
+                    await loadData();
+                  }}
+                  onSimulate={(bindingId, revision) => {
+                    setSimulationTarget({ bindingId, revision });
+                    setDesignTab('simulator');
+                  }}
+                  onLaunch={() => setShowStartModal(true)}
+                  onOpenSimulator={() => {
+                    setSimulationTarget({});
+                    setDesignTab('simulator');
+                  }}
+                  onInspectInstance={(instanceId) => {
+                    setAuditFocus({ instanceId, requestId: Date.now() });
+                    setActiveHub('operations');
+                    setOpsTab('instances');
+                  }}
+                />
+              )}
+
+              {designTab === 'simulator' && (
+                <DemoVisualSimulator
+                  blueprints={blueprints}
+                  initialBindingId={simulationTarget.bindingId}
+                  initialRevision={simulationTarget.revision}
+                  preferContextMode={Boolean(simulationTarget.bindingId)}
+                />
+              )}
+            </div>
+          )}
+
+          {/* HUB 2: AI & AGENT STUDIO */}
+          {activeHub === 'agents' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-700/80 pb-3 gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <Bot className="text-cyan-400" size={18} />
+                    AI & Agent Studio
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Governed Agent Personas, Curated Tool Registry, Versioned Prompt Catalog, and LLM Provider Bindings.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setActiveHub('governance');
+                      setGovTab('mcp');
+                    }}
+                    className="px-3 py-1.5 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-700/40 text-cyan-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <Bot size={13} /> MCP Server Protocol
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveHub('operations');
+                      setOpsTab('inbox');
+                    }}
+                    className="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/40 text-amber-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <UserCheck size={13} /> Human Decision Inbox ({waitingInstances.length})
+                  </button>
+                </div>
+              </div>
+
+              <AiContextView
+                tenantName={session.tenantName}
+                onOpenBusinessContext={() => {
+                  setActiveHub('design');
+                  setDesignTab('workflows');
+                }}
               />
             </div>
           )}
 
-          {activeTab === 'Application' && (
-            <ApplicationWorkspace
-              tenantName={session.tenantName}
-              blueprints={blueprints}
-              instances={instances}
-              onView={handleViewBlueprint}
-              onEdit={handleEditBlueprint}
-              onCreate={() => setIsCreatingBlueprint(true)}
-              onDelete={async (id) => {
-                if (confirm('Delete this draft?')) {
-                  await api.delete(id, 'Tenant');
-                  await loadData();
-                }
-              }}
-              onPublish={async (id) => {
-                await api.publish(id, 'Tenant');
-                await loadData();
-              }}
-              onSubmit={async (id) => {
-                await api.submit(id, 'Tenant');
-                await loadData();
-              }}
-              onWithdraw={async (id) => {
-                await api.withdraw(id, 'Tenant');
-                await loadData();
-              }}
-              onDeprecate={async (id) => {
-                await api.deprecate(id, 'Tenant');
-                await loadData();
-              }}
-              onAbandon={async (id) => {
-                await api.abandon(id, 'Tenant');
-                await loadData();
-              }}
-              onNewVersion={async (id) => {
-                const nv = await api.newVersion(id, 'Tenant');
-                setEditorBlueprint(nv);
-                await loadData();
-              }}
-              onSimulate={(bindingId, revision) => {
-                setSimulationTarget({ bindingId, revision });
-                setActiveTab('Simulator');
-              }}
-              onLaunch={() => setShowStartModal(true)}
-              onOpenSimulator={() => {
-                setSimulationTarget({});
-                setActiveTab('Simulator');
-              }}
-            />
-          )}
+          {/* HUB 3: OPERATIONS & RUNTIME */}
+          {activeHub === 'operations' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-700/80 pb-3 gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setOpsTab('instances')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      opsTab === 'instances'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Activity size={13} />
+                    <span>Live Instances</span>
+                    <span className="text-[10px] px-1.5 py-0.2 bg-slate-800 text-slate-400 rounded-full font-mono">{instances.length}</span>
+                  </button>
 
-          {activeTab === 'Events' && (
-            <EventAuditViewer
-              role="Tenant"
-              onInspectWorkflow={(instanceId) => {
-                const resolved = resolveWorkflowInstanceId(instances, instanceId);
-                if (!resolved) return;
-                setAuditFocus({ instanceId: resolved, requestId: Date.now() });
-                setActiveTab('Instances');
-              }}
-            />
-          )}
+                  <button
+                    onClick={() => setOpsTab('inbox')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      opsTab === 'inbox'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <UserCheck size={13} />
+                    <span>Human Decision Inbox</span>
+                    {waitingInstances.length > 0 ? (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded-full font-bold font-mono animate-pulse">
+                        {waitingInstances.length} Waiting
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-slate-800 text-slate-400 rounded-full font-mono">0</span>
+                    )}
+                  </button>
 
-          {activeTab === 'Keys' && (
-            <div className="space-y-6">
-              <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
-              <TenantRuntimeRolesPanel />
+                  <button
+                    onClick={() => setOpsTab('events')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      opsTab === 'events'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Clock size={13} />
+                    <span>Event Stream & Audit</span>
+                  </button>
+
+                  <button
+                    onClick={() => setOpsTab('dlq')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      opsTab === 'dlq'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <AlertTriangle size={13} />
+                    <span>Dead Letter Queue (DLQ)</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowStartModal(true)}
+                    className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition-all"
+                  >
+                    <Sparkles size={13} /> Launch Workflow
+                  </button>
+                </div>
+              </div>
+
+              {opsTab === 'instances' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                    <span>Showing workflow executions owned by <strong>{session.tenantName}</strong></span>
+                    <button
+                      onClick={() => setShowStartModal(true)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all"
+                    >
+                      <Sparkles size={13} /> Launch Demo Workflow
+                    </button>
+                  </div>
+                  <WorkflowInstanceTable
+                    key={auditFocus?.requestId ?? 'instances'}
+                    items={instances}
+                    blueprints={blueprints}
+                    inspectInstanceId={auditFocus?.instanceId}
+                    inspectRequestId={auditFocus?.requestId}
+                    onInspectConsumed={() => setAuditFocus(null)}
+                  />
+                </div>
+              )}
+
+              {opsTab === 'inbox' && (
+                <HumanInTheLoopInbox
+                  instances={instances}
+                  blueprints={blueprints}
+                  onInspectInstance={(instanceId) => {
+                    setAuditFocus({ instanceId, requestId: Date.now() });
+                    setOpsTab('instances');
+                  }}
+                  onRefresh={loadData}
+                  role="Tenant"
+                />
+              )}
+
+              {opsTab === 'events' && (
+                <EventAuditViewer
+                  role="Tenant"
+                  onInspectWorkflow={(instanceId) => {
+                    const resolved = resolveWorkflowInstanceId(instances, instanceId);
+                    if (!resolved) return;
+                    setAuditFocus({ instanceId: resolved, requestId: Date.now() });
+                    setOpsTab('instances');
+                  }}
+                />
+              )}
+
+              {opsTab === 'dlq' && (
+                <DeadLetterQueueViewer
+                  session={session}
+                  tenantFilter={session.tenantId}
+                />
+              )}
             </div>
           )}
 
-          {activeTab === 'Mcp' && (
-            <TenantMcpConfiguration
-              tenantId={session.tenantId}
-              tenantName={session.tenantName}
-              sessionApiKey={session.apiKey}
-              onOpenApiKeys={() => setActiveTab('Keys')}
-            />
+          {/* HUB 4: PLATFORM GOVERNANCE */}
+          {activeHub === 'governance' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-700/80 pb-3 gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setGovTab('keys')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      govTab === 'keys'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Key size={13} />
+                    <span>Scoped API Keys & Runtime RBAC</span>
+                  </button>
+
+                  <button
+                    onClick={() => setGovTab('mcp')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      govTab === 'mcp'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Bot size={13} />
+                    <span>MCP Server Protocol</span>
+                  </button>
+
+                  <button
+                    onClick={() => setGovTab('capabilities')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      govTab === 'capabilities'
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Sparkles size={13} />
+                    <span>Platform Specifications</span>
+                  </button>
+
+                  <button
+                    onClick={() => setGovTab('comparison')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      govTab === 'comparison'
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Scale size={13} />
+                    <span>Competitive Comparison</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowBackupDialog(true)}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <ShieldAlert size={13} /> Site Backup & Restore
+                  </button>
+                </div>
+              </div>
+
+              {govTab === 'keys' && (
+                <div className="space-y-6">
+                  <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
+                  <TenantRuntimeRolesPanel />
+                </div>
+              )}
+
+              {govTab === 'mcp' && (
+                <TenantMcpConfiguration
+                  tenantId={session.tenantId}
+                  tenantName={session.tenantName}
+                  sessionApiKey={session.apiKey}
+                  onOpenApiKeys={() => setGovTab('keys')}
+                />
+              )}
+
+              {govTab === 'capabilities' && (
+                <CapabilitiesShowcase />
+              )}
+
+              {govTab === 'comparison' && (
+                <CompetitiveComparison />
+              )}
+            </div>
           )}
 
-          {activeTab === 'Simulator' && (
-            <DemoVisualSimulator
-              blueprints={blueprints}
-              initialBindingId={simulationTarget.bindingId}
-              initialRevision={simulationTarget.revision}
-              preferContextMode={Boolean(simulationTarget.bindingId)}
-            />
-          )}
         </div>
       </div>
 
@@ -685,7 +1157,9 @@ export const TenantDashboard: React.FC<Props> = ({
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-300 font-bold block mb-2 text-sm text-emerald-400 flex items-center gap-1.5"><Sparkles size={14}/> Select Example Demo Workflow</label>
+                <label className="text-slate-300 font-bold block mb-2 text-sm text-emerald-400 flex items-center gap-1.5">
+                  <Sparkles size={14}/> Select Example Demo Workflow
+                </label>
                 <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
                   {[
                     {
