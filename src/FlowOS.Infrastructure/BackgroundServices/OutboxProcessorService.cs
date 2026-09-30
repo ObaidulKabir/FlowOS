@@ -236,15 +236,13 @@ public class OutboxProcessorService : BackgroundService
             }
             else if (string.Equals(actionType, "Notification", StringComparison.OrdinalIgnoreCase))
             {
-                var template = root.TryGetProperty("template", out var tm) ? tm.GetString() : "Workflow action triggered";
-
                 var dbContext = sp.GetService<FlowOSDbContext>();
                 if (dbContext != null)
                 {
                     var notif = new FlowOS.Notifications.Domain.Notification(
                         message.TenantId,
                         "WorkflowAction",
-                        $"[{stepId}] {template} (Target: {target})",
+                        FlowOS.Infrastructure.Services.WorkflowNotificationText.Format(root),
                         "Info",
                         null
                     );

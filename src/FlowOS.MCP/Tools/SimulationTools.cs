@@ -1459,6 +1459,19 @@ public class SimulationTools
                         targetStep = def;
                         triggeredEvent = "Default";
                     }
+                    else if (stepTypeLower.Contains("system") && nextSteps.Count > 0)
+                    {
+                        status = "Running";
+                        executionTrace.Add(new
+                        {
+                            stepNumber = totalStepsExecuted + 1,
+                            stepId = step.StepId,
+                            stepType = stepType,
+                            action = $"Automated step '{step.StepId}' did not continue. nextSteps has no exact key 'Default' (keys: [{string.Join(", ", nextSteps.Keys)}]), so later timers never start.",
+                            state = currentState
+                        });
+                        break;
+                    }
                     else if (nextSteps.Count == 1)
                     {
                         var single = nextSteps.First();
@@ -1487,7 +1500,7 @@ public class SimulationTools
                     break;
                 }
 
-                if (!string.IsNullOrEmpty(triggeredEvent) && !string.Equals(triggeredEvent, "Default", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(triggeredEvent))
                 {
                     var (smTrans, guardBlocked, guardReason) = FindTransition(blueprint.StateMachine, currentState, triggeredEvent, payload);
                     if (guardBlocked)
@@ -1514,28 +1527,28 @@ public class SimulationTools
                         });
                         currentState = smTrans.ToState;
                     }
-                }
-                else
-                {
-                    var queuedState = TryApplyQueuedSystemStateEvent(
-                        blueprint, eventsQueue, payload, ref currentState, stateTransitions,
-                        out var appliedEvent, out var queuedGuardReason);
-                    if (queuedState == QueuedStateApplyKind.GuardBlocked)
+                    else if (string.Equals(triggeredEvent, "Default", StringComparison.OrdinalIgnoreCase))
                     {
-                        status = "BlockedByGuard";
-                        executionTrace.Add(new
+                        var queuedState = TryApplyQueuedSystemStateEvent(
+                            blueprint, eventsQueue, payload, ref currentState, stateTransitions,
+                            out var appliedEvent, out var queuedGuardReason);
+                        if (queuedState == QueuedStateApplyKind.GuardBlocked)
                         {
-                            stepNumber = totalStepsExecuted + 1,
-                            stepId = step.StepId,
-                            stepType = stepType,
-                            action = $"Transition guard failed for queued state event '{appliedEvent}': {queuedGuardReason}",
-                            state = currentState
-                        });
-                        break;
-                    }
+                            status = "BlockedByGuard";
+                            executionTrace.Add(new
+                            {
+                                stepNumber = totalStepsExecuted + 1,
+                                stepId = step.StepId,
+                                stepType = stepType,
+                                action = $"Transition guard failed for queued state event '{appliedEvent}': {queuedGuardReason}",
+                                state = currentState
+                            });
+                            break;
+                        }
 
-                    if (queuedState == QueuedStateApplyKind.Applied)
-                        triggeredEvent = appliedEvent;
+                        if (queuedState == QueuedStateApplyKind.Applied)
+                            triggeredEvent = appliedEvent;
+                    }
                 }
 
                 var isAgentCommit =

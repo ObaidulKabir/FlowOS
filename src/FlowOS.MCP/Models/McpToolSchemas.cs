@@ -406,7 +406,7 @@ public static class McpToolSchemas
                         },
                         "additionalProperties":false
                       },
-                      "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
+                      "nextSteps":{"type":"object","additionalProperties":{"type":"string"},"description":"Event id to next step id. A SystemTask or Command continues by itself only when this object contains the exact key Default. default, SystemContinue, and other names do not auto-advance, so later timers never start. If Default is a known state-machine event, the current state must allow it; an event the machine never declares does not block the advance. A HumanTask never auto-advances."},
                       "pathLimits":{
                         "type":"object",
                         "description":"Per-event travel caps for repeatable paths (retry-password, resubmit). Key matches a nextSteps or Decision conditions key. Cyclic edges without a declaration default to maxTravels=5.",
@@ -441,22 +441,22 @@ public static class McpToolSchemas
                       "inboundSteps":{"type":"array","items":{"type":"string"}},
                       "onEntry":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string","description":"Recipient role or user id for Notification. Not the message text."},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"},"template":{"type":"string","description":"Notification message. Required for Notification. Supports {{Field}} placeholders. Omitting it sends [StepId] (Target: )."}}}
                       },
                       "onExit":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string","description":"Recipient role or user id for Notification. Not the message text."},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"},"template":{"type":"string","description":"Notification message. Required for Notification. Supports {{Field}} placeholders. Omitting it sends [StepId] (Target: )."}}}
                       },
                       "onFailure":{
                         "type":"array",
-                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string"},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"}}}
+                        "items":{"type":"object","required":["actionType"],"properties":{"actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},"target":{"type":"string","description":"Recipient role or user id for Notification. Not the message text."},"connector":{"type":"string"},"capability":{"type":"string","description":"Deprecated alias for connector."},"url":{"type":"string"},"template":{"type":"string","description":"Notification message. Required for Notification. Supports {{Field}} placeholders. Omitting it sends [StepId] (Target: )."}}}
                       },
                       "sla":{
                         "type":"object",
                         "required":["duration","timeoutEvent"],
                         "properties":{
-                          "duration":{"type":"string","minLength":1},
-                          "timeoutEvent":{"type":"string","minLength":1},
+                          "duration":{"type":"string","minLength":1,"description":"How long this step waits before timeoutEvent. The string is the clock (3m is three minutes). The next tier is a separate SLA on the next waiting step, not a longer duration on this one."},
+                          "timeoutEvent":{"type":"string","minLength":1,"description":"Event published when this SLA elapses. Must be a nextSteps key on this waiting step and a state-machine transition from this step's state. It enters the next step. It does not schedule the next timer."},
                           "escalationStepId":{"type":"string"},
                           "escalationRole":{"type":"string"},
                           "isInterrupting":{"type":"boolean"},
@@ -1006,12 +1006,12 @@ public static class McpToolSchemas
               "required":["actionType"],
               "properties":{
                 "actionType":{"type":"string","description":"Built-in: Webhook/Notification/PublishEvent/InvokeConnector (legacy InvokeCapability), or plugin alias (plugin:* / plugin.*)."},
-                "target":{"type":"string","description":"Target URL, recipient role/user, or domain event name."},
+                "target":{"type":"string","description":"Notification recipient role or user id, webhook is not this field, PublishEvent event id. Not the notification sentence."},
                 "connector":{"type":"string","description":"Connector name for InvokeConnector actions (e.g. payment.refund.v1)."},
                 "capability":{"type":"string","description":"Deprecated alias for connector."},
                 "url":{"type":"string","description":"Webhook destination URL (supports dynamic tokens like {{OrderId}})."},
                 "method":{"type":"string","enum":["POST","GET","PUT"],"default":"POST"},
-                "template":{"type":"string","description":"Message template string with optional {{Expression}} placeholders."},
+                "template":{"type":"string","description":"Notification message body. Required when actionType is Notification. Supports {{Expression}} placeholders. Putting the sentence in target instead sends [StepId] (Target: )."},
                 "payloadMapping":{"type":"object","description":"Key-to-expression mapping for dynamic payload transformation."},
                 "condition":{"type":"string","description":"Dynamic boolean expression guard required for execution."},
                 "headers":{"type":"object","description":"Custom HTTP headers."},
