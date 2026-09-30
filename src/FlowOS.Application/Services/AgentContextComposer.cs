@@ -46,7 +46,9 @@ public static class AgentContextComposer
                 capability: tool.Capability,
                 sideEffect: tool.SideEffect,
                 prefetch: tool.Prefetch,
-                description: tool.Description)).ToList(),
+                description: tool.Description,
+                parametersSchema: ParseSchema(tool.ParametersSchema),
+                requiredCapability: tool.RequiredCapability)).ToList(),
             provider: packet.Provider == null
                 ? null
                 : new ComposedProviderRef(
@@ -66,4 +68,17 @@ public static class AgentContextComposer
             resolved: new ComposedResolvedFlags(
                 prompt: packet.PromptBinding != null,
                 provider: packet.Provider != null));
+
+    private static object? ParseSchema(string? schemaJson)
+    {
+        if (string.IsNullOrWhiteSpace(schemaJson)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<object>(schemaJson);
+        }
+        catch
+        {
+            return schemaJson;
+        }
+    }
 }

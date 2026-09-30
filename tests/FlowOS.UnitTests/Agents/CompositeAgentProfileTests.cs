@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using FlowOS.Agents.Abstractions;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Services;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
@@ -135,7 +136,7 @@ public class CompositeAgentProfileTests
 
         // Curated Tools hydrated from profile's ToolAliases:
         Assert.NotNull(packet.Tools);
-        Assert.Contains(packet.Tools, t => t.Name == "crm.customer.get.v1" && t.Kind == "plugin" && t.Provider == "LookupRecord");
+        Assert.Contains(packet.Tools, t => t.Name == "crm.customer.get.v1" && t.Kind == "resource" && t.Provider == "LookupRecord");
         Assert.Contains(packet.Tools, t => t.Name == "CalculateRiskRatio");
 
         // Autonomy policy hydrated from profile:
@@ -223,5 +224,141 @@ public class CompositeAgentProfileTests
         Assert.Equal(AgentProviderKinds.Anthropic, packet.Provider.ProviderName);
         Assert.NotNull(packet.AutoCommit);
         Assert.Equal(0.80, packet.AutoCommit!.MinConfidence);
+    }
+
+    [Fact]
+    public async Task DecisionPacketBuilder_HydratesStructuredToolConfiguration_WithParametersSchemaAndSecurity()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase($"structured-tool-test-{Guid.NewGuid()}")
+            .Options;
+
+        await using var db = new FlowOSDbContext(options);
+        var registry = new PluginBindingRegistryService(db);
+
+        // 1. Register structured action tool with schema and security
+        var toolConfig = new AgentToolConfiguration
+        {
+            Description = "Fetches customer CRM details including credit score",
+            SideEffect = "read",
+            Prefetch = true,
+            RequiredCapability = "crm.customer.read",
+            ParametersSchema = """{"type":"object","properties":{"customerId":{"type":"string"}},"required":["customerId"]}"""
+        };
+
+        await registry.UpsertAsync(
+            tenantId,
+            PluginBindingTypes.Action,
+            "LookupCustomerCredit",
+            "LookupRecord",
+            true,
+            JsonSerializer.Serialize(toolConfig));
+
+        // 2. Register agent profile that binds to this tool
+        var profileConfig = new AgentProfileConfiguration
+        {
+            Role = "CreditOfficer",
+            ToolAliases = new List<string> { "LookupCustomerCredit" }
+        };
+
+        await registry.UpsertAsync(
+            tenantId,
+            PluginBindingTypes.Profile,
+            "CreditAgent",
+            "CreditOfficer",
+            true,
+            JsonSerializer.Serialize(profileConfig));
+
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "CheckCredit",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "CheckCredit",
+                        StepType = "Decision",
+                        Actor = "Agent",
+                        AgentProvider = "CreditAgent",
+                        NextSteps = new Dictionary<string, string> { ["Approved"] = "End" }
+                    }
+                }
+            }
+        };
+
+        var workflowClass = new WorkflowClass(tenantId, "CreditFlow", "1.0.0", blueprint);
+        db.WorkflowClasses.Add(workflowClass);
+        await db.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(db);
+        var builder = new DecisionPacketBuilder(unitOfWork, registry);
+
+        // Act
+        var packet = await builder.PreviewAsync(tenantId, workflowClass.Id, "CheckCredit");
+
+        // Assert
+        Assert.NotNull(packet);
+        Assert.NotNull(packet!.Tools);
+        var tool = packet.Tools!.FirstOrDefault(t => t.Name == "LookupCustomerCredit");
+        Assert.NotNull(tool);
+        Assert.Equal("LookupRecord", tool!.Provider);
+        Assert.Equal("resource", tool.Kind);
+        Assert.Equal("Fetches customer CRM details including credit score", tool.Description);
+        Assert.Equal("read", tool.SideEffect);
+        Assert.True(tool.Prefetch);
+        Assert.Equal("crm.customer.read", tool.RequiredCapability);
+        Assert.NotNull(tool.ParametersSchema);
+        Assert.Contains("customerId", tool.ParametersSchema);
+    }
+
+    [Fact]
+    public async Task AgentToolHost_Prefetch_BlocksMutatingWriteTools_FromExecution()
+    {
+        var tenantId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+
+        var packet = new DecisionPacket(
+            tenantId,
+            instanceId,
+            "PaymentStep",
+            "Pending",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?> { ["Amount"] = 100 },
+            new[] { "PAID" },
+            new[] { "PAID" },
+            new[] { "Cashier" },
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Process Payment",
+            null,
+            Tools: new[]
+            {
+                new AgentToolDescriptor(
+                    "ChargeCard",
+                    "plugin",
+                    "PaymentGateway",
+                    "Mutating charge action",
+                    SideEffect: "write",
+                    Prefetch: true, // Malicious or misconfigured prefetch on write tool!
+                    Capability: "payments.charge")
+            });
+
+        var toolHost = new AgentToolHost(Array.Empty<IAgentResourcePlugin>());
+
+        // Act
+        var prefetched = await toolHost.PrefetchAsync(packet);
+
+        // Assert
+        Assert.NotNull(prefetched.ToolResults);
+        Assert.True(prefetched.ToolResults!.ContainsKey("ChargeCard"));
+        var resultJson = JsonSerializer.Serialize(prefetched.ToolResults["ChargeCard"]);
+        Assert.Contains("cannot be prefetched", resultJson);
     }
 }

@@ -241,6 +241,114 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject UpsertAgentTool() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1,"description":"Business tool name (e.g. LookupCustomerCredit, crm.customer.get.v1)."},
+            "sourceName":{"type":"string","description":"Alias synonym."},
+            "providerName":{"type":"string","description":"Plugin or connector provider (e.g. LookupRecord, QueryRecords, FetchDocument, SearchKnowledge, CheckPolicy, connector:salesforce)."},
+            "description":{"type":"string","description":"Business purpose of the tool and guidelines for the model."},
+            "sideEffect":{"type":"string","enum":["none","read","write","notify"],"default":"none","description":"Security classification. Tools marked 'write' or 'notify' cannot be prefetched."},
+            "parametersSchema":{"description":"JSON Schema object or JSON string defining accepted arguments."},
+            "requiredCapability":{"type":"string","description":"Fine-grained permission or role required to invoke this tool."},
+            "prefetch":{"type":"boolean","default":false,"description":"Auto-prefetch at step entry using canonical context (read-only tools only)."},
+            "argumentMapping":{"type":"object","description":"Mapping between canonical context fields and tool parameter names."},
+            "configuration":{"type":"object","description":"Nested tool configuration object (optional alternative to top-level fields)."},
+            "isEnabled":{"type":"boolean","default":true},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListAgentTools() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "alias":{"type":"string","description":"Optional tool name filter."},
+            "enabledOnly":{"type":"boolean"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetAgentTool() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1,"description":"Business tool name or alias."},
+            "sourceName":{"type":"string"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject UpsertAgentProfile() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1,"description":"Agent persona name/alias (e.g. CreditUnderwriter, SupportTriageBot)."},
+            "sourceName":{"type":"string","description":"Alias synonym."},
+            "role":{"type":"string","description":"Workflow step role this agent can fulfill (e.g. LoanOfficer, TriageSpecialist)."},
+            "description":{"type":"string","description":"Human-readable description of what this Agent does."},
+            "providerAlias":{"type":"string","description":"Bound LLM provider alias (e.g. claude-reasoner, openai, default)."},
+            "promptAlias":{"type":"string","description":"Bound prompt template alias (e.g. loan-audit-v2)."},
+            "toolAliases":{
+              "type":"array",
+              "items":{"type":"string"},
+              "description":"List of registered business tool names available to this agent."
+            },
+            "autoCommitThreshold":{"type":"number","minimum":0.0,"maximum":1.0,"description":"Autonomous execution confidence threshold (e.g. 0.90)."},
+            "allowedEvents":{
+              "type":"array",
+              "items":{"type":"string"},
+              "description":"FSM transition events this agent is authorized to trigger."
+            },
+            "configuration":{"type":"object","description":"Nested profile configuration object (optional alternative to top-level fields)."},
+            "isEnabled":{"type":"boolean","default":true},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListAgentProfiles() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "alias":{"type":"string","description":"Optional agent name filter."},
+            "enabledOnly":{"type":"boolean"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetAgentProfile() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["alias"],
+          "properties":{
+            "alias":{"type":"string","minLength":1,"description":"Agent persona name or matching workflow role."},
+            "sourceName":{"type":"string"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject ExplainValidationViolation() => JObject.Parse(
         """
         {

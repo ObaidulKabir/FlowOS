@@ -23,7 +23,9 @@ public sealed record AgentToolDescriptor(
     string Description,
     string SideEffect = "none",
     bool Prefetch = false,
-    string? Capability = null);
+    string? Capability = null,
+    string? ParametersSchema = null,
+    string? RequiredCapability = null);
 
 public sealed record AgentPromptContext(
     string? TemplateGuideline,

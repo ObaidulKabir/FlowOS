@@ -121,4 +121,26 @@ public interface IPluginBindingRegistryService
         Guid tenantId,
         string aliasOrRole,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Finds a structured agent tool binding by business alias or name.
+    /// </summary>
+    Task<PluginBindingDto?> GetAgentToolAsync(
+        Guid tenantId,
+        string sourceName,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Lists all structured agent tool bindings for a tenant.
+    /// </summary>
+    Task<IReadOnlyList<PluginBindingDto>> ListAgentToolsAsync(
+        Guid tenantId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Lists all composite agent profiles for a tenant.
+    /// </summary>
+    Task<IReadOnlyList<PluginBindingDto>> ListAgentProfilesAsync(
+        Guid tenantId,
+        CancellationToken ct = default);
 }

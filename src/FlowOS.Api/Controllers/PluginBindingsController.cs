@@ -68,6 +68,40 @@ public class PluginBindingsController : ControllerBase
                 return BadRequest("autoCommitThreshold must be between 0.0 and 1.0.");
         }
 
+        if (bindingType == PluginBindingTypes.Action)
+        {
+            if (string.IsNullOrWhiteSpace(providerName))
+                return BadRequest("providerName is required for action tool bindings (e.g. LookupRecord, QueryRecords, connector:crm).");
+
+            var parsedTool = FlowOS.Core.Common.Models.AgentToolConfiguration.Parse(configurationJson);
+            if (parsedTool != null)
+            {
+                var sideEffect = parsedTool.SideEffect?.ToLowerInvariant();
+                if (!string.IsNullOrWhiteSpace(sideEffect) &&
+                    sideEffect is not ("none" or "read" or "write" or "notify"))
+                {
+                    return BadRequest("sideEffect must be one of 'none', 'read', 'write', or 'notify'.");
+                }
+
+                if (parsedTool.Prefetch && sideEffect is "write" or "notify")
+                {
+                    return BadRequest("Tools with sideEffect 'write' or 'notify' cannot be configured for prefetch.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(parsedTool.ParametersSchema))
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(parsedTool.ParametersSchema);
+                    }
+                    catch (JsonException)
+                    {
+                        return BadRequest("parametersSchema must be a valid JSON Schema string or object.");
+                    }
+                }
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(providerName))
             return BadRequest("providerName is required.");
 

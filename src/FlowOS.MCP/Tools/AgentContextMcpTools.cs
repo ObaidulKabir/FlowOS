@@ -367,6 +367,340 @@ public class AgentContextMcpTools
         }
     }
 
+    public async Task<CallToolResult> UpsertAgentTool(JObject args)
+    {
+        try
+        {
+            var alias = FirstNonEmpty(args, "alias", "sourceName");
+            if (string.IsNullOrWhiteSpace(alias))
+                return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var existing = await _pluginBindings.GetAgentToolAsync(tenantId, alias);
+
+            var providerName = FirstNonEmpty(args, "providerName") ?? existing?.ProviderName;
+            if (string.IsNullOrWhiteSpace(providerName))
+            {
+                return McpToolResults.Fail(
+                    "MCP-ARG-001",
+                    "providerName is required when creating a tool (e.g. LookupRecord, QueryRecords, FetchDocument, SearchKnowledge, CheckPolicy, connector:*).");
+            }
+
+            var sideEffect = FirstNonEmpty(args, "sideEffect")?.ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(sideEffect) &&
+                sideEffect is not ("none" or "read" or "write" or "notify"))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "sideEffect must be one of 'none', 'read', 'write', or 'notify'.");
+            }
+
+            var prefetch = args["prefetch"]?.Value<bool>() ?? false;
+            if (prefetch && sideEffect is "write" or "notify")
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "Tools with sideEffect 'write' or 'notify' cannot be configured for prefetch.");
+            }
+
+            var isEnabled = args["isEnabled"]?.Value<bool>() ?? existing?.IsEnabled ?? true;
+            var configuration = BuildToolConfiguration(args);
+            var binding = await _pluginBindings.UpsertAsync(
+                tenantId,
+                PluginBindingTypes.Action,
+                alias,
+                providerName,
+                isEnabled,
+                configuration);
+
+            return McpToolResults.Success(ToToolDto(binding));
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolResults.Fail("MCP-ARG-001", ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to save agent tool.");
+        }
+    }
+
+    public async Task<CallToolResult> ListAgentTools(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            bool? enabledOnly = args["enabledOnly"]?.Value<bool>();
+            var bindings = await _pluginBindings.ListAsync(
+                tenantId,
+                PluginBindingTypes.Action,
+                args["alias"]?.ToString()?.Trim(),
+                enabledOnly);
+
+            return McpToolResults.Success(new
+            {
+                totalCount = bindings.Count,
+                tools = bindings.Select(ToToolDto).ToList()
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to list agent tools.");
+        }
+    }
+
+    public async Task<CallToolResult> GetAgentTool(JObject args)
+    {
+        try
+        {
+            var alias = FirstNonEmpty(args, "alias", "sourceName");
+            if (string.IsNullOrWhiteSpace(alias))
+                return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var binding = await _pluginBindings.GetAgentToolAsync(tenantId, alias);
+            if (binding == null)
+            {
+                var listed = await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Action, alias);
+                binding = listed.FirstOrDefault();
+            }
+
+            if (binding == null)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Agent tool '{alias}' was not found.");
+
+            return McpToolResults.Success(ToToolDto(binding));
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to load agent tool.");
+        }
+    }
+
+    public async Task<CallToolResult> UpsertAgentProfile(JObject args)
+    {
+        try
+        {
+            var alias = FirstNonEmpty(args, "alias", "sourceName");
+            if (string.IsNullOrWhiteSpace(alias))
+                return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var existing = await _pluginBindings.GetAgentProfileAsync(tenantId, alias);
+
+            var role = FirstNonEmpty(args, "role") ?? existing?.ProviderName;
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "role is required when creating an agent profile (e.g. LoanOfficer, TriageSpecialist).");
+            }
+
+            var isEnabled = args["isEnabled"]?.Value<bool>() ?? existing?.IsEnabled ?? true;
+            var configuration = BuildProfileConfiguration(args, role);
+            var binding = await _pluginBindings.UpsertAsync(
+                tenantId,
+                PluginBindingTypes.Profile,
+                alias,
+                role,
+                isEnabled,
+                configuration);
+
+            return McpToolResults.Success(ToProfileDto(binding));
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolResults.Fail("MCP-ARG-001", ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to save agent profile.");
+        }
+    }
+
+    public async Task<CallToolResult> ListAgentProfiles(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            bool? enabledOnly = args["enabledOnly"]?.Value<bool>();
+            var bindings = await _pluginBindings.ListAsync(
+                tenantId,
+                PluginBindingTypes.Profile,
+                args["alias"]?.ToString()?.Trim(),
+                enabledOnly);
+
+            return McpToolResults.Success(new
+            {
+                totalCount = bindings.Count,
+                profiles = bindings.Select(ToProfileDto).ToList()
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to list agent profiles.");
+        }
+    }
+
+    public async Task<CallToolResult> GetAgentProfile(JObject args)
+    {
+        try
+        {
+            var alias = FirstNonEmpty(args, "alias", "sourceName");
+            if (string.IsNullOrWhiteSpace(alias))
+                return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var binding = await _pluginBindings.GetAgentProfileAsync(tenantId, alias);
+            if (binding == null)
+            {
+                var listed = await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Profile, alias);
+                binding = listed.FirstOrDefault();
+            }
+
+            if (binding == null)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Agent profile '{alias}' was not found.");
+
+            return McpToolResults.Success(ToProfileDto(binding));
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to load agent profile.");
+        }
+    }
+
+    private static object ToToolDto(PluginBindingDto binding)
+    {
+        var settings = binding.Configuration as AgentToolPublicSettings
+            ?? AgentToolConfiguration.Public(null);
+        return new
+        {
+            alias = binding.SourceName,
+            providerName = binding.ProviderName,
+            binding.IsEnabled,
+            description = settings.Description,
+            sideEffect = settings.SideEffect,
+            prefetch = settings.Prefetch,
+            requiredCapability = settings.RequiredCapability,
+            parametersSchema = settings.ParametersSchema,
+            argumentMapping = settings.ArgumentMapping,
+            binding.Id,
+            binding.TenantId,
+            binding.CreatedAtUtc,
+            binding.UpdatedAtUtc
+        };
+    }
+
+    private static object ToProfileDto(PluginBindingDto binding)
+    {
+        var settings = binding.Configuration as AgentProfilePublicSettings
+            ?? AgentProfileConfiguration.Public(null);
+        return new
+        {
+            alias = binding.SourceName,
+            role = settings.Role ?? binding.ProviderName,
+            binding.IsEnabled,
+            description = settings.Description,
+            providerAlias = settings.ProviderAlias,
+            promptAlias = settings.PromptAlias,
+            toolAliases = settings.ToolAliases,
+            autoCommitThreshold = settings.AutoCommitThreshold,
+            allowedEvents = settings.AllowedEvents,
+            binding.Id,
+            binding.TenantId,
+            binding.CreatedAtUtc,
+            binding.UpdatedAtUtc
+        };
+    }
+
+    private static string BuildToolConfiguration(JObject args)
+    {
+        var nested = args["configuration"] as JObject;
+        var description = FirstNonEmpty(args, "description") ?? nested?["description"]?.ToString();
+        var sideEffect = FirstNonEmpty(args, "sideEffect") ?? nested?["sideEffect"]?.ToString() ?? "none";
+        var requiredCapability = FirstNonEmpty(args, "requiredCapability") ?? nested?["requiredCapability"]?.ToString();
+        var prefetch = args["prefetch"]?.Value<bool>() ?? nested?["prefetch"]?.Value<bool>() ?? false;
+
+        string? schemaJson = null;
+        var schemaToken = args["parametersSchema"] ?? nested?["parametersSchema"];
+        if (schemaToken != null)
+        {
+            schemaJson = schemaToken.Type == JTokenType.String
+                ? schemaToken.ToString()
+                : schemaToken.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        var config = new JObject
+        {
+            ["description"] = description,
+            ["sideEffect"] = sideEffect,
+            ["requiredCapability"] = requiredCapability,
+            ["prefetch"] = prefetch,
+            ["parametersSchema"] = schemaJson
+        };
+
+        var argMapToken = args["argumentMapping"] ?? nested?["argumentMapping"];
+        if (argMapToken is JObject argMap)
+        {
+            config["argumentMapping"] = argMap;
+        }
+
+        return config.ToString(Newtonsoft.Json.Formatting.None);
+    }
+
+    private static string BuildProfileConfiguration(JObject args, string role)
+    {
+        var nested = args["configuration"] as JObject;
+        var description = FirstNonEmpty(args, "description") ?? nested?["description"]?.ToString();
+        var providerAlias = FirstNonEmpty(args, "providerAlias") ?? nested?["providerAlias"]?.ToString();
+        var promptAlias = FirstNonEmpty(args, "promptAlias") ?? nested?["promptAlias"]?.ToString();
+
+        double? threshold = null;
+        var thresholdToken = args["autoCommitThreshold"] ?? nested?["autoCommitThreshold"];
+        if (thresholdToken != null && double.TryParse(thresholdToken.ToString(), out var parsedThresh))
+            threshold = parsedThresh;
+
+        var config = new JObject
+        {
+            ["role"] = role,
+            ["description"] = description,
+            ["providerAlias"] = providerAlias,
+            ["promptAlias"] = promptAlias,
+            ["autoCommitThreshold"] = threshold
+        };
+
+        var toolAliasesToken = args["toolAliases"] ?? nested?["toolAliases"];
+        if (toolAliasesToken is JArray toolArray)
+        {
+            config["toolAliases"] = toolArray;
+        }
+
+        var allowedEventsToken = args["allowedEvents"] ?? nested?["allowedEvents"];
+        if (allowedEventsToken is JArray eventsArray)
+        {
+            config["allowedEvents"] = eventsArray;
+        }
+
+        return config.ToString(Newtonsoft.Json.Formatting.None);
+    }
+
     private static object ToProviderDto(PluginBindingDto binding)
     {
         var settings = binding.Configuration as AgentProviderPublicSettings

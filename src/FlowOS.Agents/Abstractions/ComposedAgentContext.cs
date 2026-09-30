@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace FlowOS.Agents.Abstractions;
@@ -26,7 +26,9 @@ public sealed record ComposedToolDescriptor(
     string? capability,
     string sideEffect,
     bool prefetch,
-    string description);
+    string description,
+    object? parametersSchema = null,
+    string? requiredCapability = null);
 
 public sealed record ComposedProviderRef(
     string alias,

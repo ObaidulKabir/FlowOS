@@ -68,4 +68,20 @@ public sealed class NullPluginBindingRegistryService : IPluginBindingRegistrySer
         string aliasOrRole,
         CancellationToken ct = default) =>
         Task.FromResult<PluginBindingDto?>(null);
+
+    public Task<PluginBindingDto?> GetAgentToolAsync(
+        Guid tenantId,
+        string sourceName,
+        CancellationToken ct = default) =>
+        Task.FromResult<PluginBindingDto?>(null);
+
+    public Task<IReadOnlyList<PluginBindingDto>> ListAgentToolsAsync(
+        Guid tenantId,
+        CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PluginBindingDto>>(Array.Empty<PluginBindingDto>());
+
+    public Task<IReadOnlyList<PluginBindingDto>> ListAgentProfilesAsync(
+        Guid tenantId,
+        CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PluginBindingDto>>(Array.Empty<PluginBindingDto>());
 }

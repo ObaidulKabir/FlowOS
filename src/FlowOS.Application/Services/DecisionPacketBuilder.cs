@@ -140,10 +140,13 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
         string? effectiveProviderAlias = providerAlias;
         string? effectivePromptAlias = step?.AgentPrompt;
 
+        IReadOnlyList<PluginBindingDto>? registeredTools = null;
         if (_pluginBindings != null)
         {
             actionBindings = await _pluginBindings.ResolveBindingsAsync(
                 tenantId, PluginBindingTypes.Action, cancellationToken);
+            registeredTools = await _pluginBindings.ListAsync(
+                tenantId, PluginBindingTypes.Action, enabledOnly: true, ct: cancellationToken);
 
             AgentProfilePublicSettings? profile = null;
             if (!string.IsNullOrWhiteSpace(providerAlias) &&
@@ -157,10 +160,18 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
 
             if (profile == null)
             {
-                var rolesToCheck = step?.AllowedRoles is { Count: > 0 }
-                    ? step.AllowedRoles
-                    : packet.AllowedRoles;
-                if (rolesToCheck is { Count: > 0 })
+                var rolesToCheck = new List<string>();
+                if (step?.AllowedRoles is { Count: > 0 }) rolesToCheck.AddRange(step.AllowedRoles);
+                if (packet.AllowedRoles is { Count: > 0 })
+                {
+                    foreach (var r in packet.AllowedRoles)
+                    {
+                        if (!rolesToCheck.Contains(r, StringComparer.OrdinalIgnoreCase))
+                            rolesToCheck.Add(r);
+                    }
+                }
+
+                if (rolesToCheck.Count > 0)
                 {
                     foreach (var role in rolesToCheck)
                     {
@@ -283,7 +294,8 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
         var tools = AgentToolCatalog.FromStep(
             packet.LegalNextStepEvents,
             toolNames,
-            actionBindings);
+            actionBindings,
+            registeredTools);
 
         return packet with { Provider = provider, Tools = tools, PromptBinding = promptBinding, AutoCommit = autoCommit };
     }

@@ -130,6 +130,51 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-llm\"}",
 
+            ["upsert_agent_tool"] =
+                "Creates or edits a structured tool in the tenant Tool Registry (bindingType action). " +
+                "Maps a business-friendly alias (e.g. LookupCustomerCredit) to an underlying plugin or connector (LookupRecord, QueryRecords, FetchDocument, SearchKnowledge, CheckPolicy, connector:*). " +
+                "Accepts parametersSchema (JSON Schema defining argument structure), description, sideEffect ('none', 'read', 'write', 'notify'), and prefetch boolean. " +
+                "SECURITY: Mutating tools ('write' or 'notify') cannot be prefetched. Endpoint URLs and credentials remain zero-knowledge on the host. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,providerName,description,sideEffect,prefetch,requiredCapability,parametersSchema,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"LookupCustomerCredit\",\"providerName\":\"LookupRecord\",\"description\":\"Fetches customer CRM record and score\",\"sideEffect\":\"read\",\"parametersSchema\":{\"type\":\"object\",\"properties\":{\"customerId\":{\"type\":\"string\"}},\"required\":[\"customerId\"]},\"prefetch\":true}",
+
+            ["list_agent_tools"] =
+                "Lists registered business tools (bindingType action) in the tenant Tool Registry, including parameter schemas and security classifications. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{totalCount,tools:[{alias,providerName,description,sideEffect,prefetch,requiredCapability,parametersSchema,isEnabled}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. Input example: {}",
+
+            ["get_agent_tool"] =
+                "Reads one registered tool by alias from the tenant Tool Registry. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,providerName,description,sideEffect,prefetch,requiredCapability,parametersSchema,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"LookupCustomerCredit\"}",
+
+            ["upsert_agent_profile"] =
+                "Creates or edits a composite AI Agent persona in tenant AI Context (bindingType profile). " +
+                "Bundles role, providerAlias, promptAlias, curated toolAliases, and autoCommitThreshold into a cohesive Agent. " +
+                "WORKFLOW BINDING: Workflow waiting steps (actor: Agent or Either) bind to this agent either by agentProvider: alias OR by matching requiredRoles/allowedRoles: [role]. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"CreditUnderwriter\",\"role\":\"LoanOfficer\",\"description\":\"Automated underwriter\",\"providerAlias\":\"claude-reasoner\",\"promptAlias\":\"loan-audit-v2\",\"toolAliases\":[\"LookupCustomerCredit\"],\"autoCommitThreshold\":0.90}",
+
+            ["list_agent_profiles"] =
+                "Lists composite AI Agent personas (bindingType profile) in tenant AI Context. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{totalCount,profiles:[{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. Input example: {}",
+
+            ["get_agent_profile"] =
+                "Reads one composite AI Agent persona by alias or role. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"alias\":\"CreditUnderwriter\"}",
+
             ["explain_validation_violation"] =
                 "Explains a FlowOS validator code and gives a design correction hint. The optional context object " +
                 "can contain stepId, event, state, or capability details. " +

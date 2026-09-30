@@ -1,4 +1,7 @@
+using System.Text.Json;
 using FlowOS.Agents.Abstractions;
+using FlowOS.Core.Common.Interfaces;
+using FlowOS.Core.Common.Models;
 
 namespace FlowOS.Application.Services;
 
@@ -17,7 +20,14 @@ public static class AgentToolCatalog
     public static IReadOnlyList<AgentToolDescriptor> FromStep(
         IEnumerable<string> legalNextStepEvents,
         IEnumerable<string>? declaredTools,
-        IReadOnlyDictionary<string, string>? actionBindings = null)
+        IReadOnlyDictionary<string, string>? actionBindings = null) =>
+        FromStep(legalNextStepEvents, declaredTools, actionBindings, null);
+
+    public static IReadOnlyList<AgentToolDescriptor> FromStep(
+        IEnumerable<string> legalNextStepEvents,
+        IEnumerable<string>? declaredTools,
+        IReadOnlyDictionary<string, string>? actionBindings,
+        IReadOnlyList<PluginBindingDto>? registeredTools)
     {
         var tools = new List<AgentToolDescriptor>();
 
@@ -36,18 +46,74 @@ public static class AgentToolCatalog
         foreach (var raw in declaredTools ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
-            var parsed = Parse(raw.Trim());
+            var cleanRaw = raw.Trim();
+
+            PluginBindingDto? matchedBinding = null;
+            if (registeredTools != null)
+            {
+                matchedBinding = registeredTools.FirstOrDefault(b =>
+                    string.Equals(b.SourceName, cleanRaw, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(b.SourceName, StripDeclaredPrefix(cleanRaw), StringComparison.OrdinalIgnoreCase));
+            }
+
+            AgentToolDescriptor parsed;
+            if (matchedBinding != null)
+            {
+                var toolConfig = matchedBinding.Configuration as AgentToolPublicSettings;
+                if (toolConfig == null && matchedBinding.Configuration is string jsonStr)
+                {
+                    toolConfig = AgentToolConfiguration.Public(jsonStr);
+                }
+
+                var provider = matchedBinding.ProviderName;
+                var kind = ResourcePlugins.Contains(provider) || ResourcePlugins.Contains(StripDeclaredPrefix(provider))
+                    ? "resource"
+                    : provider.StartsWith("connector:", StringComparison.OrdinalIgnoreCase) || provider.StartsWith("capability:", StringComparison.OrdinalIgnoreCase)
+                        ? "capability"
+                        : "plugin";
+
+                var capability = !string.IsNullOrWhiteSpace(toolConfig?.RequiredCapability)
+                    ? toolConfig.RequiredCapability
+                    : provider.Contains(':') ? Split(provider).Tail : null;
+
+                string? schemaStr = null;
+                if (toolConfig?.ParametersSchema != null)
+                {
+                    schemaStr = toolConfig.ParametersSchema is string s
+                        ? s
+                        : JsonSerializer.Serialize(toolConfig.ParametersSchema);
+                }
+
+                parsed = new AgentToolDescriptor(
+                    cleanRaw,
+                    kind,
+                    provider,
+                    !string.IsNullOrWhiteSpace(toolConfig?.Description)
+                        ? toolConfig.Description
+                        : $"{cleanRaw} registered tool.",
+                    !string.IsNullOrWhiteSpace(toolConfig?.SideEffect)
+                        ? toolConfig.SideEffect
+                        : (toolConfig?.Prefetch == true ? "read" : "none"),
+                    toolConfig?.Prefetch ?? false,
+                    capability,
+                    schemaStr,
+                    toolConfig?.RequiredCapability);
+            }
+            else
+            {
+                parsed = Parse(cleanRaw);
+                if (parsed.Kind == "plugin" &&
+                    string.IsNullOrWhiteSpace(parsed.Provider) &&
+                    actionBindings != null)
+                {
+                    if (!actionBindings.TryGetValue(parsed.Name, out var mapped))
+                        actionBindings.TryGetValue(StripDeclaredPrefix(parsed.Name), out mapped);
+                    parsed = parsed with { Provider = mapped };
+                }
+            }
+
             if (tools.Any(tool => string.Equals(tool.Name, parsed.Name, StringComparison.OrdinalIgnoreCase)))
                 continue;
-
-            if (parsed.Kind == "plugin" &&
-                string.IsNullOrWhiteSpace(parsed.Provider) &&
-                actionBindings != null)
-            {
-                if (!actionBindings.TryGetValue(parsed.Name, out var mapped))
-                    actionBindings.TryGetValue(StripDeclaredPrefix(parsed.Name), out mapped);
-                parsed = parsed with { Provider = mapped };
-            }
 
             tools.Add(parsed);
         }

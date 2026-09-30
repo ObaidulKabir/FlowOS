@@ -25,6 +25,15 @@ public sealed class AgentToolHost : IAgentToolHost
         foreach (var tool in packet.DeclaredTools)
         {
             if (!tool.Prefetch) continue;
+
+            // Security gate: Mutating tools (write, notify) cannot be silently prefetched
+            if (string.Equals(tool.SideEffect, "write", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(tool.SideEffect, "notify", StringComparison.OrdinalIgnoreCase))
+            {
+                results[tool.Name] = new { ok = false, error = $"Tool '{tool.Name}' has side-effect '{tool.SideEffect}' and cannot be prefetched." };
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(tool.Capability))
             {
                 results[tool.Name] = new { ok = false, error = "No capability bound for this tool." };

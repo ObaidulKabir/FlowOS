@@ -4,7 +4,6 @@ import {
   Brain,
   Database,
   KeyRound,
-  Plus,
   RefreshCw,
   Wrench,
   MessageSquarePlus,
@@ -13,7 +12,10 @@ import {
   Edit2,
   Shield,
   Sparkles,
-  Cpu
+  Cpu,
+  Zap,
+  AlertTriangle,
+  Code
 } from 'lucide-react';
 import { api, PluginBindingDto } from '../api/client';
 import { AgentPromptManager } from './AgentPromptManager';
@@ -254,10 +256,15 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
                 detail: `${isDefault ? '★ default · ' : ''}${p.providerName}${str(cfg.model || cfg.Model) ? ` · ${str(cfg.model || cfg.Model)}` : ''}${hasKey ? ' · key set' : ''}${p.flowOsVersion ? ` · FlowOS ${p.flowOsVersion}` : ''}`
               };
             })} />
-            <BindingList title="Tools" empty="No resource tools yet. Bind LookupRecord / QueryRecords capabilities." items={tools.map(t => ({
-              alias: t.sourceName,
-              detail: t.providerName
-            }))} />
+            <BindingList title="Tools" empty="No resource tools yet. Bind LookupRecord / QueryRecords capabilities." items={tools.map(t => {
+              const cfg = asRecord(t.configuration);
+              const se = str(cfg.sideEffect || cfg.SideEffect).toLowerCase() || 'read';
+              const prefetch = Boolean(cfg.prefetch ?? cfg.Prefetch);
+              return {
+                alias: t.sourceName,
+                detail: `${t.providerName} · ${se}${prefetch ? ' · prefetched' : ''}`
+              };
+            })} />
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
               <div className="text-[11px] uppercase tracking-wide text-amber-400 font-bold mb-2">Data</div>
               <p className="text-slate-400 leading-relaxed">
@@ -569,11 +576,23 @@ const AgentProfileManager: React.FC<{
 
               {toolAliases.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2.5">
-                  {toolAliases.map(t => (
-                    <span key={t} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-300">
-                      {t}
-                    </span>
-                  ))}
+                  {toolAliases.map(t => {
+                    const toolDef = tools.find(tool => tool.sourceName === t);
+                    const cfg = asRecord(toolDef?.configuration);
+                    const se = str(cfg.sideEffect || cfg.SideEffect).toLowerCase() || 'read';
+                    return (
+                      <span key={t} className="inline-flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-300">
+                        {t}
+                        <span className={`text-[8px] px-1 py-0.2 rounded uppercase font-semibold ${
+                          se === 'write' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                          se === 'notify' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                          'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        }`}>
+                          {se}
+                        </span>
+                      </span>
+                    );
+                  })}
                 </div>
               )}
 
@@ -697,15 +716,24 @@ const AgentProfileManager: React.FC<{
             <div className="max-h-32 overflow-y-auto space-y-1 bg-slate-950/50 p-2 rounded-lg border border-slate-800 text-xs">
               {tools.map(t => {
                 const checked = form.toolAliases.includes(t.sourceName);
+                const cfg = asRecord(t.configuration);
+                const se = str(cfg.sideEffect || cfg.SideEffect).toLowerCase() || 'read';
                 return (
-                  <label key={t.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/60 p-1 rounded">
+                  <label key={t.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/60 p-1.5 rounded transition-colors">
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleTool(t.sourceName)}
                       className="rounded border-slate-700 text-purple-600 focus:ring-purple-500 bg-slate-800"
                     />
-                    <span className="font-mono text-emerald-300 text-[11px] truncate">{t.sourceName}</span>
+                    <span className="font-mono text-emerald-300 text-[11px] font-medium truncate">{t.sourceName}</span>
+                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono uppercase font-semibold shrink-0 ${
+                      se === 'write' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                      se === 'notify' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                      'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      {se}
+                    </span>
                     <span className="text-[10px] text-slate-500 truncate ml-auto">{t.providerName}</span>
                   </label>
                 );
@@ -1119,68 +1147,423 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
   );
 };
 
+interface ToolFormState {
+  sourceName: string;
+  providerName: string;
+  description: string;
+  sideEffect: 'none' | 'read' | 'write' | 'notify';
+  requiredCapability: string;
+  prefetch: boolean;
+  parametersSchema: string;
+  isEnabled: boolean;
+}
+
+const DEFAULT_TOOL_FORM: ToolFormState = {
+  sourceName: '',
+  providerName: 'LookupRecord',
+  description: '',
+  sideEffect: 'read',
+  requiredCapability: '',
+  prefetch: false,
+  parametersSchema: '',
+  isEnabled: true
+};
+
+const getParamSummary = (schemaVal: unknown): { count: number; props: string[] } => {
+  if (!schemaVal) return { count: 0, props: [] };
+  let obj: any = schemaVal;
+  if (typeof schemaVal === 'string') {
+    try {
+      obj = JSON.parse(schemaVal);
+    } catch {
+      return { count: 0, props: [] };
+    }
+  }
+  if (obj && typeof obj === 'object' && obj.properties && typeof obj.properties === 'object') {
+    const keys = Object.keys(obj.properties);
+    return { count: keys.length, props: keys };
+  }
+  return { count: 0, props: [] };
+};
+
 const ToolBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => Promise<void> }> = ({ items, onChanged }) => {
-  const [form, setForm] = useState({ sourceName: '', providerName: 'LookupRecord', isEnabled: true });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<ToolFormState>(DEFAULT_TOOL_FORM);
   const [saving, setSaving] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setForm(DEFAULT_TOOL_FORM);
+    setValidationError(null);
+  };
+
+  const startEdit = (item: PluginBindingDto) => {
+    setEditingId(item.id);
+    const cfg = asRecord(item.configuration);
+    let schemaStr = '';
+    const rawSchema = cfg.parametersSchema ?? cfg.ParametersSchema;
+    if (rawSchema) {
+      schemaStr = typeof rawSchema === 'string' ? rawSchema : JSON.stringify(rawSchema, null, 2);
+    }
+    const se = (str(cfg.sideEffect || cfg.SideEffect).toLowerCase() || 'read') as any;
+    setForm({
+      sourceName: item.sourceName,
+      providerName: item.providerName || 'LookupRecord',
+      description: str(cfg.description || cfg.Description),
+      sideEffect: ['none', 'read', 'write', 'notify'].includes(se) ? se : 'read',
+      requiredCapability: str(cfg.requiredCapability || cfg.RequiredCapability),
+      prefetch: Boolean(cfg.prefetch ?? cfg.Prefetch),
+      parametersSchema: schemaStr,
+      isEnabled: item.isEnabled
+    });
+    setValidationError(null);
+  };
+
+  const handleSideEffectChange = (val: 'none' | 'read' | 'write' | 'notify') => {
+    setForm(prev => ({
+      ...prev,
+      sideEffect: val,
+      prefetch: (val === 'write' || val === 'notify') ? false : prev.prefetch
+    }));
+  };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+
+    if (!form.sourceName.trim()) {
+      setValidationError('Business tool name is required.');
+      return;
+    }
+    if (!form.providerName.trim()) {
+      setValidationError('Generic plugin provider is required.');
+      return;
+    }
+    if (form.prefetch && (form.sideEffect === 'write' || form.sideEffect === 'notify')) {
+      setValidationError("Tools with sideEffect 'write' or 'notify' cannot be configured for prefetch.");
+      return;
+    }
+
+    let parsedSchema: any = undefined;
+    if (form.parametersSchema.trim()) {
+      try {
+        parsedSchema = JSON.parse(form.parametersSchema.trim());
+      } catch (err: any) {
+        setValidationError(`Invalid Parameters JSON Schema: ${err.message}`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await api.upsertPluginBinding({
         bindingType: 'action',
-        sourceName: form.sourceName,
-        providerName: form.providerName,
-        isEnabled: form.isEnabled
+        sourceName: form.sourceName.trim(),
+        providerName: form.providerName.trim(),
+        isEnabled: form.isEnabled,
+        configuration: {
+          description: form.description.trim() || undefined,
+          sideEffect: form.sideEffect,
+          requiredCapability: form.requiredCapability.trim() || undefined,
+          prefetch: form.prefetch,
+          parametersSchema: parsedSchema ? JSON.stringify(parsedSchema) : undefined
+        }
       });
       await onChanged();
+      resetForm();
     } catch (err: any) {
-      alert(`Failed to save tool: ${err.message}`);
+      setValidationError(`Failed to save tool: ${err.message}`);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="grid md:grid-cols-[1fr_320px] gap-4">
-      <div className="space-y-2">
-        {items.length === 0 && (
-          <div className="text-sm text-slate-500 border border-dashed border-slate-700 rounded-xl p-8 text-center">
-            No tools yet. Bind a capability alias to LookupRecord / QueryRecords / FetchDocument / SearchKnowledge / CheckPolicy.
+    <div className="grid md:grid-cols-[1fr_360px] gap-6">
+      {/* Left Column: Registered Tools List */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between pb-1">
+          <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Wrench size={13} className="text-emerald-400" />
+            Registered Business Tools ({items.length})
+          </div>
+          <div className="text-[11px] text-slate-500">
+            Host-isolated execution with RBAC security gates
+          </div>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="text-sm text-slate-400 border border-dashed border-slate-800 bg-slate-950/40 rounded-xl p-8 text-center space-y-2">
+            <Wrench size={24} className="mx-auto text-slate-600" />
+            <div className="font-semibold text-slate-300">No Business Tools Registered Yet</div>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Bind business-specific tool names (e.g. <code className="text-emerald-300">LookupCustomerCredit</code>) to generic plugins with JSON schemas, side-effects, and capability gates.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {items.map(item => {
+              const cfg = asRecord(item.configuration);
+              const desc = str(cfg.description || cfg.Description);
+              const se = (str(cfg.sideEffect || cfg.SideEffect).toLowerCase() || 'read');
+              const prefetch = Boolean(cfg.prefetch ?? cfg.Prefetch);
+              const cap = str(cfg.requiredCapability || cfg.RequiredCapability);
+              const schema = cfg.parametersSchema ?? cfg.ParametersSchema;
+              const paramInfo = getParamSummary(schema);
+              const isEditing = editingId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`rounded-xl border p-4 bg-slate-950/70 transition-all ${
+                    isEditing ? 'border-emerald-500 ring-1 ring-emerald-500/40' : 'border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono font-bold text-emerald-300 text-sm">{item.sourceName}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">→ {item.providerName}</span>
+                        {!item.isEnabled && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            Disabled
+                          </span>
+                        )}
+                      </div>
+                      {desc && (
+                        <p className="text-xs text-slate-300 leading-relaxed pt-0.5">{desc}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(item)}
+                      className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1 transition-colors"
+                    >
+                      <Edit2 size={11} /> Edit
+                    </button>
+                  </div>
+
+                  {/* Security & Capability Badges */}
+                  <div className="flex items-center gap-2 flex-wrap pt-3 mt-3 border-t border-slate-800/80 text-[10px]">
+                    <span className={`px-2 py-0.5 rounded font-mono font-semibold uppercase flex items-center gap-1 ${
+                      se === 'write' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                      se === 'notify' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                      se === 'read' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                      'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}>
+                      {se === 'write' ? <Shield size={10} className="text-rose-400" /> :
+                       se === 'notify' ? <AlertTriangle size={10} className="text-amber-400" /> :
+                       <Shield size={10} className="text-emerald-400" />}
+                      {se === 'write' ? 'Mutating Write' : se === 'notify' ? 'Notify' : se === 'read' ? 'Read-only' : 'Safe'}
+                    </span>
+
+                    {prefetch ? (
+                      <span className="px-2 py-0.5 rounded font-medium bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1">
+                        <Zap size={10} /> Auto-Prefetch
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-slate-500 bg-slate-900 border border-slate-800">
+                        On-demand
+                      </span>
+                    )}
+
+                    {cap && (
+                      <span className="px-2 py-0.5 rounded font-mono bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1">
+                        <KeyRound size={10} /> {cap}
+                      </span>
+                    )}
+
+                    <span className="px-2 py-0.5 rounded font-mono text-slate-400 bg-slate-900 border border-slate-800 flex items-center gap-1">
+                      <Code size={10} />
+                      {paramInfo.count > 0 ? `${paramInfo.count} arg${paramInfo.count > 1 ? 's' : ''} (${paramInfo.props.join(', ')})` : 'No schema args'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-        {items.map(item => (
-          <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-            <div className="text-sm font-semibold text-white">{item.sourceName}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">plugin {item.providerName} · URLs stay on the host</div>
-          </div>
-        ))}
       </div>
-      <form onSubmit={save} className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3 h-fit">
-        <div className="text-xs font-bold text-white flex items-center gap-2">
-          <Plus size={14} className="text-emerald-300" /> Bind resource tool
+
+      {/* Right Column: Editor Form */}
+      <form onSubmit={save} className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3.5 h-fit">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+          <div className="text-xs font-bold text-white flex items-center gap-2">
+            <Wrench size={14} className="text-emerald-400" />
+            {editingId ? 'Edit Business Tool' : 'Register Business Tool'}
+          </div>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="text-[11px] text-slate-400 hover:text-slate-200"
+            >
+              + New Tool
+            </button>
+          )}
         </div>
-        <input
-          required
-          value={form.sourceName}
-          onChange={e => setForm({ ...form, sourceName: e.target.value })}
-          placeholder="capability alias (crm.customer.get.v1)"
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-        />
-        <select
-          value={form.providerName}
-          onChange={e => setForm({ ...form, providerName: e.target.value })}
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-        >
-          {TOOL_PLUGINS.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-60"
-        >
-          {saving ? 'Saving…' : 'Save tool'}
-        </button>
+
+        {validationError && (
+          <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-700 text-rose-300 text-xs">
+            {validationError}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Tool Name (Exposed to AI)</label>
+          <input
+            required
+            value={form.sourceName}
+            onChange={e => setForm({ ...form, sourceName: e.target.value })}
+            placeholder="e.g. LookupCustomerCredit"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono"
+          />
+          <p className="text-[10px] text-slate-500">Business-specific alias emitted into model prompt & function definitions.</p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Generic Plugin Provider</label>
+          <select
+            value={form.providerName}
+            onChange={e => setForm({ ...form, providerName: e.target.value })}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+          >
+            {TOOL_PLUGINS.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <p className="text-[10px] text-slate-500">Underlying host plugin executing the actual request. Credentials stay on host.</p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Description</label>
+          <textarea
+            rows={2}
+            value={form.description}
+            onChange={e => setForm({ ...form, description: e.target.value })}
+            placeholder="Instructs the AI agent when to invoke this tool and what data it yields..."
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 resize-none"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Security Side-Effect</label>
+          <select
+            value={form.sideEffect}
+            onChange={e => handleSideEffectChange(e.target.value as any)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+          >
+            <option value="read">read — Safe, read-only query (can prefetch)</option>
+            <option value="write">write — Mutating state (blocked from prefetch)</option>
+            <option value="notify">notify — External notification (blocked from prefetch)</option>
+            <option value="none">none — Safe default</option>
+          </select>
+          <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800 text-[10px] text-slate-400 space-y-1">
+            <div className="font-semibold text-amber-300 flex items-center gap-1">
+              <Shield size={11} /> Zero-Knowledge Security Gate
+            </div>
+            <div>
+              Mutating tools (<code className="text-rose-300">write</code> / <code className="text-amber-300">notify</code>) are strictly blocked from decision prefetching to protect external systems and data integrity.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <input
+            type="checkbox"
+            id="tool-prefetch"
+            checked={form.prefetch}
+            disabled={form.sideEffect === 'write' || form.sideEffect === 'notify'}
+            onChange={e => setForm({ ...form, prefetch: e.target.checked })}
+            className="rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-800 disabled:opacity-40"
+          />
+          <label
+            htmlFor="tool-prefetch"
+            className={`text-xs font-medium cursor-pointer ${
+              form.sideEffect === 'write' || form.sideEffect === 'notify' ? 'text-slate-500 cursor-not-allowed' : 'text-slate-200'
+            }`}
+          >
+            Prefetch data into agent context before decision
+          </label>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Required Capability (Optional)</label>
+          <input
+            value={form.requiredCapability}
+            onChange={e => setForm({ ...form, requiredCapability: e.target.value })}
+            placeholder="e.g. crm.customer.read"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono"
+          />
+          <p className="text-[10px] text-slate-500">Tenant RBAC capability gate checked before execution.</p>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-slate-300">Parameters JSON Schema</label>
+            <div className="flex gap-1.5 text-[10px]">
+              <button
+                type="button"
+                onClick={() => setForm({
+                  ...form,
+                  parametersSchema: JSON.stringify({
+                    type: 'object',
+                    properties: {
+                      recordId: { type: 'string', description: 'Unique identifier' }
+                    },
+                    required: ['recordId']
+                  }, null, 2)
+                })}
+                className="text-sky-400 hover:text-sky-300 underline"
+              >
+                + Lookup
+              </button>
+              <span className="text-slate-600">·</span>
+              <button
+                type="button"
+                onClick={() => setForm({
+                  ...form,
+                  parametersSchema: JSON.stringify({
+                    type: 'object',
+                    properties: {
+                      filter: { type: 'string', description: 'Query filter expression' },
+                      limit: { type: 'number', description: 'Max records to return' }
+                    }
+                  }, null, 2)
+                })}
+                className="text-sky-400 hover:text-sky-300 underline"
+              >
+                + Query
+              </button>
+            </div>
+          </div>
+          <textarea
+            rows={4}
+            value={form.parametersSchema}
+            onChange={e => setForm({ ...form, parametersSchema: e.target.value })}
+            placeholder='{\n  "type": "object",\n  "properties": {\n    "customerId": { "type": "string" }\n  },\n  "required": ["customerId"]\n}'
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-300 font-mono placeholder-slate-600 resize-y"
+          />
+          <p className="text-[10px] text-slate-500">JSON Schema describing arguments passed by LLM function calling.</p>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="flex-1 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-60 transition-colors"
+          >
+            {saving ? 'Saving…' : editingId ? 'Update Tool' : 'Register Tool'}
+          </button>
+        </div>
       </form>
     </div>
   );

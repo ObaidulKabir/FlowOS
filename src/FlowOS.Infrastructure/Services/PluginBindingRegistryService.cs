@@ -285,6 +285,56 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         return match == null ? null : ToDto(match);
     }
 
+    public async Task<PluginBindingDto?> GetAgentToolAsync(
+        Guid tenantId,
+        string sourceName,
+        CancellationToken ct = default)
+    {
+        var normalizedKey = NormalizeKey(sourceName);
+        if (string.IsNullOrWhiteSpace(normalizedKey))
+            return null;
+
+        var record = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == PluginBindingTypes.Action &&
+                x.SourceName == normalizedKey &&
+                x.IsEnabled, ct);
+
+        return record == null ? null : ToDto(record);
+    }
+
+    public async Task<IReadOnlyList<PluginBindingDto>> ListAgentToolsAsync(
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        var records = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .Where(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == PluginBindingTypes.Action)
+            .OrderBy(x => x.SourceName)
+            .ToListAsync(ct);
+
+        return records.Select(ToDto).ToList();
+    }
+
+    public async Task<IReadOnlyList<PluginBindingDto>> ListAgentProfilesAsync(
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        var records = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .Where(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == PluginBindingTypes.Profile)
+            .OrderBy(x => x.SourceName)
+            .ToListAsync(ct);
+
+        return records.Select(ToDto).ToList();
+    }
+
     private static PluginBindingDto ToDto(PluginBindingRecord x) =>
         new(
             x.Id,
@@ -301,7 +351,9 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                     ? AgentPromptConfiguration.Public(x.ConfigurationJson)
                     : x.BindingType == PluginBindingTypes.Profile
                         ? AgentProfileConfiguration.Public(x.ConfigurationJson)
-                        : null,
+                        : x.BindingType == PluginBindingTypes.Action
+                            ? AgentToolConfiguration.Public(x.ConfigurationJson)
+                            : null,
             x.FlowOsVersion);
 
     private static string? MergeConfiguration(string bindingType, string? existing, string? incoming)
@@ -313,6 +365,8 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             return AgentPromptConfiguration.Merge(existing, incoming);
         if (bindingType == PluginBindingTypes.Profile)
             return AgentProfileConfiguration.Merge(existing, incoming);
+        if (bindingType == PluginBindingTypes.Action)
+            return AgentToolConfiguration.Merge(existing, incoming);
         return incoming;
     }
 

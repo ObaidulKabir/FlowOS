@@ -120,7 +120,10 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         var legal = packet?.LegalNextStepEvents ?? context.LegalEvents;
         var system = packet?.Prompt.System
             ?? "You are a FlowOS workflow agent. Suggest one legal nextSteps event as JSON.";
-        return $"{system}\nLegal events: {string.Join(", ", legal)}\nReply with JSON: eventType, confidence, reason, insight.";
+        var toolInfo = packet?.DeclaredTools is { Count: > 0 } tools
+            ? $"\nAvailable tools: {string.Join(", ", tools.Select(t => t.Name))}"
+            : string.Empty;
+        return $"{system}\nLegal events: {string.Join(", ", legal)}{toolInfo}\nReply with JSON: eventType, confidence, reason, insight.";
     }
 
     private static string BuildUserPrompt(AgentContext context)
@@ -129,6 +132,17 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         var instructions = packet?.Prompt.Instructions
             ?? packet?.Objective
             ?? context.Objective;
+        var declaredTools = packet?.DeclaredTools;
+        var toolsPayload = declaredTools != null && declaredTools.Count > 0
+            ? declaredTools.Select(t => new
+            {
+                name = t.Name,
+                description = t.Description,
+                parameters = t.ParametersSchema,
+                sideEffect = t.SideEffect
+            }).ToList()
+            : null;
+
         return JsonSerializer.Serialize(new
         {
             instructions,
@@ -138,6 +152,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
             currentState = packet?.CurrentState,
             data = packet?.CanonicalContext,
             eventPayloads = packet?.EventPayloads,
+            tools = toolsPayload,
             toolResults = packet?.ToolResults,
             snapshot = context.EntitySnapshot
         });

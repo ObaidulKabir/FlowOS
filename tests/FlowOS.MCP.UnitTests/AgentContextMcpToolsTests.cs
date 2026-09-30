@@ -263,6 +263,113 @@ public sealed class AgentContextMcpToolsTests
             throw new KeyNotFoundException($"Step '{stepId}' was not found on workflow class 'Quote'.");
     }
 
+    [Fact]
+    public async Task UpsertAndGetAgentTool_RoundTripsSchemaAndSecuritySettings()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentTool(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "LookupCustomerCredit",
+                providerName = "LookupRecord",
+                description = "Retrieves customer CRM profile and score",
+                sideEffect = "read",
+                prefetch = true,
+                requiredCapability = "crm.customer.read",
+                parametersSchema = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        customerId = new { type = "string", description = "Customer UUID" }
+                    },
+                    required = new[] { "customerId" }
+                }
+            }));
+            Assert.False(upsert.IsError);
+
+            var listed = await tools.ListAgentTools(JObject.FromObject(new { tenantId }));
+            var listJson = JObject.Parse(listed.Content.Single().Text);
+            Assert.Equal(1, listJson["data"]!["totalCount"]?.Value<int>());
+
+            var loaded = await tools.GetAgentTool(JObject.FromObject(new { tenantId, alias = "LookupCustomerCredit" }));
+            var tool = JObject.Parse(loaded.Content.Single().Text)["data"]!;
+            Assert.Equal("LookupCustomerCredit", tool["alias"]?.ToString());
+            Assert.Equal("LookupRecord", tool["providerName"]?.ToString());
+            Assert.Equal("read", tool["sideEffect"]?.ToString());
+            Assert.True(tool["prefetch"]?.Value<bool>());
+            Assert.Equal("crm.customer.read", tool["requiredCapability"]?.ToString());
+            Assert.NotNull(tool["parametersSchema"]);
+
+            // Security gate: writing tool cannot be configured for prefetch
+            var invalid = await tools.UpsertAgentTool(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "ChargeCustomerCard",
+                providerName = "PaymentPlugin",
+                sideEffect = "write",
+                prefetch = true
+            }));
+            Assert.True(invalid.IsError);
+            Assert.Contains("cannot be configured for prefetch", invalid.Content.Single().Text);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task UpsertAndGetAgentProfile_RoundTripsPersonaAndToolAliases()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentProfile(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "CreditUnderwriter",
+                role = "LoanOfficer",
+                description = "Automated personal loan underwriter",
+                providerAlias = "quote-llm",
+                promptAlias = "quote-approval",
+                toolAliases = new[] { "LookupCustomerCredit", "FetchDocument" },
+                autoCommitThreshold = 0.90,
+                allowedEvents = new[] { "QUOTE_APPROVED", "QUOTE_REJECTED" }
+            }));
+            Assert.False(upsert.IsError);
+
+            var listed = await tools.ListAgentProfiles(JObject.FromObject(new { tenantId }));
+            var listJson = JObject.Parse(listed.Content.Single().Text);
+            Assert.Equal(1, listJson["data"]!["totalCount"]?.Value<int>());
+
+            var loaded = await tools.GetAgentProfile(JObject.FromObject(new { tenantId, alias = "CreditUnderwriter" }));
+            var profile = JObject.Parse(loaded.Content.Single().Text)["data"]!;
+            Assert.Equal("CreditUnderwriter", profile["alias"]?.ToString());
+            Assert.Equal("LoanOfficer", profile["role"]?.ToString());
+            Assert.Equal("quote-llm", profile["providerAlias"]?.ToString());
+            Assert.Equal("quote-approval", profile["promptAlias"]?.ToString());
+            Assert.Equal(0.90, profile["autoCommitThreshold"]?.Value<double>());
+            var toolAliases = profile["toolAliases"]!.Select(t => t.ToString()).ToList();
+            Assert.Contains("LookupCustomerCredit", toolAliases);
+            Assert.Contains("FetchDocument", toolAliases);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
     private sealed class InMemoryPromptRegistry : IPluginBindingRegistryService
     {
         private readonly Dictionary<string, PluginBindingDto> _items = new(StringComparer.OrdinalIgnoreCase);
@@ -279,17 +386,27 @@ public sealed class AgentContextMcpToolsTests
             CancellationToken ct = default)
         {
             object? configuration;
+            var existingJson = _rawJson.GetValueOrDefault(sourceName);
             if (string.Equals(bindingType, PluginBindingTypes.Agent, StringComparison.OrdinalIgnoreCase))
             {
-                var merged = AgentProviderConfiguration.Merge(
-                    _rawJson.GetValueOrDefault(sourceName),
-                    configurationJson);
+                var merged = AgentProviderConfiguration.Merge(existingJson, configurationJson);
                 _rawJson[sourceName] = merged;
                 configuration = AgentProviderConfiguration.Redact(merged);
             }
+            else if (string.Equals(bindingType, PluginBindingTypes.Profile, StringComparison.OrdinalIgnoreCase))
+            {
+                var merged = AgentProfileConfiguration.Merge(existingJson, configurationJson);
+                _rawJson[sourceName] = merged;
+                configuration = AgentProfileConfiguration.Public(merged);
+            }
+            else if (string.Equals(bindingType, PluginBindingTypes.Action, StringComparison.OrdinalIgnoreCase))
+            {
+                var merged = AgentToolConfiguration.Merge(existingJson, configurationJson);
+                _rawJson[sourceName] = merged;
+                configuration = AgentToolConfiguration.Public(merged);
+            }
             else
             {
-                var existingJson = _rawJson.GetValueOrDefault(sourceName);
                 var merged = AgentPromptConfiguration.Merge(existingJson, configurationJson);
                 _rawJson[sourceName] = merged;
                 configuration = AgentPromptConfiguration.Public(merged);
@@ -393,6 +510,41 @@ public sealed class AgentContextMcpToolsTests
                 (string.Equals(item.SourceName, aliasOrRole, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(item.ProviderName, aliasOrRole, StringComparison.OrdinalIgnoreCase)));
             return Task.FromResult<PluginBindingDto?>(match);
+        }
+
+        public Task<PluginBindingDto?> GetAgentToolAsync(
+            Guid tenantId,
+            string sourceName,
+            CancellationToken ct = default)
+        {
+            var match = _items.Values.FirstOrDefault(item =>
+                item.TenantId == tenantId &&
+                string.Equals(item.BindingType, PluginBindingTypes.Action, StringComparison.OrdinalIgnoreCase) &&
+                item.IsEnabled &&
+                string.Equals(item.SourceName, sourceName, StringComparison.OrdinalIgnoreCase));
+            return Task.FromResult<PluginBindingDto?>(match);
+        }
+
+        public Task<IReadOnlyList<PluginBindingDto>> ListAgentToolsAsync(
+            Guid tenantId,
+            CancellationToken ct = default)
+        {
+            var items = _items.Values.Where(item =>
+                item.TenantId == tenantId &&
+                string.Equals(item.BindingType, PluginBindingTypes.Action, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return Task.FromResult<IReadOnlyList<PluginBindingDto>>(items);
+        }
+
+        public Task<IReadOnlyList<PluginBindingDto>> ListAgentProfilesAsync(
+            Guid tenantId,
+            CancellationToken ct = default)
+        {
+            var items = _items.Values.Where(item =>
+                item.TenantId == tenantId &&
+                string.Equals(item.BindingType, PluginBindingTypes.Profile, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return Task.FromResult<IReadOnlyList<PluginBindingDto>>(items);
         }
     }
 }
