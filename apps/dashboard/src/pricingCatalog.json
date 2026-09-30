@@ -1,0 +1,161 @@
+{
+  "annualMonthsPaid": 10,
+  "annualMonthsFree": 2,
+  "hardStop": false,
+  "automaticOverageBilling": false,
+  "copy": {
+    "annual": "Annual billing is two months free, paid in advance.",
+    "annualDetail": "An annual price is ten months paid in advance (two months free).",
+    "notCharged": "We do not charge per retry, per simulation, or per transition.",
+    "overage": "Automatic overage billing is not switched on. A workspace that needs more than its plan moves to the next plan, or to an invoice you agree by email. There is no surprise per-call charge.",
+    "softOverage": "Soft overage is the intended path past a limit; we will not charge per retry, per simulation, or per transition."
+  },
+  "meters": [
+    {
+      "title": "Workflow publications",
+      "weight": "High value, scarce",
+      "body": "A new WorkflowClass, a new version, or a material republish. Active published workflows are shown separately so republishing the same graph does not look like 30 products."
+    },
+    {
+      "title": "Events published",
+      "weight": "Main scale meter",
+      "body": "Business activity flowing through FlowOS: OrderCreated, PaymentCompleted, InventoryReserved. This is what should grow as a customer succeeds."
+    },
+    {
+      "title": "MCP tool calls",
+      "weight": "Generous, inexpensive",
+      "body": "How often an agent talks to the control plane. Included allowances stay large so a developer is not afraid to ask “why did this fail?”"
+    }
+  ],
+  "meterDefinitions": [
+    {
+      "name": "Publications",
+      "meaning": "Publications are new or materially updated workflow definitions."
+    },
+    {
+      "name": "Events",
+      "meaning": "Events are business facts recorded as the workflow runs, such as an order created or a payment completed."
+    },
+    {
+      "name": "Agent calls",
+      "meaning": "Agent calls are requests an AI agent makes to the control plane."
+    }
+  ],
+  "tiers": [
+    {
+      "id": "free",
+      "name": "Free",
+      "stage": "Explore",
+      "monthlyUsd": 0,
+      "publications": 2,
+      "eventsPerMonth": 2500,
+      "mcpCallsPerMonth": 2500,
+      "activeWorkflows": 2,
+      "projects": 1,
+      "concurrency": 2,
+      "retentionDays": 7,
+      "members": 1,
+      "support": "Community",
+      "runtime": false
+    },
+    {
+      "id": "starter",
+      "name": "Starter",
+      "stage": "Build",
+      "monthlyUsd": 9,
+      "publications": 10,
+      "eventsPerMonth": 15000,
+      "mcpCallsPerMonth": 15000,
+      "activeWorkflows": 5,
+      "projects": 1,
+      "concurrency": 5,
+      "retentionDays": 14,
+      "members": 1,
+      "support": "Community",
+      "runtime": true
+    },
+    {
+      "id": "builder",
+      "name": "Builder",
+      "stage": "Ship",
+      "monthlyUsd": 29,
+      "publications": 30,
+      "eventsPerMonth": 75000,
+      "mcpCallsPerMonth": 75000,
+      "activeWorkflows": 15,
+      "projects": 3,
+      "concurrency": 10,
+      "retentionDays": 30,
+      "members": 3,
+      "support": "Standard",
+      "runtime": true,
+      "highlight": true
+    },
+    {
+      "id": "team",
+      "name": "Team",
+      "stage": "Operate together",
+      "monthlyUsd": 79,
+      "publications": 100,
+      "eventsPerMonth": 300000,
+      "mcpCallsPerMonth": 300000,
+      "activeWorkflows": 50,
+      "projects": 10,
+      "concurrency": 25,
+      "retentionDays": 90,
+      "members": 10,
+      "support": "Priority",
+      "runtime": true
+    },
+    {
+      "id": "growth",
+      "name": "Growth",
+      "stage": "Production",
+      "monthlyUsd": 199,
+      "publications": 300,
+      "eventsPerMonth": 1500000,
+      "mcpCallsPerMonth": 1500000,
+      "activeWorkflows": 150,
+      "projects": 25,
+      "concurrency": 75,
+      "retentionDays": 180,
+      "members": 25,
+      "support": "Priority",
+      "runtime": true
+    },
+    {
+      "id": "scale",
+      "name": "Scale",
+      "stage": "Infrastructure",
+      "monthlyUsd": 499,
+      "publications": 1000,
+      "eventsPerMonth": 10000000,
+      "mcpCallsPerMonth": 10000000,
+      "activeWorkflows": 500,
+      "projects": 100,
+      "concurrency": 250,
+      "retentionDays": 365,
+      "members": 50,
+      "support": "Dedicated",
+      "runtime": true
+    },
+    {
+      "id": "enterprise",
+      "name": "Enterprise",
+      "stage": "Strategic",
+      "monthlyUsd": null,
+      "priceNote": "typically $1,500–$5,000+ / month",
+      "publications": null,
+      "eventsPerMonth": null,
+      "mcpCallsPerMonth": null,
+      "activeWorkflows": null,
+      "projects": null,
+      "concurrency": null,
+      "retentionDays": null,
+      "members": null,
+      "support": "Dedicated + SLA",
+      "runtime": true,
+      "publicIncludes": "Written limits, private deploy options, and a support agreement."
+    }
+  ]
+}

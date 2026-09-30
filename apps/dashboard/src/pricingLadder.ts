@@ -1,14 +1,7 @@
-export type PricingTierId =
-  | 'free'
-  | 'starter'
-  | 'builder'
-  | 'team'
-  | 'growth'
-  | 'scale'
-  | 'enterprise';
+import catalog from './pricingCatalog.json';
 
 export interface PricingTier {
-  id: PricingTierId;
+  id: string;
   name: string;
   stage: string;
   price: string;
@@ -25,136 +18,88 @@ export interface PricingTier {
   highlight?: boolean;
 }
 
-export const PRICING_METERS = [
-  {
-    title: 'Workflow publications',
-    weight: 'High value, scarce',
-    body: 'A new WorkflowClass, a new version, or a material republish. Active published workflows are shown separately so republishing the same graph does not look like 30 products.'
-  },
-  {
-    title: 'Events published',
-    weight: 'Main scale meter',
-    body: 'Business activity flowing through FlowOS: OrderCreated, PaymentCompleted, InventoryReserved. This is what should grow as a customer succeeds.'
-  },
-  {
-    title: 'MCP tool calls',
-    weight: 'Generous, inexpensive',
-    body: 'How often an agent talks to the control plane. Included allowances stay large so a developer is not afraid to ask “why did this fail?”'
-  }
-] as const;
+interface CatalogTier {
+  id: string;
+  name: string;
+  stage: string;
+  monthlyUsd: number | null;
+  priceNote?: string;
+  publications: number | null;
+  eventsPerMonth: number | null;
+  mcpCallsPerMonth: number | null;
+  activeWorkflows: number | null;
+  projects: number | null;
+  concurrency: number | null;
+  retentionDays: number | null;
+  members: number | null;
+  support: string;
+  highlight?: boolean;
+  runtime: boolean;
+  publicIncludes?: string;
+}
 
-export const PRICING_TIERS: PricingTier[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    stage: 'Explore',
-    price: '$0',
-    priceNote: '/ month',
-    publications: '2',
-    events: '2.5K',
-    mcpCalls: '2.5K',
-    activeWorkflows: '2',
-    projects: '1',
-    concurrency: '2',
-    retention: '7 days',
-    members: '1',
-    support: 'Community'
-  },
-  {
-    id: 'starter',
-    name: 'Starter',
-    stage: 'Build',
-    price: '$9',
-    priceNote: '/ month · ~$90 / year',
-    publications: '10',
-    events: '15K',
-    mcpCalls: '15K',
-    activeWorkflows: '5',
-    projects: '1',
-    concurrency: '5',
-    retention: '14 days',
-    members: '1',
-    support: 'Community'
-  },
-  {
-    id: 'builder',
-    name: 'Builder',
-    stage: 'Ship',
-    price: '$29',
-    priceNote: '/ month · ~$290 / year',
-    publications: '30',
-    events: '75K',
-    mcpCalls: '75K',
-    activeWorkflows: '15',
-    projects: '3',
-    concurrency: '10',
-    retention: '30 days',
-    members: '3',
-    support: 'Standard',
-    highlight: true
-  },
-  {
-    id: 'team',
-    name: 'Team',
-    stage: 'Operate together',
-    price: '$79',
-    priceNote: '/ month · ~$790 / year',
-    publications: '100',
-    events: '300K',
-    mcpCalls: '300K',
-    activeWorkflows: '50',
-    projects: '10',
-    concurrency: '25',
-    retention: '90 days',
-    members: '10',
-    support: 'Priority'
-  },
-  {
-    id: 'growth',
-    name: 'Growth',
-    stage: 'Production',
-    price: '$199',
-    priceNote: '/ month · ~$1,990 / year',
-    publications: '300',
-    events: '1.5M',
-    mcpCalls: '1.5M',
-    activeWorkflows: '150',
-    projects: '25',
-    concurrency: '75',
-    retention: '180 days',
-    members: '25',
-    support: 'Priority'
-  },
-  {
-    id: 'scale',
-    name: 'Scale',
-    stage: 'Infrastructure',
-    price: '$499',
-    priceNote: '/ month · ~$4,990 / year',
-    publications: '1,000',
-    events: '10M',
-    mcpCalls: '10M',
-    activeWorkflows: '500',
-    projects: '100',
-    concurrency: '250',
-    retention: '365 days',
-    members: '50',
-    support: 'Dedicated'
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    stage: 'Strategic',
-    price: 'Custom',
-    priceNote: 'typically $1,500–$5,000+ / month',
-    publications: 'Custom',
-    events: 'Custom',
-    mcpCalls: 'Custom',
-    activeWorkflows: 'Custom',
-    projects: 'Custom',
-    concurrency: 'Custom',
-    retention: 'Custom',
-    members: 'Custom',
-    support: 'Dedicated + SLA'
+const usd = (amount: number) =>
+  `$${amount.toLocaleString('en-US')}`;
+
+const compact = (value: number) => {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    return `${Number.isInteger(millions) ? millions : millions}M`;
   }
-];
+  if (value >= 1_000) {
+    const thousands = value / 1_000;
+    return `${Number.isInteger(thousands) ? thousands : thousands}K`;
+  }
+  return String(value);
+};
+
+const allowance = (value: number | null, kind: 'count' | 'volume' | 'days' | 'members') => {
+  if (value == null) return 'Custom';
+  if (kind === 'days') return `${value} days`;
+  if (kind === 'volume') return compact(value);
+  if (kind === 'count') return value.toLocaleString('en-US');
+  return String(value);
+};
+
+const presentTier = (tier: CatalogTier): PricingTier => {
+  const paid = tier.monthlyUsd != null && tier.monthlyUsd > 0;
+  const annual = paid ? (tier.monthlyUsd as number) * catalog.annualMonthsPaid : 0;
+  return {
+    id: tier.id,
+    name: tier.name,
+    stage: tier.stage,
+    price: tier.monthlyUsd == null ? 'Custom' : usd(tier.monthlyUsd),
+    priceNote: tier.monthlyUsd == null
+      ? (tier.priceNote ?? 'Custom')
+      : paid
+        ? `/ month · ~${usd(annual)} / year`
+        : '/ month',
+    publications: allowance(tier.publications, 'count'),
+    events: allowance(tier.eventsPerMonth, 'volume'),
+    mcpCalls: allowance(tier.mcpCallsPerMonth, 'volume'),
+    activeWorkflows: allowance(tier.activeWorkflows, 'count'),
+    projects: allowance(tier.projects, 'count'),
+    concurrency: allowance(tier.concurrency, 'count'),
+    retention: allowance(tier.retentionDays, 'days'),
+    members: allowance(tier.members, 'members'),
+    support: tier.support,
+    highlight: tier.highlight
+  };
+};
+
+export const PRICING_POLICY = {
+  annualMonthsPaid: catalog.annualMonthsPaid,
+  annualMonthsFree: catalog.annualMonthsFree,
+  hardStop: catalog.hardStop,
+  automaticOverageBilling: catalog.automaticOverageBilling,
+  annual: catalog.copy.annual,
+  annualDetail: catalog.copy.annualDetail,
+  notCharged: catalog.copy.notCharged,
+  overage: catalog.copy.overage,
+  softOverage: catalog.copy.softOverage
+};
+
+export const PRICING_METERS = catalog.meters;
+export const PRICING_TIERS: PricingTier[] = (catalog.tiers as CatalogTier[]).map(presentTier);
+
+export const pricingTier = (id: string) => PRICING_TIERS.find(tier => tier.id === id);

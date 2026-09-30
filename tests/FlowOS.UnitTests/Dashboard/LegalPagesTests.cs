@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 
 namespace FlowOS.UnitTests.Dashboard;
@@ -39,9 +40,14 @@ public class LegalPagesTests
         }
 
         var pricing = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "public", "pricing.html"));
-        Assert.Contains("$29", pricing);
-        Assert.Contains("Builder", pricing);
+        using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "apps", "dashboard", "src", "pricingCatalog.json")));
+        var builder = catalog.RootElement.GetProperty("tiers").EnumerateArray()
+            .First(tier => tier.GetProperty("id").GetString() == "builder");
+        Assert.Contains($"${builder.GetProperty("monthlyUsd").GetInt32()}", pricing);
+        Assert.Contains(builder.GetProperty("name").GetString()!, pricing);
         Assert.Contains("USD", pricing);
+        Assert.Contains("pricingCatalog.json", File.ReadAllText(Path.Combine(root, "apps", "dashboard", "src", "pricingLadder.ts")));
+        Assert.Contains("pricingCatalog.json", File.ReadAllText(Path.Combine(root, "docs", "18-commercial-and-mcp-entitlements.md")));
 
         var company = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "public", "company.html"));
         if (string.IsNullOrWhiteSpace(rootElement.GetProperty("companyNumber").GetString()))

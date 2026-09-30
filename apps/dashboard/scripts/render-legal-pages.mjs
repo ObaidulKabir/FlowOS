@@ -4,6 +4,38 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const entity = JSON.parse(readFileSync(join(root, 'src', 'legalEntity.json'), 'utf8'));
+const pricing = JSON.parse(readFileSync(join(root, 'src', 'pricingCatalog.json'), 'utf8'));
+
+const longCount = value => {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    return `${Number.isInteger(millions) ? millions : millions} million`;
+  }
+  return value.toLocaleString('en-US');
+};
+
+const planPrice = tier => {
+  if (tier.monthlyUsd == null) return `Custom, ${tier.priceNote}`;
+  if (tier.monthlyUsd === 0) return '$0';
+  return `$${tier.monthlyUsd.toLocaleString('en-US')} / month`;
+};
+
+const planBilling = tier => {
+  if (tier.monthlyUsd == null) return 'Contract';
+  if (tier.monthlyUsd === 0) return 'None';
+  const annual = tier.monthlyUsd * pricing.annualMonthsPaid;
+  return `Monthly, or about $${annual.toLocaleString('en-US')} / year`;
+};
+
+const planIncludes = tier => {
+  if (tier.publicIncludes) return tier.publicIncludes;
+  const access = tier.runtime ? 'Runtime' : 'Design-time only';
+  const history = tier.retentionDays == null ? '' : `, ${tier.retentionDays}-day history`;
+  const members = tier.runtime && tier.members != null
+    ? `, ${tier.members} member${tier.members === 1 ? '' : 's'}`
+    : '';
+  return `${access}. ${longCount(tier.publications)} publications, ${longCount(tier.eventsPerMonth)} events, ${longCount(tier.mcpCallsPerMonth)} agent calls${history}${members}.`;
+};
 
 const pages = [
   { href: '/product', file: 'product.html', label: 'Product' },
@@ -41,6 +73,15 @@ const sellerFacts = [
 const sellerHtml = sellerFacts.map(line => `<p>${esc(line)}</p>`).join('\n');
 
 const mail = `<a href="mailto:${esc(entity.supportEmail)}">${esc(entity.supportEmail)}</a>`;
+
+const pricingRows = pricing.tiers.map(tier => {
+  const contact = tier.publicIncludes ? ` Contact ${mail}.` : '';
+  return `<tr><td>${esc(tier.name)}</td><td>${esc(planPrice(tier))}</td><td>${esc(planBilling(tier))}</td><td>${esc(planIncludes(tier))}${contact}</td></tr>`;
+}).join('\n        ');
+
+const meterItems = pricing.meterDefinitions.map(meter =>
+  `<li><strong>${esc(meter.name)}</strong> ${esc(meter.meaning.replace(`${meter.name} `, ''))}</li>`
+).join('\n      ');
 
 const layout = ({ title, description, body }) => `<!doctype html>
 <html lang="en">
@@ -261,29 +302,21 @@ const documents = {
     title: 'Pricing',
     description: 'FlowOS plans, what each price includes, and how billing works.',
     body: `
-    <p>List prices are in ${esc(entity.currencyName)} (${esc(entity.currencyCode)}) and exclude VAT. Where VAT is due, it is added on the invoice or at card checkout. An annual price is ten months paid in advance (two months free).</p>
+    <p>List prices are in ${esc(entity.currencyName)} (${esc(entity.currencyCode)}) and exclude VAT. Where VAT is due, it is added on the invoice or at card checkout. ${esc(pricing.copy.annualDetail)}</p>
     <p>The paid service is a hosted workspace that can run workflows. Free registration can design and simulate only.</p>
     <table>
       <thead>
         <tr><th>Plan</th><th>Price</th><th>Billing</th><th>Includes</th></tr>
       </thead>
       <tbody>
-        <tr><td>Free</td><td>$0</td><td>None</td><td>Design-time only. 2 publications, 2,500 events, 2,500 agent calls, 7-day history.</td></tr>
-        <tr><td>Starter</td><td>$9 / month</td><td>Monthly, or about $90 / year</td><td>Runtime. 10 publications, 15,000 events, 15,000 agent calls, 14-day history, 1 member.</td></tr>
-        <tr><td>Builder</td><td>$29 / month</td><td>Monthly, or about $290 / year</td><td>Runtime. 30 publications, 75,000 events, 75,000 agent calls, 30-day history, 3 members.</td></tr>
-        <tr><td>Team</td><td>$79 / month</td><td>Monthly, or about $790 / year</td><td>Runtime. 100 publications, 300,000 events, 300,000 agent calls, 90-day history, 10 members.</td></tr>
-        <tr><td>Growth</td><td>$199 / month</td><td>Monthly, or about $1,990 / year</td><td>Runtime. 300 publications, 1.5 million events, 1.5 million agent calls, 180-day history, 25 members.</td></tr>
-        <tr><td>Scale</td><td>$499 / month</td><td>Monthly, or about $4,990 / year</td><td>Runtime. 1,000 publications, 10 million events, 10 million agent calls, 365-day history, 50 members.</td></tr>
-        <tr><td>Enterprise</td><td>Custom, typically $1,500–$5,000+ / month</td><td>Contract</td><td>Written limits, private deploy options, and a support agreement. Contact ${mail}.</td></tr>
+        ${pricingRows}
       </tbody>
     </table>
     <h2>What the meters mean</h2>
     <ul>
-      <li><strong>Publications</strong> are new or materially updated workflow definitions.</li>
-      <li><strong>Events</strong> are business facts recorded as the workflow runs, such as an order created or a payment completed.</li>
-      <li><strong>Agent calls</strong> are requests an AI agent makes to the control plane.</li>
+      ${meterItems}
     </ul>
-    <p>We do not charge per retry, per simulation, or per transition. Automatic overage billing is not switched on. A workspace that needs more than its plan moves to the next plan, or to an invoice you agree by email. There is no surprise per-call charge.</p>
+    <p>${esc(pricing.copy.notCharged)} ${esc(pricing.copy.overage)}</p>
     <h2>How billing works</h2>
     <ol>
       <li>Choose a plan on this page.</li>

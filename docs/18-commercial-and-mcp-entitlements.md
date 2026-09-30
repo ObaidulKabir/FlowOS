@@ -26,7 +26,7 @@ Do **not** launch a blended “Flow Unit” currency. Keep the three meters visi
 
 ## Published packages
 
-Starting points, not frozen infrastructure math. Annual billing is two months free.
+The numbers and the billing sentences live in `apps/dashboard/src/pricingCatalog.json`. The homepage reads that file. After an edit, run `npm run legal` in `apps/dashboard` so `/pricing` is regenerated from it. These are starting points, not frozen infrastructure math. Annual billing is two months free.
 
 | | Free | Starter | Builder | Team | Growth | Scale | Enterprise |
 | --- | --- | --- | --- | --- | --- | --- | --- |

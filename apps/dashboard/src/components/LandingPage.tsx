@@ -8,7 +8,7 @@ import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { AuthModalMode } from './AuthModal';
 import { usePlatformMetrics } from '../platformMetrics';
 import { mcpRpcUrl, mcpRpcPath } from '../mcpUrl';
-import { PRICING_METERS, PRICING_TIERS } from '../pricingLadder';
+import { PRICING_METERS, PRICING_POLICY, PRICING_TIERS, pricingTier } from '../pricingLadder';
 import { FLOW_OS_VERSION_SCHEME, useFlowOsVersion } from '../flowOsRelease';
 import { legalEntity, sellerIdentity } from '../legalEntity';
 import { LegalFooterLinks } from './LegalFooterLinks';
@@ -26,6 +26,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const mcpUrl = mcpRpcUrl();
   const mcpPath = mcpRpcPath();
   const flowOsVersion = useFlowOsVersion();
+  const freeTier = pricingTier('free');
+  const starterTier = pricingTier('starter');
+  const builderTier = pricingTier('builder');
+  const teamTier = pricingTier('team');
+  const enterpriseTier = pricingTier('enterprise');
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">
@@ -452,7 +457,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Try, build, then grow with usage
           </h2>
           <p className="text-sm text-slate-400 max-w-2xl mx-auto mt-2">
-            Free → Starter → Builder → Team → Growth → Scale → Enterprise.
+            {PRICING_TIERS.map(tier => tier.name).join(' → ')}.
             You pay for publications, events, and generous MCP calls — not seats first, and not every retry or simulation.
           </p>
         </div>
@@ -473,11 +478,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="inline-block px-2.5 py-1 bg-slate-800 rounded-lg text-slate-300 font-semibold mb-3">Explore</div>
               <h3 className="text-lg font-bold text-white mb-1">Free</h3>
               <div className="text-2xl font-extrabold text-white mb-4">
-                $0 <span className="text-xs font-normal text-slate-400">/ month</span>
+                {freeTier?.price ?? '$0'} <span className="text-xs font-normal text-slate-400">/ month</span>
               </div>
               <ul className="space-y-2.5 text-slate-400 mb-6">
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Launch Live Sandbox with no signup</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 2 publications · 2.5K events · 2.5K MCP calls</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> {freeTier?.publications} publications · {freeTier?.events} events · {freeTier?.mcpCalls} MCP calls</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Simulate, lint, validate, and generate a first workflow</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Register stays design-time until a paid package is activated</li>
               </ul>
@@ -499,13 +504,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="inline-block px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg font-semibold mb-3">Ship</div>
               <h3 className="text-lg font-bold text-white mb-1">Builder</h3>
               <div className="text-2xl font-extrabold text-white mb-4">
-                $29 <span className="text-xs font-normal text-slate-400">/ month</span>
+                {builderTier?.price ?? '$29'} <span className="text-xs font-normal text-slate-400">/ month</span>
               </div>
               <ul className="space-y-2.5 text-slate-300 mb-6">
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> 30 publications · 75K events · 75K MCP calls</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> {builderTier?.publications} publications · {builderTier?.events} events · {builderTier?.mcpCalls} MCP calls</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Simulation, replay, compensation, and DLQ included</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Soft overage, then a Team upgrade — not a hard cutoff</li>
-                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Starter is $9 if you only need a first real product</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> {PRICING_POLICY.hardStop ? 'The package limit is a hard stop' : `Soft overage, then a ${teamTier?.name ?? 'Team'} upgrade — not a hard cutoff`}</li>
+                <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> {starterTier?.name ?? 'Starter'} is {starterTier?.price ?? '$9'} if you only need a first real product</li>
               </ul>
             </div>
             <button
@@ -521,8 +526,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div>
               <div className="inline-block px-2.5 py-1 bg-purple-500/20 text-purple-300 rounded-lg font-semibold mb-3">Strategic</div>
               <h3 className="text-lg font-bold text-white mb-1">Enterprise</h3>
-              <div className="text-2xl font-extrabold text-white mb-1">Custom</div>
-              <p className="text-[11px] text-slate-500 mb-4">Typically $1,500–$5,000+ / month</p>
+              <div className="text-2xl font-extrabold text-white mb-1">{enterpriseTier?.price ?? 'Custom'}</div>
+              <p className="text-[11px] text-slate-500 mb-4">{enterpriseTier?.priceNote}</p>
               <ul className="space-y-2.5 text-slate-400 mb-6">
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Private or VPC deploy, SSO, custom retention</li>
                 <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400 shrink-0" /> Custom limits, MCP policies, and data residency</li>
@@ -588,7 +593,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <p className="text-[11px] text-slate-500 mt-4 max-w-4xl leading-relaxed">
           Simulation, recovery, and MCP stay on every package. Higher tiers add volume, retention, concurrency, collaboration, and support — not the core product.
           List prices are in {legalEntity.currencyName} ({legalEntity.currencyCode}) and exclude VAT. Where VAT is due, it is added on the invoice or at card checkout.
-          Annual billing is two months free, paid in advance. Soft overage is the intended path past a limit; we will not charge per retry, per simulation, or per transition.
+          {PRICING_POLICY.annual} {PRICING_POLICY.softOverage}
           Register is Free (design-time). Starter through Scale are paid subscriptions. Enterprise and student plans are agreed by email.
           Card payments, when checkout is enabled, are taken by Stripe. Until then, request a paid plan from{' '}
           <a href={`mailto:${legalEntity.supportEmail}?subject=FlowOS%20paid%20plan`} className="text-blue-400 hover:underline">{legalEntity.supportEmail}</a>.
