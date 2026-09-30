@@ -1,12 +1,12 @@
 {
   "productName": "FlowOS",
-  "operatorName": "Prospect BD Ltd",
-  "companyNumber": "",
-  "registeredOffice": "",
-  "registrationJurisdiction": "",
+  "operatorName": "[Your UK Registered Company Name Ltd]",
+  "companyNumber": "[8-digit UK Company Number]",
+  "registeredOffice": "[Your UK Registered Office Address]",
+  "registrationJurisdiction": "England and Wales",
   "siteUrl": "https://flowosbd.com",
   "supportEmail": "admin@flowosbd.com",
-  "governingLaw": "the law of the place where the operator is incorporated",
+  "governingLaw": "the laws of England and Wales",
   "lastUpdated": "30 September 2026",
   "currencyName": "US dollars",
   "currencyCode": "USD"
