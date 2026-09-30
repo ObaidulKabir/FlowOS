@@ -20,7 +20,11 @@ public class LegalPagesTests
         Assert.False(string.IsNullOrWhiteSpace(email));
         Assert.StartsWith("https://", site);
 
-        foreach (var file in new[] { "terms.html", "privacy.html", "refunds.html", "acceptable-use.html", "contact.html" })
+        foreach (var file in new[]
+        {
+            "terms.html", "privacy.html", "refunds.html", "cancellation.html", "acceptable-use.html", "contact.html",
+            "product.html", "pricing.html", "security.html", "ai-agents.html", "company.html"
+        })
         {
             var html = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "public", file));
             Assert.Contains(operatorName!, html);
@@ -28,9 +32,22 @@ public class LegalPagesTests
             Assert.Contains("href=\"/terms\"", html);
             Assert.Contains("href=\"/privacy\"", html);
             Assert.Contains("href=\"/refunds\"", html);
-            Assert.Contains("href=\"/acceptable-use\"", html);
+            Assert.Contains("href=\"/cancellation\"", html);
             Assert.Contains("href=\"/contact\"", html);
+            Assert.DoesNotContain("Coming soon", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("XXXX", html);
         }
+
+        var pricing = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "public", "pricing.html"));
+        Assert.Contains("$29", pricing);
+        Assert.Contains("Builder", pricing);
+        Assert.Contains("USD", pricing);
+
+        var company = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "public", "company.html"));
+        if (string.IsNullOrWhiteSpace(rootElement.GetProperty("companyNumber").GetString()))
+            Assert.DoesNotContain("Company number:", company);
+        if (string.IsNullOrWhiteSpace(rootElement.GetProperty("registrationJurisdiction").GetString()))
+            Assert.DoesNotContain("England and Wales", company);
 
         var landing = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "src", "components", "LandingPage.tsx"));
         Assert.Contains("exclude VAT", landing);

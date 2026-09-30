@@ -78,7 +78,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span>MCP AI Control Plane</span>
             </a>
             <a href="#comparison" className="hover:text-white transition-colors">Compare Platforms</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+            <a href="/product" className="hover:text-white transition-colors">Product</a>
+            <a href="/pricing" className="hover:text-white transition-colors">Pricing</a>
+            <a href="/company" className="hover:text-white transition-colors">Company</a>
           </div>
 
           {/* Right Action CTAs */}
@@ -136,7 +138,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 text-xs font-medium text-slate-300 mb-6 shadow-sm">
           <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-emerald-400 font-bold">FlowOS:</span>
-          <span>Design, validate, simulate, execute, recover, and govern</span>
+          <span>Workflow automation and AI-agent control for business processes</span>
         </div>
 
         {/* Hero Title */}
@@ -157,9 +159,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
 
         {/* Subtitle */}
-        <p className="mt-5 text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          Design, validate, simulate, execute, recover, and govern workflows through MCP.
-          {mcpTools} capabilities cover that lifecycle. The dual-kernel split — state authority plus workflow orchestration — is how FlowOS keeps an agent inside what the system allows.
+        <p className="mt-5 text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+          Design, govern, run, and monitor business workflows. People and AI agents can act only inside the rules you publish.
+        </p>
+        <ul className="mt-5 flex flex-wrap items-center justify-center gap-2 max-w-3xl mx-auto list-none p-0">
+          {[
+            'Workflow automation',
+            'State-machine governance',
+            'Event-driven execution',
+            'Human and AI tasks',
+            'Monitoring',
+            'Multi-tenant workspaces'
+          ].map(item => (
+            <li key={item} className="px-3 py-1 rounded-full border border-slate-700 bg-slate-900/80 text-[11px] font-semibold text-slate-200">
+              {item}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-sm text-slate-500 max-w-2xl mx-auto leading-relaxed">
+          Developers connect agents through MCP. {mcpTools} tools cover that lifecycle.
+          The state machine decides what is legal. The workflow decides the work.
         </p>
 
         {/* Primary CTAs */}

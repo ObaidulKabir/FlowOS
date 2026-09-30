@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Contact — FlowOS</title>
-  <meta name="description" content="How to reach FlowOS for support, billing, privacy, and security." />
+  <title>AI agents — FlowOS</title>
+  <meta name="description" content="What an AI agent can and cannot do inside FlowOS." />
   <link rel="icon" type="image/png" href="/brand/flowos-icon.png" />
   <style>
     :root { color-scheme: dark; }
@@ -54,23 +54,30 @@
   </header>
   <main>
     <p class="kicker">Last updated 30 September 2026</p>
-    <h1>Contact</h1>
+    <h1>AI agents</h1>
     <aside class="seller">
       <p>FlowOS is operated by Prospect BD Ltd.</p>
 <p>Website: https://flowosbd.com</p>
 <p>Support, sales, and billing: admin@flowosbd.com</p>
     </aside>
     
-    <p>Support, sales, billing, privacy, and security use one inbox: <a href="mailto:admin@flowosbd.com">admin@flowosbd.com</a>. That address is on this domain.</p>
-    <p>We aim to reply within two business days. There is no separate phone line. Enterprise response times apply only when a written support agreement says so.</p>
-    <h2>What to include</h2>
+    <p>An AI agent in FlowOS does not get a blank cheque. It calls named operations. FlowOS still decides whether that operation is allowed.</p>
+    <h2>An agent can</h2>
     <ul>
-      <li>Support: tenant name, what you were doing, and the time it failed.</li>
-      <li>Billing: tenant name, the plan you want or the invoice you are asking about, and whether you want to cancel.</li>
-      <li>Privacy: the email on the account, and whether you want access, correction, or deletion.</li>
-      <li>Security: a description of the issue. Do not send a live API key or password in the email.</li>
+      <li>Read workflow state and history for its own tenant.</li>
+      <li>Draft and check a workflow before anything runs.</li>
+      <li>Suggest a next step that the published workflow already allows.</li>
+      <li>Carry out an operation the tenant key is allowed to call.</li>
+      <li>Connect through MCP, the agent interface at <a href="/mcp">/mcp</a>.</li>
     </ul>
-    <p>Prices are on the <a href="/pricing">pricing</a> page. The product is described on the <a href="/product">product</a> page.</p>
+    <h2>An agent cannot</h2>
+    <ul>
+      <li>Move work to a status the state machine does not allow.</li>
+      <li>See another tenant's data.</li>
+      <li>Skip a step that requires a person, or skip a high-risk action that the workflow marks for human approval.</li>
+      <li>Start live work on a Free workspace. That stays design-time until a paid plan is active.</li>
+    </ul>
+    <p>The short version: the agent proposes and, where allowed, acts. FlowOS keeps authorisation, workflow state, and the business rules.</p>
     
   </main>
   <footer>

@@ -88,10 +88,16 @@ The marketing site names the seller and links the pages a card processor expects
 
 | Page | Path |
 | --- | --- |
+| Product | `/product` |
+| Pricing | `/pricing` |
+| Security | `/security` |
+| AI agents | `/ai-agents` |
+| Company | `/company` |
 | Terms of Service | `/terms` |
 | Privacy notice | `/privacy` |
-| Refunds and cancellation | `/refunds` |
+| Refunds | `/refunds` |
+| Cancellation | `/cancellation` |
 | Acceptable use | `/acceptable-use` |
 | Contact | `/contact` |
 
-The seller block is `apps/dashboard/src/legalEntity.json`. Before a UK Ltd Stripe application, set `operatorName`, `companyNumber`, `registeredOffice`, and `governingLaw` to that company, then run `npm run legal` in `apps/dashboard` so the static pages match. List prices stay USD and exclude VAT. Card checkout itself remains `L-PAY`.
+The seller block is `apps/dashboard/src/legalEntity.json`. Before a UK Ltd Stripe application, set `operatorName`, `companyNumber`, `registeredOffice`, `registrationJurisdiction`, and `governingLaw` to that company, then run `npm run legal` in `apps/dashboard` so the static pages match. Do not publish a company number before it exists. List prices stay USD and exclude VAT. Card checkout itself remains `L-PAY`. Support and sales use `supportEmail` until separate mailboxes exist.

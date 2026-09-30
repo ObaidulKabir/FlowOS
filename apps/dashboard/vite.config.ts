@@ -1,7 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const legalPaths = ["/terms", "/privacy", "/refunds", "/acceptable-use", "/contact"];
+const legalPaths = [
+  "/terms",
+  "/privacy",
+  "/refunds",
+  "/cancellation",
+  "/acceptable-use",
+  "/contact",
+  "/product",
+  "/pricing",
+  "/security",
+  "/ai-agents",
+  "/company",
+];
 
 const rewriteLegalPage = (
   req: { url?: string },
