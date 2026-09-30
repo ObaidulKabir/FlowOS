@@ -13,6 +13,8 @@ import { CompetitiveComparison } from './CompetitiveComparison';
 import { DashboardChrome, sidebarItemClass } from './DashboardChrome';
 import { McpAgentGuideline } from './McpAgentGuideline';
 import { usePlatformMetrics } from '../platformMetrics';
+import { legalEntity, sellerIdentity } from '../legalEntity';
+import { LegalFooterLinks } from './LegalFooterLinks';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
   Globe, Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale
@@ -483,8 +485,9 @@ export const AdminDashboard: React.FC<Props> = ({
         </section>
         <footer className="py-8 border-t border-slate-800 text-center text-xs text-slate-500 bg-slate-950/50">
           <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div>© 2026 FlowOS — Prospect BD Ltd. Official system email: <a href="mailto:admin@flowosbd.com" className="text-blue-400 hover:underline">admin@flowosbd.com</a></div>
-            <div className="flex space-x-6">
+            <div>© 2026 {legalEntity.productName} — {sellerIdentity}. <a href={`mailto:${legalEntity.supportEmail}`} className="text-blue-400 hover:underline">{legalEntity.supportEmail}</a></div>
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+              <LegalFooterLinks className="hover:underline" />
               <a href="/swagger" target="_blank" className="hover:underline">Swagger Docs</a>
               <a href={mcpUrl} target="_blank" className="hover:underline">MCP Endpoint</a>
               <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank" className="hover:underline">GitHub</a>

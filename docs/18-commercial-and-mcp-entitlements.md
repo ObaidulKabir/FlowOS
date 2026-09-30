@@ -81,3 +81,17 @@ Before locking the numbers, instrument: MCP calls per active developer, events p
 Canonical policy: [Chapter 20 — Hosted LLM and tenant automation policy](20-hosted-llm-and-automation-policy.md).
 
 Paid Active tenants get a platform OpenAI model (`flowos-hosted`) without an AI Context key. Set `FLOWOS_HOSTED_LLM_API_KEY` on the host. Trial cannot spend it. Daily cap default 200 (`MCP-HOSTED-LLM-QUOTA`). BYO keys remain optional.
+
+## Public seller pages
+
+The marketing site names the seller and links the pages a card processor expects before an account is approved:
+
+| Page | Path |
+| --- | --- |
+| Terms of Service | `/terms` |
+| Privacy notice | `/privacy` |
+| Refunds and cancellation | `/refunds` |
+| Acceptable use | `/acceptable-use` |
+| Contact | `/contact` |
+
+The seller block is `apps/dashboard/src/legalEntity.json`. Before a UK Ltd Stripe application, set `operatorName`, `companyNumber`, `registeredOffice`, and `governingLaw` to that company, then run `npm run legal` in `apps/dashboard` so the static pages match. List prices stay USD and exclude VAT. Card checkout itself remains `L-PAY`.

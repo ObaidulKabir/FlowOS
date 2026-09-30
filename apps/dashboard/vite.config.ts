@@ -1,6 +1,31 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const legalPaths = ["/terms", "/privacy", "/refunds", "/acceptable-use", "/contact"];
+
+const rewriteLegalPage = (
+  req: { url?: string },
+  _res: unknown,
+  next: () => void
+) => {
+  const [path, query] = (req.url ?? "").split("?");
+  const bare = path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
+  if (legalPaths.includes(bare)) {
+    req.url = `${bare}.html${query ? `?${query}` : ""}`;
+  }
+  next();
+};
+
+const legalPageRoutes = () => ({
+  name: "flowos-legal-routes",
+  configureServer(server: { middlewares: { use: (fn: typeof rewriteLegalPage) => void } }) {
+    server.middlewares.use(rewriteLegalPage);
+  },
+  configurePreviewServer(server: { middlewares: { use: (fn: typeof rewriteLegalPage) => void } }) {
+    server.middlewares.use(rewriteLegalPage);
+  },
+});
+
 const apiProxy = {
   "/health": {
     target: process.env.VITE_API_TARGET || "http://localhost:5183",
@@ -32,7 +57,7 @@ const apiProxy = {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [legalPageRoutes(), react()],
   server: {
     allowedHosts: true, // Allow any host (localhost, flowos.prospectbdltd.com, flowos.gkibria121.com, etc.)
     port: 5173,

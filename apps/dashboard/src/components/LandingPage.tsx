@@ -10,6 +10,8 @@ import { usePlatformMetrics } from '../platformMetrics';
 import { mcpRpcUrl, mcpRpcPath } from '../mcpUrl';
 import { PRICING_METERS, PRICING_TIERS } from '../pricingLadder';
 import { FLOW_OS_VERSION_SCHEME, useFlowOsVersion } from '../flowOsRelease';
+import { legalEntity, sellerIdentity } from '../legalEntity';
+import { LegalFooterLinks } from './LegalFooterLinks';
 
 interface LandingPageProps {
   onOpenAuth: (mode: AuthModalMode) => void;
@@ -566,9 +568,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <p className="text-[11px] text-slate-500 mt-4 max-w-4xl leading-relaxed">
           Simulation, recovery, and MCP stay on every package. Higher tiers add volume, retention, concurrency, collaboration, and support — not the core product.
-          Annual billing is two months free. Soft overage is the intended path past a limit; we will not charge per retry, per simulation, or per transition.
-          Register is Free (design-time). A platform Admin activates Starter through Scale as a paid runtime plan, or Enterprise for custom terms, until self-serve checkout and the usage dashboard ship.
-          Students and local developers can request a modest ৳ plan through the same inbox — an acquisition path, not a permanently cheaper edition.
+          List prices are in {legalEntity.currencyName} ({legalEntity.currencyCode}) and exclude VAT. Where VAT is due, it is added on the invoice or at card checkout.
+          Annual billing is two months free, paid in advance. Soft overage is the intended path past a limit; we will not charge per retry, per simulation, or per transition.
+          Register is Free (design-time). Starter through Scale are paid subscriptions. Enterprise and student plans are agreed by email.
+          Card payments, when checkout is enabled, are taken by Stripe. Until then, request a paid plan from{' '}
+          <a href={`mailto:${legalEntity.supportEmail}?subject=FlowOS%20paid%20plan`} className="text-blue-400 hover:underline">{legalEntity.supportEmail}</a>.
+          Cancellation and refunds are on the <a href="/refunds" className="text-blue-400 hover:underline">refunds page</a>.
         </p>
       </section>
 
@@ -583,17 +588,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               v{flowOsVersion} · {FLOW_OS_VERSION_SCHEME}
             </div>
             <div>
-              © 2026 FlowOS — Prospect BD Ltd. All rights reserved.
+              © 2026 {legalEntity.productName} — {sellerIdentity}. All rights reserved.
             </div>
             <div className="text-[11px] text-slate-400 flex items-center gap-1 justify-center md:justify-start">
               <span>Official System Email:</span>
-              <a href="mailto:admin@flowosbd.com" className="text-blue-400 hover:underline">
-                admin@flowosbd.com
+              <a href={`mailto:${legalEntity.supportEmail}`} className="text-blue-400 hover:underline">
+                {legalEntity.supportEmail}
               </a>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-6">
+            <LegalFooterLinks className="hover:text-white transition-colors" />
             <button onClick={() => onOpenAuth('verify')} className="hover:text-cyan-400 text-slate-400 transition-colors">Verify Account Email</button>
             <a href={mcpUrl} target="_blank" className="hover:text-white transition-colors">MCP Portal</a>
             <a href="/.well-known/mcp" target="_blank" className="hover:text-white transition-colors">MCP Manifest</a>
