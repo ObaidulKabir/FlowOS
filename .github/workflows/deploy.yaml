@@ -30,8 +30,7 @@ jobs:
             set -euo pipefail
             cd  ${{ secrets.APP_PATH }}
             git fetch origin
-            git checkout main
-            git reset --hard origin/main
+            git checkout -B main origin/main
             docker network create traefik-network || true
 
       - name: Build and Deploy Containers 
@@ -41,8 +40,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22 
+          command_timeout: 30m
           script: |
             set -euo pipefail
             cd ${{ secrets.APP_PATH }}  
-            docker compose -f docker-compose.prod.yml up --build -d
             docker builder prune --filter "until=12h" -f
+            docker compose -f docker-compose.prod.yml up --build -d
