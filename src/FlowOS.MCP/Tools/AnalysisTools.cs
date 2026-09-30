@@ -45,7 +45,7 @@ public class AnalysisTools
                 break;
             case "STR-002":
                 humanExplanation = "Version is required.";
-                designHint = "Set a SemVer Version string (e.g. 1.0.0).";
+                designHint = "Set a Major.Minor.Build Version string (e.g. 1.0.0).";
                 break;
 
             // Workflow / SM structure

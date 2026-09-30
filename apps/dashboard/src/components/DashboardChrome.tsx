@@ -4,6 +4,7 @@ import {
   Shield, Building2, LogOut, Bot, Home,
   Sparkles, CheckCircle2, FileCode
 } from 'lucide-react';
+import { FLOW_OS_VERSION_SCHEME, useFlowOsVersion } from '../flowOsRelease';
 
 interface DashboardChromeProps {
   session: AuthSession;
@@ -28,7 +29,9 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
   onSignOut,
   mcpUrl,
   nav
-}) => (
+}) => {
+  const flowOsVersion = useFlowOsVersion();
+  return (
   <aside
     className="flowos-rail border-r border-slate-800 bg-slate-950 overflow-hidden"
     style={{
@@ -61,6 +64,9 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
         <span>
           <span className="block text-lg font-bold tracking-tight text-white leading-none">Flow<span className="text-blue-500">OS</span></span>
           <span className="block text-[10px] text-slate-400 mt-1 truncate max-w-[9.5rem]">{session.tenantName}</span>
+          <span className="block text-[10px] text-slate-500 font-mono mt-0.5" title={FLOW_OS_VERSION_SCHEME}>
+            v{flowOsVersion}
+          </span>
         </span>
       </button>
       <div className="mt-3">
@@ -151,3 +157,4 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
     </div>
   </aside>
 );
+};

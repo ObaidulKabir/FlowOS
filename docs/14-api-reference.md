@@ -154,7 +154,7 @@ You can start by `workflowName` **or** `workflowDefinitionId` — omit `version`
 * `POST /api/workflow-classes` — create a new private draft blueprint (`CreateWorkflowClassCommand`).
 * `PUT /api/workflow-classes/{id}` — update an existing draft.
 * `POST /api/workflow-classes/{id}/publish` — compile and publish draft to immutable versioned runtime status (`PublishWorkflowClassCommand`).
-* `POST /api/workflow-classes/{id}/new-version?bump=Major|Minor|Patch` — create a new draft copy bumping SemVer (`Major`, `Minor`, or `Patch`). Body: `{ "changeLog": "..." }`. Links `PreviousVersionId`.
+* `POST /api/workflow-classes/{id}/new-version?bump=Major|Minor|Build` — create a new draft copy bumping Major.Minor.Build (`Major`, `Minor`, or `Build`; `Patch` is an alias of `Build`). Body: `{ "changeLog": "..." }`. Links `PreviousVersionId`.
 * `POST /api/workflow-classes/{id}/rollback` — safe rollback: deprecates the current version with a pointer to the previous version without interrupting running instances (`RollbackWorkflowClassCommand`).
 * `GET /api/workflow-classes/by-name/{name}/version-tree` — returns full version history and lineage DAG for a workflow.
 * `POST /api/workflow-classes/{id}/deprecate` — mark as deprecated with optional reason and migration target pointer.

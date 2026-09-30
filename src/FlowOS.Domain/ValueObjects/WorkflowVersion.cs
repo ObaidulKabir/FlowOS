@@ -4,21 +4,21 @@ using FlowOS.Domain.Enums;
 namespace FlowOS.Domain.ValueObjects;
 
 /// <summary>
-/// Parses WorkflowClass SemVer strings (e.g. "1.2.0", "v1.0.0") for runtime mapping.
+/// Parses WorkflowClass Major.Minor.Build strings (e.g. "1.2.0", "v1.0.0") for runtime mapping.
 /// </summary>
 public readonly struct WorkflowVersion : IEquatable<WorkflowVersion>, IComparable<WorkflowVersion>
 {
     public int Major { get; }
     public int Minor { get; }
-    public int Patch { get; }
+    public int Build { get; }
     public string Original { get; }
 
-    public WorkflowVersion(int major, int minor = 0, int patch = 0, string? original = null)
+    public WorkflowVersion(int major, int minor = 0, int build = 0, string? original = null)
     {
         Major = major;
         Minor = minor;
-        Patch = patch;
-        Original = original ?? $"{major}.{minor}.{patch}";
+        Build = build;
+        Original = original ?? $"{major}.{minor}.{build}";
     }
 
     public static WorkflowVersion Parse(string? version)
@@ -34,15 +34,15 @@ public readonly struct WorkflowVersion : IEquatable<WorkflowVersion>, IComparabl
         {
             var major = Math.Max(v.Major, 0);
             var minor = Math.Max(v.Minor, 0);
-            var patch = v.Build < 0 ? 0 : v.Build;
-            return new WorkflowVersion(major, minor, patch, version);
+            var build = v.Build < 0 ? 0 : v.Build;
+            return new WorkflowVersion(major, minor, build, version);
         }
 
         var majorPart = versionStr.Split(new[] { '.', '-', '+' })[0];
         if (int.TryParse(majorPart, out var majorOnly))
             return new WorkflowVersion(majorOnly, 0, 0, version);
 
-        throw new FormatException($"Cannot parse '{version}' as a valid workflow version. Expected format: Major.Minor.Patch (e.g. '1.0.0').");
+        throw new FormatException($"Cannot parse '{version}' as a valid workflow version. Expected format: Major.Minor.Build (e.g. '1.0.0').");
     }
 
     /// <summary>Attempts to parse without throwing. Returns false on failure.</summary>
@@ -71,16 +71,16 @@ public readonly struct WorkflowVersion : IEquatable<WorkflowVersion>, IComparabl
     public WorkflowVersion BumpMinor()
         => new(Major, Minor + 1, 0, null);
 
-    /// <summary>Bump patch: 1.0.0 → 1.0.1 (hotfix)</summary>
-    public WorkflowVersion BumpPatch()
-        => new(Major, Minor, Patch + 1, null);
+    /// <summary>Bump build: 1.0.0 → 1.0.1 (hotfix)</summary>
+    public WorkflowVersion BumpBuild()
+        => new(Major, Minor, Build + 1, null);
 
     /// <summary>Bumps the version based on the specified bump type.</summary>
     public WorkflowVersion Bump(VersionBumpType bumpType) => bumpType switch
     {
         VersionBumpType.Major => BumpMajor(),
         VersionBumpType.Minor => BumpMinor(),
-        VersionBumpType.Patch => BumpPatch(),
+        VersionBumpType.Build => BumpBuild(),
         _ => throw new ArgumentOutOfRangeException(nameof(bumpType))
     };
 
@@ -90,16 +90,16 @@ public readonly struct WorkflowVersion : IEquatable<WorkflowVersion>, IComparabl
         if (majorCmp != 0) return majorCmp;
         var minorCmp = Minor.CompareTo(other.Minor);
         if (minorCmp != 0) return minorCmp;
-        return Patch.CompareTo(other.Patch);
+        return Build.CompareTo(other.Build);
     }
 
-    public override string ToString() => $"{Major}.{Minor}.{Patch}";
+    public override string ToString() => $"{Major}.{Minor}.{Build}";
 
     public bool Equals(WorkflowVersion other)
-        => Major == other.Major && Minor == other.Minor && Patch == other.Patch;
+        => Major == other.Major && Minor == other.Minor && Build == other.Build;
 
     public override bool Equals(object? obj) => obj is WorkflowVersion other && Equals(other);
-    public override int GetHashCode() => HashCode.Combine(Major, Minor, Patch);
+    public override int GetHashCode() => HashCode.Combine(Major, Minor, Build);
 
     public static bool operator ==(WorkflowVersion left, WorkflowVersion right) => left.Equals(right);
     public static bool operator !=(WorkflowVersion left, WorkflowVersion right) => !left.Equals(right);

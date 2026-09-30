@@ -10,7 +10,7 @@ Those three use whatever MCP tools, schema fields, and runtime behavior the host
 
 ## The stamp
 
-`FlowOsRelease.Version` in `src/FlowOS.Domain/FlowOsRelease.cs` is the only platform release. The current release is **1.2.2**.
+`FlowOsRelease.Version` in `src/FlowOS.Domain/FlowOsRelease.cs` is the only platform release. The scheme is **Major.Minor.Build**. The current release is **1.2.2**. The landing page, dashboard rail, `/health`, and MCP discovery all show this value.
 
 Each artifact stores `flowOsVersion` when it is created and again when a draft or binding is edited:
 
@@ -32,7 +32,7 @@ Before copying a DesignedApp from one deployment to another, download the tenant
 | Artifact stamp vs destination | Meaning |
 | --- | --- |
 | `Current` | Authored on this exact release. |
-| `OlderCompatible` | Authored on an older patch or minor of this major. This host can run it. |
+| `OlderCompatible` | Authored on an older build or minor of this major. This host can run it. |
 | `NewerThanHost` | Authored on a newer FlowOS. Do not move it here. |
 | `IncompatibleMajor` | Different major. Do not move it here. |
 
@@ -40,7 +40,7 @@ Workflow class responses include `flowOsVersion` and `flowOsCompatibility` for t
 
 ## When to bump
 
-Bump the **patch** of `FlowOsRelease.Version` for every contract change, including the smallest one:
+Bump the **build** of `FlowOsRelease.Version` for every contract change, including the smallest one:
 
 - an MCP tool is added, removed, or its arguments or errors change
 - the blueprint schema changes

@@ -980,7 +980,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                         <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500 font-medium" />
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1">Version (SemVer)</label>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Version (Major.Minor.Build)</label>
                         <input value={version} onChange={e => setVersion(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white font-mono focus:outline-none focus:border-blue-500" />
                     </div>
                 </div>

@@ -89,11 +89,11 @@ export const CapabilitiesShowcase: React.FC = () => {
       badge: "Version Governance",
       badgeColor: "bg-teal-500/20 text-teal-300 border-teal-500/30",
       icon: GitBranch,
-      summary: "Semantic versioning (Major/Minor/Patch) with deterministic instance pinning and 1-click safe rollback.",
+      summary: "Major.Minor.Build versioning with deterministic instance pinning and 1-click safe rollback.",
       situation: "Constantly evolving business requirements (shortened SLAs, updated approval tiers, restructured steps) where thousands of in-flight workflow instances must complete safely without corruption.",
-      solution: "Workflows enforce strict domain immutability after publication. Every running instance is permanently pinned to its exact version definition. Teams publish non-breaking policy changes via Patch versions (1.0.0 -> 1.0.1) or Context Binding Revisions, while 1-click rollback deprecates flawed versions without stranding running instances.",
-      example: "Company reduces standard procurement SLA from 48h to 24h: Admin publishes Patch v1.0.1 with changelog. Existing in-flight orders safely finish on v1.0.0 under the original 48h terms, while all new orders immediately enforce the 24h SLA. If needed, 1-click rollback safely restores prior standards.",
-      tags: ["SemVer (Major/Minor/Patch)", "Deterministic Instance Pinning", "1-Click Safe Rollback", "Context Parameterization", "ChangeLog Audit"]
+      solution: "Workflows enforce strict domain immutability after publication. Every running instance is permanently pinned to its exact version definition. Teams publish non-breaking policy changes via Build versions (1.0.0 -> 1.0.1) or Context Binding Revisions, while 1-click rollback deprecates flawed versions without stranding running instances.",
+      example: "Company reduces standard procurement SLA from 48h to 24h: Admin publishes Build v1.0.1 with changelog. Existing in-flight orders safely finish on v1.0.0 under the original 48h terms, while all new orders immediately enforce the 24h SLA. If needed, 1-click rollback safely restores prior standards.",
+      tags: ["Major.Minor.Build", "Deterministic Instance Pinning", "1-Click Safe Rollback", "Context Parameterization", "ChangeLog Audit"]
     }
   ];
 

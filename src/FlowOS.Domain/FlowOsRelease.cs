@@ -13,6 +13,11 @@ public static class FlowOsRelease
     /// <summary>Last MCP server release before DesignedApps recorded a FlowOS dependency.</summary>
     public const string PreStampVersion = "1.1.0";
 
+    /// <summary>Platform and workflow versions are always three integer parts: major, minor, and build.</summary>
+    public const string Scheme = "Major.Minor.Build";
+
+    public static string Display => $"FlowOS {Version}";
+
     public static FlowOsCompatibility Assess(string? artifactVersion, string? hostVersion = null)
     {
         if (!TryParse(artifactVersion, out var artifact))
@@ -42,10 +47,10 @@ public static class FlowOsRelease
             return false;
         if (!int.TryParse(parts[1], out var minor) || minor < 0)
             return false;
-        if (!int.TryParse(parts[2], out var patch) || patch < 0)
+        if (!int.TryParse(parts[2], out var build) || build < 0)
             return false;
 
-        version = new FlowOsVersionNumber(major, minor, patch);
+        version = new FlowOsVersionNumber(major, minor, build);
         return true;
     }
 }
@@ -59,7 +64,7 @@ public enum FlowOsCompatibility
     Unreadable
 }
 
-public readonly record struct FlowOsVersionNumber(int Major, int Minor, int Patch) : IComparable<FlowOsVersionNumber>
+public readonly record struct FlowOsVersionNumber(int Major, int Minor, int Build) : IComparable<FlowOsVersionNumber>
 {
     public int CompareTo(FlowOsVersionNumber other)
     {
@@ -67,8 +72,8 @@ public readonly record struct FlowOsVersionNumber(int Major, int Minor, int Patc
         if (major != 0) return major;
         var minor = Minor.CompareTo(other.Minor);
         if (minor != 0) return minor;
-        return Patch.CompareTo(other.Patch);
+        return Build.CompareTo(other.Build);
     }
 
-    public override string ToString() => $"{Major}.{Minor}.{Patch}";
+    public override string ToString() => $"{Major}.{Minor}.{Build}";
 }

@@ -5,7 +5,9 @@ namespace FlowOS.Domain.Enums;
 /// </summary>
 public enum VersionBumpType
 {
-    /// <summary>Non-breaking change, same structure (e.g. role description fix). 1.0.0 → 1.0.1</summary>
+    /// <summary>Hotfix / same structure (e.g. role description fix). 1.0.0 → 1.0.1</summary>
+    Build = 0,
+    /// <summary>Alias of <see cref="Build"/> for older clients that sent Patch.</summary>
     Patch = 0,
     /// <summary>Backwards-compatible change (e.g. new optional step). 1.0.0 → 1.1.0</summary>
     Minor = 1,

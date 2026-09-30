@@ -123,9 +123,9 @@ Check `currentStepId` again via the Admin endpoint above to confirm the transiti
 
 ## Versioning & Safe Evolution
 
-FlowOS supports semantic versioning (SemVer) for workflows: each published version is a distinct, immutable definition.
+FlowOS versions workflows as **Major.Minor.Build**: each published version is a distinct, immutable definition.
 
-* **Deploying a new version** — create a new version via `POST /api/workflow-classes/{id}/new-version?bump=Major|Minor|Patch`, attach an optional `changeLog`, update the draft blueprint, and publish.
+* **Deploying a new version** — create a new version via `POST /api/workflow-classes/{id}/new-version?bump=Major|Minor|Build`, attach an optional `changeLog`, update the draft blueprint, and publish. `Patch` is accepted as an alias of `Build`.
 * **Starting a specific version** — include `"version": 1` in the start request.
 * **Starting the latest version** — omit `version` entirely; FlowOS resolves and starts the highest available published version.
 * **Verifying which version ran** — `GET /api/admin/workflows` returns the actual `version` for each running instance.
@@ -136,7 +136,7 @@ Once a workflow instance starts, **it is permanently pinned to its exact version
 ### How to Change Operational Values (SLAs, Reminders, Thresholds)
 Published definitions cannot be edited in place. When business rules or SLA policies change, FlowOS provides three distinct adaptation mechanisms:
 
-1. **Patch Versioning (`1.0.0` → `1.0.1`) — Process-Wide Policy Shifts**:
+1. **Build Versioning (`1.0.0` → `1.0.1`) — Process-Wide Policy Shifts**:
    When standard SLA times or reminder schedules change (e.g. shortening manager approval SLA from 48h to 24h), create a **Patch version**:
    ```bash
    POST /api/workflow-classes/{id}/new-version?bump=Patch

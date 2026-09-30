@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using FlowOS.Domain;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
@@ -51,7 +52,11 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Health_and_mcp_discovery_are_public_with_allow_headers()
     {
-        Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/health")).StatusCode);
+        var healthResponse = await _client.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.OK, healthResponse.StatusCode);
+        var health = JObject.Parse(await healthResponse.Content.ReadAsStringAsync());
+        Assert.Equal(FlowOsRelease.Version, health["flowOsVersion"]?.ToString());
+        Assert.Equal(FlowOsRelease.Scheme, health["versionScheme"]?.ToString());
 
         // GET /mcp should be publicly accessible for discovery without API keys
         var unauthResponse = await _client.GetAsync("/mcp");
@@ -69,7 +74,8 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         Assert.Contains("mutating", jsonContent);
         Assert.Contains("category", jsonContent);
         Assert.Contains("tenantScoped", jsonContent);
-        Assert.Contains("jsonrpcUrl", jsonContent);
+        Assert.Contains("flowOsVersion", jsonContent);
+        Assert.Contains("versionScheme", jsonContent);
         Assert.Contains("Do not normalize /mcp/", jsonContent);
 
         // HTML discovery test
@@ -82,6 +88,9 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         Assert.Contains("Registered Agent Tools", html);
         Assert.Contains("JSON-RPC connection", html);
         Assert.Contains("trailing slash", html);
+        Assert.Contains(FlowOsRelease.Display, html);
+        Assert.Contains(FlowOsRelease.Scheme, html);
+        Assert.Contains($"\"flowOsVersion\":\"{FlowOsRelease.Version}\"", jsonContent.Replace(" ", ""));
     }
 
     [Fact]

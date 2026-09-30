@@ -9,6 +9,7 @@ import { AuthModalMode } from './AuthModal';
 import { usePlatformMetrics } from '../platformMetrics';
 import { mcpRpcUrl, mcpRpcPath } from '../mcpUrl';
 import { PRICING_METERS, PRICING_TIERS } from '../pricingLadder';
+import { FLOW_OS_VERSION_SCHEME, useFlowOsVersion } from '../flowOsRelease';
 
 interface LandingPageProps {
   onOpenAuth: (mode: AuthModalMode) => void;
@@ -22,6 +23,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
   const mcpUrl = mcpRpcUrl();
   const mcpPath = mcpRpcPath();
+  const flowOsVersion = useFlowOsVersion();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">
@@ -51,6 +53,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </span>
                 <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30">
                   Agent control plane
+                </span>
+                <span
+                  className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-slate-800 text-slate-200 border border-slate-600"
+                  title={`FlowOS ${FLOW_OS_VERSION_SCHEME}`}
+                >
+                  v{flowOsVersion}
                 </span>
               </div>
               <div className="text-[11px] text-slate-400">
@@ -570,6 +578,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="space-y-1 text-center md:text-left">
             <div className="text-slate-300 font-bold text-sm">
               FlowOS Orchestration Platform
+            </div>
+            <div className="font-mono text-slate-300">
+              v{flowOsVersion} · {FLOW_OS_VERSION_SCHEME}
             </div>
             <div>
               © 2026 FlowOS — Prospect BD Ltd. All rights reserved.

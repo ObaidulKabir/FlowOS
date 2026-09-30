@@ -14,6 +14,7 @@ using FlowOS.Infrastructure.Services;
 using FlowOS.Infrastructure;
 using FlowOS.Domain.Validation;
 using FlowOS.Api.Middleware;
+using FlowOS.Domain;
 using FlowOS.Notifications.Application;
 using FlowOS.Notifications.Infrastructure.Persistence;
 using FlowOS.Workflows.Engine;
@@ -129,6 +130,13 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
     Predicate = check => true
 });
 
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "ok",
+    flowOsVersion = FlowOsRelease.Version,
+    versionScheme = FlowOsRelease.Scheme
+}));
+
 app.MapGet("/.well-known/mcp", (HttpContext context) =>
 {
     var mcpUrl = FlowOsPublicUrls.McpEndpoint(FlowOsPublicUrls.ResolveOrigin(
@@ -149,7 +157,9 @@ app.MapGet("/.well-known/mcp", (HttpContext context) =>
     {
         schema = "https://modelcontextprotocol.io/schema/discovery.json",
         name = "FlowOS MCP Control Plane",
-        version = "1.0.0",
+        version = FlowOsRelease.Version,
+        flowOsVersion = FlowOsRelease.Version,
+        versionScheme = FlowOsRelease.Scheme,
         description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction. " + FlowOsPublicUrls.AgentJsonRpcRule,
         transport = "streamable-http",
         protocolVersion = "2025-03-26",

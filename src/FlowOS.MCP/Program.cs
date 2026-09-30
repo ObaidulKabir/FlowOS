@@ -316,7 +316,12 @@ public partial class Program
             }
         });
 
-        app.MapGet("/health", () => Results.Ok(new { status = "ok", flowOsVersion = FlowOsRelease.Version }));
+        app.MapGet("/health", () => Results.Ok(new
+        {
+            status = "ok",
+            flowOsVersion = FlowOsRelease.Version,
+            versionScheme = FlowOsRelease.Scheme
+        }));
 
         app.MapGet("/", (HttpContext context) => Results.Redirect(FlowOsPublicUrls.McpPath(ResolvePublicMcpUrl(context))));
 
@@ -334,8 +339,9 @@ public partial class Program
             {
                 schema = "https://modelcontextprotocol.io/schema/discovery.json",
                 name = "FlowOS MCP Control Plane",
-                version = "1.0.0",
+                version = FlowOsRelease.Version,
                 flowOsVersion = FlowOsRelease.Version,
+                versionScheme = FlowOsRelease.Scheme,
                 description = "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction. " + FlowOsPublicUrls.AgentJsonRpcRule,
                 transport = "streamable-http",
                 protocolVersion = "2025-03-26",
@@ -421,6 +427,7 @@ public partial class Program
                 supportedProtocolVersions = McpJsonRpcDispatcher.SupportedProtocolVersions,
                 toolsCount = toolItems.Count,
                 flowOsVersion = FlowOsRelease.Version,
+                versionScheme = FlowOsRelease.Scheme,
                 description = "FlowOS Agentic Control Plane: Multi-tenant state machine and declarative workflow engine. " + FlowOsPublicUrls.AgentJsonRpcRule,
                 endpoint = mcpPath,
                 jsonrpcUrl = mcpUrl,
@@ -836,7 +843,7 @@ public partial class Program
 </head>
 <body>
   <div class="container">
-    <div class="badge"><div class="badge-dot"></div> MCP SERVER ONLINE &bull; PROTOCOL 2025-03-26 &amp; 2024-11-05</div>
+    <div class="badge"><div class="badge-dot"></div> MCP SERVER ONLINE &bull; {{FLOWOS_DISPLAY}} ({{FLOWOS_SCHEME}}) &bull; PROTOCOL 2025-03-26 &amp; 2024-11-05</div>
     <h1>Flow<span>OS</span> MCP Control Plane</h1>
     <p class="lead">Model Context Protocol (MCP) server providing autonomous AI agents with governed execution, mathematical state enforcement, and real-time event telemetry.</p>
     <div class="card" style="border-left: 4px solid #3b82f6; margin-bottom: 1.5rem;">
@@ -957,7 +964,7 @@ public partial class Program
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</code></pre>
 
     <footer>
-      <span>&copy; 2026 FlowOS &bull; Prospect BD Ltd.</span>
+      <span>&copy; 2026 {{FLOWOS_DISPLAY}} &bull; Prospect BD Ltd.</span>
       <a href="/">Dashboard</a>
       <a href="/swagger">Swagger API</a>
       <a href="https://github.com/ObaidulKabir/FlowOS" target="_blank">GitHub</a>
@@ -966,7 +973,10 @@ public partial class Program
 </body>
 </html>
 """);
-        return sb.ToString().Replace("{{MCP_URL}}", mcpUrl, StringComparison.Ordinal);
+        return sb.ToString()
+            .Replace("{{MCP_URL}}", mcpUrl, StringComparison.Ordinal)
+            .Replace("{{FLOWOS_DISPLAY}}", FlowOsRelease.Display, StringComparison.Ordinal)
+            .Replace("{{FLOWOS_SCHEME}}", FlowOsRelease.Scheme, StringComparison.Ordinal);
     }
 }
 

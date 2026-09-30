@@ -1,8 +1,9 @@
 {
   "$schema": "https://modelcontextprotocol.io/schema/discovery.json",
   "name": "FlowOS MCP Control Plane",
-  "version": "1.0.0",
+  "version": "1.2.2",
   "flowOsVersion": "1.2.2",
+  "versionScheme": "Major.Minor.Build",
   "description": "Multi-tenant, state-machine-governed workflow control plane with an MCP interface for safe AI-agent interaction. POST JSON-RPC to the advertised `url` exactly, including a trailing slash when present. Do not normalize /mcp/ down to /mcp. Do not follow 301/302 redirects for POST. On https://flowosbd.com the path is /mcp/; on https://flowos.prospectbdltd.com it is /mcp. Tenant keys are host-scoped.",
   "endpoint": "/mcp",
   "transport": "streamable-http",

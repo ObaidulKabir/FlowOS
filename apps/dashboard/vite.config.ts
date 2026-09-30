@@ -2,6 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const apiProxy = {
+  "/health": {
+    target: process.env.VITE_API_TARGET || "http://localhost:5183",
+    changeOrigin: true,
+    secure: false,
+  },
   "/api": {
     target: process.env.VITE_API_TARGET || "http://localhost:5183",
     changeOrigin: true,
