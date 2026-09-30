@@ -456,7 +456,7 @@ export const StepActionBuilder: React.FC<Props> = ({
                           setMappingPairs(updated);
                         }}
                         placeholder="Key (e.g. orderTotal)"
-                        className="w-1/2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-1 text-[11px] font-mono"
+                        className="w-1/2 bg-slate-950 border border-slate-600 rounded p-1 text-[11px] font-mono text-white placeholder-slate-500"
                       />
                       <span className="text-slate-600 dark:text-slate-300 text-xs">➔</span>
                       <input
@@ -511,7 +511,7 @@ export const StepActionBuilder: React.FC<Props> = ({
                             setHeaderPairs(updated);
                           }}
                           placeholder="Header (e.g. Authorization)"
-                          className="w-1/2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-1 text-[11px] font-mono"
+                          className="w-1/2 bg-slate-950 border border-slate-600 rounded p-1 text-[11px] font-mono text-white placeholder-slate-500"
                         />
                         <span className="text-slate-600 dark:text-slate-300 text-xs">:</span>
                         <input

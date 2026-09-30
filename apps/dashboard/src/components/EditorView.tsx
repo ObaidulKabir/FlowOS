@@ -994,46 +994,46 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                 ) : (
                     <div className="space-y-8">
                         {/* 1. Events */}
-                        <section className="border border-indigo-100 rounded-lg overflow-hidden">
-                            <div className="bg-indigo-50 px-4 py-2 border-b border-indigo-100">
-                                <h3 className="font-semibold text-indigo-900">1. Events (Facts)</h3>
-                                <p className="text-xs text-indigo-700">What facts can happen in this domain?</p>
+                        <section className="border border-indigo-500/30 rounded-lg overflow-hidden">
+                            <div className="bg-indigo-950/50 px-4 py-2 border-b border-indigo-500/30">
+                                <h3 className="font-semibold text-indigo-200">1. Events (Facts)</h3>
+                                <p className="text-xs text-indigo-300">What facts can happen in this domain?</p>
                             </div>
                             <div className="p-4 space-y-2">
                                 {events.map((evt, idx) => (
                                     <div key={idx} className="flex gap-2">
                                         <input value={evt.eventId} onChange={e => {
                                             const newEvts = [...events]; newEvts[idx].eventId = e.target.value; setEvents(newEvts);
-                                        }} placeholder="Event ID (e.g. EVT-SUBMIT)" className="flex-1 border p-2 rounded text-sm" />
+                                        }} placeholder="Event ID (e.g. EVT-SUBMIT)" className="flex-1 border border-slate-600 bg-slate-950 p-2 rounded text-sm text-white placeholder-slate-500" />
                                         <input value={evt.name} onChange={e => {
                                             const newEvts = [...events]; newEvts[idx].name = e.target.value; setEvents(newEvts);
-                                        }} placeholder="Display Name" className="flex-1 border p-2 rounded text-sm" />
-                                        <button onClick={() => setEvents(events.filter((_, i) => i !== idx))} className="text-red-500 hover:bg-red-50 p-1 rounded">×</button>
+                                        }} placeholder="Display Name" className="flex-1 border border-slate-600 bg-slate-950 p-2 rounded text-sm text-white placeholder-slate-500" />
+                                        <button onClick={() => setEvents(events.filter((_, i) => i !== idx))} className="text-rose-400 hover:bg-rose-950 p-1 rounded">×</button>
                                     </div>
                                 ))}
-                                <button onClick={() => setEvents([...events, {eventId: '', name: ''}])} className="text-indigo-600 text-sm font-medium hover:underline">+ Add Event</button>
+                                <button onClick={() => setEvents([...events, {eventId: '', name: ''}])} className="text-indigo-400 text-sm font-medium hover:underline">+ Add Event</button>
                             </div>
                         </section>
 
                         {/* 2. State Machine */}
-                        <section className="border border-amber-100 rounded-lg overflow-hidden">
-                            <div className="bg-amber-50 px-4 py-2 border-b border-amber-100">
-                                <h3 className="font-semibold text-amber-900">2. State Machine (The Law)</h3>
-                                <p className="text-xs text-amber-700">Defines legal statuses and transitions. Cannot be bypassed.</p>
+                        <section className="border border-amber-500/30 rounded-lg overflow-hidden">
+                            <div className="bg-amber-950/50 px-4 py-2 border-b border-amber-500/30">
+                                <h3 className="font-semibold text-amber-200">2. State Machine (The Law)</h3>
+                                <p className="text-xs text-amber-300">Defines legal statuses and transitions. Cannot be bypassed.</p>
                             </div>
                             <div className="p-4 space-y-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">States</label>
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">States</label>
                                     <div className="flex flex-wrap gap-2 mb-2">
                                         {states.map((st, idx) => (
-                                            <span key={idx} className="bg-white border px-2 py-1 rounded flex items-center gap-1 text-sm">
+                                            <span key={idx} className="bg-slate-800 border border-slate-600 px-2 py-1 rounded flex items-center gap-1 text-sm text-white">
                                                 {st}
                                                 <button onClick={() => setStates(states.filter(s => s !== st))} className="text-red-500 text-xs ml-1">×</button>
                                             </span>
                                         ))}
                                         <input 
                                             placeholder="+ Add State (Enter)" 
-                                            className="border p-1 rounded text-sm min-w-[120px]" 
+                                            className="border border-slate-600 bg-slate-950 p-1 rounded text-sm min-w-[120px] text-white placeholder-slate-500" 
                                             onKeyDown={e => {
                                                 if(e.key === 'Enter') {
                                                     setStates([...states, e.currentTarget.value]);
@@ -1045,37 +1045,37 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                 </div>
                                 
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Initial State</label>
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">Initial State</label>
                                     <select 
                                         value={initialState} 
                                         onChange={e => setInitialState(e.target.value)}
-                                        className="w-full border p-2 rounded text-sm"
+                                        className="w-full border border-slate-600 bg-slate-950 p-2 rounded text-sm text-white placeholder-slate-500"
                                     >
                                         {states.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Legal Transitions</label>
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">Legal Transitions</label>
                                     <div className="space-y-2">
                                         {transitions.map((t, idx) => (
-                                            <div key={idx} className="flex gap-2 items-center bg-gray-50 p-2 rounded">
+                                            <div key={idx} className="flex gap-2 items-center bg-slate-800/80 p-2 rounded">
                                                 <select value={t.from} onChange={e => {
                                                     const newTr = [...transitions]; newTr[idx].from = e.target.value; setTransitions(newTr);
-                                                }} className="border p-1 rounded text-sm flex-1">
+                                                }} className="border border-slate-600 bg-slate-950 p-1 rounded text-sm flex-1 text-white">
                                                     {states.map(s => <option key={s} value={s}>{s}</option>)}
                                                 </select>
-                                                <span className="text-gray-400 text-xs">+</span>
+                                                <span className="text-slate-500 text-xs">+</span>
                                                 <select value={t.evt} onChange={e => {
                                                     const newTr = [...transitions]; newTr[idx].evt = e.target.value; setTransitions(newTr);
-                                                }} className="border p-1 rounded text-sm flex-1">
+                                                }} className="border border-slate-600 bg-slate-950 p-1 rounded text-sm flex-1 text-white">
                                                     <option value="">(Event)</option>
                                                     {events.map(e => <option key={e.eventId} value={e.eventId}>{e.name}</option>)}
                                                 </select>
-                                                <span className="text-gray-400 text-xs">→</span>
+                                                <span className="text-slate-500 text-xs">→</span>
                                                 <select value={t.to} onChange={e => {
                                                     const newTr = [...transitions]; newTr[idx].to = e.target.value; setTransitions(newTr);
-                                                }} className="border p-1 rounded text-sm flex-1">
+                                                }} className="border border-slate-600 bg-slate-950 p-1 rounded text-sm flex-1 text-white">
                                                     {states.map(s => <option key={s} value={s}>{s}</option>)}
                                                 </select>
                                                 <button onClick={() => setTransitions(transitions.filter((_, i) => i !== idx))} className="text-red-500">×</button>
@@ -1088,49 +1088,49 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                         </section>
 
                         {/* 3. Workflow */}
-                        <section className="border border-green-100 rounded-lg overflow-hidden">
-                            <div className="bg-green-50 px-4 py-2 border-b border-green-100">
-                                <h3 className="font-semibold text-green-900">3. Workflow (The Work)</h3>
-                                <p className="text-xs text-green-700">Procedural steps. Steps ≠ States.</p>
+                        <section className="border border-emerald-500/30 rounded-lg overflow-hidden">
+                            <div className="bg-emerald-950/50 px-4 py-2 border-b border-emerald-500/30">
+                                <h3 className="font-semibold text-emerald-200">3. Workflow (The Work)</h3>
+                                <p className="text-xs text-emerald-300">Procedural steps. Steps ≠ States.</p>
                             </div>
                             <div className="p-4 space-y-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Start Step ID</label>
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">Start Step ID</label>
                                     <input 
                                         value={startStepId} 
                                         onChange={e => setStartStepId(e.target.value)} 
-                                        className="w-full border p-2 rounded text-sm" 
+                                        className="w-full border border-slate-600 bg-slate-950 p-2 rounded text-sm text-white placeholder-slate-500" 
                                         placeholder="e.g. Start"
                                     />
                                 </div>
 
                                 <div className="space-y-4">
                                     {steps.map((step, idx) => (
-                                        <div key={idx} className="border bg-white p-4 rounded shadow-sm relative group">
-                                            <button onClick={() => setSteps(steps.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div key={idx} className="border border-slate-700 bg-slate-800 p-4 rounded shadow-sm relative group">
+                                            <button onClick={() => setSteps(steps.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <X size={16} />
                                             </button>
                                             
                                             <div className="grid grid-cols-2 gap-4 mb-3">
                                                 <div>
-                                                    <label className="block text-xs text-gray-500">Step ID</label>
+                                                    <label className="block text-xs text-slate-400">Step ID</label>
                                                     <input 
                                                         value={step.stepId} 
                                                         onChange={e => {
                                                             const newSteps = [...steps]; newSteps[idx].stepId = e.target.value; setSteps(newSteps);
                                                         }}
-                                                        className="w-full border p-2 rounded text-sm font-medium" 
+                                                        className="w-full border border-slate-600 bg-slate-950 p-2 rounded text-sm font-medium text-white placeholder-slate-500" 
                                                         placeholder="Step ID"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs text-gray-500">Type</label>
+                                                    <label className="block text-xs text-slate-400">Type</label>
                                                     <select 
                                                         value={step.stepType} 
                                                         onChange={e => {
                                                             const newSteps = [...steps]; newSteps[idx].stepType = e.target.value; setSteps(newSteps);
                                                         }}
-                                                        className="w-full border p-2 rounded text-sm"
+                                                        className="w-full border border-slate-600 bg-slate-950 p-2 rounded text-sm text-white placeholder-slate-500"
                                                     >
                                                         <option value="Command">Command</option>
                                                         <option value="HumanTask">HumanTask</option>
@@ -1145,22 +1145,22 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
 
                                             {/* Fork Specific Configuration */}
                                             {step.stepType === 'Fork' && (
-                                                <div className="mb-3 p-3 bg-indigo-50/70 rounded-lg border border-indigo-200">
+                                                <div className="mb-3 p-3 bg-indigo-950/40 rounded-lg border border-indigo-500/30">
                                                     <div className="flex items-center justify-between mb-1.5">
-                                                        <label className="text-xs font-bold text-indigo-900 flex items-center gap-1">
+                                                        <label className="text-xs font-bold text-indigo-200 flex items-center gap-1">
                                                             <span>🔀 Parallel Branches (Target Step IDs)</span>
                                                         </label>
-                                                        <span className="text-[10px] text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded font-mono">
+                                                        <span className="text-[10px] text-indigo-300 bg-indigo-900/50 px-1.5 py-0.5 rounded font-mono">
                                                             {(step.branches || []).length} branches
                                                         </span>
                                                     </div>
-                                                    <p className="text-[11px] text-indigo-700 mb-2 leading-relaxed">
+                                                    <p className="text-[11px] text-indigo-300 mb-2 leading-relaxed">
                                                         Spawns concurrent execution tokens. Each branch step executes in parallel until arriving at a Join.
                                                     </p>
                                                     <div className="space-y-1.5">
                                                         {(step.branches || []).map((branch, bIdx) => (
                                                             <div key={bIdx} className="flex gap-2 items-center">
-                                                                <span className="text-xs text-indigo-600 font-mono font-medium min-w-[65px]">
+                                                                <span className="text-xs text-indigo-300 font-mono font-medium min-w-[65px]">
                                                                     Branch {bIdx + 1}:
                                                                 </span>
                                                                 <input
@@ -1173,7 +1173,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                                         setSteps(newSteps);
                                                                     }}
                                                                     placeholder="Target Branch Step ID (e.g. CheckIdentity)"
-                                                                    className="flex-1 border p-1 rounded text-xs font-mono"
+                                                                    className="flex-1 border border-slate-600 bg-slate-950 p-1 rounded text-xs font-mono text-white placeholder-slate-500"
                                                                 />
                                                                 <button
                                                                     onClick={() => {
@@ -1191,7 +1191,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                                 newSteps[idx].branches = [...(newSteps[idx].branches || []), ''];
                                                                 setSteps(newSteps);
                                                             }}
-                                                            className="text-xs text-indigo-600 hover:underline font-semibold mt-1 inline-block"
+                                                            className="text-xs text-indigo-400 hover:underline font-semibold mt-1 inline-block"
                                                         >+ Add Parallel Branch</button>
                                                     </div>
                                                 </div>
@@ -1199,21 +1199,21 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
 
                                             {/* Join Specific Configuration */}
                                             {step.stepType === 'Join' && (
-                                                <div className="mb-3 p-3 bg-teal-50/70 rounded-lg border border-teal-200">
+                                                <div className="mb-3 p-3 bg-teal-950/40 rounded-lg border border-teal-500/30">
                                                     <div className="flex items-center justify-between mb-1.5">
-                                                        <label className="text-xs font-bold text-teal-900 flex items-center gap-1">
+                                                        <label className="text-xs font-bold text-teal-200 flex items-center gap-1">
                                                             <span>🔗 Join Barrier & Synchronization Policy</span>
                                                         </label>
-                                                        <span className="text-[10px] text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded font-mono">
+                                                        <span className="text-[10px] text-teal-300 bg-teal-900/50 px-1.5 py-0.5 rounded font-mono">
                                                             Policy: {step.joinPolicy || 'WaitAll'}
                                                         </span>
                                                     </div>
-                                                    <p className="text-[11px] text-teal-700 mb-2 leading-relaxed">
+                                                    <p className="text-[11px] text-teal-300 mb-2 leading-relaxed">
                                                         Synchronizes concurrent branches before proceeding to the continuation step.
                                                     </p>
                                                     <div className="grid grid-cols-2 gap-3 mb-2">
                                                         <div>
-                                                            <label className="block text-[11px] font-medium text-teal-900 mb-1">
+                                                            <label className="block text-[11px] font-medium text-teal-200 mb-1">
                                                                 Synchronization Mode
                                                             </label>
                                                             <select
@@ -1223,14 +1223,14 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                                     newSteps[idx].joinPolicy = e.target.value;
                                                                     setSteps(newSteps);
                                                                 }}
-                                                                className="w-full border p-1 rounded text-xs bg-white"
+                                                                className="w-full border border-slate-600 bg-slate-950 p-1 rounded text-xs text-white"
                                                             >
                                                                 <option value="WaitAll">WaitAll (Wait for all inbound branches to complete)</option>
                                                                 <option value="WaitAny">WaitAny (First branch to finish satisfies join)</option>
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="block text-[11px] font-medium text-teal-900 mb-1">
+                                                            <label className="block text-[11px] font-medium text-teal-200 mb-1">
                                                                 Expected Inbound Step IDs
                                                             </label>
                                                             <input
@@ -1241,7 +1241,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                                     setSteps(newSteps);
                                                                 }}
                                                                 placeholder="e.g. CheckIdentity, CheckFinancials, CheckSanctions"
-                                                                className="w-full border p-1 rounded text-xs font-mono bg-white"
+                                                                className="w-full border border-slate-600 bg-slate-950 p-1 rounded text-xs font-mono text-white placeholder-slate-500"
                                                             />
                                                         </div>
                                                     </div>
@@ -1249,7 +1249,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                             )}
 
                                             <div className="mb-3">
-                                                <label className="block text-xs text-gray-500 mb-1">Next Steps (Routes)</label>
+                                                <label className="block text-xs text-slate-400 mb-1">Next Steps (Routes)</label>
                                                 {step.nextSteps.map((ns, nsIdx) => (
                                                     <div key={nsIdx} className="flex gap-2 mb-2 items-center">
                                                         <select 
@@ -1259,13 +1259,13 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                                 newSteps[idx].nextSteps[nsIdx].outcome = e.target.value; 
                                                                 setSteps(newSteps);
                                                             }}
-                                                            className="flex-1 border p-1 rounded text-xs"
+                                                            className="flex-1 border border-slate-600 bg-slate-950 p-1 rounded text-xs text-white placeholder-slate-500"
                                                         >
                                                             <option value="">(Select Outcome)</option>
                                                             <option value="Default">Default</option>
                                                             {events.map(e => <option key={e.eventId} value={e.eventId}>{e.name}</option>)}
                                                         </select>
-                                                        <span className="text-gray-400 text-xs">→</span>
+                                                        <span className="text-slate-500 text-xs">→</span>
                                                         <input 
                                                             value={ns.target} 
                                                             onChange={e => {
@@ -1274,7 +1274,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                                                 setSteps(newSteps);
                                                             }}
                                                             placeholder="Target Step ID"
-                                                            className="flex-1 border p-1 rounded text-xs"
+                                                            className="flex-1 border border-slate-600 bg-slate-950 p-1 rounded text-xs text-white placeholder-slate-500"
                                                         />
                                                         <button 
                                                             onClick={() => {
@@ -1297,52 +1297,52 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs text-gray-500">Roles</label>
+                                                <label className="block text-xs text-slate-400">Roles</label>
                                                 <input 
                                                     value={step.roles}
                                                     onChange={e => {
                                                         const newSteps = [...steps]; newSteps[idx].roles = e.target.value; setSteps(newSteps);
                                                     }}
-                                                    className="w-full border p-1 rounded text-sm"
+                                                    className="w-full border border-slate-600 bg-slate-950 p-1 rounded text-sm text-white placeholder-slate-500"
                                                     placeholder="Required Roles (comma separated)"
                                                 />
                                             </div>
 
-                                            <div className="mt-3 pt-3 border-t border-gray-100">
-                                                <label className="block text-[11px] font-semibold text-indigo-500 uppercase tracking-wider mb-2">SLA / Timeouts</label>
+                                            <div className="mt-3 pt-3 border-t border-slate-700">
+                                                <label className="block text-[11px] font-semibold text-indigo-300 uppercase tracking-wider mb-2">SLA / Timeouts</label>
                                                 <div className="grid grid-cols-3 gap-2">
                                                     <div>
-                                                        <label className="block text-[10px] text-gray-500">Duration (e.g. 24h)</label>
+                                                        <label className="block text-[10px] text-slate-400">Duration (e.g. 24h)</label>
                                                         <input 
                                                             value={step.slaDuration || ''}
                                                             onChange={e => {
                                                                 const newSteps = [...steps]; newSteps[idx].slaDuration = e.target.value; setSteps(newSteps);
                                                             }}
-                                                            className="w-full border p-1 rounded text-xs"
+                                                            className="w-full border border-slate-600 bg-slate-950 p-1 rounded text-xs text-white placeholder-slate-500"
                                                             placeholder="Leave empty for none"
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label className="block text-[10px] text-gray-500">Timeout Event</label>
+                                                        <label className="block text-[10px] text-slate-400">Timeout Event</label>
                                                         <select 
                                                             value={step.slaTimeoutEvent || ''}
                                                             onChange={e => {
                                                                 const newSteps = [...steps]; newSteps[idx].slaTimeoutEvent = e.target.value; setSteps(newSteps);
                                                             }}
-                                                            className="w-full border p-1 rounded text-xs"
+                                                            className="w-full border border-slate-600 bg-slate-950 p-1 rounded text-xs text-white placeholder-slate-500"
                                                         >
                                                             <option value="">(Select)</option>
                                                             {events.map(e => <option key={e.eventId} value={e.eventId}>{e.name}</option>)}
                                                         </select>
                                                     </div>
                                                     <div>
-                                                        <label className="block text-[10px] text-gray-500">Escalation Target</label>
+                                                        <label className="block text-[10px] text-slate-400">Escalation Target</label>
                                                         <input 
                                                             value={step.slaEscalationStepId || ''}
                                                             onChange={e => {
                                                                 const newSteps = [...steps]; newSteps[idx].slaEscalationStepId = e.target.value; setSteps(newSteps);
                                                             }}
-                                                            className="w-full border p-1 rounded text-xs"
+                                                            className="w-full border border-slate-600 bg-slate-950 p-1 rounded text-xs text-white placeholder-slate-500"
                                                             placeholder="Target Step ID"
                                                         />
                                                     </div>
@@ -1368,7 +1368,7 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                                     ))}
                                     <button 
                                         onClick={() => setSteps([...steps, { stepId: '', stepType: 'Command', nextSteps: [], branches: [], joinPolicy: 'WaitAll', inboundSteps: [], roles: '', slaDuration: '', slaTimeoutEvent: '', slaEscalationStepId: '', onEntry: [], onExit: [], onFailure: [] }])}
-                                        className="w-full py-2 border-2 border-dashed border-gray-300 rounded text-gray-500 hover:border-blue-300 hover:text-blue-500 transition-colors"
+                                        className="w-full py-2 border-2 border-dashed border-slate-600 rounded text-slate-400 hover:border-blue-400 hover:text-blue-300 transition-colors"
                                     >
                                         + Add Workflow Step
                                     </button>

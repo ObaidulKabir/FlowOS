@@ -2,6 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']):not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']),
+  textarea,
+  select {
+    color: #f8fafc;
+    caret-color: #7dd3fc;
+    -webkit-text-fill-color: currentColor;
+    background-color: #020617;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #94a3b8;
+    -webkit-text-fill-color: #94a3b8;
+    opacity: 1;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: #f8fafc !important;
+    caret-color: #7dd3fc;
+    box-shadow: 0 0 0 1000px #020617 inset;
+    transition: background-color 99999s ease-out;
+  }
+
+  option {
+    color: #f8fafc;
+    background-color: #0f172a;
+  }
+}
+
 aside.flowos-rail {
   position: fixed;
   top: 0;
