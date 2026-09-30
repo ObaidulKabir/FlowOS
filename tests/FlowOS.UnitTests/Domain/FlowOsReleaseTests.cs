@@ -12,13 +12,17 @@ public class FlowOsReleaseTests
     [Fact]
     public void CurrentRelease_IsTheDesignedAppContract()
     {
-        Assert.Equal("1.2.2", FlowOsRelease.Version);
+        Assert.Equal(1, FlowOsRelease.Major);
+        Assert.Equal(2, FlowOsRelease.Minor);
+        Assert.Equal(2, FlowOsRelease.RecordedBuild);
+        Assert.Equal("1.2.2", FlowOsRelease.Format(FlowOsRelease.RecordedBuild));
+        Assert.Equal("1.2.41", FlowOsRelease.Format(41));
         Assert.Equal("Major.Minor.Build", FlowOsRelease.Scheme);
-        Assert.Equal("FlowOS 1.2.2", FlowOsRelease.Display);
+        Assert.Equal($"FlowOS {FlowOsRelease.Version}", FlowOsRelease.Display);
         Assert.Equal("1.1.0", FlowOsRelease.PreStampVersion);
         Assert.Equal(FlowOsCompatibility.Current, FlowOsRelease.Assess(FlowOsRelease.Version));
         Assert.Equal(FlowOsCompatibility.OlderCompatible, FlowOsRelease.Assess(FlowOsRelease.PreStampVersion));
-        Assert.Equal(FlowOsCompatibility.NewerThanHost, FlowOsRelease.Assess("1.2.3"));
+        Assert.Equal(FlowOsCompatibility.NewerThanHost, FlowOsRelease.Assess(FlowOsRelease.Format(FlowOsRelease.Build + 1)));
         Assert.Equal(FlowOsCompatibility.IncompatibleMajor, FlowOsRelease.Assess("2.0.0"));
         Assert.Equal(FlowOsCompatibility.Unreadable, FlowOsRelease.Assess("latest"));
         Assert.Equal(FlowOsCompatibility.Unreadable, FlowOsRelease.Assess("1.2"));
@@ -69,15 +73,19 @@ public class FlowOsReleaseTests
         var apiManifest = File.ReadAllText(Path.Combine(root, "src", "FlowOS.Api", "wwwroot", ".well-known", "mcp.json"));
         var dashboardRelease = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "src", "flowOsRelease.ts"));
 
-        Assert.Contains(FlowOsRelease.Version, chapter);
-        Assert.Contains("Bump the **build**", chapter);
+        var recorded = FlowOsRelease.Format(FlowOsRelease.RecordedBuild);
+        Assert.Contains(recorded, chapter);
+        Assert.Contains("git rev-list --count HEAD", chapter);
         Assert.Contains("Major.Minor.Build", chapter);
-        Assert.Contains($"\"flowOsVersion\": \"{FlowOsRelease.Version}\"", dashboardManifest);
+        Assert.Contains($"\"flowOsVersion\": \"{recorded}\"", dashboardManifest);
         Assert.Contains($"\"versionScheme\": \"{FlowOsRelease.Scheme}\"", dashboardManifest);
-        Assert.Contains($"\"flowOsVersion\": \"{FlowOsRelease.Version}\"", apiManifest);
+        Assert.Contains($"\"flowOsVersion\": \"{recorded}\"", apiManifest);
         Assert.Contains($"\"versionScheme\": \"{FlowOsRelease.Scheme}\"", apiManifest);
-        Assert.Contains($"export const FLOW_OS_VERSION = '{FlowOsRelease.Version}'", dashboardRelease);
+        Assert.Contains($"export const FLOW_OS_MAJOR = {FlowOsRelease.Major}", dashboardRelease);
+        Assert.Contains($"export const FLOW_OS_MINOR = {FlowOsRelease.Minor}", dashboardRelease);
+        Assert.Contains($"export const FLOW_OS_RECORDED_BUILD = {FlowOsRelease.RecordedBuild}", dashboardRelease);
         Assert.Contains($"export const FLOW_OS_VERSION_SCHEME = '{FlowOsRelease.Scheme}'", dashboardRelease);
+        Assert.Contains("VITE_FLOWOS_BUILD", dashboardRelease);
     }
 
     private static string FindRepoRoot()

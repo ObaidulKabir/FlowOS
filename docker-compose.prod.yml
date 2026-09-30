@@ -8,6 +8,7 @@ services:
       dockerfile: src/FlowOS.Api/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - FLOWOS_BUILD=${FLOWOS_BUILD:-0}
       - FLOWOS_DOMAIN=${FLOWOS_DOMAIN}
       - FLOWOS_PUBLIC_ORIGIN=${FLOWOS_PUBLIC_ORIGIN:-}
       - UseInMemoryDatabase=false
@@ -48,6 +49,7 @@ services:
     command: npm run dev -- --host --port 3000
     environment:
       - VITE_API_TARGET=${VITE_API_TARGET:-http://flowos-api:8080}
+      - VITE_FLOWOS_BUILD=${VITE_FLOWOS_BUILD:-0}
     depends_on:
       - flowos-api
     labels:
@@ -69,6 +71,7 @@ services:
       dockerfile: src/FlowOS.MCP/Dockerfile
     environment:
       - MCP_TRANSPORT=http
+      - FLOWOS_BUILD=${FLOWOS_BUILD:-0}
       - MCP_API_KEY=${MCP_API_KEY:-}
       - MCP_ROLE=${MCP_ROLE:-}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-*}

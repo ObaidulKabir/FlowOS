@@ -13,7 +13,7 @@ public static class FlowOsMcpGuidance
         "Each of those records flowOsVersion, the FlowOS release it was authored against. " +
         "That stamp is not the blueprint's own version. " +
         "Move a DesignedApp only onto a host with the same major version that is not older than the stamp. " +
-        "Bump FlowOsRelease.Version (Major.Minor.Build) for every contract change, including the smallest MCP, blueprint, business-context, or AI-context change.\n\n" +
+        "The host version is Major.Minor.Build. The build is the git commit count of the deployed host. Bump Major or Minor in FlowOsRelease when a contract change requires it.\n\n" +
         SystemInstructions;
 
     public const string SystemInstructions =

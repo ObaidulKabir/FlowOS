@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
 
-/** Keep in lockstep with FlowOsRelease.Version. Tests fail if this drifts. */
-export const FLOW_OS_VERSION = '1.2.2';
+/** Keep in lockstep with FlowOsRelease.Major, Minor, and RecordedBuild. */
+export const FLOW_OS_MAJOR = 1;
+export const FLOW_OS_MINOR = 2;
+export const FLOW_OS_RECORDED_BUILD = 2;
 export const FLOW_OS_VERSION_SCHEME = 'Major.Minor.Build';
+
+const envBuild = Number(import.meta.env.VITE_FLOWOS_BUILD);
+const build = Number.isInteger(envBuild) && envBuild > 0 ? envBuild : FLOW_OS_RECORDED_BUILD;
+
+/** Major.Minor.Build. The build is the git commit count when the dev server or deploy supplies it. */
+export const FLOW_OS_VERSION = `${FLOW_OS_MAJOR}.${FLOW_OS_MINOR}.${build}`;
 
 export const parseFlowOsVersion = (value: string | undefined | null) => {
   if (!value) return null;
@@ -41,16 +49,11 @@ export const useFlowOsVersion = () => {
     };
 
     (async () => {
-      for (const url of ['/health', '/.well-known/mcp.json']) {
-        try {
-          const parsed = await read(url);
-          if (parsed && active) {
-            setVersion(parsed.text);
-            return;
-          }
-        } catch {
-          /* try the next source */
-        }
+      try {
+        const parsed = await read('/health');
+        if (parsed && active) setVersion(parsed.text);
+      } catch {
+        /* the dashboard build stays on screen when the API is down */
       }
     })();
 

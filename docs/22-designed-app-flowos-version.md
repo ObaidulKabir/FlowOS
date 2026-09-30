@@ -10,7 +10,7 @@ Those three use whatever MCP tools, schema fields, and runtime behavior the host
 
 ## The stamp
 
-`FlowOsRelease.Version` in `src/FlowOS.Domain/FlowOsRelease.cs` is the only platform release. The scheme is **Major.Minor.Build**. The current release is **1.2.2**. The landing page, dashboard rail, `/health`, and MCP discovery all show this value.
+`FlowOsRelease` in `src/FlowOS.Domain/FlowOsRelease.cs` is the only platform release. The scheme is **Major.Minor.Build**. Major and minor are `1.2`. The recorded build, used when no deploy count is present, is **2**, so the fallback release is **1.2.2**. The landing page, dashboard rail, `/health`, and MCP discovery show `1.2` plus the build of the running host.
 
 Each artifact stores `flowOsVersion` when it is created and again when a draft or binding is edited:
 
@@ -40,7 +40,9 @@ Workflow class responses include `flowOsVersion` and `flowOsCompatibility` for t
 
 ## When to bump
 
-Bump the **build** of `FlowOsRelease.Version` for every contract change, including the smallest one:
+The **build** is not edited by hand. Deploy sets `FLOWOS_BUILD` to `git rev-list --count HEAD`, and the dashboard dev server does the same. A new commit therefore shows a new build the next time that commit is deployed. The local fallback, when git and `FLOWOS_BUILD` are both absent, stays at the recorded build.
+
+Bump **minor** or **major** by hand in `FlowOsRelease` and in `apps/dashboard/src/flowOsRelease.ts` when the contract requires it. A contract change still ships on the next commit, which advances the build:
 
 - an MCP tool is added, removed, or its arguments or errors change
 - the blueprint schema changes
@@ -49,4 +51,4 @@ Bump the **build** of `FlowOsRelease.Version` for every contract change, includi
 
 Bump **minor** when the change is additive and older DesignedApps on the same major still run. Bump **major** when older DesignedApps cannot be loaded safely.
 
-After a bump, update this chapter so it still names `FlowOsRelease.Version`, and update the static `flowOsVersion` fields in the well-known MCP manifests. New and edited DesignedApps then record the new release. Already saved artifacts keep the release they were authored against.
+After a major or minor bump, update this chapter so it still names that line, and update the static `flowOsVersion` fields in the well-known MCP manifests to the recorded fallback. New and edited DesignedApps record the release of the host that saved them. Already saved artifacts keep the release they were authored against.

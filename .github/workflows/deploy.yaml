@@ -43,6 +43,8 @@ jobs:
           command_timeout: 30m
           script: |
             set -euo pipefail
-            cd ${{ secrets.APP_PATH }}  
+            cd ${{ secrets.APP_PATH }}
+            export FLOWOS_BUILD="$(git rev-list --count HEAD)"
+            export VITE_FLOWOS_BUILD="$FLOWOS_BUILD"
             docker builder prune --filter "until=12h" -f
             docker compose -f docker-compose.prod.yml up --build -d
