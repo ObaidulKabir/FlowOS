@@ -105,4 +105,11 @@ public interface IPluginBindingRegistryService
         Guid tenantId,
         string sourceName,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Finds the tenant's designated default agent provider binding, if any.
+    /// </summary>
+    Task<PluginBindingDto?> GetDefaultAgentProviderAsync(
+        Guid tenantId,
+        CancellationToken ct = default);
 }

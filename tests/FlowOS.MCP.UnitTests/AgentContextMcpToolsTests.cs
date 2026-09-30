@@ -368,5 +368,17 @@ public sealed class AgentContextMcpToolsTests
             string sourceName,
             CancellationToken ct = default) =>
             Task.FromResult(AgentProviderConfiguration.Parse(_rawJson.GetValueOrDefault(sourceName)));
+
+        public Task<PluginBindingDto?> GetDefaultAgentProviderAsync(
+            Guid tenantId,
+            CancellationToken ct = default)
+        {
+            var defaultItem = _items.Values.FirstOrDefault(item =>
+                item.TenantId == tenantId &&
+                string.Equals(item.BindingType, PluginBindingTypes.Agent, StringComparison.OrdinalIgnoreCase) &&
+                item.IsEnabled &&
+                AgentProviderConfiguration.Parse(_rawJson.GetValueOrDefault(item.SourceName))?.IsDefault == true);
+            return Task.FromResult<PluginBindingDto?>(defaultItem);
+        }
     }
 }

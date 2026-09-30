@@ -50,6 +50,7 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 x.BindingType == normalizedType &&
                 x.SourceName == normalizedSource, ct);
 
+        string? mergedConfig = null;
         if (existing == null)
         {
             existing = new PluginBindingRecord(
@@ -60,11 +61,39 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 isEnabled);
             _dbContext.PluginBindings.Add(existing);
             if (configurationJson != null)
-                existing.Update(normalizedProvider, isEnabled, MergeConfiguration(normalizedType, null, configurationJson));
+            {
+                mergedConfig = MergeConfiguration(normalizedType, null, configurationJson);
+                existing.Update(normalizedProvider, isEnabled, mergedConfig);
+            }
         }
         else
         {
-            existing.Update(normalizedProvider, isEnabled, MergeConfiguration(normalizedType, existing.ConfigurationJson, configurationJson));
+            mergedConfig = MergeConfiguration(normalizedType, existing.ConfigurationJson, configurationJson);
+            existing.Update(normalizedProvider, isEnabled, mergedConfig);
+        }
+
+        if (normalizedType == PluginBindingTypes.Agent && mergedConfig != null)
+        {
+            var parsed = AgentProviderConfiguration.Parse(mergedConfig);
+            if (parsed?.IsDefault == true)
+            {
+                var otherProviders = await _dbContext.PluginBindings
+                    .Where(x =>
+                        x.TenantId == tenantId &&
+                        x.BindingType == PluginBindingTypes.Agent &&
+                        x.SourceName != normalizedSource)
+                    .ToListAsync(ct);
+
+                foreach (var other in otherProviders)
+                {
+                    var otherConfig = AgentProviderConfiguration.Parse(other.ConfigurationJson);
+                    if (otherConfig?.IsDefault == true)
+                    {
+                        otherConfig.IsDefault = false;
+                        other.Update(other.ProviderName, other.IsEnabled, System.Text.Json.JsonSerializer.Serialize(otherConfig));
+                    }
+                }
+            }
         }
 
         await _dbContext.SaveChangesAsync(ct);
@@ -197,7 +226,38 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 x.SourceName == normalizedSource &&
                 x.IsEnabled, ct);
 
+        if (record == null && normalizedSource == "default")
+        {
+            var all = await _dbContext.PluginBindings
+                .AsNoTracking()
+                .Where(x =>
+                    x.TenantId == tenantId &&
+                    x.BindingType == PluginBindingTypes.Agent &&
+                    x.IsEnabled)
+                .ToListAsync(ct);
+            record = all.FirstOrDefault(r =>
+                AgentProviderConfiguration.Parse(r.ConfigurationJson)?.IsDefault == true);
+        }
+
         return record == null ? null : AgentProviderConfiguration.Parse(record.ConfigurationJson);
+    }
+
+    public async Task<PluginBindingDto?> GetDefaultAgentProviderAsync(
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        var records = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .Where(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == PluginBindingTypes.Agent &&
+                x.IsEnabled)
+            .ToListAsync(ct);
+
+        var defaultRecord = records.FirstOrDefault(r =>
+            AgentProviderConfiguration.Parse(r.ConfigurationJson)?.IsDefault == true);
+
+        return defaultRecord == null ? null : ToDto(defaultRecord);
     }
 
     private static PluginBindingDto ToDto(PluginBindingRecord x) =>

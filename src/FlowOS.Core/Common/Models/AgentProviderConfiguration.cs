@@ -12,6 +12,7 @@ public sealed class AgentProviderConfiguration
     public string? Model { get; set; }
     public string? Endpoint { get; set; }
     public string? ApiKey { get; set; }
+    public bool IsDefault { get; set; }
 
     public static AgentProviderConfiguration? Parse(string? json)
     {
@@ -36,6 +37,7 @@ public sealed class AgentProviderConfiguration
         existing.Endpoint = string.IsNullOrWhiteSpace(incoming.Endpoint) ? existing.Endpoint : incoming.Endpoint.Trim();
         if (!string.IsNullOrWhiteSpace(incoming.ApiKey))
             existing.ApiKey = incoming.ApiKey.Trim();
+        existing.IsDefault = incoming.IsDefault;
 
         return JsonSerializer.Serialize(existing, JsonOptions);
     }
@@ -46,7 +48,8 @@ public sealed class AgentProviderConfiguration
         return new AgentProviderPublicSettings(
             parsed.Model,
             parsed.Endpoint,
-            !string.IsNullOrWhiteSpace(parsed.ApiKey));
+            !string.IsNullOrWhiteSpace(parsed.ApiKey),
+            parsed.IsDefault);
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -57,4 +60,4 @@ public sealed class AgentProviderConfiguration
     };
 }
 
-public sealed record AgentProviderPublicSettings(string? Model, string? Endpoint, bool HasApiKey);
+public sealed record AgentProviderPublicSettings(string? Model, string? Endpoint, bool HasApiKey, bool IsDefault = false);

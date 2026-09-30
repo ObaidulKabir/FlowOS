@@ -159,6 +159,22 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
                 }
             }
 
+            if (provider == null &&
+                (string.IsNullOrWhiteSpace(providerAlias) || string.Equals(providerAlias, "default", StringComparison.OrdinalIgnoreCase)))
+            {
+                var defaultBinding = await _pluginBindings.GetDefaultAgentProviderAsync(tenantId, cancellationToken);
+                if (defaultBinding != null && !AgentProviderKinds.IsFlowOsHosted(defaultBinding.ProviderName))
+                {
+                    var settings = defaultBinding.Configuration as AgentProviderPublicSettings;
+                    provider = new AgentProviderRef(
+                        defaultBinding.SourceName,
+                        defaultBinding.ProviderName,
+                        settings?.Model,
+                        settings?.Endpoint,
+                        settings?.HasApiKey ?? false);
+                }
+            }
+
             var promptAlias = step?.AgentPrompt;
             if (!string.IsNullOrWhiteSpace(promptAlias))
             {

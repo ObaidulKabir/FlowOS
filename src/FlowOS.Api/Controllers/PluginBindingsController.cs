@@ -72,6 +72,60 @@ public class PluginBindingsController : ControllerBase
                 return BadRequest("configuration.instructions is required when creating a prompt.");
             }
         }
+        else if (bindingType == PluginBindingTypes.Agent)
+        {
+            if (!AgentProviderKinds.IsKnown(providerName))
+            {
+                return BadRequest(
+                    $"Unknown providerName '{providerName}'. Use {AgentProviderKinds.OpenAi}, {AgentProviderKinds.Anthropic}, {AgentProviderKinds.AzureOpenAi}, {AgentProviderKinds.Google}, {AgentProviderKinds.Custom}, {AgentProviderKinds.FlowosHosted}, or {AgentProviderKinds.FlowosRisk}.");
+            }
+
+            var parsedAgent = FlowOS.Core.Common.Models.AgentProviderConfiguration.Parse(configurationJson);
+            var existingAgent = (await _bindings.ListAsync(
+                _currentUser.TenantId, bindingType, request.SourceName, ct: cancellationToken))
+                .FirstOrDefault();
+            var existingSettings = existingAgent?.Configuration as FlowOS.Core.Common.Models.AgentProviderPublicSettings;
+
+            var normalizedProvider = providerName.ToLowerInvariant();
+            if (normalizedProvider is AgentProviderKinds.AzureOpenAi or AgentProviderKinds.Custom)
+            {
+                var effectiveEndpoint = !string.IsNullOrWhiteSpace(parsedAgent?.Endpoint)
+                    ? parsedAgent.Endpoint
+                    : existingSettings?.Endpoint;
+
+                if (string.IsNullOrWhiteSpace(effectiveEndpoint))
+                {
+                    return BadRequest($"endpoint is required for '{normalizedProvider}' provider.");
+                }
+
+                if (!Uri.TryCreate(effectiveEndpoint, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    return BadRequest("endpoint must be a valid HTTP or HTTPS URL.");
+                }
+            }
+
+            if (normalizedProvider == AgentProviderKinds.Custom)
+            {
+                var effectiveModel = !string.IsNullOrWhiteSpace(parsedAgent?.Model)
+                    ? parsedAgent.Model
+                    : existingSettings?.Model;
+
+                if (string.IsNullOrWhiteSpace(effectiveModel))
+                {
+                    return BadRequest("model is required for 'custom' provider.");
+                }
+            }
+
+            if (normalizedProvider is AgentProviderKinds.OpenAi or AgentProviderKinds.Anthropic or AgentProviderKinds.Google or AgentProviderKinds.AzureOpenAi)
+            {
+                var hasKey = !string.IsNullOrWhiteSpace(parsedAgent?.ApiKey) || (existingSettings?.HasApiKey == true);
+                if (!hasKey)
+                {
+                    return BadRequest($"apiKey is required when configuring '{normalizedProvider}'.");
+                }
+            }
+        }
 
         try
         {

@@ -338,6 +338,57 @@ public class TenantLlmWorkflowAgentTests
         Assert.True(handler.CancellationObserved);
     }
 
+    [Fact]
+    public async Task TenantDefaultProvider_ResolvedByWorkflowAgentFactory_WhenDefaultRequested()
+    {
+        var tenantId = Guid.NewGuid();
+        var handler = new StubHandler("""
+            {"choices":[{"message":{"content":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.95,\"reason\":\"valid\",\"insight\":\"approved\"}"}}]}
+            """);
+
+        var bindings = new Mock<IPluginBindingRegistryService>();
+        bindings.Setup(x => x.GetAgentSecretsAsync(tenantId, "default", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentProviderConfiguration
+            {
+                Model = "gpt-4o",
+                Endpoint = "https://api.openai.com/v1/chat/completions",
+                ApiKey = "sk-default-key",
+                IsDefault = true
+            });
+
+        var factory = new WorkflowAgentFactory(bindings.Object, handler);
+        var packet = new DecisionPacket(
+            tenantId,
+            Guid.NewGuid(),
+            "ApproveQuote",
+            "Quoted",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?>(),
+            new[] { "QUOTE_APPROVED" },
+            new[] { "QUOTE_APPROVED" },
+            Array.Empty<string>(),
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Decide the quote",
+            null,
+            new AgentProviderRef("default", "openai", "gpt-4o", null, true));
+
+        var resolved = await factory.ResolveAsync(packet);
+        Assert.NotNull(resolved);
+        Assert.Equal("default", resolved.ProviderAlias);
+        Assert.Equal("openai", resolved.ProviderName);
+        Assert.Equal("gpt-4o", resolved.Model);
+
+        var result = await resolved.Agent.ExecuteAsync(AgentContext.FromPacket(packet));
+        Assert.True(result.Success);
+        Assert.Single(result.SuggestedActions);
+        Assert.Equal("QUOTE_APPROVED", result.SuggestedActions[0].EventType);
+    }
+
     private static DecisionPacket Packet(params string[] legalEvents) =>
         new(
             Guid.NewGuid(),

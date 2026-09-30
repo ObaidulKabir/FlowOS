@@ -57,4 +57,9 @@ public sealed class NullPluginBindingRegistryService : IPluginBindingRegistrySer
         string sourceName,
         CancellationToken ct = default) =>
         Task.FromResult<AgentProviderConfiguration?>(null);
+
+    public Task<PluginBindingDto?> GetDefaultAgentProviderAsync(
+        Guid tenantId,
+        CancellationToken ct = default) =>
+        Task.FromResult<PluginBindingDto?>(null);
 }

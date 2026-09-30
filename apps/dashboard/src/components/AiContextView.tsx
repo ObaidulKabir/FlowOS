@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, Brain, Database, KeyRound, Plus, RefreshCw, Wrench, MessageSquarePlus } from 'lucide-react';
+import { Bot, Brain, Database, KeyRound, Plus, RefreshCw, Wrench, MessageSquarePlus, Star, X, Edit2 } from 'lucide-react';
 import { api, PluginBindingDto } from '../api/client';
 import { AgentPromptManager } from './AgentPromptManager';
 import { WorkflowClass } from '../types';
@@ -13,7 +13,6 @@ interface Props {
 
 type AiSubTab = 'compose' | 'prompts' | 'providers' | 'tools';
 
-const PROVIDERS = ['flowos-hosted', 'openai', 'anthropic', 'azure-openai', 'google', 'custom', 'flowos-risk'] as const;
 const TOOL_PLUGINS = ['LookupRecord', 'QueryRecords', 'FetchDocument', 'SearchKnowledge', 'CheckPolicy'] as const;
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -197,9 +196,10 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
             <BindingList title="Providers" empty="No LLM providers yet. Add a BYO key on the Providers tab." items={providers.map(p => {
               const cfg = asRecord(p.configuration);
               const hasKey = Boolean(cfg.hasApiKey ?? cfg.HasApiKey);
+              const isDefault = Boolean(cfg.isDefault ?? cfg.IsDefault);
               return {
                 alias: p.sourceName,
-                detail: `${p.providerName}${str(cfg.model || cfg.Model) ? ` · ${str(cfg.model || cfg.Model)}` : ''}${hasKey ? ' · key set' : ''}${p.flowOsVersion ? ` · FlowOS ${p.flowOsVersion}` : ''}`
+                detail: `${isDefault ? '★ default · ' : ''}${p.providerName}${str(cfg.model || cfg.Model) ? ` · ${str(cfg.model || cfg.Model)}` : ''}${hasKey ? ' · key set' : ''}${p.flowOsVersion ? ` · FlowOS ${p.flowOsVersion}` : ''}`
               };
             })} />
             <BindingList title="Tools" empty="No resource tools yet. Bind LookupRecord / QueryRecords capabilities." items={tools.map(t => ({
@@ -292,128 +292,349 @@ const BindingList: React.FC<{ title: string; empty: string; items: { alias: stri
 );
 
 const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => Promise<void> }> = ({ items, onChanged }) => {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     sourceName: 'flowos-hosted',
     providerName: 'flowos-hosted',
     model: '',
     endpoint: '',
     apiKey: '',
+    isDefault: false,
     isEnabled: true
   });
+  const [hasExistingKey, setHasExistingKey] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setHasExistingKey(false);
+    setValidationError(null);
+    setForm({
+      sourceName: '',
+      providerName: 'openai',
+      model: '',
+      endpoint: '',
+      apiKey: '',
+      isDefault: items.length === 0,
+      isEnabled: true
+    });
+  };
+
+  const startEdit = (item: PluginBindingDto) => {
+    const cfg = asRecord(item.configuration);
+    const keySet = Boolean(cfg.hasApiKey ?? cfg.HasApiKey);
+    const isDef = Boolean(cfg.isDefault ?? cfg.IsDefault);
+    setEditingId(item.id);
+    setHasExistingKey(keySet);
+    setValidationError(null);
+    setForm({
+      sourceName: item.sourceName,
+      providerName: item.providerName,
+      model: str(cfg.model ?? cfg.Model),
+      endpoint: str(cfg.endpoint ?? cfg.Endpoint),
+      apiKey: '',
+      isDefault: isDef,
+      isEnabled: item.isEnabled
+    });
+  };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+
+    const alias = form.sourceName.trim();
+    if (!alias) {
+      setValidationError('Provider alias is required.');
+      return;
+    }
+
+    const provider = form.providerName;
+    if (provider === 'azure-openai' || provider === 'custom') {
+      if (!form.endpoint.trim()) {
+        setValidationError(`Endpoint URL is required for ${provider === 'azure-openai' ? 'Azure OpenAI' : 'Custom'} provider.`);
+        return;
+      }
+      if (!/^https?:\/\//i.test(form.endpoint.trim())) {
+        setValidationError('Endpoint URL must start with http:// or https://');
+        return;
+      }
+    }
+
+    if (provider === 'custom' && !form.model.trim()) {
+      setValidationError('Model name is required for Custom provider (e.g. llama3.2, deepseek-chat).');
+      return;
+    }
+
+    if (['openai', 'anthropic', 'google', 'azure-openai'].includes(provider)) {
+      if (!hasExistingKey && !form.apiKey.trim()) {
+        setValidationError(`API Key is required when configuring ${provider}.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await api.upsertPluginBinding({
         bindingType: 'agent',
-        sourceName: form.sourceName,
-        providerName: form.providerName,
+        sourceName: alias,
+        providerName: provider,
         isEnabled: form.isEnabled,
-        configuration: form.providerName === 'flowos-hosted'
-          ? {}
+        configuration: provider === 'flowos-hosted' || provider === 'flowos-risk'
+          ? { isDefault: form.isDefault }
           : {
-              model: form.model || undefined,
-              endpoint: form.endpoint || undefined,
-              apiKey: form.apiKey || undefined
+              model: form.model.trim() || undefined,
+              endpoint: form.endpoint.trim() || undefined,
+              apiKey: form.apiKey.trim() || undefined,
+              isDefault: form.isDefault
             }
       });
-      setForm({ ...form, apiKey: '', sourceName: form.sourceName });
+      resetForm();
       await onChanged();
     } catch (err: any) {
-      alert(`Failed to save provider: ${err.message}`);
+      setValidationError(err.message || 'Failed to save provider.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="grid md:grid-cols-[1fr_320px] gap-4">
+    <div className="grid md:grid-cols-[1fr_360px] gap-4">
       <div className="space-y-2">
         {items.length === 0 && (
-          <div className="text-sm text-slate-500 border border-dashed border-slate-700 rounded-xl p-8 text-center">
-            No providers yet. Paid tenants can use flowos-hosted (FlowOS OpenAI, no key). BYO openai / anthropic still store a tenant key. The key never appears in Agent Context.
+          <div className="text-sm text-slate-500 border border-dashed border-slate-700 rounded-xl p-8 text-center space-y-2">
+            <p>No LLM providers registered yet for this tenant.</p>
+            <p className="text-xs text-slate-400">
+              Paid tenants can use <strong className="text-violet-300">flowos-hosted</strong> (FlowOS OpenAI, no key required). You can also bring your own keys for OpenAI, Claude, Azure OpenAI, Google Gemini, or local Ollama.
+            </p>
           </div>
         )}
         {items.map(item => {
           const cfg = asRecord(item.configuration);
+          const hasKey = Boolean(cfg.hasApiKey ?? cfg.HasApiKey);
+          const isDefault = Boolean(cfg.isDefault ?? cfg.IsDefault);
+          const isEditing = editingId === item.id;
+
           return (
-            <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 flex justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-white">{item.sourceName}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  {item.providerName}
+            <div
+              key={item.id}
+              onClick={() => startEdit(item)}
+              className={`rounded-xl border p-4 flex justify-between items-start gap-3 cursor-pointer transition-all ${
+                isEditing
+                  ? 'border-violet-500 bg-violet-950/30 ring-1 ring-violet-500/50'
+                  : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900/60'
+              }`}
+            >
+              <div className="space-y-1 flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-white truncate">{item.sourceName}</span>
+                  {isDefault && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full text-amber-300 bg-amber-500/10 border border-amber-500/30">
+                      <Star size={10} className="fill-amber-300 text-amber-300" /> Default
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-400 truncate">
+                  <span className="font-medium text-slate-300">{item.providerName}</span>
                   {str(cfg.model || cfg.Model) ? ` · ${str(cfg.model || cfg.Model)}` : ''}
                   {str(cfg.endpoint || cfg.Endpoint) ? ` · ${str(cfg.endpoint || cfg.Endpoint)}` : ''}
                 </div>
               </div>
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-full border h-fit ${
-                cfg.hasApiKey || cfg.HasApiKey
-                  ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
-                  : 'text-slate-400 border-slate-700'
-              }`}>
-                {cfg.hasApiKey || cfg.HasApiKey ? 'key set' : 'no key'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-full border h-fit ${
+                  item.providerName === 'flowos-hosted'
+                    ? 'text-sky-300 border-sky-500/40 bg-sky-500/10'
+                    : item.providerName === 'flowos-risk'
+                    ? 'text-indigo-300 border-indigo-500/40 bg-indigo-500/10'
+                    : hasKey
+                    ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
+                    : 'text-slate-400 border-slate-700'
+                }`}>
+                  {item.providerName === 'flowos-hosted'
+                    ? 'hosted quota'
+                    : item.providerName === 'flowos-risk'
+                    ? 'rule engine'
+                    : hasKey
+                    ? 'key set'
+                    : 'no key'}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startEdit(item);
+                  }}
+                  className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                  title="Edit provider"
+                >
+                  <Edit2 size={12} />
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
+
       <form onSubmit={save} className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3 h-fit">
-        <div className="text-xs font-bold text-white flex items-center gap-2">
-          <KeyRound size={14} className="text-violet-300" /> Add / update provider
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-bold text-white flex items-center gap-2">
+            <KeyRound size={14} className="text-violet-300" />
+            {editingId ? `Edit provider: ${form.sourceName}` : 'Add LLM Provider'}
+          </div>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1"
+            >
+              <X size={12} /> New
+            </button>
+          )}
         </div>
-        <input
-          required
-          value={form.sourceName}
-          onChange={e => setForm({ ...form, sourceName: e.target.value })}
-          placeholder="alias (step.agentProvider)"
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-        />
-        <select
-          value={form.providerName}
-          onChange={e => setForm({ ...form, providerName: e.target.value })}
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-        >
-          {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        {form.providerName !== 'flowos-hosted' && form.providerName !== 'flowos-risk' && (
-          <input
-            value={form.model}
-            onChange={e => setForm({ ...form, model: e.target.value })}
-            placeholder="model (gpt-4o-mini)"
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-          />
+
+        {validationError && (
+          <div className="p-2.5 bg-rose-900/40 border border-rose-700/60 rounded-lg text-[11px] text-rose-300 leading-tight">
+            {validationError}
+          </div>
         )}
+
+        <div>
+          <label className="block text-[11px] font-medium text-slate-400 mb-1">
+            Provider Alias (Required)
+          </label>
+          <input
+            required
+            value={form.sourceName}
+            onChange={e => setForm({ ...form, sourceName: e.target.value })}
+            placeholder="e.g. fast-triage, deep-reasoner, or default"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+          />
+          <p className="text-[10px] text-slate-500 mt-0.5">Matched by workflow steps (step.agentProvider)</p>
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-medium text-slate-400 mb-1">
+            Provider Engine (Required)
+          </label>
+          <select
+            value={form.providerName}
+            onChange={e => setForm({ ...form, providerName: e.target.value })}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
+          >
+            <option value="flowos-hosted">FlowOS Hosted OpenAI (Platform Managed)</option>
+            <option value="openai">OpenAI (BYO Key)</option>
+            <option value="anthropic">Anthropic Claude (BYO Key)</option>
+            <option value="azure-openai">Azure OpenAI (Custom Endpoint)</option>
+            <option value="google">Google Gemini (BYO Key)</option>
+            <option value="custom">Custom OpenAI-Compatible (Ollama, DeepSeek, Groq)</option>
+            <option value="flowos-risk">FlowOS Risk (Deterministic Rule Engine)</option>
+          </select>
+        </div>
+
+        {form.providerName === 'flowos-hosted' && (
+          <div className="p-2.5 rounded-lg bg-violet-950/40 border border-violet-800/40 text-[11px] text-violet-200/90 leading-relaxed">
+            FlowOS executes OpenAI (gpt-4o-mini) using the platform credentials with built-in daily quota. Zero tenant keys required.
+          </div>
+        )}
+
+        {form.providerName === 'flowos-risk' && (
+          <div className="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-800/40 text-[11px] text-indigo-200/90 leading-relaxed">
+            Built-in deterministic heuristic rule engine running in-process. Validates next steps instantly with zero latency and no external LLM credentials.
+          </div>
+        )}
+
         {form.providerName !== 'flowos-hosted' && form.providerName !== 'flowos-risk' && (
           <>
-            <input
-              value={form.endpoint}
-              onChange={e => setForm({ ...form, endpoint: e.target.value })}
-              placeholder="endpoint (optional, custom/azure)"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-            />
-            <input
-              type="password"
-              value={form.apiKey}
-              onChange={e => setForm({ ...form, apiKey: e.target.value })}
-              placeholder="API key (stored, never shown)"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
-            />
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                Model {form.providerName === 'custom' ? <span className="text-amber-400">(Required)</span> : <span className="text-slate-500">(Optional)</span>}
+              </label>
+              <input
+                value={form.model}
+                onChange={e => setForm({ ...form, model: e.target.value })}
+                placeholder={
+                  form.providerName === 'openai'
+                    ? 'gpt-4o-mini (default), gpt-4o, o3-mini'
+                    : form.providerName === 'anthropic'
+                    ? 'claude-3-5-sonnet-20241022 (default), claude-3-5-haiku'
+                    : form.providerName === 'google'
+                    ? 'gemini-1.5-flash (default), gemini-1.5-pro'
+                    : form.providerName === 'azure-openai'
+                    ? 'Deployment name (optional)'
+                    : 'e.g. llama3.2, deepseek-chat, mixtral'
+                }
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                Endpoint URL {form.providerName === 'azure-openai' || form.providerName === 'custom' ? <span className="text-amber-400">(Required)</span> : <span className="text-slate-500">(Optional)</span>}
+              </label>
+              <input
+                value={form.endpoint}
+                onChange={e => setForm({ ...form, endpoint: e.target.value })}
+                placeholder={
+                  form.providerName === 'azure-openai'
+                    ? 'https://<resource>.openai.azure.com/openai/deployments/...'
+                    : form.providerName === 'custom'
+                    ? 'http://localhost:11434/v1/chat/completions'
+                    : 'Leave blank for official default endpoint'
+                }
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                API Key {form.providerName === 'custom' ? <span className="text-slate-500">(Optional for local Ollama)</span> : hasExistingKey ? <span className="text-emerald-400">(Stored — leave blank to keep)</span> : <span className="text-amber-400">(Required)</span>}
+              </label>
+              <input
+                type="password"
+                value={form.apiKey}
+                onChange={e => setForm({ ...form, apiKey: e.target.value })}
+                placeholder={hasExistingKey ? 'Leave blank to retain stored key' : 'API Key (stored write-only, never shown)'}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              />
+            </div>
           </>
         )}
-        {form.providerName === 'flowos-hosted' && (
-          <p className="text-[11px] text-violet-200/80 leading-relaxed">
-            FlowOS calls OpenAI with the platform key. No tenant API key. Included on an active paid plan, capped per day.
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold disabled:opacity-60"
-        >
-          {saving ? 'Saving…' : 'Save provider'}
-        </button>
+
+        <div className="pt-1 border-t border-slate-800">
+          <label className="flex items-start gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.isDefault}
+              onChange={e => setForm({ ...form, isDefault: e.target.checked })}
+              className="mt-0.5 rounded border-slate-700 text-violet-600 focus:ring-violet-500 bg-slate-800"
+            />
+            <div className="text-[11px]">
+              <span className="font-semibold text-slate-200">Set as Tenant Default Provider</span>
+              <p className="text-[10px] text-slate-500">
+                Steps without an explicit agentProvider will automatically resolve to this provider.
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="flex-1 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold disabled:opacity-60 transition-colors"
+          >
+            {saving ? 'Saving…' : editingId ? 'Update Provider' : 'Save Provider'}
+          </button>
+        </div>
       </form>
     </div>
   );
