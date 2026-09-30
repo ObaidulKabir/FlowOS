@@ -21,7 +21,14 @@ function App() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [currentView, session.role]);
+    if (currentView === 'landing') {
+      document.title = 'FlowOS — Build reliable workflows with your AI agent';
+    } else if (session.role === 'Admin') {
+      document.title = 'Platform Admin Dashboard — FlowOS';
+    } else {
+      document.title = `${session.tenantName || 'Tenant'} Workspace — FlowOS`;
+    }
+  }, [currentView, session.role, session.tenantName]);
 
   const openAuth = (mode: AuthModalMode) => {
     setAuthModalMode(mode);

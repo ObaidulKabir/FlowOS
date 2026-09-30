@@ -32,18 +32,91 @@
     <meta property="twitter:description" content="Design, validate, simulate, execute, recover, and govern workflows through MCP. State is Law, workflow is Work, and the event log is Truth." />
     <meta property="twitter:image" content="https://flowosbd.com/brand/flowos-social.jpg" />
 
-    <!-- Structured JSON-LD Data for Search & AI Crawlers -->
+    <!-- Structured JSON-LD Data for Search & AI Crawlers (Schema.org) -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "FlowOS",
-      "applicationCategory": "BusinessApplication",
-      "operatingSystem": "Web",
-      "description": "Hosted workflow automation for people and AI agents. A published state machine decides what is legal. The workflow decides the work.",
-      "url": "https://flowosbd.com/"
-    }
+    [
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "FlowOS",
+        "applicationCategory": "BusinessApplication",
+        "applicationSubCategory": "Workflow Automation Platform",
+        "operatingSystem": "Web, Cloud, Docker",
+        "description": "Hosted workflow automation and agent governance platform. State is Law, workflow is Work, and the event log is Truth.",
+        "url": "https://flowosbd.com/",
+        "author": {
+          "@type": "Organization",
+          "name": "Prospect BD Ltd.",
+          "url": "https://flowosbd.com/company"
+        },
+        "offers": {
+          "@type": "AggregateOffer",
+          "priceCurrency": "USD",
+          "lowPrice": "0",
+          "highPrice": "499",
+          "offerCount": "6"
+        }
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Prospect BD Ltd.",
+        "legalName": "Prospect BD Ltd.",
+        "url": "https://flowosbd.com/",
+        "logo": "https://flowosbd.com/brand/flowos-logo.png",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "email": "admin@flowosbd.com",
+          "contactType": "customer service"
+        }
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "FlowOS",
+        "url": "https://flowosbd.com/"
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is FlowOS?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "FlowOS is an enterprise business automation platform that combines pure finite state machines with transactional outbox dispatching, cryptographic security, and native Model Context Protocol (MCP) AI Agent governance."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does the dual-kernel Law and Work model work?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "FlowOS enforces mathematical state machine rules (Law) independently from workflow steps (Work). A step cannot advance or commit transitions that violate the underlying state machine, preventing illegal business states."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do AI agents connect to FlowOS?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "AI agents connect via the Model Context Protocol (MCP) using Streamable HTTP/SSE. FlowOS advertises 79 governed tools allowing agents to author drafts, simulate workflows, inspect audit trails, and execute bounded-autonomy tasks."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does FlowOS handle workflow versioning and SLA changes?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "FlowOS enforces strict domain immutability. In-flight workflow instances remain pinned to their creation version. Teams deploy non-breaking SLA policy adjustments via Patch versions (1.0.0 to 1.0.1) or Context Binding Revisions, with 1-click safe rollback support."
+            }
+          }
+        ]
+      }
+    ]
     </script>
+    <link rel="sitemap" type="application/xml" href="https://flowosbd.com/sitemap.xml" />
           <!-- Semantic Discovery Links for AI Agents & Crawlers -->
     <link rel="mcp" href="https://flowosbd.com/mcp/" />
     <link rel="mcp-server" href="https://flowosbd.com/mcp/" />
