@@ -12,6 +12,7 @@ public static class PluginBindingTypes
     public const string Decision = "decision";
     public const string Agent = "agent";
     public const string Prompt = "prompt";
+    public const string Profile = "profile";
 }
 
 public static class AgentProviderKinds
@@ -111,5 +112,13 @@ public interface IPluginBindingRegistryService
     /// </summary>
     Task<PluginBindingDto?> GetDefaultAgentProviderAsync(
         Guid tenantId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Finds a composite agent profile by alias or role.
+    /// </summary>
+    Task<PluginBindingDto?> GetAgentProfileAsync(
+        Guid tenantId,
+        string aliasOrRole,
         CancellationToken ct = default);
 }

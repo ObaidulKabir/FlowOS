@@ -135,18 +135,94 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
                 false)
             : null;
         AgentPromptRef? promptBinding = null;
+        var autoCommit = packet.AutoCommit;
+        var toolNames = new List<string>(step?.AgentTools ?? Enumerable.Empty<string>());
+        string? effectiveProviderAlias = providerAlias;
+        string? effectivePromptAlias = step?.AgentPrompt;
 
         if (_pluginBindings != null)
         {
             actionBindings = await _pluginBindings.ResolveBindingsAsync(
                 tenantId, PluginBindingTypes.Action, cancellationToken);
 
+            AgentProfilePublicSettings? profile = null;
+            if (!string.IsNullOrWhiteSpace(providerAlias) &&
+                !AgentProviderKinds.IsFlowOsHosted(providerAlias) &&
+                !string.Equals(providerAlias, AgentProviderKinds.FlowosRisk, StringComparison.OrdinalIgnoreCase))
+            {
+                var profileBinding = await _pluginBindings.GetAgentProfileAsync(
+                    tenantId, providerAlias, cancellationToken);
+                profile = profileBinding?.Configuration as AgentProfilePublicSettings;
+            }
+
+            if (profile == null)
+            {
+                var rolesToCheck = step?.AllowedRoles is { Count: > 0 }
+                    ? step.AllowedRoles
+                    : packet.AllowedRoles;
+                if (rolesToCheck is { Count: > 0 })
+                {
+                    foreach (var role in rolesToCheck)
+                    {
+                        var profileBinding = await _pluginBindings.GetAgentProfileAsync(
+                            tenantId, role, cancellationToken);
+                        if (profileBinding?.Configuration is AgentProfilePublicSettings foundProfile)
+                        {
+                            profile = foundProfile;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (profile != null)
+            {
+                if (!string.IsNullOrWhiteSpace(profile.ProviderAlias))
+                {
+                    effectiveProviderAlias = profile.ProviderAlias;
+                }
+
+                if (string.IsNullOrWhiteSpace(effectivePromptAlias) && !string.IsNullOrWhiteSpace(profile.PromptAlias))
+                {
+                    effectivePromptAlias = profile.PromptAlias;
+                }
+
+                if (profile.ToolAliases is { Count: > 0 })
+                {
+                    foreach (var t in profile.ToolAliases)
+                    {
+                        if (!string.IsNullOrWhiteSpace(t) && !toolNames.Contains(t, StringComparer.OrdinalIgnoreCase))
+                        {
+                            toolNames.Add(t.Trim());
+                        }
+                    }
+                }
+
+                if (autoCommit == null && profile.AutoCommitThreshold.HasValue)
+                {
+                    autoCommit = new AutoCommitPolicy(
+                        profile.AutoCommitThreshold.Value,
+                        profile.AllowedEvents is { Count: > 0 } ? profile.AllowedEvents : packet.LegalNextStepEvents);
+                }
+            }
+
             if (provider == null &&
-                !string.IsNullOrWhiteSpace(providerAlias) &&
-                !AgentProviderKinds.IsFlowOsHosted(providerAlias))
+                string.Equals(effectiveProviderAlias, AgentProviderKinds.FlowosRisk, StringComparison.OrdinalIgnoreCase))
+            {
+                provider = new AgentProviderRef(
+                    AgentProviderKinds.FlowosRisk,
+                    AgentProviderKinds.FlowosRisk,
+                    null,
+                    null,
+                    false);
+            }
+
+            if (provider == null &&
+                !string.IsNullOrWhiteSpace(effectiveProviderAlias) &&
+                !AgentProviderKinds.IsFlowOsHosted(effectiveProviderAlias))
             {
                 var binding = await _pluginBindings.GetEnabledAsync(
-                    tenantId, PluginBindingTypes.Agent, providerAlias, cancellationToken);
+                    tenantId, PluginBindingTypes.Agent, effectiveProviderAlias, cancellationToken);
                 if (binding != null && !AgentProviderKinds.IsFlowOsHosted(binding.ProviderName))
                 {
                     var settings = binding.Configuration as AgentProviderPublicSettings;
@@ -160,7 +236,7 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
             }
 
             if (provider == null &&
-                (string.IsNullOrWhiteSpace(providerAlias) || string.Equals(providerAlias, "default", StringComparison.OrdinalIgnoreCase)))
+                (string.IsNullOrWhiteSpace(effectiveProviderAlias) || string.Equals(effectiveProviderAlias, "default", StringComparison.OrdinalIgnoreCase)))
             {
                 var defaultBinding = await _pluginBindings.GetDefaultAgentProviderAsync(tenantId, cancellationToken);
                 if (defaultBinding != null && !AgentProviderKinds.IsFlowOsHosted(defaultBinding.ProviderName))
@@ -175,11 +251,10 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
                 }
             }
 
-            var promptAlias = step?.AgentPrompt;
-            if (!string.IsNullOrWhiteSpace(promptAlias))
+            if (!string.IsNullOrWhiteSpace(effectivePromptAlias))
             {
                 var binding = await _pluginBindings.GetEnabledAsync(
-                    tenantId, PluginBindingTypes.Prompt, promptAlias, cancellationToken);
+                    tenantId, PluginBindingTypes.Prompt, effectivePromptAlias, cancellationToken);
                 if (binding != null)
                 {
                     var prompt = binding.Configuration as AgentPromptConfiguration
@@ -193,11 +268,12 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
             }
         }
 
-        if (provider == null && ShouldAttachHostedProvider(step?.AgentProvider))
+        if (provider == null && ShouldAttachHostedProvider(effectiveProviderAlias ?? step?.AgentProvider))
         {
             var hosted = _hosted!.PublicSettings;
+            var aliasName = effectiveProviderAlias ?? step?.AgentProvider;
             provider = new AgentProviderRef(
-                string.IsNullOrWhiteSpace(step?.AgentProvider) ? AgentProviderKinds.FlowosHosted : step!.AgentProvider,
+                string.IsNullOrWhiteSpace(aliasName) ? AgentProviderKinds.FlowosHosted : aliasName,
                 AgentProviderKinds.FlowosHosted,
                 hosted.Model,
                 hosted.Endpoint,
@@ -206,10 +282,10 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
 
         var tools = AgentToolCatalog.FromStep(
             packet.LegalNextStepEvents,
-            step?.AgentTools,
+            toolNames,
             actionBindings);
 
-        return packet with { Provider = provider, Tools = tools, PromptBinding = promptBinding };
+        return packet with { Provider = provider, Tools = tools, PromptBinding = promptBinding, AutoCommit = autoCommit };
     }
 
     private bool ShouldAttachHostedProvider(string? agentProvider)

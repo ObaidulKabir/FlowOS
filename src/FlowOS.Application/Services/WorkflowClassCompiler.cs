@@ -54,7 +54,7 @@ public static class WorkflowClassCompiler
                         InputMapping = stepBp.SubWorkflow.InputMapping ?? new Dictionary<string, string>(),
                         OutputMapping = stepBp.SubWorkflow.OutputMapping ?? new Dictionary<string, string>()
                     },
-                AllowedRoles = stepBp.RequiredRoles,
+                AllowedRoles = (stepBp.AllowedRoles is { Count: > 0 } ? stepBp.AllowedRoles : stepBp.RequiredRoles) ?? new List<string>(),
                 RequiredCapabilities = ResolveStepCapabilities(stepBp, wc.Definition.Events),
                 EventRequiredCapabilities = ResolveEventCapabilities(stepBp, wc.Definition.Events),
                 NextSteps = stepBp.NextSteps,

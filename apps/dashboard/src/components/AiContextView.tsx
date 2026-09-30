@@ -1,5 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, Brain, Database, KeyRound, Plus, RefreshCw, Wrench, MessageSquarePlus, Star, X, Edit2 } from 'lucide-react';
+import {
+  Bot,
+  Brain,
+  Database,
+  KeyRound,
+  Plus,
+  RefreshCw,
+  Wrench,
+  MessageSquarePlus,
+  Star,
+  X,
+  Edit2,
+  Shield,
+  Sparkles,
+  Cpu
+} from 'lucide-react';
 import { api, PluginBindingDto } from '../api/client';
 import { AgentPromptManager } from './AgentPromptManager';
 import { WorkflowClass } from '../types';
@@ -11,7 +26,7 @@ interface Props {
   compact?: boolean;
 }
 
-type AiSubTab = 'compose' | 'prompts' | 'providers' | 'tools';
+type AiSubTab = 'compose' | 'agents' | 'prompts' | 'providers' | 'tools';
 
 const TOOL_PLUGINS = ['LookupRecord', 'QueryRecords', 'FetchDocument', 'SearchKnowledge', 'CheckPolicy'] as const;
 
@@ -35,20 +50,24 @@ const declaredAgentAliases = (workflowClass?: WorkflowClass) => {
   const prompts = new Set<string>();
   const providers = new Set<string>();
   const tools = new Set<string>();
-  if (!Array.isArray(steps)) return { prompts, providers, tools, stepCount: 0 };
+  const roles = new Set<string>();
+  if (!Array.isArray(steps)) return { prompts, providers, tools, roles, stepCount: 0 };
   for (const step of steps) {
     const prompt = str(pick(step, 'agentPrompt', 'AgentPrompt'));
     const provider = str(pick(step, 'agentProvider', 'AgentProvider'));
     const stepTools = pick(step, 'agentTools', 'AgentTools');
+    const stepRoles = pick(step, 'allowedRoles', 'AllowedRoles') || pick(step, 'requiredRoles', 'RequiredRoles');
     if (prompt) prompts.add(prompt);
     if (provider) providers.add(provider);
     if (Array.isArray(stepTools)) stepTools.forEach((t: unknown) => { if (str(t)) tools.add(str(t)); });
+    if (Array.isArray(stepRoles)) stepRoles.forEach((r: unknown) => { if (str(r)) roles.add(str(r)); });
   }
-  return { prompts, providers, tools, stepCount: steps.length };
+  return { prompts, providers, tools, roles, stepCount: steps.length };
 };
 
 export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessContext, workflowClass, compact = false }) => {
   const [subTab, setSubTab] = useState<AiSubTab>('compose');
+  const [agents, setAgents] = useState<PluginBindingDto[]>([]);
   const [prompts, setPrompts] = useState<PluginBindingDto[]>([]);
   const [providers, setProviders] = useState<PluginBindingDto[]>([]);
   const [tools, setTools] = useState<PluginBindingDto[]>([]);
@@ -59,14 +78,16 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
     setLoading(true);
     setError(null);
     try {
-      const [promptList, providerList, toolList] = await Promise.all([
+      const [promptList, providerList, toolList, agentList] = await Promise.all([
         api.listPluginBindings('prompt'),
         api.listPluginBindings('agent'),
-        api.listPluginBindings('action')
+        api.listPluginBindings('action'),
+        api.listPluginBindings('profile')
       ]);
       setPrompts(promptList.bindings);
       setProviders(providerList.bindings);
       setTools(toolList.bindings);
+      setAgents(agentList.bindings);
     } catch (err: any) {
       setError(err.message || 'Failed to load AI Context');
     } finally {
@@ -79,6 +100,11 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
   }, []);
 
   const declared = declaredAgentAliases(workflowClass);
+  const usedAgents = agents.filter(a =>
+    declared.providers.has(a.sourceName) ||
+    declared.roles.has(a.providerName) ||
+    declared.roles.has(str(asRecord(a.configuration).role))
+  );
   const usedPrompts = prompts.filter(p => declared.prompts.has(p.sourceName));
   const usedProviders = providers.filter(p => declared.providers.has(p.sourceName));
   const usedTools = tools.filter(t =>
@@ -97,10 +123,10 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
             </div>
             <p className="text-xs text-slate-400 max-w-3xl">
               {workflowClass
-                ? <>Composed for <strong className="text-white">{workflowClass.name}</strong> v{workflowClass.version}: Prompt + Data (Business Context) + Tools + Provider.</>
-                : <>FlowOS composes one Agent Context for deciding steps: <strong className="text-sky-300">Prompt</strong>,
+                ? <>Composed for <strong className="text-white">{workflowClass.name}</strong> v{workflowClass.version}: Agents + Prompt + Data (Business Context) + Tools + Providers.</>
+                : <>FlowOS composes AI Context for deciding steps: <strong className="text-purple-300">Agents</strong>, <strong className="text-sky-300">Prompt</strong>,
               <strong className="text-amber-300"> Data</strong>, <strong className="text-emerald-300"> Tools</strong>, and
-              <strong className="text-violet-300"> Provider</strong>.</>}
+              <strong className="text-violet-300"> Providers</strong>.</>}
               {' '}The model never sees API keys or tenant URLs.
               {compact ? null : <> Owned by <strong>{tenantName}</strong>.</>}
             </p>
@@ -114,7 +140,15 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           </button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 mt-4">
+          <ComposeCard
+            icon={<Bot size={14} />}
+            label="Agents"
+            count={workflowClass ? `${usedAgents.length}/${agents.length}` : agents.length}
+            hint="Composite personas"
+            color="purple"
+            onClick={() => setSubTab('agents')}
+          />
           <ComposeCard
             icon={<MessageSquarePlus size={14} />}
             label="Prompt"
@@ -127,7 +161,7 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
             icon={<Database size={14} />}
             label="Data"
             count="live"
-            hint="Business Context + case facts"
+            hint="Business Context facts"
             color="amber"
             onClick={onOpenBusinessContext}
           />
@@ -135,15 +169,15 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
             icon={<Wrench size={14} />}
             label="Tools"
             count={workflowClass ? `${usedTools.length}/${tools.length}` : tools.length}
-            hint="Tenant resource plugins"
+            hint="Resource action plugins"
             color="emerald"
             onClick={() => setSubTab('tools')}
           />
           <ComposeCard
-            icon={<Bot size={14} />}
-            label="Provider"
+            icon={<KeyRound size={14} />}
+            label="Providers"
             count={workflowClass ? `${usedProviders.length}/${providers.length}` : providers.length}
-            hint="BYO model binding"
+            hint="BYO model bindings"
             color="violet"
             onClick={() => setSubTab('providers')}
           />
@@ -157,6 +191,7 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
       <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs">
         {([
           ['compose', 'Compose'],
+          ['agents', 'Agents (Personas)'],
           ['prompts', 'Prompts'],
           ['providers', 'Providers'],
           ['tools', 'Tools']
@@ -178,17 +213,34 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           {workflowClass && (
             <div className="rounded-lg border border-violet-500/25 bg-violet-950/20 px-3 py-2 text-[11px] text-violet-100">
               Declared on this workflow’s steps:
+              agents [{[...declared.providers].filter(p => agents.some(a => a.sourceName === p)).join(', ') || '—'}] ·
+              roles [{[...declared.roles].join(', ') || '—'}] ·
               prompt [{[...declared.prompts].join(', ') || '—'}] ·
-              provider [{[...declared.providers].join(', ') || '—'}] ·
               tools [{[...declared.tools].join(', ') || '—'}]
             </div>
           )}
           <p>
-            Point a waiting step (<code className="text-sky-300">actor: Agent</code> or <code className="text-sky-300">Either</code>) at these aliases.
+            Point a waiting step (<code className="text-sky-300">actor: Agent</code> or <code className="text-sky-300">Either</code>) at an Agent Persona alias or matching Role.
             Design-time inspect with MCP <code className="text-violet-300">preview_agent_context</code>; live inspect with
             <code className="text-violet-300"> get_agent_context</code> — neither runs the agent.
           </p>
           <div className="grid md:grid-cols-2 gap-3">
+            <BindingList
+              title="Agents (Composite Personas)"
+              empty="No agent personas yet. Create a composite agent persona on the Agents tab."
+              items={agents.map(a => {
+                const cfg = asRecord(a.configuration);
+                const role = str(cfg.role) || a.providerName;
+                const prov = str(cfg.providerAlias) || 'default';
+                const prompt = str(cfg.promptAlias) || 'none';
+                const toolCount = Array.isArray(cfg.toolAliases) ? cfg.toolAliases.length : 0;
+                const auto = cfg.autoCommitThreshold != null ? `${Math.round(Number(cfg.autoCommitThreshold) * 100)}% auto` : 'manual';
+                return {
+                  alias: a.sourceName,
+                  detail: `Role: ${role} · Provider: ${prov} · Prompt: ${prompt} · Tools: ${toolCount} · ${auto}`
+                };
+              })}
+            />
             <BindingList title="Prompts" empty="No prompts yet." items={prompts.map(p => ({
               alias: p.sourceName,
               detail: `${str(asRecord(p.configuration).title) || str(asRecord(p.configuration).Title) || 'markdown'}${p.flowOsVersion ? ` · FlowOS ${p.flowOsVersion}` : ''}`
@@ -225,6 +277,16 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
         </div>
       )}
 
+      {subTab === 'agents' && (
+        <AgentProfileManager
+          items={agents}
+          providers={providers}
+          prompts={prompts}
+          tools={tools}
+          onChanged={load}
+        />
+      )}
+
       {subTab === 'prompts' && (
         <AgentPromptManager tenantName={tenantName} compact />
       )}
@@ -245,10 +307,11 @@ const ComposeCard: React.FC<{
   label: string;
   count: number | string;
   hint: string;
-  color: 'sky' | 'amber' | 'emerald' | 'violet';
+  color: 'purple' | 'sky' | 'amber' | 'emerald' | 'violet';
   onClick?: () => void;
 }> = ({ icon, label, count, hint, color, onClick }) => {
   const tones = {
+    purple: 'border-purple-500/30 hover:border-purple-400/60 text-purple-300',
     sky: 'border-sky-500/30 hover:border-sky-400/60 text-sky-300',
     amber: 'border-amber-500/30 hover:border-amber-400/60 text-amber-300',
     emerald: 'border-emerald-500/30 hover:border-emerald-400/60 text-emerald-300',
@@ -290,6 +353,422 @@ const BindingList: React.FC<{ title: string; empty: string; items: { alias: stri
     )}
   </div>
 );
+
+const AgentProfileManager: React.FC<{
+  items: PluginBindingDto[];
+  providers: PluginBindingDto[];
+  prompts: PluginBindingDto[];
+  tools: PluginBindingDto[];
+  onChanged: () => Promise<void>;
+}> = ({ items, providers, prompts, tools, onChanged }) => {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    sourceName: '',
+    role: '',
+    description: '',
+    providerAlias: '',
+    promptAlias: '',
+    toolAliases: [] as string[],
+    autoCommitThreshold: '',
+    allowedEvents: '',
+    isEnabled: true
+  });
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setValidationError(null);
+    setForm({
+      sourceName: '',
+      role: '',
+      description: '',
+      providerAlias: '',
+      promptAlias: '',
+      toolAliases: [],
+      autoCommitThreshold: '',
+      allowedEvents: '',
+      isEnabled: true
+    });
+  };
+
+  const startEdit = (item: PluginBindingDto) => {
+    const cfg = asRecord(item.configuration);
+    setEditingId(item.id);
+    setValidationError(null);
+    setForm({
+      sourceName: item.sourceName,
+      role: str(cfg.role) || item.providerName || '',
+      description: str(cfg.description) || '',
+      providerAlias: str(cfg.providerAlias) || '',
+      promptAlias: str(cfg.promptAlias) || '',
+      toolAliases: Array.isArray(cfg.toolAliases) ? cfg.toolAliases.map(t => String(t)) : [],
+      autoCommitThreshold: cfg.autoCommitThreshold != null ? String(cfg.autoCommitThreshold) : '',
+      allowedEvents: Array.isArray(cfg.allowedEvents) ? cfg.allowedEvents.join(', ') : '',
+      isEnabled: item.isEnabled
+    });
+  };
+
+  const toggleTool = (toolName: string) => {
+    setForm(prev => {
+      const exists = prev.toolAliases.includes(toolName);
+      return {
+        ...prev,
+        toolAliases: exists
+          ? prev.toolAliases.filter(t => t !== toolName)
+          : [...prev.toolAliases, toolName]
+      };
+    });
+  };
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError(null);
+
+    const alias = form.sourceName.trim();
+    if (!alias) {
+      setValidationError('Agent alias (Name) is required.');
+      return;
+    }
+
+    const role = form.role.trim();
+    if (!role) {
+      setValidationError('Role / Identity is required (e.g. LoanOfficer, Underwriter, TriageOfficer).');
+      return;
+    }
+
+    let threshold: number | undefined = undefined;
+    if (form.autoCommitThreshold.trim()) {
+      const parsed = parseFloat(form.autoCommitThreshold.trim());
+      if (isNaN(parsed) || parsed < 0 || parsed > 1) {
+        setValidationError('Auto-commit threshold must be between 0.0 and 1.0 (e.g. 0.85).');
+        return;
+      }
+      threshold = parsed;
+    }
+
+    const events = form.allowedEvents
+      .split(',')
+      .map(e => e.trim())
+      .filter(Boolean);
+
+    setSaving(true);
+    try {
+      await api.upsertPluginBinding({
+        bindingType: 'profile',
+        sourceName: alias,
+        providerName: role,
+        isEnabled: form.isEnabled,
+        configuration: {
+          role,
+          description: form.description.trim() || undefined,
+          providerAlias: form.providerAlias.trim() || undefined,
+          promptAlias: form.promptAlias.trim() || undefined,
+          toolAliases: form.toolAliases,
+          autoCommitThreshold: threshold,
+          allowedEvents: events.length > 0 ? events : undefined
+        }
+      });
+      resetForm();
+      await onChanged();
+    } catch (err: any) {
+      setValidationError(err.message || 'Failed to save agent persona.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid md:grid-cols-[1fr_380px] gap-4">
+      <div className="space-y-3">
+        {items.length === 0 && (
+          <div className="text-sm text-slate-500 border border-dashed border-slate-700 rounded-xl p-8 text-center space-y-2">
+            <Bot size={32} className="mx-auto text-purple-400/50 mb-2" />
+            <p className="font-semibold text-slate-300">No Agent Personas defined yet.</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Agents bundle a <strong className="text-purple-300">Role</strong>, a bound <strong className="text-violet-300">LLM Provider</strong>,
+              a <strong className="text-sky-300">Prompt</strong>, and curated business <strong className="text-emerald-300">Tools</strong> into
+              a reusable autonomous persona. Workflow steps matching the role or alias automatically hydrate this context.
+            </p>
+          </div>
+        )}
+        {items.map(item => {
+          const cfg = asRecord(item.configuration);
+          const role = str(cfg.role) || item.providerName;
+          const description = str(cfg.description);
+          const providerAlias = str(cfg.providerAlias) || 'tenant default';
+          const promptAlias = str(cfg.promptAlias) || 'none';
+          const toolAliases = Array.isArray(cfg.toolAliases) ? (cfg.toolAliases as string[]) : [];
+          const threshold = cfg.autoCommitThreshold != null ? Number(cfg.autoCommitThreshold) : null;
+          const allowedEvents = Array.isArray(cfg.allowedEvents) ? (cfg.allowedEvents as string[]) : [];
+          const isEditing = editingId === item.id;
+
+          return (
+            <div
+              key={item.id}
+              onClick={() => startEdit(item)}
+              className={`rounded-xl border p-4 cursor-pointer transition-all ${
+                isEditing
+                  ? 'border-purple-500 bg-purple-950/30 ring-1 ring-purple-500/50'
+                  : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900/60'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 mt-0.5">
+                    <Bot size={18} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">{item.sourceName}</span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/30">
+                        <Shield size={10} /> {role}
+                      </span>
+                      {!item.isEnabled && (
+                        <span className="text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">Disabled</span>
+                      )}
+                    </div>
+                    {description && (
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{description}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); startEdit(item); }}
+                  className="text-slate-500 hover:text-slate-300 p-1"
+                >
+                  <Edit2 size={13} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/80 text-[11px]">
+                <div className="flex items-center gap-1.5 text-slate-400 truncate">
+                  <Cpu size={12} className="text-violet-400 shrink-0" />
+                  <span className="text-slate-500">Provider:</span>
+                  <span className="text-slate-300 font-medium truncate">{providerAlias}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-slate-400 truncate">
+                  <MessageSquarePlus size={12} className="text-sky-400 shrink-0" />
+                  <span className="text-slate-500">Prompt:</span>
+                  <span className="text-slate-300 font-medium truncate">{promptAlias}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-slate-400 truncate">
+                  <Wrench size={12} className="text-emerald-400 shrink-0" />
+                  <span className="text-slate-500">Tools:</span>
+                  <span className="text-slate-300 font-medium">{toolAliases.length} assigned</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-slate-400 truncate">
+                  <Sparkles size={12} className="text-amber-400 shrink-0" />
+                  <span className="text-slate-500">Autonomy:</span>
+                  <span className="text-slate-300 font-medium">
+                    {threshold != null ? `${Math.round(threshold * 100)}% auto-commit` : 'Manual review'}
+                  </span>
+                </div>
+              </div>
+
+              {toolAliases.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2.5">
+                  {toolAliases.map(t => (
+                    <span key={t} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-300">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {allowedEvents.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-2 text-[10px] text-slate-500">
+                  <span>Auto-events:</span>
+                  {allowedEvents.map(e => (
+                    <span key={e} className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">
+                      {e}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <form onSubmit={save} className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3 h-fit">
+        <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+          <div className="text-xs font-bold text-white flex items-center gap-2">
+            <Bot size={14} className="text-purple-400" />
+            {editingId ? 'Edit Agent Persona' : 'Define Agent Persona'}
+          </div>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="text-[11px] text-slate-400 hover:text-slate-200"
+            >
+              + New Agent
+            </button>
+          )}
+        </div>
+
+        {validationError && (
+          <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-700 text-rose-300 text-xs">
+            {validationError}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Agent Alias (Unique Name)</label>
+          <input
+            required
+            value={form.sourceName}
+            onChange={e => setForm({ ...form, sourceName: e.target.value })}
+            placeholder="e.g. CreditUnderwriter, TriageBot"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500"
+          />
+          <p className="text-[10px] text-slate-500">Used as step.agentProvider or for direct attribution.</p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Workflow Role / Identity</label>
+          <input
+            required
+            value={form.role}
+            onChange={e => setForm({ ...form, role: e.target.value })}
+            placeholder="e.g. LoanOfficer, RiskAnalyst, SupportTier1"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500"
+          />
+          <p className="text-[10px] text-slate-500">Workflow steps requiring this role automatically bind to this Agent.</p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Description (Optional)</label>
+          <textarea
+            rows={2}
+            value={form.description}
+            onChange={e => setForm({ ...form, description: e.target.value })}
+            placeholder="What does this agent persona do and decide?"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 resize-none"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Bound LLM Provider</label>
+          <select
+            value={form.providerAlias}
+            onChange={e => setForm({ ...form, providerAlias: e.target.value })}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+          >
+            <option value="">(Tenant Default Provider)</option>
+            <option value="flowos-hosted">flowos-hosted (FlowOS OpenAI)</option>
+            <option value="flowos-risk">flowos-risk (Risk fixture)</option>
+            {providers.map(p => (
+              <option key={p.id} value={p.sourceName}>
+                {p.sourceName} ({p.providerName})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Bound Prompt</label>
+          <select
+            value={form.promptAlias}
+            onChange={e => setForm({ ...form, promptAlias: e.target.value })}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+          >
+            <option value="">(None / Step Template Default)</option>
+            {prompts.map(p => {
+              const title = str(asRecord(p.configuration).title) || str(asRecord(p.configuration).Title) || 'markdown';
+              return (
+                <option key={p.id} value={p.sourceName}>
+                  {p.sourceName} ({title})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-slate-300">Curated Business Tools</label>
+          {tools.length === 0 ? (
+            <p className="text-[10px] text-slate-500 italic bg-slate-950/40 p-2 rounded-lg border border-slate-800">
+              No capability tools registered yet. Add resource actions in the Tools tab.
+            </p>
+          ) : (
+            <div className="max-h-32 overflow-y-auto space-y-1 bg-slate-950/50 p-2 rounded-lg border border-slate-800 text-xs">
+              {tools.map(t => {
+                const checked = form.toolAliases.includes(t.sourceName);
+                return (
+                  <label key={t.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/60 p-1 rounded">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleTool(t.sourceName)}
+                      className="rounded border-slate-700 text-purple-600 focus:ring-purple-500 bg-slate-800"
+                    />
+                    <span className="font-mono text-emerald-300 text-[11px] truncate">{t.sourceName}</span>
+                    <span className="text-[10px] text-slate-500 truncate ml-auto">{t.providerName}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="pt-2 border-t border-slate-800 space-y-2">
+          <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+            <Sparkles size={12} /> Autonomy Policy
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-slate-400 font-medium">Confidence Threshold</label>
+              <input
+                type="number"
+                step="0.05"
+                min="0"
+                max="1"
+                value={form.autoCommitThreshold}
+                onChange={e => setForm({ ...form, autoCommitThreshold: e.target.value })}
+                placeholder="e.g. 0.85 (or empty)"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-slate-400 font-medium">Allowed Events</label>
+              <input
+                value={form.allowedEvents}
+                onChange={e => setForm({ ...form, allowedEvents: e.target.value })}
+                placeholder="Approve, Reject"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-500 leading-tight">
+            If model confidence exceeds threshold, FlowOS auto-publishes legal events without human parking.
+          </p>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="flex-1 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold disabled:opacity-60 transition-colors"
+          >
+            {saving ? 'Saving…' : editingId ? 'Update Agent' : 'Save Agent'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
 
 const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => Promise<void> }> = ({ items, onChanged }) => {
   const [editingId, setEditingId] = useState<string | null>(null);

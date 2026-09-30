@@ -37,8 +37,9 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         if (normalizedType != PluginBindingTypes.Action &&
             normalizedType != PluginBindingTypes.Decision &&
             normalizedType != PluginBindingTypes.Agent &&
-            normalizedType != PluginBindingTypes.Prompt)
-            throw new ArgumentException($"Unsupported bindingType '{bindingType}'. Use '{PluginBindingTypes.Action}', '{PluginBindingTypes.Decision}', '{PluginBindingTypes.Agent}', or '{PluginBindingTypes.Prompt}'.");
+            normalizedType != PluginBindingTypes.Prompt &&
+            normalizedType != PluginBindingTypes.Profile)
+            throw new ArgumentException($"Unsupported bindingType '{bindingType}'. Use '{PluginBindingTypes.Action}', '{PluginBindingTypes.Decision}', '{PluginBindingTypes.Agent}', '{PluginBindingTypes.Prompt}', or '{PluginBindingTypes.Profile}'.");
         if (string.IsNullOrWhiteSpace(normalizedSource))
             throw new ArgumentException("sourceName is required.");
         if (string.IsNullOrWhiteSpace(normalizedProvider))
@@ -260,6 +261,30 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         return defaultRecord == null ? null : ToDto(defaultRecord);
     }
 
+    public async Task<PluginBindingDto?> GetAgentProfileAsync(
+        Guid tenantId,
+        string aliasOrRole,
+        CancellationToken ct = default)
+    {
+        var normalizedKey = NormalizeKey(aliasOrRole);
+        if (string.IsNullOrWhiteSpace(normalizedKey))
+            return null;
+
+        var records = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .Where(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == PluginBindingTypes.Profile &&
+                x.IsEnabled)
+            .ToListAsync(ct);
+
+        var match = records.FirstOrDefault(r =>
+            string.Equals(r.SourceName, normalizedKey, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r.ProviderName, normalizedKey, StringComparison.OrdinalIgnoreCase));
+
+        return match == null ? null : ToDto(match);
+    }
+
     private static PluginBindingDto ToDto(PluginBindingRecord x) =>
         new(
             x.Id,
@@ -274,7 +299,9 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 ? AgentProviderConfiguration.Redact(x.ConfigurationJson)
                 : x.BindingType == PluginBindingTypes.Prompt
                     ? AgentPromptConfiguration.Public(x.ConfigurationJson)
-                    : null,
+                    : x.BindingType == PluginBindingTypes.Profile
+                        ? AgentProfileConfiguration.Public(x.ConfigurationJson)
+                        : null,
             x.FlowOsVersion);
 
     private static string? MergeConfiguration(string bindingType, string? existing, string? incoming)
@@ -284,6 +311,8 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             return AgentProviderConfiguration.Merge(existing, incoming);
         if (bindingType == PluginBindingTypes.Prompt)
             return AgentPromptConfiguration.Merge(existing, incoming);
+        if (bindingType == PluginBindingTypes.Profile)
+            return AgentProfileConfiguration.Merge(existing, incoming);
         return incoming;
     }
 

@@ -11,11 +11,12 @@ public class CommercialPolicyCopyTests
     {
         var root = FindRepoRoot();
         var landing = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "src", "components", "LandingPage.tsx"));
+        var pricingCatalog = File.ReadAllText(Path.Combine(root, "apps", "dashboard", "src", "pricingCatalog.json"));
         var docs = File.ReadAllText(Path.Combine(root, "docs", "18-commercial-and-mcp-entitlements.md"));
         var chapter13 = File.ReadAllText(Path.Combine(root, "docs", "13-mcp-and-ai-agent-integration.md"));
 
         Assert.Contains("Try, build, then grow with usage", landing);
-        Assert.Contains("will not charge per retry, per simulation, or per transition", landing);
+        Assert.Contains("will not charge per retry, per simulation, or per transition", pricingCatalog);
         Assert.Contains("Register is Free (design-time)", landing);
         Assert.Contains("MCP is included", docs);
         Assert.Contains("will not charge per retry, simulation, replay, or compensation", docs, StringComparison.OrdinalIgnoreCase);

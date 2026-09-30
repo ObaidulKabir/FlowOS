@@ -50,14 +50,26 @@ public class PluginBindingsController : ControllerBase
         var providerName = request.ProviderName?.Trim();
         if (bindingType == PluginBindingTypes.Prompt && string.IsNullOrWhiteSpace(providerName))
             providerName = AgentPromptKinds.Markdown;
-        if (string.IsNullOrWhiteSpace(providerName))
-            return BadRequest("providerName is required.");
 
         string? configurationJson = null;
         if (request.Configuration is { ValueKind: JsonValueKind.Object or JsonValueKind.String } config)
             configurationJson = config.ValueKind == JsonValueKind.String
                 ? config.GetString()
                 : config.GetRawText();
+
+        if (bindingType == PluginBindingTypes.Profile)
+        {
+            var parsedProfile = FlowOS.Core.Common.Models.AgentProfileConfiguration.Parse(configurationJson);
+            if (string.IsNullOrWhiteSpace(providerName))
+                providerName = parsedProfile?.Role?.Trim();
+            if (string.IsNullOrWhiteSpace(providerName))
+                providerName = request.SourceName.Trim();
+            if (parsedProfile?.AutoCommitThreshold is < 0.0 or > 1.0)
+                return BadRequest("autoCommitThreshold must be between 0.0 and 1.0.");
+        }
+
+        if (string.IsNullOrWhiteSpace(providerName))
+            return BadRequest("providerName is required.");
 
         if (bindingType == PluginBindingTypes.Prompt)
         {
