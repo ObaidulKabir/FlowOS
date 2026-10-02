@@ -59,73 +59,128 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
                 "Provider API key is not configured.");
         }
 
+        var systemPrompt = BuildSystemPrompt(context);
+        var userPrompt = BuildUserPrompt(context);
+        var history = new List<ToolCallMessage>();
+        var iterations = 0;
+        const int MaxIterations = 10;
+        AgentTelemetry? lastTelemetry = null;
+
         try
         {
-            var systemPrompt = BuildSystemPrompt(context);
-            var userPrompt = BuildUserPrompt(context);
-            using var request = _adapter.CreateRequest(_endpoint, _apiKey, _model, systemPrompt, userPrompt);
-            var response = _transport == null
-                ? await SendDirectAsync(request, cancellationToken)
-                : await _transport.SendAsync(request, cancellationToken);
-
-            var transportTelemetry = new AgentTelemetry(
-                response.HttpStatusCode,
-                response.ProviderRequestId,
-                AttemptCount: Math.Max(0, response.AttemptCount));
-            if (!response.Success)
+            while (iterations < MaxIterations)
             {
-                return AgentResult.Failure(
-                    response.FailureCode ?? AgentFailureCodes.ProviderUnavailable,
-                    FailureMessage(response.FailureCode),
-                    transportTelemetry);
-            }
+                using var request = _adapter.CreateRequest(
+                    _endpoint, 
+                    _apiKey, 
+                    _model, 
+                    systemPrompt, 
+                    iterations == 0 ? userPrompt : "", 
+                    context.Packet?.DeclaredTools, 
+                    history.Count > 0 ? history : null);
 
-            var providerResponse = _adapter.ParseResponse(response.Content ?? string.Empty);
-            var telemetry = new AgentTelemetry(
-                response.HttpStatusCode,
-                response.ProviderRequestId ?? providerResponse.ProviderRequestId,
-                providerResponse.InputTokens,
-                providerResponse.OutputTokens,
-                providerResponse.TotalTokens,
-                Math.Max(0, response.AttemptCount));
+                var response = _transport == null
+                    ? await SendDirectAsync(request, cancellationToken)
+                    : await _transport.SendAsync(request, cancellationToken);
 
-            if (providerResponse.ErrorCode != null)
-            {
-                return AgentResult.Failure(
-                    providerResponse.ErrorCode,
-                    $"Provider returned a specific error code: {providerResponse.ErrorCode}",
-                    telemetry);
-            }
+                var transportTelemetry = new AgentTelemetry(
+                    response.HttpStatusCode,
+                    response.ProviderRequestId,
+                    AttemptCount: Math.Max(0, response.AttemptCount));
+                
+                if (!response.Success)
+                {
+                    return AgentResult.Failure(
+                        response.FailureCode ?? AgentFailureCodes.ProviderUnavailable,
+                        FailureMessage(response.FailureCode),
+                        transportTelemetry);
+                }
 
-            if (!TryParseSuggestion(providerResponse.Content, out var parsed))
-            {
-                return AgentResult.Failure(
-                    AgentFailureCodes.InvalidModelOutput,
-                    "Provider returned model output that did not match the required suggestion contract.",
-                    telemetry);
-            }
+                var providerResponse = _adapter.ParseResponse(response.Content ?? string.Empty);
+                var telemetry = new AgentTelemetry(
+                    response.HttpStatusCode,
+                    response.ProviderRequestId ?? providerResponse.ProviderRequestId,
+                    providerResponse.InputTokens,
+                    providerResponse.OutputTokens,
+                    providerResponse.TotalTokens,
+                    Math.Max(0, response.AttemptCount));
+                
+                lastTelemetry = telemetry;
 
-            var result = AgentResult.WithActions(parsed.Insight, parsed.Actions);
-            result.Telemetry = telemetry;
-            if (context.RestrictToLegalEvents)
-            {
-                result = AgentSuggestionContract.RestrictToLegalEvents(result, context.LegalEvents);
-                if (result.SuggestedActions.Count == 0)
+                if (providerResponse.ErrorCode != null)
+                {
+                    return AgentResult.Failure(
+                        providerResponse.ErrorCode,
+                        $"Provider returned a specific error code: {providerResponse.ErrorCode}",
+                        telemetry);
+                }
+
+                if (providerResponse.ToolCalls != null && providerResponse.ToolCalls.Count > 0)
+                {
+                    history.Add(new ToolCallMessage("assistant", providerResponse.Content, providerResponse.ToolCalls));
+
+                    if (context.ToolInvoker == null)
+                    {
+                        return AgentResult.Failure(
+                            AgentFailureCodes.ProviderConfiguration,
+                            "Provider requested tool invocation, but no IAgentToolInvoker is available in the context.",
+                            telemetry);
+                    }
+
+                    foreach (var tc in providerResponse.ToolCalls)
+                    {
+                        string tcResult;
+                        try
+                        {
+                            tcResult = await context.ToolInvoker.InvokeToolAsync(tc.ToolName, tc.ArgumentsJson, cancellationToken);
+                        }
+                        catch (Exception ex)
+                        {
+                            tcResult = $"{{\"ok\":false,\"error\":\"{ex.Message}\"}}";
+                        }
+                        history.Add(new ToolCallMessage("tool", tcResult, ToolCallId: tc.Id, ToolName: tc.ToolName));
+                    }
+
+                    iterations++;
+                    continue;
+                }
+
+                if (!TryParseSuggestion(providerResponse.Content, out var parsed))
                 {
                     return AgentResult.Failure(
                         AgentFailureCodes.InvalidModelOutput,
-                        "Provider suggested an event outside the legal nextSteps set.",
+                        "Provider returned model output that did not match the required suggestion contract.",
                         telemetry);
                 }
-            }
 
-            return result;
+                var result = AgentResult.WithActions(parsed.Insight, parsed.Actions);
+                result.Telemetry = telemetry;
+                if (context.RestrictToLegalEvents)
+                {
+                    result = AgentSuggestionContract.RestrictToLegalEvents(result, context.LegalEvents);
+                    if (result.SuggestedActions.Count == 0)
+                    {
+                        return AgentResult.Failure(
+                            AgentFailureCodes.InvalidModelOutput,
+                            "Provider suggested an event outside the legal nextSteps set.",
+                            telemetry);
+                    }
+                }
+
+                return result;
+            }
+            
+            return AgentResult.Failure(
+                AgentFailureCodes.InvalidModelOutput,
+                $"Provider exceeded maximum tool loop iterations ({MaxIterations}).",
+                lastTelemetry);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return AgentResult.Failure(
                 AgentFailureCodes.ProviderUnavailable,
-                "Provider call failed.");
+                "Provider call failed.",
+                lastTelemetry);
         }
     }
 

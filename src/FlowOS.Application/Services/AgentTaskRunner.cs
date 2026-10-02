@@ -45,6 +45,23 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
         _executionHistory = executionHistory;
     }
 
+    private sealed class ScopedToolInvoker : IAgentToolInvoker
+    {
+        private readonly DecisionPacket _packet;
+        private readonly IAgentToolHost _host;
+        
+        public ScopedToolInvoker(DecisionPacket packet, IAgentToolHost host)
+        {
+            _packet = packet;
+            _host = host;
+        }
+
+        public Task<string> InvokeToolAsync(string toolName, string? argumentsJson, CancellationToken cancellationToken = default)
+        {
+            return _host.InvokeToolAsync(_packet, toolName, argumentsJson, cancellationToken);
+        }
+    }
+
     public Task<AgentTaskRunResult> SuggestAsync(
         Guid tenantId,
         Guid workflowInstanceId,
@@ -287,7 +304,8 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
             }
 
             var events = await _unitOfWork.Events.ListByCorrelationIdAsync(workflowInstanceId, cancellationToken);
-            var context = AgentContext.FromPacket(packet, events);
+            var toolInvoker = _toolHost != null ? new ScopedToolInvoker(packet, _toolHost) : null;
+            var context = AgentContext.FromPacket(packet, events, toolInvoker);
             AgentResult result;
             try
             {

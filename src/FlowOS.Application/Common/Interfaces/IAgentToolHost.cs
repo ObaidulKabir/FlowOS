@@ -56,4 +56,10 @@ public interface IAgentToolHost
     Task<DecisionPacket> PrefetchAsync(
         DecisionPacket packet,
         CancellationToken cancellationToken = default);
+
+    Task<string> InvokeToolAsync(
+        DecisionPacket packet,
+        string toolName,
+        string? argumentsJson,
+        CancellationToken cancellationToken = default);
 }

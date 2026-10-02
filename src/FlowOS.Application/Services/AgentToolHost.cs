@@ -85,4 +85,84 @@ public sealed class AgentToolHost : IAgentToolHost
 
         return packet with { ToolResults = results };
     }
+
+    public async Task<string> InvokeToolAsync(
+        DecisionPacket packet,
+        string toolName,
+        string? argumentsJson,
+        CancellationToken cancellationToken = default)
+    {
+        var tool = packet.DeclaredTools?.FirstOrDefault(t => t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
+        if (tool == null)
+        {
+            return $"{{\"ok\":false,\"error\":\"Tool '{toolName}' is not declared for this packet.\"}}";
+        }
+
+        if (string.IsNullOrWhiteSpace(tool.Capability))
+        {
+            return $"{{\"ok\":false,\"error\":\"No capability bound for this tool.\"}}";
+        }
+
+        object? payload = null;
+        if (!string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            try
+            {
+                payload = System.Text.Json.JsonSerializer.Deserialize<object>(argumentsJson);
+            }
+            catch
+            {
+                // Ignore parse errors, capability might expect raw string
+                payload = argumentsJson;
+            }
+        }
+        else
+        {
+            payload = packet.CanonicalContext;
+        }
+
+        AgentResourceResult executed;
+        if (_plugins.TryGetValue(tool.Provider ?? tool.Kind, out var plugin) ||
+            _plugins.TryGetValue(AgentToolCatalog.ResourcePluginName(tool.Name), out plugin))
+        {
+            executed = await plugin.ExecuteAsync(
+                new AgentResourceRequest(
+                    packet.TenantId,
+                    packet.WorkflowInstanceId,
+                    packet.CurrentStepId,
+                    tool.Name,
+                    tool.Capability,
+                    packet.CanonicalContext,
+                    packet.EventPayloads),
+                cancellationToken);
+        }
+        else if (_invoker != null)
+        {
+            var invoked = await _invoker.InvokeAsync(
+                packet.TenantId,
+                tool.Capability,
+                tool.SideEffect,
+                payload,
+                packet.WorkflowInstanceId,
+                packet.CurrentStepId,
+                cancellationToken);
+                
+            executed = new AgentResourceResult(
+                invoked.Ok, tool.Name, tool.Capability, invoked.Parsed ?? invoked.Body, invoked.Error);
+        }
+        else
+        {
+            return $"{{\"ok\":false,\"error\":\"No resource plugin registered for '{tool.Name}'.\"}}";
+        }
+
+        var resultObj = new
+        {
+            ok = executed.Ok,
+            capability = executed.CapabilityName,
+            data = executed.Data,
+            error = executed.Error
+        };
+
+        return System.Text.Json.JsonSerializer.Serialize(resultObj);
+    }
 }

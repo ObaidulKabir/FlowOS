@@ -1,4 +1,7 @@
-﻿using System.Net.Http;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -24,7 +27,9 @@ public sealed class OpenAiProviderAdapter : ILlmProviderAdapter
         string? apiKey,
         string model,
         string systemPrompt,
-        string userPrompt)
+        string userPrompt,
+        IReadOnlyList<AgentToolDescriptor>? tools = null,
+        IReadOnlyList<ToolCallMessage>? history = null)
     {
         var url = string.IsNullOrWhiteSpace(endpoint)
             ? "https://api.openai.com/v1/chat/completions"
@@ -64,16 +69,85 @@ public sealed class OpenAiProviderAdapter : ILlmProviderAdapter
             }
             : new { type = "json_object" };
 
-        var payload = new
+        var messages = new List<object>
         {
-            model,
-            response_format = responseFormat,
-            messages = new object[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
-            }
+            new { role = "system", content = systemPrompt },
+            new { role = "user", content = userPrompt }
         };
+
+        if (history != null)
+        {
+            foreach (var msg in history)
+            {
+                if (msg.Role == "tool")
+                {
+                    messages.Add(new
+                    {
+                        role = "tool",
+                        content = msg.Content ?? "",
+                        tool_call_id = msg.ToolCallId
+                    });
+                }
+                else
+                {
+                    if (msg.ToolCalls != null && msg.ToolCalls.Count > 0)
+                    {
+                        messages.Add(new
+                        {
+                            role = "assistant",
+                            content = msg.Content,
+                            tool_calls = msg.ToolCalls.Select(tc => new
+                            {
+                                id = tc.Id,
+                                type = "function",
+                                function = new
+                                {
+                                    name = tc.ToolName,
+                                    arguments = tc.ArgumentsJson
+                                }
+                            }).ToArray()
+                        });
+                    }
+                    else
+                    {
+                        messages.Add(new { role = "assistant", content = msg.Content ?? "" });
+                    }
+                }
+            }
+        }
+
+        object? toolsPayload = null;
+        if (tools != null && tools.Count > 0)
+        {
+            toolsPayload = tools.Select(t => new
+            {
+                type = "function",
+                function = new
+                {
+                    name = t.Name,
+                    description = t.Description,
+                    parameters = string.IsNullOrWhiteSpace(t.ParametersSchema) 
+                        ? new { type = "object", properties = new { } } 
+                        : JsonSerializer.Deserialize<object>(t.ParametersSchema)
+                }
+            }).ToArray();
+        }
+
+        var payload = new Dictionary<string, object>
+        {
+            ["model"] = model,
+            ["messages"] = messages
+        };
+
+        if (toolsPayload != null)
+        {
+            payload["tools"] = toolsPayload;
+            payload["tool_choice"] = "auto";
+        }
+        else
+        {
+            payload["response_format"] = responseFormat;
+        }
 
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         return request;
@@ -102,17 +176,42 @@ public sealed class OpenAiProviderAdapter : ILlmProviderAdapter
         {
             using var doc = JsonDocument.Parse(responseBody);
             var root = doc.RootElement;
+            
             string? content = null;
+            List<ToolCallInfo>? toolCalls = null;
+            
             if (root.TryGetProperty("choices", out var choices) &&
                 choices.ValueKind == JsonValueKind.Array &&
                 choices.GetArrayLength() > 0)
             {
                 var first = choices[0];
-                if (first.TryGetProperty("message", out var message) &&
-                    message.TryGetProperty("content", out var contentElement) &&
-                    contentElement.ValueKind == JsonValueKind.String)
+                if (first.TryGetProperty("message", out var message))
                 {
-                    content = contentElement.GetString();
+                    if (message.TryGetProperty("content", out var contentElement) &&
+                        contentElement.ValueKind == JsonValueKind.String)
+                    {
+                        content = contentElement.GetString();
+                    }
+                    
+                    if (message.TryGetProperty("tool_calls", out var tcElement) &&
+                        tcElement.ValueKind == JsonValueKind.Array)
+                    {
+                        toolCalls = new List<ToolCallInfo>();
+                        foreach (var tc in tcElement.EnumerateArray())
+                        {
+                            if (tc.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "function" &&
+                                tc.TryGetProperty("id", out var idEl) &&
+                                tc.TryGetProperty("function", out var funcEl) &&
+                                funcEl.TryGetProperty("name", out var nameEl) &&
+                                funcEl.TryGetProperty("arguments", out var argsEl))
+                            {
+                                toolCalls.Add(new ToolCallInfo(
+                                    idEl.GetString() ?? "",
+                                    nameEl.GetString() ?? "",
+                                    argsEl.GetString() ?? "{}"));
+                            }
+                        }
+                    }
                 }
             }
 
@@ -123,47 +222,32 @@ public sealed class OpenAiProviderAdapter : ILlmProviderAdapter
                 content = direct.GetString();
             }
 
-            long? inputTokens = null;
-            long? outputTokens = null;
-            long? totalTokens = null;
-            if (root.TryGetProperty("usage", out var usage) &&
-                usage.ValueKind == JsonValueKind.Object)
+            long? inputTokens = null, outputTokens = null, totalTokens = null;
+            if (root.TryGetProperty("usage", out var usage))
             {
-                inputTokens = ReadNonNegativeInt64(usage, "prompt_tokens");
-                outputTokens = ReadNonNegativeInt64(usage, "completion_tokens");
-                totalTokens = ReadNonNegativeInt64(usage, "total_tokens");
+                if (usage.TryGetProperty("prompt_tokens", out var p) && p.TryGetInt64(out var pv)) inputTokens = pv;
+                if (usage.TryGetProperty("completion_tokens", out var c) && c.TryGetInt64(out var cv)) outputTokens = cv;
+                if (usage.TryGetProperty("total_tokens", out var t) && t.TryGetInt64(out var tv)) totalTokens = tv;
             }
 
-            var requestId = root.TryGetProperty("id", out var id) &&
-                            id.ValueKind == JsonValueKind.String
-                ? LlmTelemetrySanitizer.SanitizeRequestId(id.GetString())
-                : null;
+            string? requestId = null;
+            if (root.TryGetProperty("id", out var idElement))
+            {
+                requestId = idElement.GetString();
+            }
 
             return new LlmProviderResponse(
                 content,
                 inputTokens,
                 outputTokens,
-                totalTokens ?? SumTokens(inputTokens, outputTokens),
-                requestId);
+                totalTokens,
+                requestId,
+                null,
+                toolCalls != null && toolCalls.Count > 0 ? toolCalls : null);
         }
         catch
         {
             return new LlmProviderResponse(null);
         }
     }
-
-    private static long? ReadNonNegativeInt64(JsonElement parent, string name) =>
-        parent.TryGetProperty(name, out var value) &&
-        value.ValueKind == JsonValueKind.Number &&
-        value.TryGetInt64(out var parsed) &&
-        parsed >= 0
-            ? parsed
-            : null;
-
-    private static long? SumTokens(long? inputTokens, long? outputTokens) =>
-        inputTokens.HasValue &&
-        outputTokens.HasValue &&
-        inputTokens.Value <= long.MaxValue - outputTokens.Value
-            ? inputTokens.Value + outputTokens.Value
-            : null;
 }

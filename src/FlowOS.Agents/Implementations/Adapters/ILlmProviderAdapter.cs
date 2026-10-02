@@ -1,6 +1,20 @@
+using System.Collections.Generic;
 using System.Net.Http;
+using FlowOS.Agents.Abstractions;
 
 namespace FlowOS.Agents.Implementations.Adapters;
+
+public sealed record ToolCallInfo(
+    string Id,
+    string ToolName,
+    string ArgumentsJson);
+
+public sealed record ToolCallMessage(
+    string Role, // "assistant", "tool"
+    string? Content,
+    IReadOnlyList<ToolCallInfo>? ToolCalls = null,
+    string? ToolCallId = null,
+    string? ToolName = null);
 
 public sealed record LlmProviderResponse(
     string? Content,
@@ -8,7 +22,8 @@ public sealed record LlmProviderResponse(
     long? OutputTokens = null,
     long? TotalTokens = null,
     string? ProviderRequestId = null,
-    string? ErrorCode = null);
+    string? ErrorCode = null,
+    IReadOnlyList<ToolCallInfo>? ToolCalls = null);
 
 public interface ILlmProviderAdapter
 {
@@ -17,7 +32,9 @@ public interface ILlmProviderAdapter
         string? apiKey,
         string model,
         string systemPrompt,
-        string userPrompt);
+        string userPrompt,
+        IReadOnlyList<AgentToolDescriptor>? tools = null,
+        IReadOnlyList<ToolCallMessage>? history = null);
 
     string? ExtractContent(string responseBody);
 

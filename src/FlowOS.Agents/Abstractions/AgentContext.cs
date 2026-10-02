@@ -15,6 +15,7 @@ public class AgentContext
     public DecisionPacket? Packet { get; }
     public IReadOnlyList<string> LegalEvents { get; }
     public bool RestrictToLegalEvents { get; }
+    public IAgentToolInvoker? ToolInvoker { get; }
 
     public AgentContext(
         Guid tenantId,
@@ -22,7 +23,8 @@ public class AgentContext
         string workflowState,
         IEnumerable<IEvent> eventHistory,
         string objective,
-        DecisionPacket? packet = null)
+        DecisionPacket? packet = null,
+        IAgentToolInvoker? toolInvoker = null)
     {
         TenantId = tenantId;
         EntitySnapshot = entitySnapshot;
@@ -32,9 +34,13 @@ public class AgentContext
         Packet = packet;
         LegalEvents = packet?.LegalNextStepEvents ?? Array.Empty<string>();
         RestrictToLegalEvents = packet != null;
+        ToolInvoker = toolInvoker;
     }
 
-    public static AgentContext FromPacket(DecisionPacket packet, IEnumerable<IEvent>? eventHistory = null)
+    public static AgentContext FromPacket(
+        DecisionPacket packet, 
+        IEnumerable<IEvent>? eventHistory = null,
+        IAgentToolInvoker? toolInvoker = null)
     {
         var snapshot = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in packet.EventPayloads)
@@ -59,6 +65,7 @@ public class AgentContext
             packet.CurrentState ?? packet.CurrentStepId,
             eventHistory ?? Array.Empty<IEvent>(),
             packet.Objective,
-            packet);
+            packet,
+            toolInvoker);
     }
 }

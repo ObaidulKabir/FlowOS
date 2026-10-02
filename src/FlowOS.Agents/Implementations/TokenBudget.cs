@@ -50,7 +50,7 @@ public static class TokenBudget
         promptData["snapshot"] = context.EntitySnapshot;
 
         // Try adding full payloads and tool results
-        var eventPayloads = CloneDictionary(packet?.EventPayloads);
+        var eventPayloads = CloneEventPayloads(packet?.EventPayloads);
         var toolResults = CloneDictionary(packet?.ToolResults);
         
         promptData["eventPayloads"] = eventPayloads;
@@ -109,5 +109,11 @@ public static class TokenBudget
     {
         if (source == null) return null;
         return source.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    }
+
+    private static Dictionary<string, object?>? CloneEventPayloads(IReadOnlyDictionary<string, object>? source)
+    {
+        if (source == null) return null;
+        return source.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value);
     }
 }
