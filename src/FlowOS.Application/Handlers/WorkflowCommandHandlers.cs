@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -177,20 +177,49 @@ public partial class WorkflowCommandHandlers :
         !string.IsNullOrWhiteSpace(sm.InitialState) &&
         sm.Transitions.Count > 0;
 
-    private void RunAutoAdvance(
+    private async Task RunAutoAdvanceAsync(
         WorkflowInstance instance,
         WorkflowDefinition definition,
         Guid tenantId,
         FlowOS.StateMachines.Models.ExecutionContext context,
-        FlowOS.Domain.Entities.StateMachineDefinition? smDef = null)
+        FlowOS.Domain.Entities.StateMachineDefinition? smDef,
+        CancellationToken cancellationToken)
     {
-        FlowOS.Application.Services.WorkflowAutoAdvanceRunner.Run(
+        var traces = FlowOS.Application.Services.WorkflowAutoAdvanceRunner.Run(
             _engine,
             instance,
             definition,
             tenantId,
             context,
             smDef);
+
+        if (_actionDispatcher != null)
+        {
+            foreach (var trace in traces)
+            {
+                if (!trace.IsAllowed) continue;
+
+                foreach (var departedStepId in trace.DepartedStepIds)
+                {
+                    var departedStep = definition.Steps.FirstOrDefault(s => s.StepId == departedStepId);
+                    if (departedStep?.OnExit != null && departedStep.OnExit.Count > 0)
+                    {
+                        await _actionDispatcher.QueueActionsAsync(
+                            tenantId, instance.Id, departedStepId, "OnExit", departedStep.OnExit, context.Payload, cancellationToken);
+                    }
+                }
+
+                foreach (var enteredStepId in trace.EnteredStepIds)
+                {
+                    var enteredStep = definition.Steps.FirstOrDefault(s => s.StepId == enteredStepId);
+                    if (enteredStep?.OnEntry != null && enteredStep.OnEntry.Count > 0)
+                    {
+                        await _actionDispatcher.QueueActionsAsync(
+                            tenantId, instance.Id, enteredStepId, "OnEntry", enteredStep.OnEntry, context.Payload, cancellationToken);
+                    }
+                }
+            }
+        }
     }
 
     private async Task CheckAndScheduleTimerAsync(
@@ -680,7 +709,7 @@ public partial class WorkflowCommandHandlers :
         AddCurrentRolesToContext(childContext);
         await EnrichExecutionContextWithPluginBindingsAsync(childContext, parentInstance.TenantId, cancellationToken);
 
-        RunAutoAdvance(childInstance, childDefinition, parentInstance.TenantId, childContext, childSmDef);
+        await RunAutoAdvanceAsync(childInstance, childDefinition, parentInstance.TenantId, childContext, childSmDef, cancellationToken);
         var autoAdvancedEnteredStepIds = (childInstance.ActiveStepIds != null && childInstance.ActiveStepIds.Count > 0)
             ? childInstance.ActiveStepIds.ToList()
             : (string.IsNullOrEmpty(childInstance.CurrentStepId) ? new List<string>() : new List<string> { childInstance.CurrentStepId });
@@ -963,7 +992,7 @@ public partial class WorkflowCommandHandlers :
             await TryResumeParentWorkflowOnChildCompletionAsync(parentInstance, cancellationToken);
         }
 
-        RunAutoAdvance(parentInstance, parentDefinition, parentInstance.TenantId, context, stateMachineDefinition);
+        await RunAutoAdvanceAsync(parentInstance, parentDefinition, parentInstance.TenantId, context, stateMachineDefinition, cancellationToken);
         var autoAdvancedEnteredStepIds = (parentInstance.ActiveStepIds != null && parentInstance.ActiveStepIds.Count > 0)
             ? parentInstance.ActiveStepIds.ToList()
             : (string.IsNullOrEmpty(parentInstance.CurrentStepId) ? new List<string>() : new List<string> { parentInstance.CurrentStepId });

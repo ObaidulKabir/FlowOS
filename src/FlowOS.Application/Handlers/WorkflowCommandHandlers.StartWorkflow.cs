@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -344,7 +344,7 @@ public partial class WorkflowCommandHandlers
                 autoAdvanceContext.Payload,
                 cancellationToken);
 
-            RunAutoAdvance(instance, fullDefinition, request.TenantId, autoAdvanceContext, startStateMachine);
+            await RunAutoAdvanceAsync(instance, fullDefinition, request.TenantId, autoAdvanceContext, startStateMachine, cancellationToken);
             var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
                 ? instance.ActiveStepIds.ToList()
                 : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });

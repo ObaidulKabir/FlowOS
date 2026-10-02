@@ -964,8 +964,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                instance.ActiveStepIds.Select(id => FindStep(definition, id)).FirstOrDefault(step => step != null);
     }
 
-    private static WorkflowStepDefinition? FindStep(WorkflowDefinition definition, string stepId)
-        => definition.Steps.FirstOrDefault(step =>
+    private static WorkflowStepDefinition? FindStep(WorkflowDefinition definition, string? stepId)
+        => string.IsNullOrEmpty(stepId) ? null : definition.Steps.FirstOrDefault(step =>
             string.Equals(step.StepId, stepId, StringComparison.OrdinalIgnoreCase));
 
     private static IReadOnlyList<string> NormalizeRoles(IReadOnlyList<string>? roles)

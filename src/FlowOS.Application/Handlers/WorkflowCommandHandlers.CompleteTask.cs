@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -198,7 +198,7 @@ public partial class WorkflowCommandHandlers
                 await TryResumeParentWorkflowOnChildCompletionAsync(instance, cancellationToken);
             }
 
-            RunAutoAdvance(instance, definition, request.TenantId, context, smDef);
+            await RunAutoAdvanceAsync(instance, definition, request.TenantId, context, smDef, cancellationToken);
             var autoAdvancedEnteredStepIds = (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 0)
                 ? instance.ActiveStepIds.ToList()
                 : (string.IsNullOrEmpty(instance.CurrentStepId) ? new List<string>() : new List<string> { instance.CurrentStepId });

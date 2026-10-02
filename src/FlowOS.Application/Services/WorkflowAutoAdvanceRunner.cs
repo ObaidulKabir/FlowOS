@@ -8,13 +8,15 @@ namespace FlowOS.Application.Services;
 
 public sealed record WorkflowAutoAdvanceTrace(
     string EventType,
-    string FromStepId,
-    string ToStepId,
+    string? FromStepId,
+    string? ToStepId,
     IReadOnlyList<string> ActiveStepIds,
     string FromState,
     string ToState,
     bool IsAllowed,
-    string Message);
+    string Message,
+    IReadOnlyList<string> DepartedStepIds,
+    IReadOnlyList<string> EnteredStepIds);
 
 public static class WorkflowAutoAdvanceRunner
 {
@@ -49,8 +51,11 @@ public static class WorkflowAutoAdvanceRunner
                     continue;
                 }
 
-                var fromStep = instance.CurrentStepId;
-                var fromState = instance.CurrentState ?? instance.CurrentStepId;
+                var activeBefore = instance.ActiveStepIds.ToList();
+                var currentBefore = instance.CurrentStepId;
+                
+                var fromStep = stepId;
+                var fromState = instance.CurrentState ?? fromStep;
                 var result = engine.Advance(
                     instance,
                     definition,
@@ -58,6 +63,29 @@ public static class WorkflowAutoAdvanceRunner
                     context,
                     stateMachineDefinition,
                     fromState);
+
+                var activeAfter = instance.ActiveStepIds.ToList();
+                var currentAfter = instance.CurrentStepId;
+
+                var departedSteps = new List<string>();
+                if (activeBefore.Count > 0)
+                {
+                    departedSteps.AddRange(activeBefore.Where(s => !activeAfter.Contains(s)));
+                }
+                else if (!string.IsNullOrEmpty(currentBefore) && currentBefore != currentAfter)
+                {
+                    departedSteps.Add(currentBefore);
+                }
+
+                var enteredSteps = new List<string>();
+                if (activeAfter.Count > 0)
+                {
+                    enteredSteps.AddRange(activeAfter.Where(s => !activeBefore.Contains(s)));
+                }
+                else if (!string.IsNullOrEmpty(currentAfter) && currentAfter != currentBefore)
+                {
+                    enteredSteps.Add(currentAfter);
+                }
 
                 trace.Add(new WorkflowAutoAdvanceTrace(
                     "Default",
@@ -67,7 +95,9 @@ public static class WorkflowAutoAdvanceRunner
                     fromState,
                     instance.CurrentState ?? fromState,
                     result.Success,
-                    result.Message));
+                    result.Message,
+                    departedSteps,
+                    enteredSteps));
 
                 if (!result.Success)
                 {
