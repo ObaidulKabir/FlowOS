@@ -14,6 +14,12 @@ public sealed class AgentProviderConfiguration
     public string? ApiKey { get; set; }
     public bool IsDefault { get; set; }
 
+    /// <summary>
+    /// Maximum output tokens to request from the provider. When null, adapters use their own default.
+    /// Particularly important for Anthropic which requires an explicit max_tokens value.
+    /// </summary>
+    public int? MaxTokens { get; set; }
+
     public static AgentProviderConfiguration? Parse(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -52,7 +58,10 @@ public sealed class AgentProviderConfiguration
             parsed.IsDefault);
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    public static string Serialize(AgentProviderConfiguration config) =>
+        JsonSerializer.Serialize(config, JsonOptions);
+
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,

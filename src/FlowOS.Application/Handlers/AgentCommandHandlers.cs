@@ -31,7 +31,12 @@ public class AgentCommandHandlers : IRequestHandler<PublishAgentInsightCommand, 
             request.TenantId,
             request.AgentId,
             request.Insight,
-            request.ContextObjective
+            request.ContextObjective,
+            workflowInstanceId: request.WorkflowInstanceId,
+            stepId: request.StepId,
+            suggestedEvent: request.SuggestedEvent,
+            confidence: request.Confidence,
+            providerName: request.ProviderName
         );
 
         domainEvent.SetCorrelationId(request.CorrelationId ?? request.WorkflowInstanceId);

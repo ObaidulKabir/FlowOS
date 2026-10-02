@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 
 namespace FlowOS.Agents.Implementations.Adapters;
 
@@ -7,7 +7,8 @@ public sealed record LlmProviderResponse(
     long? InputTokens = null,
     long? OutputTokens = null,
     long? TotalTokens = null,
-    string? ProviderRequestId = null);
+    string? ProviderRequestId = null,
+    string? ErrorCode = null);
 
 public interface ILlmProviderAdapter
 {

@@ -8,15 +8,19 @@ using FlowOS.Core.Common.Models;
 using FlowOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
+using Microsoft.AspNetCore.DataProtection;
+
 namespace FlowOS.Infrastructure.Services;
 
 public class PluginBindingRegistryService : IPluginBindingRegistryService
 {
     private readonly FlowOSDbContext _dbContext;
+    private readonly IDataProtector? _dataProtector;
 
-    public PluginBindingRegistryService(FlowOSDbContext dbContext)
+    public PluginBindingRegistryService(FlowOSDbContext dbContext, IDataProtectionProvider? dataProtectionProvider = null)
     {
         _dbContext = dbContext;
+        _dataProtector = dataProtectionProvider?.CreateProtector("FlowOS.AgentSecrets");
     }
 
     public async Task<PluginBindingDto> UpsertAsync(
@@ -240,7 +244,12 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 AgentProviderConfiguration.Parse(r.ConfigurationJson)?.IsDefault == true);
         }
 
-        return record == null ? null : AgentProviderConfiguration.Parse(record.ConfigurationJson);
+        var config = record == null ? null : AgentProviderConfiguration.Parse(record.ConfigurationJson);
+        if (config?.ApiKey != null)
+        {
+            config.ApiKey = TryDecrypt(config.ApiKey);
+        }
+        return config;
     }
 
     public async Task<PluginBindingDto?> GetDefaultAgentProviderAsync(
@@ -356,11 +365,31 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                             : null,
             x.FlowOsVersion);
 
-    private static string? MergeConfiguration(string bindingType, string? existing, string? incoming)
+    private string? MergeConfiguration(string bindingType, string? existing, string? incoming)
     {
         if (incoming == null) return existing;
         if (bindingType == PluginBindingTypes.Agent)
-            return AgentProviderConfiguration.Merge(existing, incoming);
+        {
+            var existingParsed = AgentProviderConfiguration.Parse(existing);
+            if (existingParsed?.ApiKey != null)
+                existingParsed.ApiKey = TryDecrypt(existingParsed.ApiKey);
+
+            var incomingParsed = AgentProviderConfiguration.Parse(incoming);
+            if (incomingParsed?.ApiKey != null)
+                incomingParsed.ApiKey = TryDecrypt(incomingParsed.ApiKey); // In case it's somehow already encrypted, though unlikely from API
+
+            var mergedJson = AgentProviderConfiguration.Merge(
+                existingParsed == null ? null : AgentProviderConfiguration.Serialize(existingParsed), 
+                incomingParsed == null ? null : AgentProviderConfiguration.Serialize(incomingParsed));
+            
+            var mergedParsed = AgentProviderConfiguration.Parse(mergedJson);
+            if (mergedParsed?.ApiKey != null)
+            {
+                mergedParsed.ApiKey = TryEncrypt(mergedParsed.ApiKey);
+                return AgentProviderConfiguration.Serialize(mergedParsed);
+            }
+            return mergedJson;
+        }
         if (bindingType == PluginBindingTypes.Prompt)
             return AgentPromptConfiguration.Merge(existing, incoming);
         if (bindingType == PluginBindingTypes.Profile)
@@ -368,6 +397,26 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         if (bindingType == PluginBindingTypes.Action)
             return AgentToolConfiguration.Merge(existing, incoming);
         return incoming;
+    }
+
+    private string TryDecrypt(string value)
+    {
+        if (_dataProtector == null || string.IsNullOrWhiteSpace(value)) return value;
+        try
+        {
+            return _dataProtector.Unprotect(value);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            // Fallback for legacy plain-text keys before encryption was enabled
+            return value;
+        }
+    }
+
+    private string TryEncrypt(string value)
+    {
+        if (_dataProtector == null || string.IsNullOrWhiteSpace(value)) return value;
+        return _dataProtector.Protect(value);
     }
 
     private static string NormalizeBindingType(string? bindingType) =>

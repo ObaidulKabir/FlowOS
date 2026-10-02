@@ -26,11 +26,15 @@ public class AgentInsightProjector : INotificationHandler<DomainEventNotificatio
         {
             Id = Guid.NewGuid(),
             TenantId = evt.TenantId,
-            WorkflowInstanceId = evt.CorrelationId ?? Guid.Empty,
+            WorkflowInstanceId = evt.WorkflowInstanceId ?? evt.CorrelationId ?? Guid.Empty,
             AgentId = evt.AgentId,
             Insight = evt.Insight,
             ContextObjective = evt.ContextObjective,
-            CreatedAt = evt.Timestamp
+            CreatedAt = evt.Timestamp,
+            StepId = evt.StepId,
+            SuggestedEvent = evt.SuggestedEvent,
+            Confidence = evt.Confidence,
+            ProviderName = evt.ProviderName
         };
 
         _unitOfWork.AgentInsights.Add(readModel);

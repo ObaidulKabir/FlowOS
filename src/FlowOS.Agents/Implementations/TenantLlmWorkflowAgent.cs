@@ -10,11 +10,17 @@ namespace FlowOS.Agents.Implementations;
 /// </summary>
 public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
 {
+    /// <summary>
+    /// Shared pooled HttpClient for all direct (non-transport) provider calls.
+    /// HttpClient is thread-safe and designed to be reused across requests.
+    /// </summary>
+    private static readonly HttpClient SharedClient = new();
+
     private readonly string _providerName;
     private readonly string _model;
     private readonly string _endpoint;
     private readonly string? _apiKey;
-    private readonly HttpMessageHandler? _handler;
+    private readonly HttpClient? _customClient;
     private readonly ILlmProviderAdapter _adapter;
     private readonly ILlmTransport? _transport;
 
@@ -31,7 +37,8 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         _model = string.IsNullOrWhiteSpace(model) ? "gpt-4o-mini" : model.Trim();
         _endpoint = string.IsNullOrWhiteSpace(endpoint) ? string.Empty : endpoint.Trim();
         _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
-        _handler = handler;
+        // Only allocate a custom client when a test/override handler is provided.
+        _customClient = handler != null ? new HttpClient(handler, disposeHandler: false) : null;
         _adapter = adapter ?? LlmProviderAdapterFactory.GetAdapter(_providerName);
         _transport = transport;
     }
@@ -82,6 +89,14 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
                 providerResponse.TotalTokens,
                 Math.Max(0, response.AttemptCount));
 
+            if (providerResponse.ErrorCode != null)
+            {
+                return AgentResult.Failure(
+                    providerResponse.ErrorCode,
+                    $"Provider returned a specific error code: {providerResponse.ErrorCode}",
+                    telemetry);
+            }
+
             if (!TryParseSuggestion(providerResponse.Content, out var parsed))
             {
                 return AgentResult.Failure(
@@ -128,34 +143,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
 
     private static string BuildUserPrompt(AgentContext context)
     {
-        var packet = context.Packet;
-        var instructions = packet?.Prompt.Instructions
-            ?? packet?.Objective
-            ?? context.Objective;
-        var declaredTools = packet?.DeclaredTools;
-        var toolsPayload = declaredTools != null && declaredTools.Count > 0
-            ? declaredTools.Select(t => new
-            {
-                name = t.Name,
-                description = t.Description,
-                parameters = t.ParametersSchema,
-                sideEffect = t.SideEffect
-            }).ToList()
-            : null;
-
-        return JsonSerializer.Serialize(new
-        {
-            instructions,
-            templateGuideline = packet?.Prompt.TemplateGuideline,
-            policyGuideline = packet?.Prompt.PolicyGuideline,
-            currentStepId = packet?.CurrentStepId,
-            currentState = packet?.CurrentState,
-            data = packet?.CanonicalContext,
-            eventPayloads = packet?.EventPayloads,
-            tools = toolsPayload,
-            toolResults = packet?.ToolResults,
-            snapshot = context.EntitySnapshot
-        });
+        return TokenBudget.BuildBudgetedPrompt(context);
     }
 
     private async Task<LlmTransportResult> SendDirectAsync(
@@ -164,9 +152,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
     {
         try
         {
-            using var client = _handler == null
-                ? new HttpClient()
-                : new HttpClient(_handler, disposeHandler: false);
+            var client = _customClient ?? SharedClient;
             using var response = await client.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -217,7 +203,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
 
         try
         {
-            using var suggestion = JsonDocument.Parse(content);
+            using var suggestion = JsonDocument.Parse(StripMarkdownCodeFence(content));
             var root = suggestion.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||
                 !TryReadBoundedString(root, "eventType", 200, out var eventType) ||
@@ -241,6 +227,34 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Strips markdown code fences that some LLMs (Anthropic, Google) wrap around JSON output.
+    /// Handles: ```json ... ```, ``` ... ```, and leading/trailing whitespace.
+    /// </summary>
+    internal static string StripMarkdownCodeFence(string content)
+    {
+        var trimmed = content.AsSpan().Trim();
+
+        // Must start with ``` to be a code fence
+        if (!trimmed.StartsWith("```", StringComparison.Ordinal))
+            return content.Trim();
+
+        // Strip opening fence (```json, ```JSON, ```)
+        var afterFence = trimmed[3..];
+        var newline = afterFence.IndexOfAny(['\n', '\r']);
+        if (newline >= 0)
+            afterFence = afterFence[(newline + 1)..];
+        else
+            afterFence = afterFence.TrimStart();
+
+        // Strip closing fence
+        var closingFence = afterFence.LastIndexOf("```", StringComparison.Ordinal);
+        if (closingFence >= 0)
+            afterFence = afterFence[..closingFence];
+
+        return afterFence.Trim().ToString();
     }
 
     private static bool TryReadBoundedString(

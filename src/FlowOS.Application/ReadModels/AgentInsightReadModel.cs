@@ -15,4 +15,10 @@ public class AgentInsightReadModel
     public string Insight { get; set; } = string.Empty;
     public string ContextObjective { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+
+    // Extended telemetry fields (nullable — projected from enriched event)
+    public string? StepId { get; set; }
+    public string? SuggestedEvent { get; set; }
+    public double? Confidence { get; set; }
+    public string? ProviderName { get; set; }
 }

@@ -123,12 +123,21 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
             var model = NormalizeModel(
                 providerName!,
                 secrets?.Model ?? packet.Provider?.Model);
+
+            // For Anthropic, create a per-request adapter that honours tenant MaxTokens config.
+            var adapter = string.Equals(
+                providerName, AgentProviderKinds.Anthropic, StringComparison.OrdinalIgnoreCase)
+                    && secrets?.MaxTokens is { } maxTok
+                ? new FlowOS.Agents.Implementations.Adapters.AnthropicProviderAdapter(maxTok)
+                : null;
+
             var agent = new TenantLlmWorkflowAgent(
                 providerName!,
                 model,
                 secrets?.Endpoint ?? packet.Provider?.Endpoint,
                 secrets?.ApiKey,
                 _handler,
+                adapter: adapter,
                 transport: _transport);
             return new ResolvedWorkflowAgent(
                 agent,

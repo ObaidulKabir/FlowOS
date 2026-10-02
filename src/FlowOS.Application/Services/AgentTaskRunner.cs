@@ -354,7 +354,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                 await PersistInsightAsync(
                     tenantId,
                     workflowInstanceId,
-                    resolved.ActorId,
+                    resolved,
                     result,
                     packet,
                     cancellationToken);
@@ -810,7 +810,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
     private async Task PersistInsightAsync(
         Guid tenantId,
         Guid workflowInstanceId,
-        string agentId,
+        ResolvedWorkflowAgent resolved,
         AgentResult result,
         DecisionPacket packet,
         CancellationToken cancellationToken)
@@ -819,10 +819,11 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
             return;
 
         var insight = result.Insight;
-        if (string.IsNullOrWhiteSpace(insight) && result.SuggestedActions.Count > 0)
+        SuggestedAction? topAction = result.SuggestedActions.Count > 0 ? result.SuggestedActions[0] : null;
+
+        if (string.IsNullOrWhiteSpace(insight) && topAction != null)
         {
-            var top = result.SuggestedActions[0];
-            insight = $"Suggested {top.EventType} ({top.Confidence:0.00}): {top.Reason}";
+            insight = $"Suggested {topAction.EventType} ({topAction.Confidence:0.00}): {topAction.Reason}";
         }
 
         if (string.IsNullOrWhiteSpace(insight))
@@ -832,10 +833,14 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
             new PublishAgentInsightCommand(
                 tenantId,
                 workflowInstanceId,
-                agentId,
+                resolved.ActorId,
                 insight,
                 packet.Objective,
-                workflowInstanceId),
+                workflowInstanceId,
+                StepId: packet.CurrentStepId,
+                SuggestedEvent: topAction?.EventType,
+                Confidence: topAction?.Confidence,
+                ProviderName: resolved.ProviderName),
             cancellationToken);
     }
 }

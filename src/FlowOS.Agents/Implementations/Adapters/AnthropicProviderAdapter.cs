@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using FlowOS.Agents.Abstractions;
@@ -7,6 +7,14 @@ namespace FlowOS.Agents.Implementations.Adapters;
 
 public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
 {
+    private readonly int _maxTokens;
+
+    /// <param name="maxTokens">Maximum output tokens. Defaults to 1024. Set higher for verbose reasoning models.</param>
+    public AnthropicProviderAdapter(int maxTokens = 1024)
+    {
+        _maxTokens = maxTokens > 0 ? maxTokens : 1024;
+    }
+
     public HttpRequestMessage CreateRequest(
         string endpoint,
         string? apiKey,
@@ -28,7 +36,7 @@ public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
         var payload = new
         {
             model = string.IsNullOrWhiteSpace(model) ? "claude-3-5-sonnet-20241022" : model,
-            max_tokens = 1024,
+            max_tokens = _maxTokens,
             system = systemPrompt,
             messages = new object[]
             {
@@ -49,8 +57,25 @@ public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
         {
             using var doc = JsonDocument.Parse(responseBody);
             var root = doc.RootElement;
+            
+            string? errorCode = null;
+            if (root.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "error" &&
+                root.TryGetProperty("error", out var errObj) &&
+                errObj.TryGetProperty("type", out var errType))
+            {
+                var errTypeStr = errType.GetString();
+                if (errTypeStr == "overloaded_error")
+                {
+                    errorCode = AgentFailureCodes.ProviderUnavailable;
+                }
+                else if (errTypeStr == "rate_limit_error")
+                {
+                    errorCode = AgentFailureCodes.ProviderRateLimit;
+                }
+            }
+
             string? content = null;
-            if (root.TryGetProperty("content", out var contentArr) &&
+            if (errorCode == null && root.TryGetProperty("content", out var contentArr) &&
                 contentArr.ValueKind == JsonValueKind.Array &&
                 contentArr.GetArrayLength() > 0)
             {
@@ -84,7 +109,8 @@ public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
                 inputTokens,
                 outputTokens,
                 SumTokens(inputTokens, outputTokens),
-                requestId);
+                requestId,
+                errorCode);
         }
         catch
         {

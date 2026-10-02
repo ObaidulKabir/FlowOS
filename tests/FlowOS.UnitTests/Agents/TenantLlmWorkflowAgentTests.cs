@@ -389,6 +389,71 @@ public class TenantLlmWorkflowAgentTests
         Assert.Equal("QUOTE_APPROVED", result.SuggestedActions[0].EventType);
     }
 
+    [Fact]
+    public async Task HostedAgent_AnthropicAdapter_MapsOverloadedErrorToProviderUnavailable()
+    {
+        var handler = new StubHandler("""
+            {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+            """, HttpStatusCode.OK);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "anthropic",
+            "claude-3-5-sonnet-20241022",
+            "https://api.anthropic.com/v1/messages",
+            "sk-ant-test-key",
+            handler);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(Packet("QUOTE_APPROVED")));
+
+        Assert.False(result.Success);
+        Assert.Equal(AgentFailureCodes.ProviderUnavailable, result.FailureCode);
+    }
+
+    [Fact]
+    public async Task HostedAgent_GoogleAdapter_MapsSafetyFinishReasonToInvalidModelOutput()
+    {
+        var handler = new StubHandler("""
+            {"candidates":[{"finishReason":"SAFETY","content":{"parts":[]}}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "google",
+            "gemini-1.5-flash",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "AIza-google-key",
+            handler);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(Packet("QUOTE_APPROVED")));
+
+        Assert.False(result.Success);
+        Assert.Equal(AgentFailureCodes.InvalidModelOutput, result.FailureCode);
+    }
+
+    [Theory]
+    [InlineData("```json\n{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.9,\"reason\":\"r\",\"insight\":\"i\"}\n```")]
+    [InlineData("```\r\n{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.9,\"reason\":\"r\",\"insight\":\"i\"}\r\n```")]
+    [InlineData("   ```json   \n{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.9,\"reason\":\"r\",\"insight\":\"i\"}\n```   ")]
+    public async Task HostedAgent_StripsMarkdownCodeFences(string markdownResponse)
+    {
+        var safeResponse = markdownResponse.Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
+        var handler = new StubHandler($$"""
+            {"content":[{"type":"text","text":"{{safeResponse}}"}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "anthropic",
+            "claude-3-5-sonnet-20241022",
+            "https://api.anthropic.com/v1/messages",
+            "sk-ant-test-key",
+            handler);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(Packet("QUOTE_APPROVED")));
+
+        Assert.True(result.Success);
+        Assert.Single(result.SuggestedActions);
+        Assert.Equal("QUOTE_APPROVED", result.SuggestedActions[0].EventType);
+    }
+
     private static DecisionPacket Packet(params string[] legalEvents) =>
         new(
             Guid.NewGuid(),

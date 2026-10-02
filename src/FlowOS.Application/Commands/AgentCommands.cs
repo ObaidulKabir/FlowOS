@@ -10,5 +10,9 @@ public record PublishAgentInsightCommand(
     string AgentId,
     string Insight,
     string ContextObjective,
-    Guid? CorrelationId = null
+    Guid? CorrelationId = null,
+    string? StepId = null,
+    string? SuggestedEvent = null,
+    double? Confidence = null,
+    string? ProviderName = null
 ) : IRequest<bool>, IPolicySecuredCommand;

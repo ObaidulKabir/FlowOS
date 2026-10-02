@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using FlowOS.Agents.Abstractions;
@@ -56,13 +56,27 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
         {
             using var doc = JsonDocument.Parse(responseBody);
             var root = doc.RootElement;
+            
+            string? errorCode = null;
             string? contentText = null;
             if (root.TryGetProperty("candidates", out var candidates) &&
                 candidates.ValueKind == JsonValueKind.Array &&
                 candidates.GetArrayLength() > 0)
             {
                 var first = candidates[0];
-                if (first.TryGetProperty("content", out var content) &&
+                
+                if (first.TryGetProperty("finishReason", out var finishReasonProp) &&
+                    finishReasonProp.ValueKind == JsonValueKind.String)
+                {
+                    var finishReason = finishReasonProp.GetString();
+                    if (string.Equals(finishReason, "SAFETY", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(finishReason, "RECITATION", StringComparison.OrdinalIgnoreCase))
+                    {
+                        errorCode = AgentFailureCodes.InvalidModelOutput;
+                    }
+                }
+
+                if (errorCode == null && first.TryGetProperty("content", out var content) &&
                     content.TryGetProperty("parts", out var parts) &&
                     parts.ValueKind == JsonValueKind.Array &&
                     parts.GetArrayLength() > 0)
@@ -96,7 +110,8 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
                 inputTokens,
                 outputTokens,
                 totalTokens ?? SumTokens(inputTokens, outputTokens),
-                requestId);
+                requestId,
+                errorCode);
         }
         catch
         {
