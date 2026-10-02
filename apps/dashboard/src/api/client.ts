@@ -376,6 +376,15 @@ export const api = {
     return handleResponse(response, 'Failed to list workflow instances');
   },
 
+  getAgentHistory: async (
+    limit: number = 50,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<any[]> => {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    const response = await authorizedFetch(`/api/agents/history?${params.toString()}`, {}, role);
+    return handleResponse(response, 'Failed to load agent history');
+  },
+
   getAgentEvaluationMetrics: async (
     fromUtc: string,
     toUtc: string,

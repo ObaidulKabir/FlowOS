@@ -20,6 +20,7 @@ import {
 import { api, PluginBindingDto } from '../api/client';
 import { AgentPromptManager } from './AgentPromptManager';
 import { WorkflowClass } from '../types';
+import { AgentObservabilityDashboard } from './AgentObservabilityDashboard';
 
 interface Props {
   tenantName: string;
@@ -28,7 +29,7 @@ interface Props {
   compact?: boolean;
 }
 
-type AiSubTab = 'compose' | 'agents' | 'prompts' | 'providers' | 'tools';
+type AiSubTab = 'compose' | 'agents' | 'prompts' | 'providers' | 'tools' | 'history';
 
 const TOOL_PLUGINS = ['LookupRecord', 'QueryRecords', 'FetchDocument', 'SearchKnowledge', 'CheckPolicy'] as const;
 
@@ -196,7 +197,8 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           ['agents', 'Agents (Personas)'],
           ['prompts', 'Prompts'],
           ['providers', 'Providers'],
-          ['tools', 'Tools']
+          ['tools', 'Tools'],
+          ['history', 'Observability']
         ] as const).map(([id, label]) => (
           <button
             key={id}
@@ -304,6 +306,10 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
 
       {subTab === 'tools' && (
         <ToolBindings items={tools} onChanged={load} />
+      )}
+
+      {subTab === 'history' && (
+        <AgentObservabilityDashboard />
       )}
     </div>
   );
