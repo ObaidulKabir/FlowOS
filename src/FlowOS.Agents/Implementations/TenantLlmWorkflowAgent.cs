@@ -8,7 +8,7 @@ namespace FlowOS.Agents.Implementations;
 /// Hosted LLM workflow agent supporting OpenAI, Anthropic, and Google via provider adapters.
 /// The API key is loaded internally and never copied onto Agent Context.
 /// </summary>
-public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
+public sealed class TenantLlmWorkflowAgent : IConversationalAgent
 {
     /// <summary>
     /// Shared pooled HttpClient for all direct (non-transport) provider calls.
@@ -43,11 +43,29 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         _transport = transport;
     }
 
+    public int MaxTurns => 5;
+
     public Task<AgentResult> ExecuteAsync(AgentContext context) =>
         ExecuteAsync(context, CancellationToken.None);
 
-    public async Task<AgentResult> ExecuteAsync(
+    public Task<AgentResult> ExecuteConversationalAsync(
+        DecisionPacket packet,
+        IReadOnlyList<ChatMessage> history,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteInternalAsync(AgentContext.FromPacket(packet), history, cancellationToken);
+    }
+
+    public Task<AgentResult> ExecuteAsync(
         AgentContext context,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteInternalAsync(context, Array.Empty<ChatMessage>(), cancellationToken);
+    }
+
+    private async Task<AgentResult> ExecuteInternalAsync(
+        AgentContext context,
+        IReadOnlyList<ChatMessage> history,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -61,7 +79,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
 
         var systemPrompt = BuildSystemPrompt(context);
         var userPrompt = BuildUserPrompt(context);
-        var history = new List<ToolCallMessage>();
+        var toolCallHistory = new List<ToolCallMessage>();
         var iterations = 0;
         const int MaxIterations = 10;
         AgentTelemetry? lastTelemetry = null;
@@ -70,6 +88,16 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
         {
             while (iterations < MaxIterations)
             {
+                var combinedHistory = new List<ToolCallMessage>();
+                foreach (var msg in history)
+                {
+                    combinedHistory.Add(new ToolCallMessage(
+                        msg.Role.ToString().ToLowerInvariant(),
+                        msg.Content,
+                        Name: msg.Name));
+                }
+                combinedHistory.AddRange(toolCallHistory);
+
                 using var request = _adapter.CreateRequest(
                     _endpoint, 
                     _apiKey, 
@@ -77,7 +105,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
                     systemPrompt, 
                     iterations == 0 ? userPrompt : "", 
                     context.Packet?.DeclaredTools, 
-                    history.Count > 0 ? history : null);
+                    combinedHistory.Count > 0 ? combinedHistory : null);
 
                 var response = _transport == null
                     ? await SendDirectAsync(request, cancellationToken)
@@ -117,7 +145,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
 
                 if (providerResponse.ToolCalls != null && providerResponse.ToolCalls.Count > 0)
                 {
-                    history.Add(new ToolCallMessage("assistant", providerResponse.Content, providerResponse.ToolCalls));
+                    toolCallHistory.Add(new ToolCallMessage("assistant", providerResponse.Content, providerResponse.ToolCalls));
 
                     if (context.ToolInvoker == null)
                     {
@@ -138,7 +166,7 @@ public sealed class TenantLlmWorkflowAgent : IWorkflowAgent
                         {
                             tcResult = $"{{\"ok\":false,\"error\":\"{ex.Message}\"}}";
                         }
-                        history.Add(new ToolCallMessage("tool", tcResult, ToolCallId: tc.Id, ToolName: tc.ToolName));
+                        toolCallHistory.Add(new ToolCallMessage("tool", tcResult, ToolCallId: tc.Id, ToolName: tc.ToolName));
                     }
 
                     iterations++;

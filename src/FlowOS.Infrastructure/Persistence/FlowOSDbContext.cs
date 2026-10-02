@@ -37,6 +37,7 @@ public class FlowOSDbContext : DbContext
     public DbSet<DistributedLease> DistributedLeases { get; set; }
     public DbSet<HostedLlmDailyUsage> HostedLlmDailyUsages { get; set; }
     public DbSet<AgentExecutionRecord> AgentExecutionRecords { get; set; }
+    public DbSet<ConversationMessageRecord> ConversationMessages { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

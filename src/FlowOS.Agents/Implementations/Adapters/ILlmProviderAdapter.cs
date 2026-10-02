@@ -14,7 +14,8 @@ public sealed record ToolCallMessage(
     string? Content,
     IReadOnlyList<ToolCallInfo>? ToolCalls = null,
     string? ToolCallId = null,
-    string? ToolName = null);
+    string? ToolName = null,
+    string? Name = null);
 
 public sealed record LlmProviderResponse(
     string? Content,

@@ -101,6 +101,7 @@ public static class DependencyInjection
         services.AddScoped<AgentExecutionStore>();
         services.AddScoped<IAgentExecutionRecorder>(provider => provider.GetRequiredService<AgentExecutionStore>());
         services.AddScoped<IAgentExecutionHistoryStore>(provider => provider.GetRequiredService<AgentExecutionStore>());
+        services.AddScoped<IConversationStore, ConversationStore>();
         services.AddScoped<IAgentObservabilityQueryService, FlowOS.Application.Services.AgentObservabilityQueryService>();
         services.AddScoped(provider =>
         {

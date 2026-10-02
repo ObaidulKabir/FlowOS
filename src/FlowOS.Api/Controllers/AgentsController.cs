@@ -7,6 +7,7 @@ using FlowOS.Application.Commands;
 using FlowOS.Agents.Events;
 using FlowOS.Core.Interfaces;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Domain.Enums;
 
 namespace FlowOS.Api.Controllers;
@@ -57,6 +58,56 @@ public class AgentsController : ControllerBase
         }
 
         return Ok(new { success = true, message = "Agent insight recorded." });
+    }
+
+    [HttpPost("instances/{workflowInstanceId:guid}/chat")]
+    public async Task<IActionResult> AppendChatMessage(
+        Guid workflowInstanceId,
+        [FromBody] AppendChatMessageDto request,
+        [FromServices] IConversationStore conversationStore,
+        [FromServices] IAgentTaskCoordinator taskCoordinator,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = _currentUser.TenantId;
+
+        await conversationStore.AppendMessageAsync(
+            tenantId,
+            workflowInstanceId,
+            request.StepId,
+            new FlowOS.Agents.Abstractions.ChatMessage(
+                FlowOS.Agents.Abstractions.ChatMessageRole.User,
+                request.Message,
+                request.Name),
+            cancellationToken);
+
+        if (request.TriggerAgent)
+        {
+            await taskCoordinator.EnqueueCurrentStepAsync(
+                tenantId,
+                workflowInstanceId,
+                AgentTaskSource.ApiRequest,
+                cancellationToken);
+        }
+
+        return Ok(new { success = true });
+    }
+
+    [HttpGet("instances/{workflowInstanceId:guid}/chat/{stepId}")]
+    public async Task<IActionResult> GetChatHistory(
+        Guid workflowInstanceId,
+        string stepId,
+        [FromServices] IConversationStore conversationStore,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = _currentUser.TenantId;
+
+        var history = await conversationStore.GetHistoryAsync(
+            tenantId,
+            workflowInstanceId,
+            stepId,
+            cancellationToken);
+
+        return Ok(history);
     }
 
     [HttpGet("{workflowInstanceId:guid}/history")]
@@ -222,4 +273,12 @@ public class PublishInsightDto
     public string Insight { get; set; } = string.Empty;
     public string ContextObjective { get; set; } = string.Empty;
     public Guid? CorrelationId { get; set; }
+}
+
+public class AppendChatMessageDto
+{
+    public string StepId { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string? Name { get; set; }
+    public bool TriggerAgent { get; set; } = true;
 }

@@ -24,6 +24,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
     private readonly IWorkflowAgentFactory _agentFactory;
     private readonly IAgentExecutionRecorder? _executionRecorder;
     private readonly IAgentExecutionHistoryStore? _executionHistory;
+    private readonly IConversationStore? _conversationStore;
 
     public AgentTaskRunner(
         IDecisionPacketBuilder packetBuilder,
@@ -33,7 +34,8 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
         IAgentToolHost? toolHost = null,
         IWorkflowAgentFactory? agentFactory = null,
         IAgentExecutionRecorder? executionRecorder = null,
-        IAgentExecutionHistoryStore? executionHistory = null)
+        IAgentExecutionHistoryStore? executionHistory = null,
+        IConversationStore? conversationStore = null)
     {
         _packetBuilder = packetBuilder;
         _mediator = mediator;
@@ -43,6 +45,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
         _agentFactory = agentFactory ?? new WorkflowAgentFactory(NullPluginBindingRegistryService.Instance);
         _executionRecorder = executionRecorder;
         _executionHistory = executionHistory;
+        _conversationStore = conversationStore;
     }
 
     private sealed class ScopedToolInvoker : IAgentToolInvoker
@@ -309,7 +312,31 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
             AgentResult result;
             try
             {
-                result = await resolved.Agent.ExecuteAsync(context, cancellationToken);
+                var targetAgent = resolved.Agent;
+                if (targetAgent is IConversationalAgent conversationalAgent && _conversationStore != null)
+                {
+                    var history = await _conversationStore.GetHistoryAsync(
+                        tenantId,
+                        workflowInstanceId,
+                        packet.CurrentStepId,
+                        cancellationToken);
+                        
+                    result = await conversationalAgent.ExecuteConversationalAsync(packet, history, cancellationToken);
+
+                    if (result.Success && !string.IsNullOrWhiteSpace(result.Insight))
+                    {
+                        await _conversationStore.AppendMessageAsync(
+                            tenantId,
+                            workflowInstanceId,
+                            packet.CurrentStepId,
+                            new ChatMessage(ChatMessageRole.Assistant, result.Insight, resolved.Model),
+                            cancellationToken);
+                    }
+                }
+                else
+                {
+                    result = await resolved.Agent.ExecuteAsync(context, cancellationToken);
+                }
             }
             catch (OperationCanceledException)
             {

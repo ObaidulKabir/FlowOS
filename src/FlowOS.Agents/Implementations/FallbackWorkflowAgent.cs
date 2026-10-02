@@ -10,8 +10,9 @@ namespace FlowOS.Agents.Implementations;
 /// If the primary agent fails with a rate-limit or unavailability error, 
 /// the next fallback agent in the chain is attempted.
 /// </summary>
-public sealed class FallbackWorkflowAgent : IWorkflowAgent
+public sealed class FallbackWorkflowAgent : IConversationalAgent
 {
+    public IWorkflowAgent Primary => _primary;
     private readonly IWorkflowAgent _primary;
     private readonly IReadOnlyList<IWorkflowAgent> _fallbacks;
 
@@ -19,6 +20,39 @@ public sealed class FallbackWorkflowAgent : IWorkflowAgent
     {
         _primary = primary;
         _fallbacks = fallbacks;
+    }
+
+    public int MaxTurns => _primary is IConversationalAgent c ? c.MaxTurns : 1;
+
+    public Task<AgentResult> ExecuteConversationalAsync(DecisionPacket packet, IReadOnlyList<ChatMessage> history, CancellationToken cancellationToken = default)
+    {
+        return ExecuteConversationalInternalAsync(packet, history, cancellationToken);
+    }
+
+    private async Task<AgentResult> ExecuteConversationalInternalAsync(DecisionPacket packet, IReadOnlyList<ChatMessage> history, CancellationToken cancellationToken)
+    {
+        var result = _primary is IConversationalAgent c 
+            ? await c.ExecuteConversationalAsync(packet, history, cancellationToken)
+            : await _primary.ExecuteAsync(AgentContext.FromPacket(packet), cancellationToken);
+
+        if (IsRetryableFailure(result))
+        {
+            foreach (var fallback in _fallbacks)
+            {
+                var fallbackResult = fallback is IConversationalAgent fc 
+                    ? await fc.ExecuteConversationalAsync(packet, history, cancellationToken)
+                    : await fallback.ExecuteAsync(AgentContext.FromPacket(packet), cancellationToken);
+
+                if (!IsRetryableFailure(fallbackResult))
+                {
+                    return fallbackResult;
+                }
+                
+                result = fallbackResult; 
+            }
+        }
+
+        return result;
     }
 
     public Task<AgentResult> ExecuteAsync(AgentContext context) =>
@@ -38,7 +72,6 @@ public sealed class FallbackWorkflowAgent : IWorkflowAgent
                     return fallbackResult;
                 }
                 
-                // If this fallback also failed with a retryable error, continue to the next one
                 result = fallbackResult; 
             }
         }
