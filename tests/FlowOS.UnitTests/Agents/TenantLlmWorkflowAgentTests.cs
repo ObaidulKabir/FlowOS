@@ -29,7 +29,7 @@ public class TenantLlmWorkflowAgentTests
                 ApiKey = "sk-secret-must-stay-internal"
             });
 
-        var factory = new WorkflowAgentFactory(bindings.Object, handler);
+        var factory = new WorkflowAgentFactory(bindings.Object, new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()), handler);
         var packet = new DecisionPacket(
             tenantId,
             Guid.NewGuid(),
@@ -75,7 +75,7 @@ public class TenantLlmWorkflowAgentTests
     [Fact]
     public async Task FlowOsRiskProvider_UsesRiskAnalysisAgent()
     {
-        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>());
+        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>(), new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()));
         var packet = new DecisionPacket(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -356,7 +356,7 @@ public class TenantLlmWorkflowAgentTests
                 IsDefault = true
             });
 
-        var factory = new WorkflowAgentFactory(bindings.Object, handler);
+        var factory = new WorkflowAgentFactory(bindings.Object, new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()), handler);
         var packet = new DecisionPacket(
             tenantId,
             Guid.NewGuid(),

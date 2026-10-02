@@ -37,9 +37,14 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         _model = string.IsNullOrWhiteSpace(model) ? "gpt-4o-mini" : model.Trim();
         _endpoint = string.IsNullOrWhiteSpace(endpoint) ? string.Empty : endpoint.Trim();
         _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
-        // Only allocate a custom client when a test/override handler is provided.
         _customClient = handler != null ? new HttpClient(handler, disposeHandler: false) : null;
-        _adapter = adapter ?? LlmProviderAdapterFactory.GetAdapter(_providerName);
+        _adapter = adapter ?? new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(new FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory[] {
+            new FlowOS.Agents.Implementations.Adapters.OpenAiAdapterFactory(),
+            new FlowOS.Agents.Implementations.Adapters.AzureOpenAiAdapterFactory(),
+            new FlowOS.Agents.Implementations.Adapters.CustomOpenAiAdapterFactory(),
+            new FlowOS.Agents.Implementations.Adapters.AnthropicAdapterFactory(),
+            new FlowOS.Agents.Implementations.Adapters.GoogleAdapterFactory()
+        }).GetAdapter(_providerName);
         _transport = transport;
     }
 

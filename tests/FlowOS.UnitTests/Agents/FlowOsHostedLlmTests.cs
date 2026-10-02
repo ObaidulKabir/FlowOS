@@ -27,7 +27,7 @@ public class FlowOsHostedLlmTests
             configured: true,
             lease: new FlowOsHostedLlmLease(true, "sk-platform-openai", "gpt-4o-mini", null, null, null));
 
-        var factory = new WorkflowAgentFactory(bindings.Object, handler, hosted);
+        var factory = new WorkflowAgentFactory(bindings.Object, new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()), handler, hosted);
         var packet = Packet(new AgentProviderRef("flowos-hosted", "flowos-hosted", "gpt-4o-mini", null, true));
 
         var resolved = await factory.ResolveAsync(packet, "RiskAnalysisAgent");
@@ -54,7 +54,7 @@ public class FlowOsHostedLlmTests
         var hosted = new StubHostedRuntime(
             configured: true,
             lease: new FlowOsHostedLlmLease(true, "sk-platform-openai", "gpt-4o-mini", null, null, null));
-        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>(), hosted: hosted);
+        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>(), new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()), hosted: hosted);
         var resolved = await factory.ResolveAsync(Packet(null));
         Assert.IsType<TenantLlmWorkflowAgent>(resolved.Agent);
         Assert.Equal("flowos-hosted", resolved.ActorId);
@@ -63,7 +63,7 @@ public class FlowOsHostedLlmTests
     [Fact]
     public async Task Factory_EmptyProvider_UsesRiskWhenHostedMissing()
     {
-        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>());
+        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>(), new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()));
         var resolved = await factory.ResolveAsync(Packet(null));
         Assert.IsType<RiskAnalysisAgent>(resolved.Agent);
         Assert.Equal("flowos-risk", resolved.ActorId);
@@ -78,7 +78,7 @@ public class FlowOsHostedLlmTests
                 false, null, "gpt-4o-mini", null,
                 FlowOsHostedLlmCodes.Unavailable,
                 FlowOsHostedLlmCodes.UnavailableMessage));
-        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>(), hosted: hosted);
+        var factory = new WorkflowAgentFactory(Mock.Of<IPluginBindingRegistryService>(), new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()), hosted: hosted);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => factory.ResolveAsync(
                 Packet(new AgentProviderRef("flowos-hosted", "flowos-hosted", null, null, false)),
@@ -104,6 +104,7 @@ public class FlowOsHostedLlmTests
         var hosted = new Mock<IFlowOsHostedLlmRuntime>(MockBehavior.Strict);
         var factory = new WorkflowAgentFactory(
             bindings.Object,
+            new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(System.Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()),
             hosted: hosted.Object);
         var packet = Packet(new AgentProviderRef(
             "tenant-openai",

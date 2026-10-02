@@ -9,17 +9,20 @@ namespace FlowOS.Application.Services;
 public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
 {
     private readonly IPluginBindingRegistryService _bindings;
+    private readonly ILlmProviderAdapterRegistry _adapterRegistry;
     private readonly HttpMessageHandler? _handler;
     private readonly IFlowOsHostedLlmRuntime? _hosted;
     private readonly ILlmTransport? _transport;
 
     public WorkflowAgentFactory(
         IPluginBindingRegistryService bindings,
+        ILlmProviderAdapterRegistry adapterRegistry,
         HttpMessageHandler? handler = null,
         IFlowOsHostedLlmRuntime? hosted = null,
         ILlmTransport? transport = null)
     {
         _bindings = bindings;
+        _adapterRegistry = adapterRegistry;
         _handler = handler;
         _hosted = hosted;
         _transport = transport;
@@ -55,7 +58,9 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
         var primary = await ResolveSingleAsync(packet, requestedAgentId, cancellationToken);
         
         string? fallbackAlias = null;
-        if (AgentProviderKinds.IsByoLlm(primary.ProviderName) && !string.IsNullOrWhiteSpace(primary.ProviderAlias))
+        if (AgentProviderKinds.IsByoLlm(primary.ProviderName) && 
+            !string.IsNullOrWhiteSpace(primary.ProviderAlias) &&
+            !AgentProviderKinds.IsFlowOsHosted(primary.ProviderAlias))
         {
             try
             {
@@ -153,12 +158,14 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
             }
 
             var model = NormalizeModel(AgentProviderKinds.OpenAi, lease.Model);
+            var adapter = _adapterRegistry.GetAdapter(AgentProviderKinds.OpenAi);
             var agent = new TenantLlmWorkflowAgent(
                 AgentProviderKinds.OpenAi,
                 model,
                 lease.Endpoint,
                 lease.ApiKey,
                 _handler,
+                adapter: adapter,
                 transport: _transport);
             return new ResolvedWorkflowAgent(
                 agent,
@@ -179,12 +186,7 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
                 providerName!,
                 secrets?.Model ?? packet.Provider?.Model);
 
-            // For Anthropic, create a per-request adapter that honours tenant MaxTokens config.
-            var adapter = string.Equals(
-                providerName, AgentProviderKinds.Anthropic, StringComparison.OrdinalIgnoreCase)
-                    && secrets?.MaxTokens is { } maxTok
-                ? new FlowOS.Agents.Implementations.Adapters.AnthropicProviderAdapter(maxTok)
-                : null;
+            var adapter = _adapterRegistry.GetAdapter(providerName, secrets);
 
             var agent = new TenantLlmWorkflowAgent(
                 providerName!,

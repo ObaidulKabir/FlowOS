@@ -35,11 +35,13 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
             ? $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent"
             : endpoint.Trim();
 
-        var url = string.IsNullOrWhiteSpace(apiKey)
-            ? baseUrl
-            : $"{baseUrl}?key={apiKey}";
+        var url = baseUrl;
 
         var request = new HttpRequestMessage(HttpMethod.Post, url);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            request.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
+        }
 
         var contents = new List<object>();
 

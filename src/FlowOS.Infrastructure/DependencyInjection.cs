@@ -89,9 +89,16 @@ public static class DependencyInjection
         services.AddSingleton<ILlmTransport, LlmHttpTransport>();
         services.AddScoped<IAgentTaskRunner, FlowOS.Application.Services.AgentTaskRunner>();
         services.AddScoped<IAgentTaskCoordinator, FlowOS.Application.Services.AgentTaskCoordinator>();
-        services.AddScoped<IWorkflowAgentFactory>(provider =>
+        services.AddSingleton<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory, FlowOS.Agents.Implementations.Adapters.OpenAiAdapterFactory>();
+        services.AddSingleton<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory, FlowOS.Agents.Implementations.Adapters.AzureOpenAiAdapterFactory>();
+        services.AddSingleton<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory, FlowOS.Agents.Implementations.Adapters.CustomOpenAiAdapterFactory>();
+        services.AddSingleton<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory, FlowOS.Agents.Implementations.Adapters.AnthropicAdapterFactory>();
+        services.AddSingleton<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory, FlowOS.Agents.Implementations.Adapters.GoogleAdapterFactory>();
+        services.AddSingleton<FlowOS.Agents.Abstractions.ILlmProviderAdapterRegistry, FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry>();
+        services.AddScoped<FlowOS.Application.Common.Interfaces.IWorkflowAgentFactory>(provider =>
             new FlowOS.Application.Services.WorkflowAgentFactory(
                 provider.GetRequiredService<FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService>(),
+                provider.GetRequiredService<FlowOS.Agents.Abstractions.ILlmProviderAdapterRegistry>(),
                 hosted: provider.GetRequiredService<IFlowOsHostedLlmRuntime>(),
                 transport: provider.GetRequiredService<ILlmTransport>()));
         services.AddScoped<IFlowOsHostedLlmRuntime, FlowOsHostedLlmRuntime>();

@@ -42,7 +42,9 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
         _unitOfWork = unitOfWork;
         _leaseService = leaseService;
         _toolHost = toolHost;
-        _agentFactory = agentFactory ?? new WorkflowAgentFactory(NullPluginBindingRegistryService.Instance);
+        _agentFactory = agentFactory ?? new WorkflowAgentFactory(
+            NullPluginBindingRegistryService.Instance,
+            new FlowOS.Agents.Implementations.Adapters.LlmProviderAdapterRegistry(Array.Empty<FlowOS.Agents.Implementations.Adapters.ILlmProviderAdapterFactory>()));
         _executionRecorder = executionRecorder;
         _executionHistory = executionHistory;
         _conversationStore = conversationStore;
