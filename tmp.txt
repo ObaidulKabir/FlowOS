@@ -35,13 +35,11 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
             ? $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent"
             : endpoint.Trim();
 
-        var url = baseUrl;
+        var url = string.IsNullOrWhiteSpace(apiKey)
+            ? baseUrl
+            : $"{baseUrl}?key={apiKey}";
 
         var request = new HttpRequestMessage(HttpMethod.Post, url);
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            request.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
-        }
 
         var contents = new List<object>();
 
@@ -151,25 +149,13 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
                 responseSchema = new
                 {
                     type = "object",
-                    required = new[] { "insight", "actions" },
+                    required = new[] { "eventType", "confidence", "reason", "insight" },
                     properties = new
                     {
-                        insight = new { type = "string" },
-                        actions = new
-                        {
-                            type = "array",
-                            items = new
-                            {
-                                type = "object",
-                                required = new[] { "eventType", "confidence", "reason" },
-                                properties = new
-                                {
-                                    eventType = new { type = "string" },
-                                    confidence = new { type = "number" },
-                                    reason = new { type = "string" }
-                                }
-                            }
-                        }
+                        eventType = new { type = "string" },
+                        confidence = new { type = "number" },
+                        reason = new { type = "string" },
+                        insight = new { type = "string" }
                     }
                 }
             };

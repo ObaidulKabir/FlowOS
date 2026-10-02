@@ -56,10 +56,17 @@ public sealed record AgentDecisionEvaluation(
 public sealed record AgentDecisionEnvelope(
     string AgentId,
     AgentResult Result,
-    AgentDecisionEvaluation Evaluation,
-    SuggestedAction? OriginalCandidate = null)
+    IReadOnlyList<AgentDecisionEvaluation> Evaluations,
+    IReadOnlyList<SuggestedAction>? OriginalCandidates = null)
 {
-    public SuggestedAction? Candidate => Evaluation.Candidate;
+    public SuggestedAction? Candidate => Evaluations.FirstOrDefault(e => e.ShouldCommit)?.Candidate 
+        ?? Evaluations.FirstOrDefault(e => e.Candidate != null)?.Candidate;
+        
+    public AgentDecisionEvaluation Evaluation => Evaluations.FirstOrDefault(e => e.ShouldCommit) 
+        ?? Evaluations.FirstOrDefault() 
+        ?? new AgentDecisionEvaluation(AgentDecisionKind.Park, null, "No legal suggestion.");
+        
+    public SuggestedAction? OriginalCandidate => OriginalCandidates?.FirstOrDefault();
 }
 
 /// <summary>
@@ -78,34 +85,37 @@ public static class AgentDecisionPolicy
         ArgumentNullException.ThrowIfNull(packet);
         ArgumentNullException.ThrowIfNull(result);
 
-        var originalCandidate = HighestConfidence(result.SuggestedActions);
+        var originalCandidates = result.SuggestedActions.ToList();
         var filtered = AgentSuggestionContract.RestrictToLegalEvents(
             result,
             packet.LegalNextStepEvents);
-        var candidate = HighestConfidence(filtered.SuggestedActions);
+        
         var resolvedAgentId = NormalizeAgentId(agentId);
 
-        if (candidate == null)
+        if (filtered.SuggestedActions.Count == 0)
         {
             return new AgentDecisionEnvelope(
                 resolvedAgentId,
                 filtered,
-                new AgentDecisionEvaluation(
-                    AgentDecisionKind.Park,
-                    null,
-                    "No legal suggestion."),
-                originalCandidate);
+                [new AgentDecisionEvaluation(AgentDecisionKind.Park, null, "No legal suggestion.")],
+                originalCandidates);
         }
 
-        var canCommit = AutoCommitEvaluator.CanCommit(packet, candidate, out var reason);
+        var evaluations = new List<AgentDecisionEvaluation>();
+        foreach (var candidate in filtered.SuggestedActions)
+        {
+            var canCommit = AutoCommitEvaluator.CanCommit(packet, candidate, out var reason);
+            evaluations.Add(new AgentDecisionEvaluation(
+                canCommit ? AgentDecisionKind.Commit : AgentDecisionKind.Park,
+                candidate,
+                reason));
+        }
+
         return new AgentDecisionEnvelope(
             resolvedAgentId,
             filtered,
-            new AgentDecisionEvaluation(
-                canCommit ? AgentDecisionKind.Commit : AgentDecisionKind.Park,
-                candidate,
-                reason),
-            originalCandidate);
+            evaluations,
+            originalCandidates);
     }
 
     public static AgentDecisionEnvelope EvaluateSimulation(
@@ -158,7 +168,7 @@ public static class AgentDecisionPolicy
                 Success = true,
                 Insight = reason
             },
-            new AgentDecisionEvaluation(AgentDecisionKind.Skipped, null, reason));
+            [new AgentDecisionEvaluation(AgentDecisionKind.Skipped, null, reason)]);
 
     private static SuggestedAction? HighestConfidence(IEnumerable<SuggestedAction> actions) =>
         actions

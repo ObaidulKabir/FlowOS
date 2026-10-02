@@ -112,8 +112,11 @@ public class AgentDecisionPolicyTests
 
         var decision = AgentDecisionPolicy.Evaluate(Packet(), result);
 
-        Assert.Equal("EVT-REQUEST-REVISION", decision.Candidate?.EventType);
-        Assert.Equal(AgentDecisionKind.Park, decision.Evaluation.Kind);
+        Assert.Equal("EVT-ACCEPT", decision.Candidate?.EventType);
+        Assert.Equal(AgentDecisionKind.Commit, decision.Evaluation.Kind);
+        Assert.Equal(2, decision.Evaluations.Count);
+        Assert.Contains(decision.Evaluations, e => e.Candidate?.EventType == "EVT-REQUEST-REVISION" && e.Kind == AgentDecisionKind.Park);
+        
         Assert.DoesNotContain(
             decision.Result.SuggestedActions,
             action => action.EventType == "EVT-ILLEGAL");

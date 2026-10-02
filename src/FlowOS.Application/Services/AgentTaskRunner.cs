@@ -394,7 +394,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
 
             var decision = AgentDecisionPolicy.Evaluate(packet, result, resolved.ActorId);
             result = decision.Result;
-            var suggestion = decision.Candidate;
+            var evaluations = decision.Evaluations;
 
             if (allowAutoCommit)
             {
@@ -407,14 +407,14 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                     cancellationToken);
             }
 
-            if (!allowAutoCommit || suggestion == null)
+            if (!allowAutoCommit || evaluations.Count == 0)
             {
-                var park = suggestion == null ? "No legal suggestion." : null;
+                var park = evaluations.Count == 0 ? "No legal suggestion." : null;
                 await CompleteExecutionAsync(
                     executionId,
                     SuccessfulCompletion(
                         result,
-                        suggestion,
+                        decision.Candidate,
                         wasCommitted: false,
                         wasParked: park != null,
                         parkReason: park),
@@ -429,72 +429,15 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                     executionContext?.JobId);
             }
 
-            if (!decision.Evaluation.ShouldCommit)
+            var commitEvaluations = evaluations.Where(e => e.ShouldCommit).ToList();
+            if (commitEvaluations.Count == 0)
             {
+                var parkReason = evaluations[0].Reason;
                 await CompleteExecutionAsync(
                     executionId,
                     SuccessfulCompletion(
                         result,
-                        suggestion,
-                        wasCommitted: false,
-                        wasParked: true,
-                        parkReason: decision.Evaluation.Reason),
-                    cancellationToken);
-                return RunResult(
-                    resolved,
-                    false,
-                    decision.Evaluation.Reason,
-                    result,
-                    packet,
-                    executionId,
-                    executionContext?.JobId);
-            }
-
-            try
-            {
-                var published = await _mediator.Send(
-                    new PublishEventCommand(
-                        tenantId,
-                        workflowInstanceId,
-                        suggestion.EventType,
-                        workflowInstanceId,
-                        suggestion.Payload.Count == 0 ? packet.EventPayloads : suggestion.Payload,
-                        CreateCommitIdempotencyKey(
-                            executionContext,
-                            executionId,
-                            suggestion.EventType),
-                        $"Agent:{resolved.ActorId}"),
-                    cancellationToken);
-
-                var parkReason = published
-                    ? null
-                    : "PublishEventCommand declined the suggested event.";
-                await CompleteExecutionAsync(
-                    executionId,
-                    SuccessfulCompletion(
-                        result,
-                        suggestion,
-                        wasCommitted: published,
-                        wasParked: !published,
-                        parkReason: parkReason),
-                    cancellationToken);
-                return RunResult(
-                    resolved,
-                    published,
-                    parkReason,
-                    result,
-                    packet,
-                    executionId,
-                    executionContext?.JobId);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                const string parkReason = "State machine or engine denied the suggestion.";
-                await CompleteExecutionAsync(
-                    executionId,
-                    SuccessfulCompletion(
-                        result,
-                        suggestion,
+                        decision.Candidate,
                         wasCommitted: false,
                         wasParked: true,
                         parkReason: parkReason),
@@ -508,6 +451,61 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                     executionId,
                     executionContext?.JobId);
             }
+
+            bool anyFailed = false;
+            string? firstFailReason = null;
+            
+            foreach (var eval in commitEvaluations)
+            {
+                var suggestion = eval.Candidate!;
+                try
+                {
+                    var published = await _mediator.Send(
+                        new PublishEventCommand(
+                            tenantId,
+                            workflowInstanceId,
+                            suggestion.EventType,
+                            workflowInstanceId,
+                            suggestion.Payload.Count == 0 ? packet.EventPayloads : suggestion.Payload,
+                            CreateCommitIdempotencyKey(
+                                executionContext,
+                                executionId,
+                                suggestion.EventType),
+                            $"Agent:{resolved.ActorId}"),
+                        cancellationToken);
+
+                    if (!published)
+                    {
+                        anyFailed = true;
+                        firstFailReason ??= "PublishEventCommand declined the suggested event.";
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    anyFailed = true;
+                    firstFailReason ??= "State machine or engine denied the suggestion.";
+                }
+            }
+
+            var finalParkReason = anyFailed ? firstFailReason : null;
+            await CompleteExecutionAsync(
+                executionId,
+                SuccessfulCompletion(
+                    result,
+                    decision.Candidate, // Primary candidate for audit log
+                    wasCommitted: !anyFailed,
+                    wasParked: anyFailed,
+                    parkReason: finalParkReason),
+                cancellationToken);
+
+            return RunResult(
+                resolved,
+                !anyFailed,
+                finalParkReason,
+                result,
+                packet,
+                executionId,
+                executionContext?.JobId);
         }
         catch (OperationCanceledException)
         {

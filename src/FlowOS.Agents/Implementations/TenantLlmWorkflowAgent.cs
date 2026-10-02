@@ -222,11 +222,11 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         var packet = context.Packet;
         var legal = packet?.LegalNextStepEvents ?? context.LegalEvents;
         var system = packet?.Prompt.System
-            ?? "You are a FlowOS workflow agent. Suggest one legal nextSteps event as JSON.";
+            ?? "You are a FlowOS workflow agent. Suggest one or more legal nextSteps events as JSON.";
         var toolInfo = packet?.DeclaredTools is { Count: > 0 } tools
             ? $"\nAvailable tools: {string.Join(", ", tools.Select(t => t.Name))}"
             : string.Empty;
-        return $"{system}\nLegal events: {string.Join(", ", legal)}{toolInfo}\nReply with JSON: eventType, confidence, reason, insight.";
+        return $"{system}\nLegal events: {string.Join(", ", legal)}{toolInfo}\nReply with JSON: insight (string), actions (array of objects with eventType, confidence, reason).";
     }
 
     private static string BuildUserPrompt(AgentContext context)
@@ -293,22 +293,52 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         {
             using var suggestion = JsonDocument.Parse(StripMarkdownCodeFence(content));
             var root = suggestion.RootElement;
-            if (root.ValueKind != JsonValueKind.Object ||
-                !TryReadBoundedString(root, "eventType", 200, out var eventType) ||
-                !TryReadBoundedString(root, "reason", 2000, out var reason) ||
-                !TryReadBoundedString(root, "insight", 2000, out var insight) ||
-                !root.TryGetProperty("confidence", out var confidenceElement) ||
-                confidenceElement.ValueKind != JsonValueKind.Number ||
-                !confidenceElement.TryGetDouble(out var confidence) ||
-                !double.IsFinite(confidence) ||
-                confidence is < 0 or > 1)
-            {
+            if (root.ValueKind != JsonValueKind.Object)
                 return false;
+
+            if (!TryReadBoundedString(root, "insight", 2000, out var insight))
+                return false;
+
+            var actions = new List<SuggestedAction>();
+
+            if (root.TryGetProperty("actions", out var actionsProp) && actionsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var actionElement in actionsProp.EnumerateArray())
+                {
+                    if (actionElement.ValueKind != JsonValueKind.Object ||
+                        !TryReadBoundedString(actionElement, "eventType", 200, out var eventType) ||
+                        !TryReadBoundedString(actionElement, "reason", 2000, out var reason) ||
+                        !actionElement.TryGetProperty("confidence", out var confidenceElement) ||
+                        confidenceElement.ValueKind != JsonValueKind.Number ||
+                        !confidenceElement.TryGetDouble(out var confidence) ||
+                        !double.IsFinite(confidence) ||
+                        confidence is < 0 or > 1)
+                    {
+                        return false;
+                    }
+                    actions.Add(new SuggestedAction(eventType, reason, confidence));
+                }
+            }
+            else
+            {
+                // Fallback to legacy single-action format
+                if (!TryReadBoundedString(root, "eventType", 200, out var eventType) ||
+                    !TryReadBoundedString(root, "reason", 2000, out var reason) ||
+                    !root.TryGetProperty("confidence", out var confidenceElement) ||
+                    confidenceElement.ValueKind != JsonValueKind.Number ||
+                    !confidenceElement.TryGetDouble(out var confidence) ||
+                    !double.IsFinite(confidence) ||
+                    confidence is < 0 or > 1)
+                {
+                    return false;
+                }
+                actions.Add(new SuggestedAction(eventType, reason, confidence));
             }
 
-            parsed = new ParsedSuggestion(
-                insight,
-                [new SuggestedAction(eventType, reason, confidence)]);
+            if (actions.Count == 0)
+                return false;
+
+            parsed = new ParsedSuggestion(insight, actions);
             return true;
         }
         catch (JsonException)
