@@ -41,8 +41,63 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
         string? requestedAgentId = null,
         CancellationToken cancellationToken = default)
     {
+        return await ResolveChainAsync(packet, requestedAgentId, new HashSet<string>(StringComparer.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private async Task<ResolvedWorkflowAgent> ResolveChainAsync(
+        DecisionPacket packet,
+        string? requestedAgentId,
+        HashSet<string> visitedAliases,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(packet);
 
+        var primary = await ResolveSingleAsync(packet, requestedAgentId, cancellationToken);
+        
+        string? fallbackAlias = null;
+        if (AgentProviderKinds.IsByoLlm(primary.ProviderName) && !string.IsNullOrWhiteSpace(primary.ProviderAlias))
+        {
+            try
+            {
+                var secrets = await _bindings.GetAgentSecretsAsync(packet.TenantId, primary.ProviderAlias, cancellationToken);
+                fallbackAlias = secrets?.FallbackProviderAlias;
+            }
+            catch
+            {
+                // Ignore if secrets are missing here; ResolveSingleAsync handled exceptions for the primary agent already
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(fallbackAlias) || !visitedAliases.Add(fallbackAlias))
+        {
+            return primary;
+        }
+
+        var fallbackBinding = await _bindings.GetEnabledAsync(packet.TenantId, PluginBindingTypes.Agent, fallbackAlias, cancellationToken);
+        if (fallbackBinding == null)
+        {
+            return primary;
+        }
+
+        var fallbackProviderRef = new AgentProviderRef(
+            fallbackBinding.SourceName,
+            fallbackBinding.ProviderName,
+            packet.Provider?.Model,
+            null,
+            false);
+            
+        var fallbackPacket = packet with { Provider = fallbackProviderRef };
+        var fallbackResolved = await ResolveChainAsync(fallbackPacket, requestedAgentId, visitedAliases, cancellationToken);
+
+        var wrappedAgent = new FallbackWorkflowAgent(primary.Agent, new[] { fallbackResolved.Agent });
+        return primary with { Agent = wrappedAgent };
+    }
+
+    private async Task<ResolvedWorkflowAgent> ResolveSingleAsync(
+        DecisionPacket packet,
+        string? requestedAgentId = null,
+        CancellationToken cancellationToken = default)
+    {
         var providerName = packet.Provider?.ProviderName;
         if (IsExplicitFlowOsRisk(providerName))
             return RiskDescriptor();

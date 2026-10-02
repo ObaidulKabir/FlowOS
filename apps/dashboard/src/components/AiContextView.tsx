@@ -812,6 +812,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
     model: '',
     endpoint: '',
     apiKey: '',
+    fallbackProviderAlias: '',
     isDefault: false,
     isEnabled: true
   });
@@ -829,6 +830,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
       model: '',
       endpoint: '',
       apiKey: '',
+      fallbackProviderAlias: '',
       isDefault: items.length === 0,
       isEnabled: true
     });
@@ -847,6 +849,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
       model: str(cfg.model ?? cfg.Model),
       endpoint: str(cfg.endpoint ?? cfg.Endpoint),
       apiKey: '',
+      fallbackProviderAlias: str(cfg.fallbackProviderAlias ?? cfg.FallbackProviderAlias),
       isDefault: isDef,
       isEnabled: item.isEnabled
     });
@@ -894,12 +897,13 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
         providerName: provider,
         isEnabled: form.isEnabled,
         configuration: provider === 'flowos-hosted' || provider === 'flowos-risk'
-          ? { isDefault: form.isDefault }
+          ? { isDefault: form.isDefault, fallbackProviderAlias: form.fallbackProviderAlias.trim() || undefined }
           : {
               model: form.model.trim() || undefined,
               endpoint: form.endpoint.trim() || undefined,
               apiKey: form.apiKey.trim() || undefined,
-              isDefault: form.isDefault
+              isDefault: form.isDefault,
+              fallbackProviderAlias: form.fallbackProviderAlias.trim() || undefined
             }
       });
       resetForm();
@@ -951,6 +955,11 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
                   <span className="font-medium text-slate-300">{item.providerName}</span>
                   {str(cfg.model || cfg.Model) ? ` · ${str(cfg.model || cfg.Model)}` : ''}
                   {str(cfg.endpoint || cfg.Endpoint) ? ` · ${str(cfg.endpoint || cfg.Endpoint)}` : ''}
+                  {str(cfg.fallbackProviderAlias || cfg.FallbackProviderAlias) ? (
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-violet-950/50 text-violet-300 border border-violet-800/50">
+                      Fallback: {str(cfg.fallbackProviderAlias || cfg.FallbackProviderAlias)}
+                    </span>
+                  ) : ''}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1112,6 +1121,18 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
             </div>
           </>
         )}
+
+        <div className="pt-2">
+          <label className="block text-[11px] font-medium text-slate-400 mb-1">
+            Fallback Provider Alias <span className="text-slate-500">(Optional)</span>
+          </label>
+          <input
+            value={form.fallbackProviderAlias}
+            onChange={e => setForm({ ...form, fallbackProviderAlias: e.target.value })}
+            placeholder="e.g. backup-openai (used if this provider fails)"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+          />
+        </div>
 
         <div className="pt-1 border-t border-slate-800">
           <label className="flex items-start gap-2 cursor-pointer select-none">

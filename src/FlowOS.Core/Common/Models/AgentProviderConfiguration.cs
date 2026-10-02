@@ -19,6 +19,11 @@ public sealed class AgentProviderConfiguration
     /// Particularly important for Anthropic which requires an explicit max_tokens value.
     /// </summary>
     public int? MaxTokens { get; set; }
+    
+    /// <summary>
+    /// If execution fails due to rate-limiting or provider unavailability, FlowOS will fallback to this provider alias.
+    /// </summary>
+    public string? FallbackProviderAlias { get; set; }
 
     public static AgentProviderConfiguration? Parse(string? json)
     {
@@ -44,6 +49,7 @@ public sealed class AgentProviderConfiguration
         if (!string.IsNullOrWhiteSpace(incoming.ApiKey))
             existing.ApiKey = incoming.ApiKey.Trim();
         existing.IsDefault = incoming.IsDefault;
+        existing.FallbackProviderAlias = string.IsNullOrWhiteSpace(incoming.FallbackProviderAlias) ? existing.FallbackProviderAlias : incoming.FallbackProviderAlias.Trim();
 
         return JsonSerializer.Serialize(existing, JsonOptions);
     }
@@ -55,7 +61,8 @@ public sealed class AgentProviderConfiguration
             parsed.Model,
             parsed.Endpoint,
             !string.IsNullOrWhiteSpace(parsed.ApiKey),
-            parsed.IsDefault);
+            parsed.IsDefault,
+            parsed.FallbackProviderAlias);
     }
 
     public static string Serialize(AgentProviderConfiguration config) =>
@@ -69,4 +76,4 @@ public sealed class AgentProviderConfiguration
     };
 }
 
-public sealed record AgentProviderPublicSettings(string? Model, string? Endpoint, bool HasApiKey, bool IsDefault = false);
+public sealed record AgentProviderPublicSettings(string? Model, string? Endpoint, bool HasApiKey, bool IsDefault = false, string? FallbackProviderAlias = null);
