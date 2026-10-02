@@ -110,6 +110,27 @@ public class AgentsController : ControllerBase
         return Ok(history);
     }
 
+    [HttpGet("sessions")]
+    public async Task<IActionResult> ListSessions(
+        [FromServices] IConversationStore conversationStore,
+        CancellationToken cancellationToken,
+        [FromQuery] int limit = 50)
+    {
+        var tenantId = _currentUser.TenantId;
+
+        if (limit < 1 || limit > 200)
+        {
+            return BadRequest(new { error = "limit must be between 1 and 200." });
+        }
+
+        var sessions = await conversationStore.ListSessionsAsync(
+            tenantId,
+            limit,
+            cancellationToken);
+
+        return Ok(sessions);
+    }
+
     [HttpGet("{workflowInstanceId:guid}/history")]
     [HttpGet("instances/{workflowInstanceId:guid}/history")]
     public async Task<ActionResult<AgentExecutionHistoryDto>> GetExecutionHistory(

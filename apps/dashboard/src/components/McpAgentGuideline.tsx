@@ -88,7 +88,9 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-            Your agent can design, validate, simulate, execute, recover, and govern a workflow through MCP. Copy the snippets below with placeholders, then paste a key you created. Launch Live Sandbox is a separate disposable guest workspace: it does not publish a production credential, and a blank API key does not open production execution. JSON-RPC must be posted to <code className="text-blue-300">{mcpUrl}</code> exactly — {MCP_JSONRPC_RULE} MCP stays on every package. Free / Trial keys may discover, lint, validate, and simulate — they cannot start instances until a paid package is activated. To move a Designed App and its running instances, read prompt <code className="text-blue-300">backup_tenant_for_another_site</code> or resource <code className="text-blue-300">flowos://guides/tenant-backup</code>. The backup is a download from Site backup, not an MCP tool payload. Download and restore both require header <code className="text-blue-300">X-FlowOS-Backup-Confirm</code>.
+            Your agent can design, validate, simulate, execute, recover, and govern a workflow through MCP. That now includes multi-turn agent chat memory,
+            prompt-audit visibility, tenant external-agent settings, and the external change-feed plan/execute loop for workers running outside the app runtime.
+            Copy the snippets below with placeholders, then paste a key you created. Launch Live Sandbox is a separate disposable guest workspace: it does not publish a production credential, and a blank API key does not open production execution. JSON-RPC must be posted to <code className="text-blue-300">{mcpUrl}</code> exactly — {MCP_JSONRPC_RULE} MCP stays on every package. Free / Trial keys may discover, lint, validate, and simulate — they cannot start instances until a paid package is activated. To move a Designed App and its running instances, read prompt <code className="text-blue-300">backup_tenant_for_another_site</code> or resource <code className="text-blue-300">flowos://guides/tenant-backup</code>. The backup is a download from Site backup, not an MCP tool payload. Download and restore both require header <code className="text-blue-300">X-FlowOS-Backup-Confirm</code>.
           </p>
         </div>
 
@@ -145,6 +147,16 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
           </div>
           <p className="text-[11px] text-slate-400">
             Launch shared public workflows cross-tenant while execution state remains private to caller.
+          </p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-slate-700/50 p-3 rounded-xl">
+          <div className="text-cyan-400 font-semibold mb-1 flex items-center gap-1.5">
+            <Sparkles size={14} />
+            <span>External Agent Loop</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            External workers can poll change feed items, plan next actions, execute step-by-step, and keep approvals inside FlowOS.
           </p>
         </div>
       </div>
@@ -230,6 +242,12 @@ console.log('Result:', rpcResponse.result?.content?.[0]?.text);`;
             </li>
             <li>
               <strong>AI task automation:</strong> Call MCP prompt <code className="text-blue-300">automate_waiting_task_with_ai_agent</code> or read <code className="text-blue-300">flowos://guides/ai-task-automation</code>. Paid tenants default to FlowOS hosted OpenAI (<code className="text-blue-300">flowos-hosted</code>, platform key <code className="text-blue-300">FLOWOS_HOSTED_LLM_API_KEY</code>, daily cap). BYO keys stay optional via <code className="text-blue-300">upsert_agent_provider</code>. Keep a waiting HumanTask/Command (never a Decision <code className="text-blue-300">Default</code> skip). Set <code className="text-blue-300">actor: Agent</code> or <code className="text-blue-300">Either</code>. Inspect with <code className="text-blue-300">preview_agent_context</code> or <code className="text-blue-300">get_agent_context</code>. <code className="text-blue-300">simulate_*</code> never calls the live LLM. On a live instance, publish the human gate then <code className="text-blue-300">run_agent_task</code>.
+            </li>
+            <li>
+              <strong>Multi-turn and audit loop:</strong> Use <code className="text-blue-300">append_agent_chat_message</code>, <code className="text-blue-300">get_agent_chat_history</code>, and <code className="text-blue-300">list_agent_chat_sessions</code> when the agent needs durable conversation context for a workflow step. Use <code className="text-blue-300">list_agent_prompt_audits</code> to inspect request/response traces when prompt auditing is enabled on the selected provider.
+            </li>
+            <li>
+              <strong>External worker loop:</strong> For Cursor, Claude Desktop, or a separate MCP worker service that processes FlowOS changes one by one, configure tenant opt-in with <code className="text-blue-300">configure_external_agent_settings</code>, read <code className="text-blue-300">get_external_agent_settings</code>, then drive the runtime through <code className="text-blue-300">poll_external_agent_changes</code>, <code className="text-blue-300">plan_for_change</code>, <code className="text-blue-300">execute_plan</code>, and <code className="text-blue-300">resume_plan</code>.
             </li>
             <li>
               <strong>Tenant resource tools:</strong> Expose tenant APIs with <code className="text-blue-300">register_connector</code>, then declare them on the waiting step as <code className="text-blue-300">LookupRecord:crm.customer.get.v1</code>, <code className="text-blue-300">QueryRecords:</code>, <code className="text-blue-300">FetchDocument:</code>, <code className="text-blue-300">SearchKnowledge:</code>, or <code className="text-blue-300">CheckPolicy:</code>. FlowOS prefetches those reads into Agent Context. Write connectors (<code className="text-blue-300">connector:payment.refund.v1</code>) and notify plugins are listed but not prefetched. The model never sees the URL.

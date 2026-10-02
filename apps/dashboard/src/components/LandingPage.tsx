@@ -341,7 +341,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </h2>
               <p className="text-sm text-slate-300 mt-3 leading-relaxed">
                 Empower AI agents (Claude Desktop, Cursor, Custom LLM workers) to author, validate, execute, and troubleshoot enterprise workflows via {mcpTools} production tools over Streamable JSON-RPC 2.0.
+                FlowOS now exposes the full agent lifecycle: governed design-time operations, live waiting-task automation, multi-turn conversation context, prompt audit visibility,
+                and external agent change-feed planning for workers that run outside the app runtime.
               </p>
+
+              <div className="mt-5 grid gap-2.5 sm:grid-cols-3 text-xs">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-3 text-slate-300">
+                  <div className="font-bold text-white mb-1">Governed mutation</div>
+                  Design, validate, simulate, publish, and activate only through the same approval-aware control plane.
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-3 text-slate-300">
+                  <div className="font-bold text-white mb-1">Agent runtime visibility</div>
+                  Inspect AI context, append tenant chat messages, review session history, and read prompt audits without exposing secrets.
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-3 text-slate-300">
+                  <div className="font-bold text-white mb-1">External worker automation</div>
+                  Poll one-by-one change feed items, create plans, execute them safely, and keep human confirmation on high-risk actions.
+                </div>
+              </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
                 <a

@@ -35,6 +35,24 @@ public static class ToolRegistration
         registry.Register("get_agent_evaluation_metrics", McpToolDescriptions.For("get_agent_evaluation_metrics"), McpToolSchemas.GetAgentEvaluationMetrics(),
             async (args) => await ExecuteScopedAsync<AgentObservabilityMcpTools>(serviceProvider, t => t.GetAgentEvaluationMetrics(args)));
 
+        registry.Register("append_agent_chat_message", McpToolDescriptions.For("append_agent_chat_message"), McpToolSchemas.AppendAgentChatMessage(),
+            async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.AppendAgentChatMessage(args)));
+
+        registry.Register("get_agent_chat_history", McpToolDescriptions.For("get_agent_chat_history"), McpToolSchemas.GetAgentChatHistory(),
+            async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.GetAgentChatHistory(args)));
+
+        registry.Register("list_agent_chat_sessions", McpToolDescriptions.For("list_agent_chat_sessions"), McpToolSchemas.ListAgentChatSessions(),
+            async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.ListAgentChatSessions(args)));
+
+        registry.Register("list_agent_prompt_audits", McpToolDescriptions.For("list_agent_prompt_audits"), McpToolSchemas.ListAgentPromptAudits(),
+            async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.ListAgentPromptAudits(args)));
+
+        registry.Register("get_external_agent_settings", McpToolDescriptions.For("get_external_agent_settings"), McpToolSchemas.GetExternalAgentSettings(),
+            async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.GetExternalAgentSettings(args)));
+
+        registry.Register("configure_external_agent_settings", McpToolDescriptions.For("configure_external_agent_settings"), McpToolSchemas.ConfigureExternalAgentSettings(),
+            async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.ConfigureExternalAgentSettings(args)));
+
         registry.Register("get_agent_context", McpToolDescriptions.For("get_agent_context"), McpToolSchemas.GetAgentContext(),
             async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.GetAgentContext(args)));
 
@@ -263,6 +281,33 @@ public static class ToolRegistration
 
         registry.Register("refine_workflow_blueprint_from_nl", McpToolDescriptions.For("refine_workflow_blueprint_from_nl"), McpToolSchemas.RefineBlueprintFromNaturalLanguage(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.RefineBlueprintFromNaturalLanguage(args)));
+
+        registry.Register("poll_external_agent_changes", McpToolDescriptions.For("poll_external_agent_changes"), McpToolSchemas.PollExternalAgentChanges(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentChangeFeedMcpTools>(serviceProvider, t => t.PollExternalAgentChanges(args)));
+
+        registry.Register("ack_external_agent_change", McpToolDescriptions.For("ack_external_agent_change"), McpToolSchemas.AckExternalAgentChange(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentChangeFeedMcpTools>(serviceProvider, t => t.AckExternalAgentChange(args)));
+
+        registry.Register("renew_change_lease", McpToolDescriptions.For("renew_change_lease"), McpToolSchemas.RenewChangeLease(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentChangeFeedMcpTools>(serviceProvider, t => t.RenewChangeLease(args)));
+
+        registry.Register("list_external_agent_changes", McpToolDescriptions.For("list_external_agent_changes"), McpToolSchemas.ListExternalAgentChanges(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentChangeFeedMcpTools>(serviceProvider, t => t.ListExternalAgentChanges(args)));
+
+        registry.Register("get_external_agent_change", McpToolDescriptions.For("get_external_agent_change"), McpToolSchemas.GetExternalAgentChange(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentChangeFeedMcpTools>(serviceProvider, t => t.GetExternalAgentChange(args)));
+
+        registry.Register("plan_for_change", McpToolDescriptions.For("plan_for_change"), McpToolSchemas.PlanForChange(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentPlanMcpTools>(serviceProvider, t => t.PlanForChange(args)));
+
+        registry.Register("execute_plan", McpToolDescriptions.For("execute_plan"), McpToolSchemas.ExecutePlan(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentPlanMcpTools>(serviceProvider, t => t.ExecutePlan(args)));
+
+        registry.Register("resume_plan", McpToolDescriptions.For("resume_plan"), McpToolSchemas.ResumePlan(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentPlanMcpTools>(serviceProvider, t => t.ResumePlan(args)));
+
+        registry.Register("get_external_agent_plan", McpToolDescriptions.For("get_external_agent_plan"), McpToolSchemas.GetExternalAgentPlan(),
+            async (args) => await ExecuteScopedAsync<ExternalAgentPlanMcpTools>(serviceProvider, t => t.GetExternalAgentPlan(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

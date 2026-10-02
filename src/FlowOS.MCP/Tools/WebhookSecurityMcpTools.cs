@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Services;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
 using Microsoft.EntityFrameworkCore;
@@ -18,11 +19,13 @@ public class WebhookSecurityMcpTools
 {
     private readonly IWebhookSignatureService _signatureService;
     private readonly FlowOSDbContext _dbContext;
+    private readonly ITenantSecretProtector _secretProtector;
 
-    public WebhookSecurityMcpTools(IWebhookSignatureService signatureService, FlowOSDbContext dbContext)
+    public WebhookSecurityMcpTools(IWebhookSignatureService signatureService, FlowOSDbContext dbContext, ITenantSecretProtector secretProtector)
     {
         _signatureService = signatureService;
         _dbContext = dbContext;
+        _secretProtector = secretProtector;
     }
 
     public async Task<CallToolResult> VerifyWebhookSignature(JObject args)
@@ -46,7 +49,7 @@ public class WebhookSecurityMcpTools
                 if (tenantId.HasValue && tenantId.Value != Guid.Empty)
                 {
                     var tenant = await _dbContext.Tenants.FindAsync(tenantId.Value);
-                    secret = tenant?.WebhookSigningSecret;
+                    secret = tenant?.UnprotectedWebhookSigningSecret(_secretProtector);
                 }
 
                 if (string.IsNullOrWhiteSpace(secret))
@@ -115,9 +118,13 @@ public class WebhookSecurityMcpTools
             string signingSecret = "whsec_test_flowos_ping_secret";
 
             var tenant = await _dbContext.Tenants.FindAsync(tenantId);
-            if (tenant != null && !string.IsNullOrWhiteSpace(tenant.WebhookSigningSecret))
+            if (tenant != null)
             {
-                signingSecret = tenant.WebhookSigningSecret;
+                var unprotected = tenant.UnprotectedWebhookSigningSecret(_secretProtector);
+                if (!string.IsNullOrWhiteSpace(unprotected))
+                {
+                    signingSecret = unprotected;
+                }
             }
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -200,6 +207,7 @@ public class WebhookSecurityMcpTools
             }
 
             var newSecret = tenant.RotateWebhookSigningSecret();
+            tenant.ProtectWebhookSigningSecret(_secretProtector);
             await _dbContext.SaveChangesAsync();
 
             return McpToolResults.Success(new

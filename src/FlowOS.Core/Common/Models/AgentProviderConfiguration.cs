@@ -25,6 +25,8 @@ public sealed class AgentProviderConfiguration
     /// </summary>
     public string? FallbackProviderAlias { get; set; }
 
+    public bool EnablePromptAudit { get; set; }
+
     public static AgentProviderConfiguration? Parse(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -49,7 +51,9 @@ public sealed class AgentProviderConfiguration
         if (!string.IsNullOrWhiteSpace(incoming.ApiKey))
             existing.ApiKey = incoming.ApiKey.Trim();
         existing.IsDefault = incoming.IsDefault;
+        existing.MaxTokens = incoming.MaxTokens ?? existing.MaxTokens;
         existing.FallbackProviderAlias = string.IsNullOrWhiteSpace(incoming.FallbackProviderAlias) ? existing.FallbackProviderAlias : incoming.FallbackProviderAlias.Trim();
+        existing.EnablePromptAudit = incoming.EnablePromptAudit;
 
         return JsonSerializer.Serialize(existing, JsonOptions);
     }
@@ -62,7 +66,9 @@ public sealed class AgentProviderConfiguration
             parsed.Endpoint,
             !string.IsNullOrWhiteSpace(parsed.ApiKey),
             parsed.IsDefault,
-            parsed.FallbackProviderAlias);
+            parsed.MaxTokens,
+            parsed.FallbackProviderAlias,
+            parsed.EnablePromptAudit);
     }
 
     public static string Serialize(AgentProviderConfiguration config) =>
@@ -76,4 +82,11 @@ public sealed class AgentProviderConfiguration
     };
 }
 
-public sealed record AgentProviderPublicSettings(string? Model, string? Endpoint, bool HasApiKey, bool IsDefault = false, string? FallbackProviderAlias = null);
+public sealed record AgentProviderPublicSettings(
+    string? Model,
+    string? Endpoint,
+    bool HasApiKey,
+    bool IsDefault = false,
+    int? MaxTokens = null,
+    string? FallbackProviderAlias = null,
+    bool EnablePromptAudit = false);

@@ -8,6 +8,7 @@ using FlowOS.Core.Common.Models;
 using FlowOS.Domain.Entities;
 using FlowOS.Events.Models;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -202,7 +203,10 @@ public class OutboxProcessorService : BackgroundService
                         {
                             var db = sp.GetService<FlowOSDbContext>();
                             var tenant = db != null ? await db.Tenants.FindAsync(new object[] { message.TenantId }, ct) : null;
-                            var signingSecret = tenant?.WebhookSigningSecret;
+                            var secretProtector = sp.GetService<FlowOS.Core.Common.Interfaces.ITenantSecretProtector>();
+                            var signingSecret = tenant != null && secretProtector != null
+                                ? tenant.UnprotectedWebhookSigningSecret(secretProtector)
+                                : tenant?.WebhookSigningSecret;
                             if (string.IsNullOrWhiteSpace(signingSecret))
                             {
                                 signingSecret = $"whsec_{message.TenantId.ToString("N")}";

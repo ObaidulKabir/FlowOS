@@ -27,4 +27,15 @@ public interface IConversationStore
         string stepId,
         IEnumerable<ChatMessage> messages,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ConversationSessionInfo>> ListSessionsAsync(
+        Guid tenantId,
+        int limit = 50,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record ConversationSessionInfo(
+    Guid WorkflowInstanceId,
+    string StepId,
+    int MessageCount,
+    DateTimeOffset LastMessageAtUtc);

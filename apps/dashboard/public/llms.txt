@@ -8,7 +8,7 @@ FlowOS is a multi-tenant business automation platform engineered for mission-cri
 ## Core Architectural Pillars
 - **Dual-Kernel (Law + Work)**: State transitions are evaluated by a mathematical finite state machine before any workflow step can advance. Zero illegal transitions can occur.
 - **Transactional Outbox & Zero Dual-Write**: Domain events and outbox messages (webhooks, SSE alerts) commit in the exact same database transaction.
-- **Model Context Protocol (MCP)**: 79 registered MCP tools covering draft creation, pre-flight simulation, time-travel history replay, and bounded-autonomy task execution.
+- **Model Context Protocol (MCP)**: Live discovery advertises the current MCP tool count. The catalog covers draft creation, pre-flight simulation, time-travel history replay, bounded-autonomy task execution, multi-turn workflow chat, prompt audits, and external AI agent change-feed planning.
 - **Multi-Tier SLAs & Reminders**: Declarative step timeouts combined with intermediate non-interrupting countdown notifications (`-24h`, `-2h`) and dynamic relative timers (`appointmentDate - 24h`), all cancelled atomically upon task completion.
 - **Immutable Workflow Versioning & Safe Rollback**: Full SemVer (`Major`, `Minor`, `Patch`) lineage. In-flight instances are permanently pinned to their definition version. Non-breaking policy changes deploy via Patch versions (`1.0.0` -> `1.0.1`) or Context Binding revisions. 1-click rollback deprecates flawed versions without stranding running instances.
 - **Distributed Saga & Compensations**: Automated `OnFailure` rollback hooks execute compensating actions (refunds, resource releases) across third-party APIs with exponential retry.
@@ -22,6 +22,7 @@ FlowOS is a multi-tenant business automation platform engineered for mission-cri
 - **Company Information**: https://flowosbd.com/company
 - **MCP Endpoint**: https://flowosbd.com/mcp
 - **Discovery Manifest**: https://flowosbd.com/.well-known/mcp
+- **Live MCP Tool Catalog**: https://flowosbd.com/mcp
 
 ## Operator & Legal Entity
 FlowOS is developed and operated by Prospect BD Ltd.

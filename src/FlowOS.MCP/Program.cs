@@ -16,6 +16,7 @@ using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
 using FlowOS.MCP.Tools;
 using FlowOS.Notifications.Application;
+using FlowOS.Notifications.Infrastructure.Persistence;
 using FlowOS.Security.Interfaces;
 using FlowOS.Security.Policies;
 using Microsoft.AspNetCore.Builder;
@@ -620,13 +621,17 @@ public partial class Program
 
     static void AddFlowOsMcpServices(IServiceCollection services)
     {
+        services.AddScoped<EventPublishingInterceptor>();
+        services.AddScoped<ExternalAgentChangeInterceptor>();
         services.AddDbContext<FlowOSDbContext>((serviceProvider, options) =>
         {
             var configuration = serviceProvider.GetRequiredService<IConfiguration>();
             var environmentName = configuration["ASPNETCORE_ENVIRONMENT"];
             if (string.IsNullOrWhiteSpace(environmentName))
                 environmentName = serviceProvider.GetService<IHostEnvironment>()?.EnvironmentName;
-            FlowOsDatabase.Configure(options, environmentName, configuration, "FlowOS_MCP_Db");
+            var eventInterceptor = serviceProvider.GetRequiredService<EventPublishingInterceptor>();
+            var changeInterceptor = serviceProvider.GetRequiredService<ExternalAgentChangeInterceptor>();
+            FlowOsDatabase.Configure(options, environmentName, configuration, "FlowOS_MCP_Db", eventInterceptor, changeInterceptor);
         });
 
         services.AddFlowOSPersistence();
@@ -664,6 +669,7 @@ public partial class Program
         services.AddScoped<AgentTools>();
         services.AddScoped<AgentObservabilityMcpTools>();
         services.AddScoped<AgentContextMcpTools>();
+        services.AddScoped<AgentAutomationMcpTools>();
         services.AddScoped<ExecutionTools>();
         services.AddScoped<CapabilityRegistryMcpTools>();
         services.AddScoped<PluginBindingMcpTools>();
@@ -678,6 +684,11 @@ public partial class Program
         services.AddScoped<ActionObservabilityMcpTools>();
         services.AddScoped<McpAuthorizationErrorMapper>();
         services.AddScoped<TenantIamMcpTools>();
+        services.AddScoped<ExternalAgentChangeFeedMcpTools>();
+        services.AddScoped<ExternalAgentPlanMcpTools>();
+        services.AddScoped<IExternalAIAgentPlanner, DefaultExternalAIAgentPlanner>();
+        services.AddScoped<IExternalAIAgentExecutor, DefaultExternalAIAgentExecutor>();
+        services.AddHostedService<ExternalAIAgentAutoPilotService>();
     }
 
     private static async Task InitializePostgresPersistenceAsync(

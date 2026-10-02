@@ -9,6 +9,7 @@ using FlowOS.Infrastructure.Persistence;
 using FlowOS.Infrastructure.Services;
 using FlowOS.MCP.Tools;
 using FlowOS.Workflows.Domain;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -142,7 +143,7 @@ public class WebhookSignatureTests
         db.Tenants.Add(tenant);
         await db.SaveChangesAsync();
 
-        var tools = new WebhookSecurityMcpTools(_service, db);
+        var tools = new WebhookSecurityMcpTools(_service, db, new DataProtectionTenantSecretProtector(new EphemeralDataProtectionProvider()));
 
         // 1. Generate signature via MCP
         var generateArgs = new JObject

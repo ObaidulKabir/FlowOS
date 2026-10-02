@@ -127,7 +127,11 @@ public sealed class AgentContextMcpToolsTests
                 alias = "quote-llm",
                 providerName = "openai",
                 model = "gpt-4o-mini",
-                apiKey = "sk-test-do-not-return"
+                apiKey = "sk-test-do-not-return",
+                isDefault = true,
+                maxTokens = 512,
+                fallbackProviderAlias = "backup-llm",
+                enablePromptAudit = true
             }));
             Assert.False(upsert.IsError);
 
@@ -141,6 +145,10 @@ public sealed class AgentContextMcpToolsTests
             Assert.Equal("openai", provider["providerName"]?.ToString());
             Assert.Equal("gpt-4o-mini", provider["model"]?.ToString());
             Assert.True(provider["hasApiKey"]?.Value<bool>());
+            Assert.True(provider["isDefault"]?.Value<bool>());
+            Assert.Equal(512, provider["maxTokens"]?.Value<int>());
+            Assert.Equal("backup-llm", provider["fallbackProviderAlias"]?.ToString());
+            Assert.True(provider["enablePromptAudit"]?.Value<bool>());
             Assert.Null(provider["apiKey"]);
             Assert.DoesNotContain("sk-test", provider.ToString(), StringComparison.OrdinalIgnoreCase);
 
@@ -148,12 +156,15 @@ public sealed class AgentContextMcpToolsTests
             {
                 tenantId,
                 alias = "quote-llm",
-                model = "gpt-4o"
+                model = "gpt-4o",
+                maxTokens = 1024
             }));
             Assert.False(keepKey.IsError);
             var updated = JObject.Parse(keepKey.Content.Single().Text)["data"]!;
             Assert.Equal("gpt-4o", updated["model"]?.ToString());
             Assert.True(updated["hasApiKey"]?.Value<bool>());
+            Assert.Equal(1024, updated["maxTokens"]?.Value<int>());
+            Assert.Equal("backup-llm", updated["fallbackProviderAlias"]?.ToString());
         }
         finally
         {

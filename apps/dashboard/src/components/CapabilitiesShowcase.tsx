@@ -67,9 +67,9 @@ export const CapabilitiesShowcase: React.FC = () => {
       icon: Cpu,
       summary: "End-to-end workflow design, simulation, and self-healing via Model Context Protocol.",
       situation: "Operations teams wanting AI agents (Claude, ChatGPT) to design, validate, and troubleshoot enterprise workflows without manual YAML/JSON wrangling.",
-      solution: `${mcpTools} registered MCP tools allowing LLM agents to attach lifecycle hooks, simulate failure paths in-memory (simulateFailureAtStep), query execution audit logs, and retry failed outbox messages.`,
-      example: "Autonomous AI agent analyzes error rate, diagnoses an expired partner webhook token via get_instance_action_history, updates the hook configuration, and re-dispatches failed tasks.",
-      tags: ["Model Context Protocol", "Pre-Flight Simulation", "Failure Injection", "Agentic Ops"]
+      solution: `${mcpTools} registered MCP tools allowing LLM agents to attach lifecycle hooks, simulate failure paths in-memory (simulateFailureAtStep), inspect prompt audits and multi-turn chat sessions, and drive external one-by-one change plans without bypassing approval gates.`,
+      example: "An external AI worker polls a FlowOS change, drafts a plan, appends clarifying chat to the workflow session, reviews prompt audits for the last run, then executes the approved plan step-by-step through MCP.",
+      tags: ["Model Context Protocol", "Pre-Flight Simulation", "External Agent Plans", "Agentic Ops"]
     },
     {
       id: 6,

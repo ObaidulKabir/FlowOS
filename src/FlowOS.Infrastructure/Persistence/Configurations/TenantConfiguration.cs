@@ -36,6 +36,16 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.WebhookSigningSecret)
             .HasMaxLength(256);
 
+        builder.Property(t => t.ExternalAIAgentEnabled)
+            .IsRequired(false);
+
+        builder.Property(t => t.ExternalAIAgentAutoPilot)
+            .IsRequired(false);
+
+        builder.Property(t => t.ExternalAIAgentProfileId)
+            .IsRequired(false)
+            .HasMaxLength(200);
+
         builder.HasIndex(t => t.Name).IsUnique();
     }
 }

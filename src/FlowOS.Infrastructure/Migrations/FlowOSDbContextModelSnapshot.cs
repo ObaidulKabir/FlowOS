@@ -502,6 +502,92 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("AgentExecutionRecords", (string)null);
                 });
 
+            modelBuilder.Entity("FlowOS.Domain.Entities.AgentPromptAuditRecord", b =>
+                {
+                    b.Property<Guid>("AuditId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("ExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("HttpStatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("InputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Iteration")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<long?>("OutputTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProviderAlias")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("RawRequestPayload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RawResponsePayload")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StepId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SystemPrompt")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserPrompt")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("AuditId");
+
+                    b.HasIndex("ExecutionId")
+                        .HasDatabaseName("IX_AgentPromptAuditRecords_ExecutionId");
+
+                    b.HasIndex("WorkflowInstanceId")
+                        .HasDatabaseName("IX_AgentPromptAuditRecords_WorkflowInstanceId");
+
+                    b.HasIndex("TenantId", "RecordedAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AgentPromptAuditRecords_Tenant_RecordedAt");
+
+                    b.ToTable("AgentPromptAuditRecords", (string)null);
+                });
+
             modelBuilder.Entity("FlowOS.Domain.Entities.AgentTaskJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -700,6 +786,183 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("EventDefinitions");
                 });
 
+            modelBuilder.Entity("FlowOS.Domain.Entities.ExternalAI.ExternalAgentChangeRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("LeasedByAgent")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("LeasedUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(5);
+
+                    b.Property<DateTime?>("NextRetryUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SourceOutboxMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeasedUntilUtc")
+                        .HasDatabaseName("IX_ExternalAgentChangeRecords_LeasedUntilUtc");
+
+                    b.HasIndex("Status", "NextRetryUtc")
+                        .HasDatabaseName("IX_ExternalAgentChangeRecords_Status_NextRetryUtc");
+
+                    b.HasIndex("TenantId", "CreatedAtUtc", "Id")
+                        .HasDatabaseName("IX_ExternalAgentChangeRecords_Tenant_CreatedAt_Id");
+
+                    b.ToTable("ExternalAgentChangeRecords", (string)null);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.ExternalAI.ExternalAgentPlanRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentProfileId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("ChangeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PlanStepsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PlanVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangeId")
+                        .HasDatabaseName("IX_ExternalAgentPlanRecords_ChangeId");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_ExternalAgentPlanRecords_TenantId");
+
+                    b.ToTable("ExternalAgentPlanRecords", (string)null);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.ExternalAI.ExternalAgentPlanStepRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("DependsOnJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime?>("FinishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResultSnapshotJson")
+                        .HasMaxLength(65535)
+                        .HasColumnType("character varying(65535)");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<string>("StepId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("StepIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ToolArgsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ToolName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlanId", "StepIndex")
+                        .HasDatabaseName("IX_ExternalAgentPlanStepRecords_PlanId_StepIndex");
+
+                    b.ToTable("ExternalAgentPlanStepRecords", (string)null);
+                });
+
             modelBuilder.Entity("FlowOS.Domain.Entities.HostedLlmDailyUsage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -806,6 +1069,16 @@ namespace FlowOS.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("ExternalAIAgentAutoPilot")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("ExternalAIAgentEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ExternalAIAgentProfileId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Name")
                         .IsRequired()

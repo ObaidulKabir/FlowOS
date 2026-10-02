@@ -16,6 +16,10 @@ public class Tenant
 
     public string? WebhookSigningSecret { get; private set; }
 
+    public bool? ExternalAIAgentEnabled { get; private set; }
+    public bool? ExternalAIAgentAutoPilot { get; private set; }
+    public string? ExternalAIAgentProfileId { get; private set; }
+
     public bool CanRunRuntime =>
         (Plan == TenantPlan.Managed || Plan == TenantPlan.Enterprise) &&
         BillingStatus == TenantBillingStatus.Active;
@@ -101,6 +105,14 @@ public class Tenant
 
         Plan = plan;
         BillingStatus = billingStatus;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetExternalAIAgent(bool enabled, bool auto, string? profileId)
+    {
+        ExternalAIAgentEnabled = enabled;
+        ExternalAIAgentAutoPilot = auto;
+        ExternalAIAgentProfileId = string.IsNullOrWhiteSpace(profileId) ? null : profileId.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
 }

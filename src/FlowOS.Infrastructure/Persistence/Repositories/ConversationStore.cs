@@ -71,4 +71,32 @@ internal sealed class ConversationStore : IConversationStore
         _dbContext.ConversationMessages.AddRange(records);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<ConversationSessionInfo>> ListSessionsAsync(
+        Guid tenantId,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var records = await _dbContext.ConversationMessages
+            .Where(m => m.TenantId == tenantId)
+            .Select(m => new
+            {
+                m.WorkflowInstanceId,
+                m.StepId,
+                m.Timestamp
+            })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return records
+            .GroupBy(m => new { m.WorkflowInstanceId, m.StepId })
+            .Select(g => new ConversationSessionInfo(
+                g.Key.WorkflowInstanceId,
+                g.Key.StepId,
+                g.Count(),
+                g.Max(m => m.Timestamp)))
+            .OrderByDescending(s => s.LastMessageAtUtc)
+            .Take(limit)
+            .ToList();
+    }
 }

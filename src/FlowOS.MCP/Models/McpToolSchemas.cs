@@ -95,6 +95,94 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject AppendAgentChatMessage() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId","stepId","message"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "stepId":{"type":"string","minLength":1,"maxLength":200},
+            "message":{"type":"string","minLength":1},
+            "name":{"type":"string","maxLength":200},
+            "triggerAgent":{"type":"boolean","default":true},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetAgentChatHistory() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId","stepId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "stepId":{"type":"string","minLength":1,"maxLength":200},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListAgentChatSessions() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "limit":{"type":"integer","minimum":1,"maximum":200,"default":50},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListAgentPromptAudits() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "executionId":{"type":"string","format":"uuid"},
+            "stepId":{"type":"string","maxLength":200},
+            "providerAlias":{"type":"string","maxLength":200},
+            "fromUtc":{"type":"string","format":"date-time"},
+            "toUtc":{"type":"string","format":"date-time"},
+            "limit":{"type":"integer","minimum":1,"maximum":200,"default":50},
+            "includePayloads":{"type":"boolean","default":false},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetExternalAgentSettings() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ConfigureExternalAgentSettings() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["enabled"],
+          "properties":{
+            "enabled":{"type":"boolean"},
+            "autoPilot":{"type":"boolean","default":false},
+            "agentProfileId":{"type":"string","maxLength":200},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject GetAgentContext() => JObject.Parse(
         """
         {
@@ -198,12 +286,20 @@ public static class McpToolSchemas
             "model":{"type":"string"},
             "endpoint":{"type":"string"},
             "apiKey":{"type":"string","description":"Write-only tenant LLM key. Omit on update to keep the stored key. Never returned."},
+            "isDefault":{"type":"boolean","default":false,"description":"Marks this provider as the tenant default when a workflow step does not name a specific provider alias."},
+            "maxTokens":{"type":"integer","minimum":1,"description":"Optional provider output-token cap. Important for Anthropic requests that require an explicit max_tokens value."},
+            "fallbackProviderAlias":{"type":"string","description":"Optional provider alias FlowOS should try when the primary provider is overloaded or unavailable."},
+            "enablePromptAudit":{"type":"boolean","default":false,"description":"Opt-in raw prompt/response audit logging for this provider binding."},
             "configuration":{
               "type":"object",
               "properties":{
                 "model":{"type":"string"},
                 "endpoint":{"type":"string"},
-                "apiKey":{"type":"string"}
+                "apiKey":{"type":"string"},
+                "isDefault":{"type":"boolean"},
+                "maxTokens":{"type":"integer","minimum":1},
+                "fallbackProviderAlias":{"type":"string"},
+                "enablePromptAudit":{"type":"boolean"}
               },
               "additionalProperties":false
             },
@@ -1594,5 +1690,125 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
-}
 
+    public static JObject PollExternalAgentChanges() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid","description":"Required tenant scope; resolved from authenticated transport when omitted."},
+            "limit":{"type":"integer","minimum":1,"maximum":50,"default":10,"description":"Maximum number of changes to return per poll (1-50)."},
+            "peekOnly":{"type":"boolean","default":false,"description":"When true, lists pending changes without leasing (read-only preview)."},
+            "ttlSeconds":{"type":"integer","minimum":60,"maximum":3600,"default":120,"description":"Lease TTL in seconds (60-3600). Only used when peekOnly=false."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject AckExternalAgentChange() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["changeId","result"],
+          "properties":{
+            "changeId":{"type":"string","format":"uuid","description":"UUID of the leased change record to acknowledge."},
+            "result":{"type":"string","enum":["succeeded","failed"],"description":"Terminal processing result: 'succeeded' marks Processed; 'failed' records the error and increments attempt count."},
+            "error":{"type":"string","description":"Optional failure detail when result='failed'. Stored on the change for diagnosis."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject RenewChangeLease() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["changeId"],
+          "properties":{
+            "changeId":{"type":"string","format":"uuid","description":"UUID of the Leased change record whose TTL should be extended."},
+            "ttlSeconds":{"type":"integer","minimum":60,"maximum":3600,"default":120,"description":"Extended lease TTL in seconds (60-3600)."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListExternalAgentChanges() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid","description":"Required tenant scope; resolved from authenticated transport when omitted."},
+            "status":{"type":"string","enum":["Pending","Leased","Processed","Failed","DeadLetter"],"description":"Optional status filter (exact enum match, case-insensitive)."},
+            "limit":{"type":"integer","minimum":1,"maximum":100,"default":20,"description":"Maximum number of pending records to scan (1-100)."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetExternalAgentChange() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["changeId"],
+          "properties":{
+            "changeId":{"type":"string","format":"uuid","description":"UUID of the change record to retrieve."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject PlanForChange() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["changeId"],
+          "properties":{
+            "changeId":{"type":"string","format":"uuid","description":"UUID of the change record to plan for."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."},
+            "agentProfileId":{"type":"string","description":"Optional tenant AI profile alias used for planning."},
+            "objective":{"type":"string","description":"Optional planning objective override."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ExecutePlan() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["planId"],
+          "properties":{
+            "planId":{"type":"string","format":"uuid","description":"UUID of the external agent plan to execute."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ResumePlan() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["planId"],
+          "properties":{
+            "planId":{"type":"string","format":"uuid","description":"UUID of the external agent plan to resume."},
+            "fromStepId":{"type":"string","description":"Optional logical stepId to resume from."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetExternalAgentPlan() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["planId"],
+          "properties":{
+            "planId":{"type":"string","format":"uuid","description":"UUID of the plan to retrieve."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
+}

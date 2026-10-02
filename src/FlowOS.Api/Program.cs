@@ -43,19 +43,22 @@ builder.Services.AddScoped<IPolicyEvaluator, DefaultPolicyEvaluator>();
 
 builder.Services.AddSingleton<NotificationStreamService>();
 builder.Services.AddScoped<EventPublishingInterceptor>();
+builder.Services.AddScoped<ExternalAgentChangeInterceptor>();
 builder.Services.AddScoped<NotificationRepository>();
 builder.Services.AddScoped<INotificationRepository>(sp => sp.GetRequiredService<NotificationRepository>());
 builder.Services.AddScoped<INotificationQueryService>(sp => sp.GetRequiredService<NotificationRepository>());
 
 builder.Services.AddDbContext<FlowOSDbContext>((sp, options) =>
 {
-    var interceptor = sp.GetRequiredService<EventPublishingInterceptor>();
+    var eventInterceptor = sp.GetRequiredService<EventPublishingInterceptor>();
+    var changeInterceptor = sp.GetRequiredService<ExternalAgentChangeInterceptor>();
     FlowOsDatabase.Configure(
         options,
         builder.Environment.EnvironmentName,
         builder.Configuration,
         "FlowOS_Db",
-        interceptor);
+        eventInterceptor,
+        changeInterceptor);
 });
 
 builder.Services.AddFlowOSPersistence();

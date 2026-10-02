@@ -13,19 +13,22 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
     private readonly HttpMessageHandler? _handler;
     private readonly IFlowOsHostedLlmRuntime? _hosted;
     private readonly ILlmTransport? _transport;
+    private readonly IAgentPromptAuditor? _auditor;
 
     public WorkflowAgentFactory(
         IPluginBindingRegistryService bindings,
         ILlmProviderAdapterRegistry adapterRegistry,
         HttpMessageHandler? handler = null,
         IFlowOsHostedLlmRuntime? hosted = null,
-        ILlmTransport? transport = null)
+        ILlmTransport? transport = null,
+        IAgentPromptAuditor? auditor = null)
     {
         _bindings = bindings;
         _adapterRegistry = adapterRegistry;
         _handler = handler;
         _hosted = hosted;
         _transport = transport;
+        _auditor = auditor;
     }
 
     public async Task<IWorkflowAgent> CreateAsync(
@@ -159,6 +162,7 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
 
             var model = NormalizeModel(AgentProviderKinds.OpenAi, lease.Model);
             var adapter = _adapterRegistry.GetAdapter(AgentProviderKinds.OpenAi);
+            var enableAudit = false;
             var agent = new TenantLlmWorkflowAgent(
                 AgentProviderKinds.OpenAi,
                 model,
@@ -166,7 +170,8 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
                 lease.ApiKey,
                 _handler,
                 adapter: adapter,
-                transport: _transport);
+                transport: _transport,
+                auditor: enableAudit ? _auditor : null);
             return new ResolvedWorkflowAgent(
                 agent,
                 ResolveLlmActorId(requestedAgentId, AgentProviderKinds.FlowosHosted),
@@ -188,6 +193,7 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
 
             var adapter = _adapterRegistry.GetAdapter(providerName, secrets);
 
+            var enableAudit = secrets?.EnablePromptAudit ?? false;
             var agent = new TenantLlmWorkflowAgent(
                 providerName!,
                 model,
@@ -195,7 +201,8 @@ public sealed class WorkflowAgentFactory : IWorkflowAgentFactory
                 secrets?.ApiKey,
                 _handler,
                 adapter: adapter,
-                transport: _transport);
+                transport: _transport,
+                auditor: enableAudit ? _auditor : null);
             return new ResolvedWorkflowAgent(
                 agent,
                 ResolveLlmActorId(requestedAgentId, alias),

@@ -28,12 +28,15 @@ public static class DataSeeder
 
     public static async Task SeedAsync(FlowOSDbContext context, IServiceProvider serviceProvider, IHostEnvironment env)
     {
+        var secretProtector = serviceProvider.GetService<FlowOS.Core.Common.Interfaces.ITenantSecretProtector>();
+
         // 1. Ensure Tenant
         if (!await context.Tenants.AnyAsync(t => t.TenantId == DefaultTenantId))
         {
             var tenant = new Tenant("Default Tenant");
             SetPrivateProperty(tenant, "TenantId", DefaultTenantId);
             tenant.AssignPlan(TenantPlan.Managed, TenantBillingStatus.Active);
+            if (secretProtector != null) tenant.ProtectWebhookSigningSecret(secretProtector);
             context.Tenants.Add(tenant);
             await context.SaveChangesAsync();
         }
@@ -44,6 +47,7 @@ public static class DataSeeder
             var clientTenant = new Tenant("Demo Client Tenant");
             SetPrivateProperty(clientTenant, "TenantId", demoClientTenantId);
             clientTenant.AssignPlan(TenantPlan.Managed, TenantBillingStatus.Active);
+            if (secretProtector != null) clientTenant.ProtectWebhookSigningSecret(secretProtector);
             context.Tenants.Add(clientTenant);
             await context.SaveChangesAsync();
         }

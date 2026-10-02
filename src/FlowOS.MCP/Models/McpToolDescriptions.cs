@@ -71,6 +71,47 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-LIMIT-001, MCP-INTERNAL. " +
                 "Input example: {\"fromUtc\":\"2026-09-01T00:00:00Z\",\"toUtc\":\"2026-09-22T00:00:00Z\"}",
 
+            ["append_agent_chat_message"] =
+                "Appends a user chat message to a workflow instance step conversation and optionally enqueues the current step for agent processing. " +
+                "This exposes the multi-turn conversation feature through MCP so external tools can continue a live agent session without calling the REST API. " +
+                "Returns: {ok:true,data:{tenantId,workflowInstanceId,stepId,triggerAgent,enqueuedJobs,messageRecorded}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"stepId\":\"AgentReview\",\"message\":\"Customer approved the revised quote.\",\"triggerAgent\":true}",
+
+            ["get_agent_chat_history"] =
+                "Reads the ordered multi-turn chat history for one workflow instance step conversation. " +
+                "Use this to reconstruct agent/user context for a live conversational step through MCP. " +
+                "Returns: {ok:true,data:{tenantId,workflowInstanceId,stepId,count,messages:[{role,content,name,timestamp}]}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"stepId\":\"AgentReview\"}",
+
+            ["list_agent_chat_sessions"] =
+                "Lists recent workflow-step chat sessions for the tenant, ordered by most recent message timestamp. " +
+                "This is the MCP companion to the conversational agent session listing added in the API. " +
+                "Returns: {ok:true,data:{tenantId,limit,totalCount,sessions:[{workflowInstanceId,stepId,messageCount,lastMessageAtUtc}]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"limit\":50}",
+
+            ["list_agent_prompt_audits"] =
+                "Lists tenant prompt/response audit records when provider-level prompt auditing is enabled. " +
+                "By default returns metadata only; pass includePayloads=true to include raw request/response payloads for forensic debugging. " +
+                "Returns: {ok:true,data:{tenantId,includePayloads,totalCount,audits:[{auditId,providerAlias,providerName,model,recordedAtUtc,...}]}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"includePayloads\":false,\"limit\":20}",
+
+            ["get_external_agent_settings"] =
+                "Reads the tenant-level External AI Agent pipeline settings that control change-feed generation and autopilot processing. " +
+                "Returns: {ok:true,data:{tenantId,enabled,autoPilot,agentProfileId}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {}",
+
+            ["configure_external_agent_settings"] =
+                "Enables or disables the tenant-level External AI Agent pipeline and configures autopilot plus the default planning profile alias. " +
+                "This is the MCP management surface for the external-agent opt-in flags stored on the tenant. " +
+                "Returns: {ok:true,data:{tenantId,enabled,autoPilot,agentProfileId}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"enabled\":true,\"autoPilot\":true,\"agentProfileId\":\"ops-planner\"}",
+
             ["get_agent_context"] =
                 "Composes Agent Context for a live instance current step (Prompt + Data + Tools + redacted Provider) without running the agent and without publishing. " +
                 "Prefetch (default true) fills Data.ToolResults via hosted resource plugins; the model never sees URLs or API keys. " +
@@ -110,23 +151,24 @@ public static class McpToolDescriptions
             ["upsert_agent_provider"] =
                 "Creates or edits a tenant-owned LLM provider used for AI task automation. Point a waiting step at it with agentProvider. " +
                 "apiKey is write-only: stored on the tenant, omitted from responses, and left unchanged when you omit it on update. " +
-                "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key). Dashboard: Application → AI Context → Providers. " +
+                "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key). " +
+                "Also supports default-provider selection, provider fallback alias, maxTokens, and opt-in prompt audit logging. Dashboard: Application → AI Context → Providers. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
-                "Input example: {\"alias\":\"flowos-hosted\",\"providerName\":\"flowos-hosted\"}",
+                "Input example: {\"alias\":\"flowos-hosted\",\"providerName\":\"flowos-hosted\",\"isDefault\":true,\"enablePromptAudit\":false}",
 
             ["list_agent_providers"] =
-                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey. Never returns the API key. " +
+                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey plus default/fallback/audit settings. Never returns the API key. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,isEnabled}]}}. " +
+                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {}",
 
             ["get_agent_provider"] =
-                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret. " +
+                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret, and includes default/fallback/audit settings. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-llm\"}",
 
@@ -612,7 +654,73 @@ public static class McpToolDescriptions
                 "Allows modifying steps, adding parallel branches, inserting SLA timers with intermediate countdown reminders, adding relative pre/post-event timers, or attaching webhook and compensation actions while maintaining schema compliance. " +
                 "Returns: {ok:true,data:{suggestedName,suggestedVersion,summary,explanation,blueprint,validation}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
-                "Input example: {\"prompt\":\"Add 24h SLA timeout with a reminder 2h before due time, and manager escalation webhook.\",\"currentBlueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}"
+                "Input example: {\"prompt\":\"Add 24h SLA timeout with a reminder 2h before due time, and manager escalation webhook.\",\"currentBlueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}",
+
+            ["poll_external_agent_changes"] =
+                "[External AI Change Feed] Polls the next batch of tenant-scoped outbox-backed change records for an external autonomous AI agent to process. " +
+                "When peekOnly=false (default), atomically leases each returned record to the caller with the requested TTL so no competing consumer touches it. " +
+                "When peekOnly=true, returns a read-only snapshot of pending/failed candidates without leasing (no side effects, does not advance attempt counters). " +
+                "Lease caller ID is generated deterministically as 'mcp:{tenantId}:{guid}' to ensure traceable ownership. " +
+                "Returns: {ok:true,data:{tenantId,peekOnly,count,changes:[{id,eventType,status,leasedUntilUtc,attemptCount,payloadJson}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"limit\":10,\"peekOnly\":false,\"ttlSeconds\":120}",
+
+            ["ack_external_agent_change"] =
+                "[External AI Change Feed] Idempotently acknowledges a previously-leased external agent change record and marks it Processed (succeeded) or Failed (with optional error). " +
+                "For result='succeeded' the record transitions to Processed regardless of prior Ack calls (idempotent). " +
+                "For result='failed' the record increments AttemptCount, stores LastError, and transitions to Failed (retry eligible) or DeadLetter when max attempts are exhausted. " +
+                "Returns: {ok:true,data:{changeId,result,status,attemptCount,lastError}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"changeId\":\"22222222-2222-2222-2222-222222222222\",\"result\":\"succeeded\"}",
+
+            ["renew_change_lease"] =
+                "[External AI Change Feed] Extends the lease TTL on a Leased change record so a long-running external agent avoids having the record reclaimed mid-processing. " +
+                "Only works for records currently in Leased status; the caller implicitly inherits the existing LeasedByAgent identity stored on the record. " +
+                "Returns: {ok:true,data:{changeId,renewed:true,ttlSeconds,leasedUntilUtc}}. " +
+                "Errors: MCP-ARG-001, MCP-STATE-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"changeId\":\"22222222-2222-2222-2222-222222222222\",\"ttlSeconds\":300}",
+
+            ["list_external_agent_changes"] =
+                "[External AI Change Feed] Scans the tenant's pending/failed change queue (optionally filtered by status) and returns the requested page of records without leasing or mutating state. " +
+                "This is a read-only observability tool; use poll_external_agent_changes to acquire leases for actual processing. " +
+                "Status enum values (case-insensitive): Pending, Leased, Processed, Failed, DeadLetter. " +
+                "Returns: {ok:true,data:{tenantId,statusFilter,totalCount,filteredCount,changes:[{id,eventType,status,attemptCount,createdAtUtc}]}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"status\":\"Failed\",\"limit\":20}",
+
+            ["get_external_agent_change"] =
+                "[External AI Change Feed] Retrieves a single change record by UUID and joins it with any associated ExternalAgentPlan steps derived from the originating outbox message. " +
+                "Returns the full serialized payload plus attempt/lease metadata and (when available) associatedPlan info with step-level status breakdowns. " +
+                "Returns: {ok:true,data:{id,eventType,status,attemptCount,leasedUntilUtc,payload,associatedPlan}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"changeId\":\"22222222-2222-2222-2222-222222222222\"}",
+
+            ["plan_for_change"] =
+                "[External AI Planner] Uses the tenant's configured LLM provider (profile alias or default provider) to transform one external-agent change into a structured MCP execution plan. " +
+                "Unknown tool names are dropped during validation, and when no valid steps survive the planner returns a minimal inspection step so the plan remains executable. " +
+                "Returns: {ok:true,data:{planId,changeId,tenantId,agentProfileId,validationDropped,steps:[{stepId,stepIndex,toolName,toolArgs,description,dependsOn}]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"changeId\":\"22222222-2222-2222-2222-222222222222\",\"agentProfileId\":\"ops-planner\"}",
+
+            ["execute_plan"] =
+                "[External AI Executor] Runs each persisted plan step sequentially against the MCP tool registry, recording started/finished timestamps plus redacted result snapshots. " +
+                "A failed step aborts dependent work and marks downstream dependent steps Skipped. " +
+                "Returns: {ok:true,data:{planId,tenantId,success,stepCount,stepResults:[...]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"planId\":\"33333333-3333-3333-3333-333333333333\"}",
+
+            ["resume_plan"] =
+                "[External AI Executor] Resets failed/skipped steps back to Pending from the selected step boundary and re-runs the remaining plan sequentially. " +
+                "When fromStepId is omitted, execution resumes from the first Failed step. " +
+                "Returns: {ok:true,data:{planId,tenantId,success,stepCount,stepResults:[...]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"planId\":\"33333333-3333-3333-3333-333333333333\",\"fromStepId\":\"step-2\"}",
+
+            ["get_external_agent_plan"] =
+                "[External AI Planner] Retrieves a persisted external-agent plan and all step execution statuses for observability and debugging. " +
+                "Returns: {ok:true,data:{id,changeId,tenantId,agentProfileId,createdAtUtc,planVersion,steps:[...]}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"planId\":\"33333333-3333-3333-3333-333333333333\"}"
         };
 
     public static string For(string toolName) =>
@@ -623,6 +731,21 @@ public static class McpToolDescriptions
     public static readonly IReadOnlyDictionary<string, ToolSecurityProfile> SecurityProfiles =
         new Dictionary<string, ToolSecurityProfile>(StringComparer.Ordinal)
         {
+            ["append_agent_chat_message"] = new("command", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["get_agent_chat_history"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["list_agent_chat_sessions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["list_agent_prompt_audits"] = new("observability", "authenticated", true, true, false, "none", true, "medium"),
+            ["get_external_agent_settings"] = new("external-agent", "authenticated", true, true, false, "none", true, "low"),
+            ["configure_external_agent_settings"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["poll_external_agent_changes"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["ack_external_agent_change"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["renew_change_lease"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["list_external_agent_changes"] = new("external-agent", "authenticated", true, true, false, "none", true, "low"),
+            ["get_external_agent_change"] = new("external-agent", "authenticated", true, true, false, "none", true, "low"),
+            ["plan_for_change"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["execute_plan"] = new("external-agent", "authenticated", true, true, true, "irreversible", true, "high"),
+            ["resume_plan"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "high"),
+            ["get_external_agent_plan"] = new("external-agent", "authenticated", true, true, false, "none", true, "low"),
             ["get_subworkflow_tree"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_parallel_execution"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["refine_workflow_blueprint_from_nl"] = new("governance", "authenticated", true, true, false, "none", true, "low"),

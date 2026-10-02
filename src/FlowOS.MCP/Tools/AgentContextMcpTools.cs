@@ -713,6 +713,10 @@ public class AgentContextMcpTools
             model = settings.Model,
             endpoint = settings.Endpoint,
             hasApiKey = settings.HasApiKey,
+            isDefault = settings.IsDefault,
+            maxTokens = settings.MaxTokens,
+            fallbackProviderAlias = settings.FallbackProviderAlias,
+            enablePromptAudit = settings.EnablePromptAudit,
             binding.Id,
             binding.TenantId,
             binding.CreatedAtUtc,
@@ -745,13 +749,26 @@ public class AgentContextMcpTools
         var model = FirstNonEmpty(args, "model") ?? nested?["model"]?.ToString();
         var endpoint = FirstNonEmpty(args, "endpoint") ?? nested?["endpoint"]?.ToString();
         var apiKey = FirstNonEmpty(args, "apiKey") ?? nested?["apiKey"]?.ToString();
+        var isDefault = args["isDefault"]?.Value<bool>() ?? nested?["isDefault"]?.Value<bool>() ?? false;
+        var maxTokens = args["maxTokens"]?.Value<int?>() ?? nested?["maxTokens"]?.Value<int?>();
+        var fallbackProviderAlias = FirstNonEmpty(args, "fallbackProviderAlias") ?? nested?["fallbackProviderAlias"]?.ToString();
+        var enablePromptAudit = args["enablePromptAudit"]?.Value<bool>() ?? nested?["enablePromptAudit"]?.Value<bool>() ?? false;
 
-        return new JObject
+        var config = new JObject
         {
             ["model"] = model,
             ["endpoint"] = endpoint,
-            ["apiKey"] = apiKey
-        }.ToString(Newtonsoft.Json.Formatting.None);
+            ["apiKey"] = apiKey,
+            ["isDefault"] = isDefault,
+            ["enablePromptAudit"] = enablePromptAudit
+        };
+
+        if (maxTokens.HasValue)
+            config["maxTokens"] = maxTokens.Value;
+        if (!string.IsNullOrWhiteSpace(fallbackProviderAlias))
+            config["fallbackProviderAlias"] = fallbackProviderAlias;
+
+        return config.ToString(Newtonsoft.Json.Formatting.None);
     }
 
     private static string BuildPromptConfiguration(JObject args)

@@ -100,7 +100,8 @@ public static class DependencyInjection
                 provider.GetRequiredService<FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService>(),
                 provider.GetRequiredService<FlowOS.Agents.Abstractions.ILlmProviderAdapterRegistry>(),
                 hosted: provider.GetRequiredService<IFlowOsHostedLlmRuntime>(),
-                transport: provider.GetRequiredService<ILlmTransport>()));
+                transport: provider.GetRequiredService<ILlmTransport>(),
+                auditor: provider.GetRequiredService<FlowOS.Agents.Abstractions.IAgentPromptAuditor>()));
         services.AddScoped<IFlowOsHostedLlmRuntime, FlowOsHostedLlmRuntime>();
         services.AddScoped<IAgentTaskQueue, AgentTaskQueue>();
         services.AddScoped<IDistributedLeaseService, DistributedLeaseService>();
@@ -108,6 +109,10 @@ public static class DependencyInjection
         services.AddScoped<AgentExecutionStore>();
         services.AddScoped<IAgentExecutionRecorder>(provider => provider.GetRequiredService<AgentExecutionStore>());
         services.AddScoped<IAgentExecutionHistoryStore>(provider => provider.GetRequiredService<AgentExecutionStore>());
+        services.AddScoped<IAgentPromptAuditStore, AgentPromptAuditStore>();
+        services.AddScoped<IAgentPromptAuditor, DefaultAgentPromptAuditor>();
+        services.AddScoped<IExternalAgentChangeStore, ExternalAgentChangeStore>();
+        services.AddScoped<IExternalAgentPlanStore, ExternalAgentPlanStore>();
         services.AddScoped<IConversationStore, ConversationStore>();
         services.AddScoped<IAgentObservabilityQueryService, FlowOS.Application.Services.AgentObservabilityQueryService>();
         services.AddScoped(provider =>
@@ -126,6 +131,7 @@ public static class DependencyInjection
         services.AddScoped<FlowOS.Infrastructure.Services.Security.TenantSecurityProvisioningService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantEntitlementService, FlowOS.Infrastructure.Services.TenantEntitlementService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantBackupService, TenantBackupService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.ITenantSecretProtector, DataProtectionTenantSecretProtector>();
         return services;
     }
 }

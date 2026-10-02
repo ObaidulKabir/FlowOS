@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Text.Json;
 using FlowOS.Agents.Abstractions;
 using FlowOS.Agents.Implementations.Adapters;
+using FlowOS.Domain.Entities;
 
 namespace FlowOS.Agents.Implementations;
 
@@ -23,6 +25,7 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
     private readonly HttpClient? _customClient;
     private readonly ILlmProviderAdapter _adapter;
     private readonly ILlmTransport? _transport;
+    private readonly IAgentPromptAuditor? _auditor;
 
     public TenantLlmWorkflowAgent(
         string providerName,
@@ -31,7 +34,8 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         string? apiKey,
         HttpMessageHandler? handler = null,
         ILlmProviderAdapter? adapter = null,
-        ILlmTransport? transport = null)
+        ILlmTransport? transport = null,
+        IAgentPromptAuditor? auditor = null)
     {
         _providerName = string.IsNullOrWhiteSpace(providerName) ? "openai" : providerName.Trim();
         _model = string.IsNullOrWhiteSpace(model) ? "gpt-4o-mini" : model.Trim();
@@ -46,6 +50,7 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
             new FlowOS.Agents.Implementations.Adapters.GoogleAdapterFactory()
         }).GetAdapter(_providerName);
         _transport = transport;
+        _auditor = auditor;
     }
 
     public int MaxTurns => 5;
@@ -103,23 +108,72 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
                 }
                 combinedHistory.AddRange(toolCallHistory);
 
+                var iterationUserPrompt = iterations == 0 ? userPrompt : string.Empty;
+                var toolNames = context.Packet?.DeclaredTools?.Select(t => t.Name).ToList();
+
                 using var request = _adapter.CreateRequest(
                     _endpoint, 
                     _apiKey, 
                     _model, 
                     systemPrompt, 
-                    iterations == 0 ? userPrompt : "", 
+                    iterationUserPrompt, 
                     context.Packet?.DeclaredTools, 
                     combinedHistory.Count > 0 ? combinedHistory : null);
 
+                var sw = Stopwatch.StartNew();
                 var response = _transport == null
                     ? await SendDirectAsync(request, cancellationToken)
                     : await _transport.SendAsync(request, cancellationToken);
+                sw.Stop();
+                var durationMs = sw.ElapsedMilliseconds;
 
                 var transportTelemetry = new AgentTelemetry(
                     response.HttpStatusCode,
                     response.ProviderRequestId,
                     AttemptCount: Math.Max(0, response.AttemptCount));
+
+                if (_auditor != null && _auditor.IsEnabled)
+                {
+                    var providerResponseForAudit = response.Success && !string.IsNullOrWhiteSpace(response.Content)
+                        ? _adapter.ParseResponse(response.Content!)
+                        : null;
+
+                    var rawRequestPayload = JsonSerializer.Serialize(new
+                    {
+                        SystemPrompt = systemPrompt,
+                        UserPrompt = iterationUserPrompt,
+                        TurnMessages = combinedHistory,
+                        ToolNames = toolNames
+                    });
+
+                    var rawResponsePayload = response.Content ?? (providerResponseForAudit?.ErrorCode != null
+                        ? "error:" + providerResponseForAudit.ErrorCode
+                        : string.Empty);
+
+                    var auditRecord = new AgentPromptAuditRecord(
+                        auditId: Guid.NewGuid(),
+                        tenantId: context.TenantId,
+                        providerName: _providerName,
+                        model: _model,
+                        recordedAtUtc: DateTime.UtcNow,
+                        rawRequestPayload: rawRequestPayload,
+                        durationMs: durationMs,
+                        iteration: iterations,
+                        workflowInstanceId: context.Packet?.WorkflowInstanceId,
+                        stepId: context.Packet?.CurrentStepId,
+                        providerAlias: context.Packet?.Provider?.Alias,
+                        systemPrompt: systemPrompt,
+                        userPrompt: iterationUserPrompt,
+                        rawResponsePayload: rawResponsePayload,
+                        failureCode: response.FailureCode ?? providerResponseForAudit?.ErrorCode,
+                        httpStatusCode: response.HttpStatusCode,
+                        inputTokens: providerResponseForAudit?.InputTokens,
+                        outputTokens: providerResponseForAudit?.OutputTokens,
+                        executionId: null,
+                        correlationId: null);
+
+                    try { await _auditor.TryRecordAsync(auditRecord, cancellationToken); } catch { }
+                }
                 
                 if (!response.Success)
                 {

@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI Agent Governance & MCP Control Plane — FlowOS</title>
   <link rel="canonical" href="https://flowosbd.com/ai-agents" />
-  <meta name="description" content="Model Context Protocol (MCP) interface for AI agents in FlowOS. Bounded autonomy, fail-closed state validation, and human-in-the-loop task governance." />
+  <meta name="description" content="Model Context Protocol (MCP) interface for AI agents in FlowOS. Bounded autonomy, external agent change feeds, prompt audits, multi-turn chat, and human-in-the-loop governance." />
   <meta name="robots" content="index, follow" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="FlowOS" />
   <meta property="og:url" content="https://flowosbd.com/ai-agents" />
   <meta property="og:title" content="AI Agent Governance & MCP Control Plane — FlowOS" />
-  <meta property="og:description" content="Model Context Protocol (MCP) interface for AI agents in FlowOS. Bounded autonomy, fail-closed state validation, and human-in-the-loop task governance." />
+  <meta property="og:description" content="Model Context Protocol (MCP) interface for AI agents in FlowOS. Bounded autonomy, external agent change feeds, prompt audits, multi-turn chat, and human-in-the-loop governance." />
   <meta property="og:image" content="https://flowosbd.com/brand/flowos-social.jpg" />
   <meta property="og:image:alt" content="FlowOS AI Agent Control Plane" />
   <link rel="icon" type="image/png" href="/brand/flowos-icon.png" />
@@ -20,7 +20,7 @@
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "AI Agent Governance & MCP Control Plane in FlowOS",
-    "description": "Explains bounded autonomy, dual-kernel law enforcement, and 79 registered MCP tools for AI agents.",
+    "description": "Explains bounded autonomy, dual-kernel law enforcement, external agent change feeds, and the live MCP catalog for AI agents.",
     "url": "https://flowosbd.com/ai-agents",
     "author": {
       "@type": "Organization",
@@ -75,7 +75,7 @@
     </nav>
   </header>
   <main>
-    <p class="kicker">Last updated 30 September 2026</p>
+    <p class="kicker">Last updated 3 October 2026</p>
     <h1>AI agents</h1>
     <aside class="seller">
       <p>FlowOS is operated by [Your UK Registered Company Name Ltd].</p>
@@ -103,6 +103,21 @@
       <li>Start live work on a Free workspace. That stays design-time until a paid plan is active.</li>
     </ul>
     <p>The short version: the agent proposes and, where allowed, acts. FlowOS keeps authorisation, workflow state, and the business rules.</p>
+
+    <h2>What MCP now covers</h2>
+    <ul>
+      <li>Design-time work such as draft creation, validation, linting, simulation, context binding, and publication with explicit human approval where required.</li>
+      <li>Live runtime work such as waiting-task automation, workflow start and event publication on paid plans, and durable recovery tools.</li>
+      <li>Multi-turn workflow chat using durable agent sessions, so an agent can append messages and later read the same conversation history.</li>
+      <li>Prompt audit visibility, so a tenant can inspect recorded request and response traces when audit is enabled on the selected provider.</li>
+      <li>External AI agent change feeds and plans, so a separate worker can poll FlowOS changes one by one, draft a plan, execute it, and resume safely after interruption.</li>
+    </ul>
+
+    <h2>External AI agents</h2>
+    <p>An external AI agent is a worker that runs outside the FlowOS web app runtime, for example Cursor, Claude Desktop, or another MCP client or service. FlowOS can expose changes to that worker one by one through MCP. The worker does not bypass FlowOS. It still acts through named tools, tenant isolation, approval gates, and workflow legality checks.</p>
+
+    <h2>How to read the tool catalog</h2>
+    <p>The public discovery document at <a href="/mcp">/mcp</a> lists the current MCP tools, schemas, and security metadata. That is the source of truth for the live count. Agents should read the discovery metadata first, then call the named tools they need.</p>
     
   </main>
   <footer>

@@ -1,5 +1,6 @@
 using FlowOS.Application.ReadModels;
 using FlowOS.Domain.Entities;
+using FlowOS.Domain.Entities.ExternalAI;
 using FlowOS.Events.Models; // Re-add this
 using FlowOS.Workflows.Domain; // Re-add this
 using FlowOS.Security.Models;
@@ -38,6 +39,10 @@ public class FlowOSDbContext : DbContext
     public DbSet<HostedLlmDailyUsage> HostedLlmDailyUsages { get; set; }
     public DbSet<AgentExecutionRecord> AgentExecutionRecords { get; set; }
     public DbSet<ConversationMessageRecord> ConversationMessages { get; set; }
+    public DbSet<AgentPromptAuditRecord> AgentPromptAuditRecords { get; set; }
+    public DbSet<ExternalAgentChangeRecord> ExternalAgentChangeRecords { get; set; }
+    public DbSet<ExternalAgentPlanRecord> ExternalAgentPlanRecords { get; set; }
+    public DbSet<ExternalAgentPlanStepRecord> ExternalAgentPlanStepRecords { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

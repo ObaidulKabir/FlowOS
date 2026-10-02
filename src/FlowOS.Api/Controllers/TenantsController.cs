@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
 using FlowOS.Core.Security;
 using FlowOS.Domain.Entities;
@@ -25,17 +26,20 @@ public class TenantsController : ControllerBase
     private readonly ICurrentUser _currentUser;
     private readonly TenantSecurityProvisioningService _securityProvisioning;
     private readonly ITenantBackupService _backups;
+    private readonly ITenantSecretProtector _secretProtector;
 
     public TenantsController(
         FlowOSDbContext context,
         ICurrentUser currentUser,
         TenantSecurityProvisioningService securityProvisioning,
-        ITenantBackupService backups)
+        ITenantBackupService backups,
+        ITenantSecretProtector secretProtector)
     {
         _context = context;
         _currentUser = currentUser;
         _securityProvisioning = securityProvisioning;
         _backups = backups;
+        _secretProtector = secretProtector;
     }
 
     [HttpGet]
@@ -104,6 +108,7 @@ public class TenantsController : ControllerBase
             return Conflict($"A tenant with name '{request.Name}' already exists.");
 
         var tenant = new Tenant(request.Name.Trim());
+        tenant.ProtectWebhookSigningSecret(_secretProtector);
         _context.Tenants.Add(tenant);
 
         var rawKey = TenantApiKey.GenerateRawKey();
