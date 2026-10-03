@@ -28,13 +28,17 @@ jobs:
           port: 22
           script: |
             set -euo pipefail
-            cd  ${{ secrets.APP_PATH }}
-            git fetch origin
-            if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-              git stash push --include-untracked --message "pre-deploy-$(date +%s)" || true
-            fi
-            git checkout -B main origin/main
-            git reset --hard origin/main
+            DEPLOY_PATH="${{ secrets.APP_PATH }}"
+            TMP_DIR="$(mktemp -d)"
+            trap 'rm -rf "$TMP_DIR"' EXIT
+            git clone --depth 1 --branch main https://github.com/ObaidulKabir/FlowOS.git "$TMP_DIR/repo"
+            mkdir -p "$DEPLOY_PATH"
+            rsync -a --delete \
+              --exclude ".git/" \
+              --exclude ".env" \
+              --exclude ".env.*" \
+              --exclude "flowos-config/" \
+              "$TMP_DIR/repo/" "$DEPLOY_PATH/"
             docker network create traefik-network || true
 
       - name: Build and Deploy Containers 
@@ -48,7 +52,7 @@ jobs:
           script: |
             set -euo pipefail
             cd ${{ secrets.APP_PATH }}
-            export FLOWOS_BUILD="$(git rev-list --count HEAD)"
+            export FLOWOS_BUILD="$(git rev-list --count HEAD 2>/dev/null || echo ${{ github.run_number }})"
             export VITE_FLOWOS_BUILD="$FLOWOS_BUILD"
             docker builder prune --filter "until=12h" -f
             docker compose -f docker-compose.prod.yml up --build -d
