@@ -39,6 +39,14 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           cat << 'EOF' > deploy.sh
           set -ex
+          
+          # Clean up disk space before doing anything else
+          docker system prune -af --volumes || true
+          sudo journalctl --vacuum-time=3d || true
+          sudo apt-get clean || true
+          
+          df -h
+          
           mkdir -p "${{ secrets.APP_PATH }}"
           cd "${{ secrets.APP_PATH }}"
           if [ ! -d .git ]; then
