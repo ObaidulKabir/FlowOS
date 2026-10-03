@@ -28,17 +28,15 @@ jobs:
           port: 22
           script: |
             set -euo pipefail
-            DEPLOY_PATH="${{ secrets.APP_PATH }}"
-            TMP_DIR="$(mktemp -d)"
-            trap 'rm -rf "$TMP_DIR"' EXIT
-            git clone --depth 1 --branch main https://github.com/ObaidulKabir/FlowOS.git "$TMP_DIR/repo"
-            mkdir -p "$DEPLOY_PATH"
-            rsync -a --delete \
-              --exclude ".git/" \
-              --exclude ".env" \
-              --exclude ".env.*" \
-              --exclude "flowos-config/" \
-              "$TMP_DIR/repo/" "$DEPLOY_PATH/"
+            mkdir -p "${{ secrets.APP_PATH }}"
+            cd "${{ secrets.APP_PATH }}"
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin https://github.com/ObaidulKabir/FlowOS.git
+            fi
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
             docker network create traefik-network || true
 
       - name: Build and Deploy Containers 
