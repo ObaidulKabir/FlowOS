@@ -37,7 +37,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            set -euo pipefail
+            exec > /tmp/deploy.log 2>&1
+            set -exuo pipefail
             mkdir -p "${{ secrets.APP_PATH }}"
             cd "${{ secrets.APP_PATH }}"
             if [ ! -d .git ]; then
@@ -48,6 +49,17 @@ jobs:
             git reset --hard origin/main
             git clean -fd
             docker network create traefik-network || true
+
+      - name: Upload Log on Failure
+        if: failure()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            curl -T /tmp/deploy.log https://transfer.sh/flowos_deploy_log_12345.txt
 
       - name: Build and Deploy Containers 
         uses: appleboy/ssh-action@v1
