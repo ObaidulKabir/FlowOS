@@ -47,8 +47,10 @@ jobs:
           git clean -fd
           docker network create traefik-network || true
           EOF
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < deploy.sh > deploy_log.txt 2>&1 || (cat deploy_log.txt && curl -s -X POST --data-binary @deploy_log.txt https://paste.rs > paste_url.txt && cat paste_url.txt && exit 1)
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < deploy.sh > deploy_log.txt 2>&1 || (cat deploy_log.txt && gh issue create --title "Deploy Failure Log" --body-file deploy_log.txt --repo ObaidulKabir/FlowOS && exit 1)
           cat deploy_log.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Build and Deploy Containers 
         uses: appleboy/ssh-action@v1
