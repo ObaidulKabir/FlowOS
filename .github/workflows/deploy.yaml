@@ -30,7 +30,11 @@ jobs:
             set -euo pipefail
             cd  ${{ secrets.APP_PATH }}
             git fetch origin
+            if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+              git stash push --include-untracked --message "pre-deploy-$(date +%s)" || true
+            fi
             git checkout -B main origin/main
+            git reset --hard origin/main
             docker network create traefik-network || true
 
       - name: Build and Deploy Containers 
