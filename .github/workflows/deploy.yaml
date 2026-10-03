@@ -15,6 +15,9 @@ jobs:
   deploy:
     name: Deploy to ${{ inputs.ENVIRONMENT || 'production' }}
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
     environment: ${{ inputs.ENVIRONMENT || 'production' }}
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
 
@@ -47,7 +50,12 @@ jobs:
           git clean -fd
           docker network create traefik-network || true
           EOF
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < deploy.sh > deploy_log.txt 2>&1 || (cat deploy_log.txt && gh issue create --title "Deploy Failure Log" --body-file deploy_log.txt --repo ObaidulKabir/FlowOS && exit 1)
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < deploy.sh > deploy_log.txt 2>&1 || (
+            echo "SSH COMMAND FAILED. LOG:" > error_body.txt
+            cat deploy_log.txt >> error_body.txt
+            gh issue create --title "Deploy Failure Log" --body-file error_body.txt --repo ObaidulKabir/FlowOS
+            exit 1
+          )
           cat deploy_log.txt
         env:
           GH_TOKEN: ${{ github.token }}
