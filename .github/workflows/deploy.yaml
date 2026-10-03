@@ -30,36 +30,25 @@ jobs:
             echo "SSH connection works"
 
       - name: Update Code on Server
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            exec > /tmp/deploy.log 2>&1
-            set -exuo pipefail
-            mkdir -p "${{ secrets.APP_PATH }}"
-            cd "${{ secrets.APP_PATH }}"
-            if [ ! -d .git ]; then
-              git init
-              git remote add origin https://github.com/ObaidulKabir/FlowOS.git
-            fi
-            git fetch origin
-            git reset --hard origin/main
-            git clean -fd
-            docker network create traefik-network || true
-
-      - name: Upload Log on Failure
-        if: failure()
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            curl -T /tmp/deploy.log https://transfer.sh/flowos_deploy_log_12345.txt
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          cat << 'EOF' > deploy.sh
+          set -ex
+          mkdir -p "${{ secrets.APP_PATH }}"
+          cd "${{ secrets.APP_PATH }}"
+          if [ ! -d .git ]; then
+            git init
+            git remote add origin https://github.com/ObaidulKabir/FlowOS.git
+          fi
+          git fetch origin
+          git reset --hard origin/main
+          git clean -fd
+          docker network create traefik-network || true
+          EOF
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < deploy.sh > deploy_log.txt 2>&1 || (cat deploy_log.txt && curl -s -X POST --data-binary @deploy_log.txt https://paste.rs > paste_url.txt && cat paste_url.txt && exit 1)
+          cat deploy_log.txt
 
       - name: Build and Deploy Containers 
         uses: appleboy/ssh-action@v1
