@@ -87,6 +87,11 @@ export const WorkflowTable: React.FC<Props> = ({
               <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
                 <td className="py-3 px-4 font-semibold text-white">
                   <span>{item.name}</span>
+                  {isAdmin && item.tenantId && (
+                    <span className="text-[10px] text-slate-500 block font-mono">
+                      Tenant: {item.tenantId.substring(0, 8)}...
+                    </span>
+                  )}
                 </td>
                 <td className="py-3 px-4 font-mono text-slate-400">{item.version}</td>
                 <td className="py-3 px-4">

@@ -71,8 +71,9 @@ export const AdminDashboard: React.FC<Props> = ({
       notices.push(err.message || 'Failed to load tenants');
     }
 
+    const effectiveTenant = targetTenantId !== undefined ? targetTenantId : selectedTenantFilter;
     try {
-      const bpList = await api.list(undefined, undefined, 'Admin', targetTenantId || undefined);
+      const bpList = await api.list(undefined, undefined, 'Admin', effectiveTenant || undefined);
       setBlueprints(bpList);
     } catch (err: any) {
       setBlueprints([]);
@@ -93,16 +94,15 @@ export const AdminDashboard: React.FC<Props> = ({
     setLoading(false);
   };
 
-  const handleViewTenantWorkflows = async (tenantId: string) => {
+  const handleViewTenantWorkflows = (tenantId: string) => {
     setSelectedTenantFilter(tenantId);
     setActiveTab('Catalog');
     setCatalogSubTab('All');
-    await loadData(tenantId);
   };
 
   useEffect(() => {
-    loadData();
-  }, [activeTab]);
+    void loadData(selectedTenantFilter);
+  }, [activeTab, selectedTenantFilter]);
 
   // Blueprints waiting for admin approval (Shared scope in Submitted/Shared status)
   const pendingApprovals = blueprints.filter(b => b.scope === 1 || b.status === 2);
@@ -317,7 +317,8 @@ export const AdminDashboard: React.FC<Props> = ({
                 currentTab="Shared"
                 isAdmin={true}
                 onView={async (id) => {
-                  const item = await api.get(id, 'Admin', selectedTenantFilter || undefined);
+                  const bp = blueprints.find(b => b.id === id);
+                  const item = await api.get(id, 'Admin', selectedTenantFilter || bp?.tenantId || undefined);
                   setSelectedBlueprint(item);
                 }}
                 onApprove={handleApprove}
@@ -336,9 +337,7 @@ export const AdminDashboard: React.FC<Props> = ({
                   <select
                     value={selectedTenantFilter}
                     onChange={(e) => {
-                      const tId = e.target.value;
-                      setSelectedTenantFilter(tId);
-                      void loadData(tId);
+                      setSelectedTenantFilter(e.target.value);
                     }}
                     className="bg-slate-950 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-purple-500 focus:outline-none"
                   >
@@ -353,7 +352,6 @@ export const AdminDashboard: React.FC<Props> = ({
                     <button
                       onClick={() => {
                         setSelectedTenantFilter('');
-                        void loadData('');
                       }}
                       className="text-[11px] text-purple-400 hover:text-purple-300 underline ml-1"
                     >
@@ -389,7 +387,8 @@ export const AdminDashboard: React.FC<Props> = ({
                 currentTab={catalogSubTab}
                 isAdmin={true}
                 onView={async (id) => {
-                  const item = await api.get(id, 'Admin', selectedTenantFilter || undefined);
+                  const bp = blueprints.find(b => b.id === id);
+                  const item = await api.get(id, 'Admin', selectedTenantFilter || bp?.tenantId || undefined);
                   setSelectedBlueprint(item);
                 }}
                 onApprove={handleApprove}
@@ -527,7 +526,11 @@ export const AdminDashboard: React.FC<Props> = ({
           onClose={() => setSelectedBlueprint(null)}
           onValidate={async () => {
             if (selectedBlueprint) {
-              const res = await api.validate(selectedBlueprint.id, 'Admin', selectedTenantFilter || undefined);
+              const res = await api.validate(
+                selectedBlueprint.id,
+                'Admin',
+                selectedTenantFilter || selectedBlueprint.tenantId || undefined
+              );
               setValidationResult(res);
             }
           }}

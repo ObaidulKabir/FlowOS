@@ -21,7 +21,7 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
 
   React.useEffect(() => {
     if (item.previousVersionId) {
-       api.get(item.previousVersionId, 'Admin')
+       api.get(item.previousVersionId, 'Admin', item.tenantId)
           .then(res => setPreviousItem(res))
           .catch(err => console.error("Could not load previous version for diff", err));
     }

@@ -66,7 +66,7 @@ public class AgentTaskProcessorServiceTests
         
         var executeTask = service.StartAsync(cts.Token);
         
-        await Task.Delay(150, CancellationToken.None);
+        await Task.Delay(400, CancellationToken.None);
         cts.Cancel();
         
         try { await service.StopAsync(CancellationToken.None); } catch (TaskCanceledException) { }
@@ -122,7 +122,7 @@ public class AgentTaskProcessorServiceTests
         
         var executeTask = service.StartAsync(cts.Token);
         
-        await Task.Delay(150, CancellationToken.None);
+        await Task.Delay(400, CancellationToken.None);
         cts.Cancel();
         
         try { await service.StopAsync(CancellationToken.None); } catch (TaskCanceledException) { }

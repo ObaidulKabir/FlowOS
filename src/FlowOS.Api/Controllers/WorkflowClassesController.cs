@@ -6,6 +6,7 @@ using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Handlers.Governance;
 using FlowOS.Application.Queries.Governance;
 using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
 using FlowOS.Domain.Enums;
 using FlowOS.API.Filters;
 using MediatR;
@@ -63,18 +64,31 @@ public class WorkflowClassesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List(
         [FromQuery] WorkflowClassScope? scope,
-        [FromQuery] WorkflowClassStatus? status)
+        [FromQuery] WorkflowClassStatus? status,
+        [FromQuery] Guid? tenantId)
     {
-        var list = await _mediator.Send(new ListWorkflowClassesQuery(_currentUser.TenantId, scope, status));
+        var effectiveTenant = ResolveEffectiveTenant(tenantId);
+        var list = await _mediator.Send(new ListWorkflowClassesQuery(effectiveTenant, scope, status));
         return Ok(list);
     }
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(Guid id)
+    public async Task<IActionResult> GetById(Guid id, [FromQuery] Guid? tenantId)
     {
         try
         {
-            var result = await _mediator.Send(new GetWorkflowClassByIdQuery(_currentUser.TenantId, id));
+            Guid effectiveTenant;
+            if (IsPlatformAdmin())
+            {
+                var target = ResolveEffectiveTenant(tenantId);
+                effectiveTenant = (target != _currentUser.TenantId && target != Guid.Empty) ? target : Guid.Empty;
+            }
+            else
+            {
+                effectiveTenant = _currentUser.TenantId;
+            }
+
+            var result = await _mediator.Send(new GetWorkflowClassByIdQuery(effectiveTenant, id));
             if (result == null) return NotFound();
             return Ok(result);
         }
@@ -105,11 +119,18 @@ public class WorkflowClassesController : ControllerBase
         => await Mutate(new WithdrawWorkflowClassCommand(_currentUser.TenantId, id));
 
     [HttpPost("{id}/validate")]
-    public async Task<IActionResult> Validate(Guid id)
+    public async Task<IActionResult> Validate(Guid id, [FromQuery] Guid? tenantId)
     {
         try
         {
-            var result = await _mediator.Send(new ValidateWorkflowClassCommand(_currentUser.TenantId, id));
+            var effectiveTenant = ResolveEffectiveTenant(tenantId);
+            if (effectiveTenant == _currentUser.TenantId && IsPlatformAdmin())
+            {
+                var existing = await _mediator.Send(new GetWorkflowClassByIdQuery(Guid.Empty, id));
+                if (existing != null) effectiveTenant = existing.TenantId;
+            }
+
+            var result = await _mediator.Send(new ValidateWorkflowClassCommand(effectiveTenant, id));
             return Ok(result);
         }
         catch (KeyNotFoundException) { return NotFound(); }
@@ -225,10 +246,32 @@ public class WorkflowClassesController : ControllerBase
     }
 
     [HttpGet("by-name/{name}/version-tree")]
-    public async Task<IActionResult> GetVersionTree(string name)
+    public async Task<IActionResult> GetVersionTree(string name, [FromQuery] Guid? tenantId)
     {
-        var list = await _mediator.Send(new GetWorkflowClassVersionTreeQuery(_currentUser.TenantId, name));
+        var effectiveTenant = ResolveEffectiveTenant(tenantId);
+        var list = await _mediator.Send(new GetWorkflowClassVersionTreeQuery(effectiveTenant, name));
         return Ok(list);
+    }
+
+    private bool IsPlatformAdmin() =>
+        TenantIdentityRules.IsPlatformAdministrator(_currentUser.TenantId, _currentUser.Roles);
+
+    private Guid ResolveEffectiveTenant(Guid? targetTenantId)
+    {
+        if (!IsPlatformAdmin())
+            return _currentUser.TenantId;
+
+        if (targetTenantId.HasValue && targetTenantId.Value != Guid.Empty)
+            return targetTenantId.Value;
+
+        if (Request.Headers.TryGetValue("x-tenant-id", out var hVal) &&
+            TenantIdentityRules.TryParseTenant(hVal.ToString(), out var hTenant) &&
+            hTenant != Guid.Empty)
+        {
+            return hTenant;
+        }
+
+        return _currentUser.TenantId;
     }
 
     private async Task<IActionResult> Mutate(IRequest<WorkflowClassResponseDto> command)

@@ -256,7 +256,9 @@ export const api = {
   list: async (scope?: WorkflowClassScope, status?: WorkflowClassStatus, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass[]> => {
     const tenantId = tenantIdOverride || getActiveTenantId();
     const params = new URLSearchParams();
-    params.append('tenantId', tenantId);
+    if (tenantId) {
+      params.append('tenantId', tenantId);
+    }
     if (scope !== undefined) {
       const scopeName = WorkflowClassScope[scope] || scope.toString();
       params.append('scope', scopeName);
@@ -266,14 +268,14 @@ export const api = {
       params.append('status', statusName);
     }
     
-    const response = await authorizedFetch(`${API_BASE}?${params.toString()}`, {}, role, tenantIdOverride);
+    const response = await authorizedFetch(`${API_BASE}?${params.toString()}`, {}, role);
     return handleResponse(response, 'Failed to list workflow classes');
   },
 
   get: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass> => {
     const tenantId = tenantIdOverride || getActiveTenantId();
-    const headers = getHeaders(role, 'default', tenantId);
-    const response = await fetch(`${API_BASE}/${id}?tenantId=${tenantId}`, { headers });
+    const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+    const response = await authorizedFetch(`${API_BASE}/${id}${query}`, {}, role);
     return handleResponse(response, 'Failed to get workflow class');
   },
 
@@ -301,8 +303,8 @@ export const api = {
 
   validate: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<ValidationResult> => {
     const tenantId = tenantIdOverride || getActiveTenantId();
-    const headers = getHeaders(role, 'default', tenantId);
-    const response = await fetch(`${API_BASE}/${id}/validate?tenantId=${tenantId}`, { method: 'POST', headers });
+    const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+    const response = await authorizedFetch(`${API_BASE}/${id}/validate${query}`, { method: 'POST' }, role);
     return handleResponse(response, 'Failed to validate');
   },
 
