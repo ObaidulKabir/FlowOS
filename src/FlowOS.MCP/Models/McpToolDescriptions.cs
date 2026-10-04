@@ -333,6 +333,27 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-VALIDATION, CTX-STATE-001, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"revision\":\"draft\",\"initialPayload\":{\"expense\":{\"amount\":1500}},\"roles\":[\"FinanceManager\"],\"events\":[{\"eventType\":\"EVT-EXP-SUBMIT\"}],\"autoAdvanceTimers\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["inspect_context_schema"] =
+                "[Business Context] Inspects the declarative ContextSchema of a WorkflowClass blueprint, active context binding, or raw schema JSON. " +
+                "Parses entityType, primary key, correlationFields, typed fields (with modifiers: immutable, appendOnly, counter, required), reactive computed formulas, field-level access, and secondary indexes. " +
+                "Returns: {ok:true,data:{hasSchema,isDeclarative,parsedSchema,rawSchema}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["inspect_instance_context"] =
+                "[Business Context] Queries the live partitioned Business Context snapshot of a running or completed workflow instance. " +
+                "Returns identity (§1), live canonical business data hash (§2), system metadata and audit trail (§3), and resolved roles cache (§4). " +
+                "Returns: {ok:true,data:{workflowInstanceId,identity,businessData,systemData,resolvedRoles,concurrencyVersion,createdAtUtc,updatedAtUtc}}. " +
+                "Errors: MCP-ARG-002, MCP-NOTFOUND-001, MCP-TENANT-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["test_context_operations"] =
+                "[Business Context Sandbox] Dry-runs Redis-like atomic primitives (Set, Increment, Append, DeepMerge, SetIfAbsent) against a test context snapshot and schema. " +
+                "Validates immutability guards, appendOnly behavior, and evaluates reactive computed fields without persisting to the database. " +
+                "Returns: {ok:true,data:{success,entityType,entityId,canonicalData,systemData,concurrencyVersion}}. " +
+                "Errors: MCP-ARG-001, CTX-STATE-001, MCP-INTERNAL. " +
+                "Input example: {\"operations\":[{\"op\":\"Set\",\"field\":\"orderId\",\"value\":\"ORD-1\"},{\"op\":\"Increment\",\"field\":\"retryCount\",\"value\":1}],\"schema\":{\"entityType\":\"Order\"}}",
+
             ["diagnose_caller_permissions"] =
                 "[Tenant IAM] Reports the authenticated caller's roles, immutable API-key scopes, role capabilities, effective intersection, and whether an optional requiredCapability is authorized. This is the first remediation step after MCP-AUTHZ-*. " +
                 "Returns: {ok:true,data:{tenantId,credentialType,roles,scopes,roleCapabilities,effectiveCapabilities,requiredCapability,authorized,scopeBoundary,guidance}}. " +
@@ -817,6 +838,9 @@ public static class McpToolDescriptions
             ["list_context_bindings"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["get_context_binding"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_context_binding"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["inspect_context_schema"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
+            ["inspect_instance_context"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["test_context_operations"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["diagnose_caller_permissions"] = new("security", "authenticated", true, true, false, "none", true, "low"),
             ["list_tenant_roles"] = new("security", "authenticated", true, true, false, "none", true, "low"),
             ["create_tenant_role"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),

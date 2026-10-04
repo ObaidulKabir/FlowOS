@@ -909,6 +909,61 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject InspectContextSchema() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "workflowClassId":{"type":"string","format":"uuid","description":"Optional WorkflowClass ID to inspect ContextSchema from."},
+            "contextBindingId":{"type":"string","format":"uuid","description":"Optional context binding ID to inspect ContextSchema from."},
+            "schema":{"type":["object","string"],"description":"Optional inline context schema (JSON object or string) to inspect directly."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject InspectInstanceContext() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"Workflow instance UUID to inspect partitioned business context for."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject TestContextOperations() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["operations"],
+          "properties":{
+            "operations":{
+              "type":"array",
+              "items":{
+                "type":"object",
+                "required":["field"],
+                "properties":{
+                  "op":{"type":"string","enum":["Set","Increment","Append","DeepMerge","SetIfAbsent"],"default":"Set"},
+                  "field":{"type":"string","minLength":1},
+                  "value":{}
+                },
+                "additionalProperties":false
+              },
+              "description":"List of Redis-like atomic primitives to execute against the context."
+            },
+            "baseContext":{"type":"object","description":"Optional initial context key-value state."},
+            "schema":{"type":["object","string"],"description":"Optional declarative ContextSchema definition to enforce."},
+            "actor":{"type":"string","description":"Attribution label for the recorded _auditTrail."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     private static string ContextBindingDefinitionSchema() =>
         """
         {

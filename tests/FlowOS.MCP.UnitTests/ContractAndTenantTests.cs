@@ -103,7 +103,10 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.PreviewRetryPolicy(),
             McpToolSchemas.GetSubWorkflowTree(),
             McpToolSchemas.SimulateParallelExecution(),
-            McpToolSchemas.SimulateSubWorkflow()
+            McpToolSchemas.SimulateSubWorkflow(),
+            McpToolSchemas.InspectContextSchema(),
+            McpToolSchemas.InspectInstanceContext(),
+            McpToolSchemas.TestContextOperations()
         };
 
         Assert.All(schemas, schema =>
