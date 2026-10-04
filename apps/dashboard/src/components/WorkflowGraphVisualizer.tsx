@@ -49,6 +49,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
   definition,
   currentStepId,
   currentState,
+  instanceStatus,
   completedSteps = [],
   initialView = 'both'
 }) => {
@@ -305,6 +306,10 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
           chart += `  class ${sId} normal\n`;
        }
     });
+
+    if (instanceStatus && String(instanceStatus).toLowerCase() === 'completed' && currentState) {
+      chart += `  ${safeId(currentState)} --> [*]\n`;
+    }
 
     return chart;
   };

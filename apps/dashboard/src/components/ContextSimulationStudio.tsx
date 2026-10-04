@@ -522,9 +522,9 @@ export const ContextSimulationStudio: React.FC<Props> = ({
               <section className="rounded-2xl border border-slate-700 bg-slate-900 p-4">
                 <WorkflowGraphVisualizer
                   definition={result.graph}
-                  currentStepId={result.currentStepId}
-                  currentState={result.currentState}
-                  instanceStatus={result.status}
+                  currentStepId={selectedTrace ? selectedTrace.activeStepIds.join(',') : result.currentStepId}
+                  currentState={selectedTrace ? selectedTrace.toState : result.currentState}
+                  instanceStatus={(!selectedTrace || selectedTraceIndex === result.trace.length - 1) ? result.status : undefined}
                   completedSteps={completedSteps}
                   initialView="both"
                 />

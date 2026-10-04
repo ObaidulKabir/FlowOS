@@ -474,6 +474,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
                       definition={resolvedDefinition}
                       currentStepId={replaySnapshot?.toStepId || auditDetail?.currentStepId}
                       currentState={replaySnapshot?.toState || auditDetail?.currentState}
+                      instanceStatus={auditDetail?.status}
                       completedSteps={Array.from(new Set((auditDetail?.timeline || []).map(e => e.keyData?.CurrentStep || e.keyData?.Step || e.keyData?.TargetStep || '').filter(Boolean)))}
                     />
                   ) : (
