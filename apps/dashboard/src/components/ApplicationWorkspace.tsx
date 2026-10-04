@@ -121,6 +121,11 @@ export const ApplicationWorkspace: React.FC<Props> = ({
   const publishedForBindings = blueprints.filter(
     item => item.status === WorkflowClassStatus.Published || item.status === WorkflowClassStatus.Public
   );
+  
+  // Ensure the currently selected workflow is always available for binding/simulation, even if it's a draft
+  const availableForBindings = publishedForBindings.some(x => x.id === selected.id) 
+    ? publishedForBindings 
+    : [selected, ...publishedForBindings];
 
   const steps = useMemo(() => extractSteps(selected), [selected]);
 
@@ -509,7 +514,7 @@ export const ApplicationWorkspace: React.FC<Props> = ({
                   <ContextBindingsView
                     compact
                     filterSourceWorkflowClassId={selected.id}
-                    workflowClasses={publishedForBindings.length ? publishedForBindings : [selected]}
+                    workflowClasses={availableForBindings}
                     role="Tenant"
                     onSimulate={onSimulate}
                   />
