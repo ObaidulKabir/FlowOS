@@ -17,27 +17,14 @@ namespace FlowOS.EndToEndTests.Concurrency;
 /// If Docker is unavailable they will fail with a connection error.
 /// </summary>
 [Trait("Category", "Concurrency")]
-public sealed class PostgresConcurrencyTests : IAsyncLifetime
+public sealed class PostgresConcurrencyTests : IClassFixture<PostgresConcurrencyFixture>
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .WithDatabase("flowos_concurrency_test")
-        .WithUsername("test")
-        .WithPassword("test")
-        .Build();
+    private readonly PostgresConcurrencyFixture _fixture;
 
-    private string ConnectionString => _postgres.GetConnectionString();
-
-    public async Task InitializeAsync()
+    public PostgresConcurrencyTests(PostgresConcurrencyFixture fixture)
     {
-        await _postgres.StartAsync();
-
-        var options = BuildOptions();
-        await using var ctx = new FlowOS.Infrastructure.Persistence.FlowOSDbContext(options);
-        await ctx.Database.MigrateAsync();
+        _fixture = fixture;
     }
-
-    public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
 
     // ─── Distributed Lease ──────────────────────────────────────────────────────
 
@@ -52,8 +39,8 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         const string owner1 = "worker-A";
         const string owner2 = "worker-B";
 
-        await using var ctx1 = CreateContext();
-        await using var ctx2 = CreateContext();
+        await using var ctx1 = _fixture.CreateContext();
+        await using var ctx2 = _fixture.CreateContext();
         var svc1 = new DistributedLeaseService(ctx1);
         var svc2 = new DistributedLeaseService(ctx2);
 
@@ -79,7 +66,7 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         const string key = "test-lease-roundtrip";
         const string owner = "worker-main";
 
-        await using var ctx = CreateContext();
+        await using var ctx = _fixture.CreateContext();
         var svc = new DistributedLeaseService(ctx);
 
         var handle = await svc.TryAcquireAsync(key, owner, TimeSpan.FromMinutes(1));
@@ -90,7 +77,7 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         Assert.True(released);
 
         // After release, another worker should be able to acquire
-        await using var ctx2 = CreateContext();
+        await using var ctx2 = _fixture.CreateContext();
         var svc2 = new DistributedLeaseService(ctx2);
         var reAcquired = await svc2.TryAcquireAsync(key, "worker-new", TimeSpan.FromMinutes(1));
         Assert.NotNull(reAcquired);
@@ -106,7 +93,7 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         const string originalOwner = "worker-original";
         const string newOwner = "worker-takeover";
 
-        await using var ctx1 = CreateContext();
+        await using var ctx1 = _fixture.CreateContext();
         var svc1 = new DistributedLeaseService(ctx1);
 
         // Acquire a very short lease
@@ -117,7 +104,7 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         await Task.Delay(200);
 
         // A new worker should now be able to take the lease
-        await using var ctx2 = CreateContext();
+        await using var ctx2 = _fixture.CreateContext();
         var svc2 = new DistributedLeaseService(ctx2);
         var newHandle = await svc2.TryAcquireAsync(key, newOwner, TimeSpan.FromMinutes(1));
         Assert.NotNull(newHandle);
@@ -138,8 +125,8 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         var bindingId = await SeedContextBindingAsync(tenantId, "ConcurrencyTest", "Binding-CC");
 
         // Context A and B load the same row
-        await using var ctxA = CreateContext();
-        await using var ctxB = CreateContext();
+        await using var ctxA = _fixture.CreateContext();
+        await using var ctxB = _fixture.CreateContext();
 
         var bindingA = await ctxA.WorkflowContextBindings.FindAsync(bindingId);
         var bindingB = await ctxB.WorkflowContextBindings.FindAsync(bindingId);
@@ -166,8 +153,8 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         var tenantId = Guid.NewGuid();
         var bindingId = await SeedContextBindingAsync(tenantId, "ArchiveTest", "Binding-Archive");
 
-        await using var ctxA = CreateContext();
-        await using var ctxB = CreateContext();
+        await using var ctxA = _fixture.CreateContext();
+        await using var ctxB = _fixture.CreateContext();
 
         var bindingA = await ctxA.WorkflowContextBindings.FindAsync(bindingId);
         var bindingB = await ctxB.WorkflowContextBindings.FindAsync(bindingId);
@@ -198,8 +185,8 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
         await SeedSnapshotAsync(tenantId, instanceId);
 
         // Two contexts load the same snapshot
-        await using var ctxA = CreateContext();
-        await using var ctxB = CreateContext();
+        await using var ctxA = _fixture.CreateContext();
+        await using var ctxB = _fixture.CreateContext();
 
         var snapshotA = await ctxA.WorkflowContextSnapshots.FindAsync(instanceId);
         var snapshotB = await ctxB.WorkflowContextSnapshots.FindAsync(instanceId);
@@ -224,20 +211,11 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
-    private DbContextOptions<FlowOS.Infrastructure.Persistence.FlowOSDbContext> BuildOptions() =>
-        new DbContextOptionsBuilder<FlowOS.Infrastructure.Persistence.FlowOSDbContext>()
-            .UseNpgsql(ConnectionString, b => b.MigrationsAssembly(
-                typeof(FlowOS.Infrastructure.Persistence.FlowOSDbContext).Assembly.FullName))
-            .Options;
 
-    private FlowOS.Infrastructure.Persistence.FlowOSDbContext CreateContext() =>
-        new(new DbContextOptionsBuilder<FlowOS.Infrastructure.Persistence.FlowOSDbContext>()
-            .UseNpgsql(ConnectionString)
-            .Options);
 
     private async Task<Guid> SeedContextBindingAsync(Guid tenantId, string contextType, string name)
     {
-        await using var ctx = CreateContext();
+        await using var ctx = _fixture.CreateContext();
         var binding = new WorkflowContextBinding(tenantId, contextType, name);
         ctx.WorkflowContextBindings.Add(binding);
         await ctx.SaveChangesAsync();
@@ -247,7 +225,7 @@ public sealed class PostgresConcurrencyTests : IAsyncLifetime
     private async Task SeedSnapshotAsync(Guid tenantId, Guid instanceId)
     {
         // First we need a WorkflowInstance row (FK requirement)
-        await using var ctx = CreateContext();
+        await using var ctx = _fixture.CreateContext();
 
         // Seed minimal prerequisite entities
         var revisionId = await SeedWorkflowInstanceAsync(ctx, tenantId, instanceId);
