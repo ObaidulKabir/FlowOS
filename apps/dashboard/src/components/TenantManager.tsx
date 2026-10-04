@@ -194,17 +194,6 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
     }
   };
 
-  const handleRevokeKey = async (tenantId: string, keyId: string) => {
-    if (!window.confirm('Are you sure you want to revoke this API key? Applications using it will no longer be able to authenticate.')) {
-      return;
-    }
-    try {
-      await api.revokeTenantKey(tenantId, keyId);
-      await loadTenants();
-    } catch (err: any) {
-      setError(err.message || 'Failed to revoke API key');
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -588,13 +577,7 @@ headers = {
                                   {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'Never'}
                                 </td>
                                 <td className="py-2.5 px-3 text-right">
-                                  <button
-                                    onClick={() => handleRevokeKey(t.tenantId, k.id)}
-                                    className="text-rose-400 hover:text-rose-300 p-1.5 rounded hover:bg-rose-500/10 transition-colors"
-                                    title="Revoke Key"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
+                                  <span className="text-[10px] text-slate-500 italic">View Only</span>
                                 </td>
                               </tr>
                             );

@@ -306,7 +306,6 @@ export const AdminDashboard: React.FC<Props> = ({
                 }}
                 onApprove={handleApprove}
                 onDeprecate={handleDeprecate}
-                onAbandon={handleAbandon}
               />
             </div>
           )}
@@ -337,7 +336,6 @@ export const AdminDashboard: React.FC<Props> = ({
                 }}
                 onApprove={handleApprove}
                 onDeprecate={handleDeprecate}
-                onAbandon={handleAbandon}
               />
             </div>
           )}
