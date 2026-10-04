@@ -77,11 +77,13 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
             contextualEventType: null,
             sourcePayload,
             isInitial: true);
+        ContextSchemaParser.TryParse(activeBinding.SourceWorkflowClass.Definition.ContextSchema, out var schemaDef);
         return new PreparedWorkflowContext(
             activeBinding.Revision,
             null,
             prepared.Delta,
-            prepared.Payload);
+            prepared.Payload,
+            schemaDef);
     }
 
     public async Task<PreparedWorkflowContext?> PrepareForInstanceAsync(
@@ -154,7 +156,8 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
         }
 
         ValidateCanonical(source.Definition.ContextSchema, merged);
-        return new PreparedWorkflowContext(revision, snapshot, delta, ToExecutionPayload(merged));
+        ContextSchemaParser.TryParse(source.Definition.ContextSchema, out var schemaDef);
+        return new PreparedWorkflowContext(revision, snapshot, delta, ToExecutionPayload(merged), schemaDef);
     }
 
     public async Task<Dictionary<string, object>> PrepareSimulationAsync(
@@ -271,12 +274,14 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
         }
 
         ValidateCanonical(sourceWorkflowClass.Definition.ContextSchema, merged);
+        ContextSchemaParser.TryParse(sourceWorkflowClass.Definition.ContextSchema, out var schemaDef);
         return new PreparedWorkflowSimulationContext(
             revision,
             canonicalEvent,
             delta,
             merged,
-            ToExecutionPayload(merged));
+            ToExecutionPayload(merged),
+            schemaDef);
     }
 
     public async Task<PreparedWorkflowContext?> PrepareCanonicalDeltaAsync(
@@ -316,8 +321,9 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
             merged[item.Key] = item.Value;
         }
         ValidateCanonical(source.Definition.ContextSchema, merged);
+        ContextSchemaParser.TryParse(source.Definition.ContextSchema, out var schemaDef);
 
-        return new PreparedWorkflowContext(revision, snapshot, delta, ToExecutionPayload(merged));
+        return new PreparedWorkflowContext(revision, snapshot, delta, ToExecutionPayload(merged), schemaDef);
     }
 
     public WorkflowContextSnapshot CreateSnapshot(
@@ -330,7 +336,8 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
             tenantId,
             prepared.Revision.Id,
             prepared.Delta,
-            businessReference);
+            businessReference,
+            prepared.ContextSchema);
 
     private static Dictionary<string, JsonElement> Project(
         JsonElement sourceRoot,
@@ -504,6 +511,35 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
                     if (!TryGetProperty(value, requiredName.GetString()!, out _))
                     {
                         errors.Add($"{path}.{requiredName.GetString()} is required.");
+                    }
+                }
+            }
+
+            if ((schema.TryGetProperty("fields", out var fields) || schema.TryGetProperty("Fields", out fields)) &&
+                fields.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var fieldProp in fields.EnumerateObject())
+                {
+                    var fieldDef = fieldProp.Value;
+                    if (fieldDef.TryGetProperty("required", out var isReq) && isReq.ValueKind == JsonValueKind.True)
+                    {
+                        if (!TryGetProperty(value, fieldProp.Name, out _))
+                        {
+                            errors.Add($"{path}.{fieldProp.Name} is required.");
+                        }
+                    }
+
+                    if (TryGetProperty(value, fieldProp.Name, out var propValue))
+                    {
+                        if (fieldDef.TryGetProperty("type", out var fType) && fType.ValueKind == JsonValueKind.String)
+                        {
+                            var expectedType = fType.GetString();
+                            if (expectedType == "counter") expectedType = "number";
+                            if (!MatchesType(propValue, expectedType))
+                            {
+                                errors.Add($"{path}.{fieldProp.Name} must be of type '{fType.GetString()}'.");
+                            }
+                        }
                     }
                 }
             }

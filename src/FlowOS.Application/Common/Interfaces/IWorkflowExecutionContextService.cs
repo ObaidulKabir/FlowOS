@@ -17,22 +17,52 @@ public sealed class PreparedWorkflowContext
     public WorkflowContextSnapshot? Snapshot { get; }
     public Dictionary<string, JsonElement> Delta { get; }
     public Dictionary<string, object> Payload { get; }
+    public ContextSchemaDefinition? ContextSchema { get; }
 
     public PreparedWorkflowContext(
         WorkflowContextBindingRevision revision,
         WorkflowContextSnapshot? snapshot,
         Dictionary<string, JsonElement> delta,
-        Dictionary<string, object> payload)
+        Dictionary<string, object> payload,
+        ContextSchemaDefinition? contextSchema = null)
     {
         Revision = revision;
         Snapshot = snapshot;
         Delta = delta;
         Payload = payload;
+        ContextSchema = contextSchema;
     }
 
-    public void CommitDelta()
+    public void CommitDelta(string? actor = null)
     {
-        Snapshot?.Merge(Delta);
+        Snapshot?.Merge(Delta, ContextSchema, actor, Recompute);
+    }
+
+    private void Recompute(Dictionary<string, JsonElement> data)
+    {
+        if (ContextSchema?.Computed == null || ContextSchema.Computed.Count == 0) return;
+
+        var payload = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in data)
+        {
+            payload[kvp.Key] = kvp.Value;
+        }
+
+        foreach (var (fieldName, compDef) in ContextSchema.Computed)
+        {
+            if (string.IsNullOrWhiteSpace(compDef.Expression)) continue;
+            try
+            {
+                var val = FlowOS.StateMachines.Engine.ExpressionEvaluator.EvaluateValue(compDef.Expression, payload);
+                if (val != null)
+                {
+                    var elem = JsonSerializer.SerializeToElement(val);
+                    data[fieldName] = elem;
+                    payload[fieldName] = val;
+                }
+            }
+            catch { /* fail closed on evaluation error */ }
+        }
     }
 }
 
@@ -41,7 +71,8 @@ public sealed record PreparedWorkflowSimulationContext(
     string? CanonicalEventType,
     Dictionary<string, JsonElement> Delta,
     Dictionary<string, JsonElement> CanonicalData,
-    Dictionary<string, object> Payload);
+    Dictionary<string, object> Payload,
+    ContextSchemaDefinition? ContextSchema = null);
 
 public interface IWorkflowExecutionContextService
 {

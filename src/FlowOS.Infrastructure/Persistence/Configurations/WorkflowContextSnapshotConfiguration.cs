@@ -21,6 +21,12 @@ public class WorkflowContextSnapshotConfiguration : IEntityTypeConfiguration<Wor
         builder.Property(x => x.ExternalEntityId).HasMaxLength(300).IsRequired(false);
         builder.Property(x => x.ConcurrencyVersion).IsConcurrencyToken();
 
+        builder.Ignore(x => x.SystemData);
+        builder.Ignore(x => x.ResolvedRoles);
+        builder.Ignore(x => x.CorrelationKeys);
+        builder.Ignore(x => x.EntityType);
+        builder.Ignore(x => x.EntityId);
+
         var canonicalComparer = new ValueComparer<Dictionary<string, JsonElement>>(
             (left, right) => JsonSerializer.Serialize(left, JsonOptions) == JsonSerializer.Serialize(right, JsonOptions),
             value => JsonSerializer.Serialize(value, JsonOptions).GetHashCode(),
