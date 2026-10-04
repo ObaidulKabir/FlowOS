@@ -34,7 +34,7 @@ public class WorkflowClassQueryHandlers :
         var wc = await _unitOfWork.WorkflowClasses.GetByIdAsNoTrackingAsync(request.Id, cancellationToken);
         if (wc == null) return null;
 
-        if (wc.Scope == WorkflowClassScope.Private && wc.TenantId != request.TenantId)
+        if (wc.Scope == WorkflowClassScope.Private && request.TenantId != Guid.Empty && wc.TenantId != request.TenantId)
             throw new UnauthorizedAccessException("WorkflowClass is private to another tenant.");
 
         return WorkflowClassCommandHandlers.MapToDto(wc);

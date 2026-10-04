@@ -23,12 +23,12 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
 
     public Task<WorkflowInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken cancellationToken = default)
         => _context.WorkflowInstances
-            .FirstOrDefaultAsync(w => w.Id == id && w.TenantId == tenantId, cancellationToken);
+            .FirstOrDefaultAsync(w => w.Id == id && (tenantId == Guid.Empty || w.TenantId == tenantId), cancellationToken);
 
     public Task<WorkflowInstance?> GetByIdAsNoTrackingAsync(Guid id, Guid tenantId, CancellationToken cancellationToken = default)
         => _context.WorkflowInstances
             .AsNoTracking()
-            .FirstOrDefaultAsync(w => w.Id == id && w.TenantId == tenantId, cancellationToken);
+            .FirstOrDefaultAsync(w => w.Id == id && (tenantId == Guid.Empty || w.TenantId == tenantId), cancellationToken);
 
     public Task<WorkflowInstance?> GetByIdAsNoTrackingAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.WorkflowInstances
@@ -80,7 +80,7 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         var result = await (from w in _context.WorkflowInstances.AsNoTracking()
                             join wc in _context.WorkflowClasses.AsNoTracking() on w.WorkflowClassId equals wc.Id into wcGroup
                             from wc in wcGroup.DefaultIfEmpty()
-                            where w.Id == id && w.TenantId == tenantId
+                            where w.Id == id && (tenantId == Guid.Empty || w.TenantId == tenantId)
                             select new { w, Name = wc != null ? wc.Name : "Unknown" })
             .FirstOrDefaultAsync(cancellationToken);
 

@@ -18,7 +18,7 @@ public class WorkflowContextBindingRepository : IWorkflowContextBindingRepositor
         Guid tenantId,
         CancellationToken cancellationToken = default)
         => _context.WorkflowContextBindings
-            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && (tenantId == Guid.Empty || x.TenantId == tenantId), cancellationToken);
 
     public Task<WorkflowContextBinding?> GetByIdAsNoTrackingAsync(
         Guid id,
@@ -26,7 +26,7 @@ public class WorkflowContextBindingRepository : IWorkflowContextBindingRepositor
         CancellationToken cancellationToken = default)
         => _context.WorkflowContextBindings
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && (tenantId == Guid.Empty || x.TenantId == tenantId), cancellationToken);
 
     public Task<WorkflowContextBinding?> GetByContextTypeAsync(
         string contextType,
@@ -59,7 +59,7 @@ public class WorkflowContextBindingRepository : IWorkflowContextBindingRepositor
         CancellationToken cancellationToken = default)
         => await _context.WorkflowContextBindings
             .AsNoTracking()
-            .Where(x => x.TenantId == tenantId)
+            .Where(x => (tenantId == Guid.Empty || x.TenantId == tenantId))
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
