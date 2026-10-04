@@ -168,13 +168,15 @@ export const setActiveTenantId = (id: string, name?: string) => {
 
 export const getHeaders = (
   roleOverride?: 'Tenant' | 'Admin',
-  credentialMode: 'default' | 'token-only' | 'key-only' = 'default'
+  credentialMode: 'default' | 'token-only' | 'key-only' = 'default',
+  tenantIdOverride?: string
 ) => {
   const session = getAuthSession();
   const role = roleOverride || session.role;
+  const tenantId = tenantIdOverride || session.tenantId;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-tenant-id': session.tenantId,
+    'x-tenant-id': tenantId,
     'X-Mock-Role': role,
     'X-Mock-UserId': session.username || (role === 'Admin' ? 'superadmin' : 'tenant-user')
   };
@@ -196,20 +198,21 @@ export const getHeaders = (
 const authorizedFetch = async (
   url: string,
   init: RequestInit = {},
-  role?: 'Tenant' | 'Admin'
+  role?: 'Tenant' | 'Admin',
+  tenantIdOverride?: string
 ): Promise<Response> => {
   const merge = (headers: Record<string, string>) => ({
     ...headers,
     ...(init.headers as Record<string, string> | undefined)
   });
-  let response = await fetch(url, { ...init, headers: merge(getHeaders(role)) });
+  let response = await fetch(url, { ...init, headers: merge(getHeaders(role, 'default', tenantIdOverride)) });
   if (response.status !== 401) return response;
 
   const session = getAuthSession();
   if (session.apiKey && session.token) {
-    response = await fetch(url, { ...init, headers: merge(getHeaders(role, 'token-only')) });
+    response = await fetch(url, { ...init, headers: merge(getHeaders(role, 'token-only', tenantIdOverride)) });
     if (response.status !== 401) return response;
-    response = await fetch(url, { ...init, headers: merge(getHeaders(role, 'key-only')) });
+    response = await fetch(url, { ...init, headers: merge(getHeaders(role, 'key-only', tenantIdOverride)) });
     if (response.status !== 401) return response;
   }
 
@@ -224,7 +227,7 @@ const authorizedFetch = async (
     apiKey: DEMO_API_KEY,
     tenantId: DEMO_TENANT_ID
   });
-  return fetch(url, { ...init, headers: merge(getHeaders(role, 'key-only')) });
+  return fetch(url, { ...init, headers: merge(getHeaders(role, 'key-only', tenantIdOverride)) });
 };
 
 const handleResponse = async (response: Response, errorMessage: string) => {
@@ -250,8 +253,8 @@ const handleResponse = async (response: Response, errorMessage: string) => {
 };
 
 export const api = {
-  list: async (scope?: WorkflowClassScope, status?: WorkflowClassStatus, role?: 'Tenant' | 'Admin'): Promise<WorkflowClass[]> => {
-    const tenantId = getActiveTenantId();
+  list: async (scope?: WorkflowClassScope, status?: WorkflowClassStatus, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass[]> => {
+    const tenantId = tenantIdOverride || getActiveTenantId();
     const params = new URLSearchParams();
     params.append('tenantId', tenantId);
     if (scope !== undefined) {
@@ -263,13 +266,13 @@ export const api = {
       params.append('status', statusName);
     }
     
-    const response = await authorizedFetch(`${API_BASE}?${params.toString()}`, {}, role);
+    const response = await authorizedFetch(`${API_BASE}?${params.toString()}`, {}, role, tenantIdOverride);
     return handleResponse(response, 'Failed to list workflow classes');
   },
 
-  get: async (id: string, role?: 'Tenant' | 'Admin'): Promise<WorkflowClass> => {
-    const headers = getHeaders(role);
-    const tenantId = getActiveTenantId();
+  get: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass> => {
+    const tenantId = tenantIdOverride || getActiveTenantId();
+    const headers = getHeaders(role, 'default', tenantId);
     const response = await fetch(`${API_BASE}/${id}?tenantId=${tenantId}`, { headers });
     return handleResponse(response, 'Failed to get workflow class');
   },
@@ -296,9 +299,9 @@ export const api = {
     return handleResponse(response, 'Failed to update draft');
   },
 
-  validate: async (id: string, role?: 'Tenant' | 'Admin'): Promise<ValidationResult> => {
-    const headers = getHeaders(role);
-    const tenantId = getActiveTenantId();
+  validate: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<ValidationResult> => {
+    const tenantId = tenantIdOverride || getActiveTenantId();
+    const headers = getHeaders(role, 'default', tenantId);
     const response = await fetch(`${API_BASE}/${id}/validate?tenantId=${tenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to validate');
   },
@@ -324,9 +327,9 @@ export const api = {
     return handleResponse(response, 'Failed to withdraw');
   },
 
-  deprecate: async (id: string, role?: 'Tenant' | 'Admin'): Promise<WorkflowClass> => {
-    const headers = getHeaders(role);
-    const tenantId = getActiveTenantId();
+  deprecate: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass> => {
+    const tenantId = tenantIdOverride || getActiveTenantId();
+    const headers = getHeaders(role, 'default', tenantId);
     const response = await fetch(`${API_BASE}/${id}/deprecate?tenantId=${tenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to deprecate');
   },
@@ -338,9 +341,9 @@ export const api = {
     return handleResponse(response, 'Failed to abandon');
   },
 
-  approve: async (id: string): Promise<WorkflowClass> => {
-    const headers = getHeaders('Admin');
-    const tenantId = getActiveTenantId();
+  approve: async (id: string, tenantIdOverride?: string): Promise<WorkflowClass> => {
+    const tenantId = tenantIdOverride || getActiveTenantId();
+    const headers = getHeaders('Admin', 'default', tenantId);
     const response = await fetch(`${API_BASE}/${id}/approve?tenantId=${tenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to approve');
   },

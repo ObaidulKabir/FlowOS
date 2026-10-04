@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, getActiveTenantId, setActiveTenantId } from '../api/client';
 import { TenantDto } from '../types';
 import { mcpRpcUrl } from '../mcpUrl';
-import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles } from 'lucide-react';
+import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles, Layers } from 'lucide-react';
 import { ApiKeyScopePicker } from './ApiKeyScopePicker';
 import { API_KEY_SCOPE_PRESETS } from '../lib/apiKeyScopes';
 
@@ -10,12 +10,14 @@ interface TenantManagerProps {
   onTenantChange?: (newTenantId: string) => void;
   openRegisterModal?: boolean;
   onRegisterModalClosed?: () => void;
+  onViewTenantWorkflows?: (tenantId: string) => void;
 }
 
 export const TenantManager: React.FC<TenantManagerProps> = ({ 
   onTenantChange, 
   openRegisterModal = false,
-  onRegisterModalClosed 
+  onRegisterModalClosed,
+  onViewTenantWorkflows 
 }) => {
   const [tenants, setTenants] = useState<TenantDto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -478,6 +480,18 @@ headers = {
                         <CheckCircle2 size={14} /> Selected
                       </span>
                     )}
+
+                    <button
+                      onClick={() => {
+                        handleSelectTenant(t.tenantId);
+                        onViewTenantWorkflows?.(t.tenantId);
+                      }}
+                      className="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                      title={`View Workflows for ${t.name}`}
+                    >
+                      <Layers size={13} />
+                      <span>View Workflows</span>
+                    </button>
 
                     <button
                       onClick={() => setKeyGenTenant(t)}

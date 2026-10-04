@@ -100,14 +100,15 @@ export const WorkflowTable: React.FC<Props> = ({
                 <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
                   <button 
                     onClick={() => onView(item.id)} 
-                    className="p-1.5 text-blue-400 hover:text-white hover:bg-blue-600/20 rounded transition-colors" 
-                    title="View Details"
+                    className="px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 hover:text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm" 
+                    title="View Workflow Blueprint & Architecture"
                   >
-                    <Eye size={15} />
+                    <Eye size={13} />
+                    <span>View Workflow</span>
                   </button>
 
-                  {/* Contextual Actions based on Tab/Status */}
-                  {currentTab === 'Drafts' && (
+                  {/* Contextual Actions based on Tab/Status - Admin can view only */}
+                  {!isAdmin && currentTab === 'Drafts' && (
                     <>
                       {onEdit && (
                         <button 
@@ -118,62 +119,86 @@ export const WorkflowTable: React.FC<Props> = ({
                           <Edit size={15} />
                         </button>
                       )}
-                      <button 
-                        onClick={() => onPublish?.(item.id)} 
-                        className="p-1.5 text-emerald-400 hover:text-white hover:bg-emerald-600/20 rounded transition-colors" 
-                        title="Publish to Engine"
-                      >
-                        <CheckCircle size={15} />
-                      </button>
-                      <button 
-                        onClick={() => onDelete?.(item.id)} 
-                        className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-600/20 rounded transition-colors" 
-                        title="Delete Draft"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {onPublish && (
+                        <button 
+                          onClick={() => onPublish(item.id)} 
+                          className="p-1.5 text-emerald-400 hover:text-white hover:bg-emerald-600/20 rounded transition-colors" 
+                          title="Publish to Engine"
+                        >
+                          <CheckCircle size={15} />
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button 
+                          onClick={() => onDelete(item.id)} 
+                          className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-600/20 rounded transition-colors" 
+                          title="Delete Draft"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </>
                   )}
 
-                  {currentTab === 'Published' && (
+                  {!isAdmin && currentTab === 'Published' && (
                     <>
-                      <button 
-                        onClick={() => onSubmit?.(item.id)} 
-                        className="p-1.5 text-purple-400 hover:text-white hover:bg-purple-600/20 rounded transition-colors" 
-                        title="Submit for Review"
-                      >
-                        <Send size={15} />
-                      </button>
-                      <button 
-                        onClick={() => onNewVersion?.(item.id)} 
-                        className="p-1.5 text-teal-400 hover:text-white hover:bg-teal-600/20 rounded transition-colors inline-flex items-center gap-0.5" 
-                        title="Create New Draft Version"
-                      >
-                        <Copy size={14} />
-                        <span className="text-[10px] font-bold">+</span>
-                      </button>
-                      <button 
-                        onClick={() => onCopy?.(item.id)} 
-                        className="p-1.5 text-blue-400 hover:text-white hover:bg-blue-600/20 rounded transition-colors" 
-                        title="Fork Blueprint"
-                      >
-                        <Copy size={15} />
-                      </button>
-                      <button 
-                        onClick={() => onDeprecate?.(item.id)} 
-                        className="p-1.5 text-amber-400 hover:text-white hover:bg-amber-600/20 rounded transition-colors" 
-                        title="Deprecate Version"
-                      >
-                        <Archive size={15} />
-                      </button>
-                      <button 
-                        onClick={() => onAbandon?.(item.id)} 
-                        className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-600/20 rounded transition-colors" 
-                        title="Abandon"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {onSubmit && (
+                        <button 
+                          onClick={() => onSubmit(item.id)} 
+                          className="p-1.5 text-purple-400 hover:text-white hover:bg-purple-600/20 rounded transition-colors" 
+                          title="Submit for Review"
+                        >
+                          <Send size={15} />
+                        </button>
+                      )}
+                      {onNewVersion && (
+                        <button 
+                          onClick={() => onNewVersion(item.id)} 
+                          className="p-1.5 text-teal-400 hover:text-white hover:bg-teal-600/20 rounded transition-colors inline-flex items-center gap-0.5" 
+                          title="Create New Draft Version"
+                        >
+                          <Copy size={14} />
+                          <span className="text-[10px] font-bold">+</span>
+                        </button>
+                      )}
+                      {onCopy && (
+                        <button 
+                          onClick={() => onCopy(item.id)} 
+                          className="p-1.5 text-blue-400 hover:text-white hover:bg-blue-600/20 rounded transition-colors" 
+                          title="Fork Blueprint"
+                        >
+                          <Copy size={15} />
+                        </button>
+                      )}
+                      {onDeprecate && (
+                        <button 
+                          onClick={() => onDeprecate(item.id)} 
+                          className="p-1.5 text-amber-400 hover:text-white hover:bg-amber-600/20 rounded transition-colors" 
+                          title="Deprecate Version"
+                        >
+                          <Archive size={15} />
+                        </button>
+                      )}
+                      {onAbandon && (
+                        <button 
+                          onClick={() => onAbandon(item.id)} 
+                          className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-600/20 rounded transition-colors" 
+                          title="Abandon"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </>
+                  )}
+
+                  {isAdmin && currentTab === 'Published' && onDeprecate && (
+                    <button 
+                      onClick={() => onDeprecate(item.id)} 
+                      className="p-1.5 text-amber-400 hover:text-white hover:bg-amber-600/20 rounded transition-colors" 
+                      title="Deprecate Version"
+                    >
+                      <Archive size={15} />
+                    </button>
                   )}
 
                   {currentTab === 'Shared' && (

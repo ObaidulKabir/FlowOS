@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult } from '../types';
+import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult, TenantDto, WorkflowClassStatus } from '../types';
 import { api } from '../api/client';
 import { TenantManager } from './TenantManager';
 import { WorkflowTable } from './WorkflowTable';
@@ -17,7 +17,7 @@ import { legalEntity, sellerIdentity } from '../legalEntity';
 import { LegalFooterLinks } from './LegalFooterLinks';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
-  Globe, Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale
+  Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale, Layers
 } from 'lucide-react';
 
 interface Props {
@@ -39,8 +39,10 @@ export const AdminDashboard: React.FC<Props> = ({
 }) => {
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
   const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities' | 'Comparison'>('Tenants');
-  const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Public' | 'Shared' | 'Published'>('All');
+  const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Drafts' | 'Published' | 'Shared' | 'Public'>('All');
 
+  const [tenants, setTenants] = useState<TenantDto[]>([]);
+  const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('');
   const [tenantsCount, setTenantsCount] = useState(0);
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
@@ -55,19 +57,22 @@ export const AdminDashboard: React.FC<Props> = ({
   const [selectedBlueprint, setSelectedBlueprint] = useState<WorkflowClass | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (tenantIdOverride?: string) => {
     setLoading(true);
     setError(null);
     const notices: string[] = [];
+    const targetTenantId = tenantIdOverride !== undefined ? tenantIdOverride : selectedTenantFilter;
+
     try {
       const tList = await api.listTenants();
+      setTenants(tList);
       setTenantsCount(tList.length);
     } catch (err: any) {
       notices.push(err.message || 'Failed to load tenants');
     }
 
     try {
-      const bpList = await api.list(undefined, undefined, 'Admin');
+      const bpList = await api.list(undefined, undefined, 'Admin', targetTenantId || undefined);
       setBlueprints(bpList);
     } catch (err: any) {
       setBlueprints([]);
@@ -86,6 +91,13 @@ export const AdminDashboard: React.FC<Props> = ({
 
     setError(notices[0] || null);
     setLoading(false);
+  };
+
+  const handleViewTenantWorkflows = async (tenantId: string) => {
+    setSelectedTenantFilter(tenantId);
+    setActiveTab('Catalog');
+    setCatalogSubTab('All');
+    await loadData(tenantId);
   };
 
   useEffect(() => {
@@ -147,7 +159,7 @@ export const AdminDashboard: React.FC<Props> = ({
                 <Plus size={14} />
                 <span className="truncate">Register Tenant</span>
               </button>
-              <button type="button" onClick={loadData} className={sidebarItemClass(false, 'bg-purple-600 text-white')}>
+              <button type="button" onClick={() => void loadData()} className={sidebarItemClass(false, 'bg-purple-600 text-white')}>
                 <RefreshCw size={14} className={loading ? 'animate-spin text-purple-400' : ''} />
                 <span className="truncate">Refresh</span>
               </button>
@@ -163,8 +175,8 @@ export const AdminDashboard: React.FC<Props> = ({
                 <span className="truncate">Review Queue ({pendingApprovals.length})</span>
               </button>
               <button type="button" onClick={() => setActiveTab('Catalog')} className={sidebarItemClass(activeTab === 'Catalog', 'bg-purple-600 text-white')}>
-                <Globe size={14} />
-                <span className="truncate">Blueprint Catalog</span>
+                <Layers size={14} />
+                <span className="truncate">Workflows ({blueprints.length})</span>
               </button>
               <button type="button" onClick={() => setActiveTab('Instances')} className={sidebarItemClass(activeTab === 'Instances', 'bg-purple-600 text-white')}>
                 <Activity size={14} />
@@ -238,12 +250,15 @@ export const AdminDashboard: React.FC<Props> = ({
             <div className="text-xl font-bold text-white mt-0.5">{tenantsCount}</div>
           </div>
 
-          <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          <div 
+            onClick={() => setActiveTab('Catalog')}
+            className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-purple-500/50 transition-colors"
+          >
             <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-              <Globe size={12} className="text-emerald-400" />
-              <span>Catalog Blueprints</span>
+              <Layers size={12} className="text-purple-400" />
+              <span>Workflows & Blueprints</span>
             </div>
-            <div className="text-xl font-bold text-emerald-400 mt-0.5">{blueprints.length}</div>
+            <div className="text-xl font-bold text-purple-400 mt-0.5">{blueprints.length}</div>
           </div>
 
           <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
@@ -284,6 +299,7 @@ export const AdminDashboard: React.FC<Props> = ({
               openRegisterModal={openRegisterModal}
               onRegisterModalClosed={() => setOpenRegisterModal(false)}
               onTenantChange={() => loadData()}
+              onViewTenantWorkflows={handleViewTenantWorkflows}
             />
           )}
 
@@ -301,7 +317,7 @@ export const AdminDashboard: React.FC<Props> = ({
                 currentTab="Shared"
                 isAdmin={true}
                 onView={async (id) => {
-                  const item = await api.get(id, 'Admin');
+                  const item = await api.get(id, 'Admin', selectedTenantFilter || undefined);
                   setSelectedBlueprint(item);
                 }}
                 onApprove={handleApprove}
@@ -312,26 +328,68 @@ export const AdminDashboard: React.FC<Props> = ({
 
           {activeTab === 'Catalog' && (
             <div className="space-y-4">
-              <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs w-fit">
-                {(['All', 'Public', 'Shared', 'Published'] as const).map(sub => (
-                  <button
-                    key={sub}
-                    onClick={() => setCatalogSubTab(sub)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      catalogSubTab === sub ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                    }`}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-700/80">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Building2 size={13} className="text-purple-400" /> Tenant Scope:
+                  </span>
+                  <select
+                    value={selectedTenantFilter}
+                    onChange={(e) => {
+                      const tId = e.target.value;
+                      setSelectedTenantFilter(tId);
+                      void loadData(tId);
+                    }}
+                    className="bg-slate-950 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-purple-500 focus:outline-none"
                   >
-                    {sub}
-                  </button>
-                ))}
+                    <option value="">Default Active Context</option>
+                    {tenants.map(t => (
+                      <option key={t.tenantId} value={t.tenantId}>
+                        {t.name} ({t.tenantId.substring(0, 8)}...)
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTenantFilter && (
+                    <button
+                      onClick={() => {
+                        setSelectedTenantFilter('');
+                        void loadData('');
+                      }}
+                      className="text-[11px] text-purple-400 hover:text-purple-300 underline ml-1"
+                    >
+                      Reset Filter
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs w-fit">
+                  {(['All', 'Drafts', 'Published', 'Shared', 'Public'] as const).map(sub => (
+                    <button
+                      key={sub}
+                      onClick={() => setCatalogSubTab(sub)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        catalogSubTab === sub ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {sub}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <WorkflowTable
-                items={blueprints}
+                items={blueprints.filter(bp => {
+                  if (catalogSubTab === 'All') return true;
+                  if (catalogSubTab === 'Drafts') return bp.status === WorkflowClassStatus.Draft;
+                  if (catalogSubTab === 'Published') return bp.status === WorkflowClassStatus.Published;
+                  if (catalogSubTab === 'Shared') return bp.scope === 1 || bp.status === 2;
+                  if (catalogSubTab === 'Public') return bp.scope === 2 || bp.status === 3;
+                  return true;
+                })}
                 currentTab={catalogSubTab}
                 isAdmin={true}
                 onView={async (id) => {
-                  const item = await api.get(id, 'Admin');
+                  const item = await api.get(id, 'Admin', selectedTenantFilter || undefined);
                   setSelectedBlueprint(item);
                 }}
                 onApprove={handleApprove}
@@ -469,7 +527,7 @@ export const AdminDashboard: React.FC<Props> = ({
           onClose={() => setSelectedBlueprint(null)}
           onValidate={async () => {
             if (selectedBlueprint) {
-              const res = await api.validate(selectedBlueprint.id, 'Admin');
+              const res = await api.validate(selectedBlueprint.id, 'Admin', selectedTenantFilter || undefined);
               setValidationResult(res);
             }
           }}
