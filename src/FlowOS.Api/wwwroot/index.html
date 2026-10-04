@@ -1,60 +1,131 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FlowOS — Dual-Kernel Orchestration & Agentic MCP Control Plane</title>
+    <title>FlowOS — Build reliable workflows with your AI agent</title>
+    <link rel="canonical" href="https://flowosbd.com/" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/brand/flowos-icon.png" />
+    <link rel="shortcut icon" href="/brand/favicon.ico" />
+    <link rel="apple-touch-icon" href="/brand/flowos-icon.png" />
+    <meta name="theme-color" content="#020617" />
     
     <!-- Primary Meta Tags -->
-    <meta name="title" content="FlowOS — Dual-Kernel Orchestration & Agentic MCP Control Plane" />
-    <meta name="description" content="FlowOS is an enterprise-grade multi-tenant workflow orchestration platform separating mathematical state machine rules from declarative execution, featuring a native 60-tool Model Context Protocol (MCP) server backed by 369 passing automated tests." />
-    <meta name="keywords" content="FlowOS, MCP, Model Context Protocol, State Machine, Workflow Engine, Multi-Tenant, Orchestration, AI Agents, Temporal, Camunda" />
+    <meta name="title" content="FlowOS — Build reliable workflows with your AI agent" />
+    <meta name="description" content="Design, validate, simulate, execute, recover, and govern workflows through MCP. State is Law, workflow is Work, and the event log is Truth." />
     <meta name="author" content="Prospect BD Ltd." />
     <meta name="robots" content="index, follow" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://flowos.prospectbdltd.com/" />
-    <meta property="og:title" content="FlowOS — Dual-Kernel Orchestration & Agentic MCP Control Plane" />
-    <meta property="og:description" content="State Machine = Law, Workflow = Work, Event = Truth. Native 60-tool MCP server, 369 passing tests, zero-trust multi-tenancy, and declarative JSON workflows." />
+    <meta property="og:url" content="https://flowosbd.com/" />
+    <meta property="og:title" content="FlowOS — Build reliable workflows with your AI agent" />
+    <meta property="og:description" content="Design, validate, simulate, execute, recover, and govern workflows through MCP. State is Law, workflow is Work, and the event log is Truth." />
     <meta property="og:site_name" content="FlowOS" />
+    <meta property="og:image" content="https://flowosbd.com/brand/flowos-social.jpg" />
+    <meta property="og:image:alt" content="FlowOS logo" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://flowos.prospectbdltd.com/" />
-    <meta property="twitter:title" content="FlowOS — Dual-Kernel Orchestration & Agentic MCP Control Plane" />
-    <meta property="twitter:description" content="State Machine = Law, Workflow = Work, Event = Truth. Native 60-tool MCP server, 369 passing tests, zero-trust multi-tenancy, and declarative JSON workflows." />
+    <meta property="twitter:url" content="https://flowosbd.com/" />
+    <meta property="twitter:title" content="FlowOS — Build reliable workflows with your AI agent" />
+    <meta property="twitter:description" content="Design, validate, simulate, execute, recover, and govern workflows through MCP. State is Law, workflow is Work, and the event log is Truth." />
+    <meta property="twitter:image" content="https://flowosbd.com/brand/flowos-social.jpg" />
 
-    <!-- Structured JSON-LD Data for Search & AI Crawlers -->
+    <!-- Structured JSON-LD Data for Search & AI Crawlers (Schema.org) -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "FlowOS",
-      "operatingSystem": "Linux, Windows, Docker, Kubernetes",
-      "applicationCategory": "BusinessApplication, DeveloperApplication",
-      "description": "Enterprise-grade multi-tenant workflow orchestration platform with dual-kernel mathematical state enforcement and native Model Context Protocol (MCP) server for AI agents.",
-      "featureList": [
-        "Dual-Kernel Architecture: State Machine = Law, Workflow = Work, Event = Truth",
-        "Native Model Context Protocol (MCP) Server with 61 tools registered",
-        "369 automated tests passing: 303 unit, 28 end-to-end, and 38 MCP contract tests",
-        "Strict Zero-Trust Multi-Tenancy with Scoped Tenant API Keys",
-        "Declarative JSON Workflow Blueprints with Versioning and Governance",
-        "Transactional PostgreSQL Event Log & Real-Time Notification Projections",
-        "Automated SLA & Zero-Zombie Escalation Dispatcher"
-      ],
-      "url": "https://flowos.prospectbdltd.com"
-    }
+    [
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "FlowOS",
+        "applicationCategory": "BusinessApplication",
+        "applicationSubCategory": "Workflow Automation Platform",
+        "operatingSystem": "Web, Cloud, Docker",
+        "description": "Hosted workflow automation and agent governance platform. State is Law, workflow is Work, and the event log is Truth.",
+        "url": "https://flowosbd.com/",
+        "author": {
+          "@type": "Organization",
+          "name": "Prospect BD Ltd.",
+          "url": "https://flowosbd.com/company"
+        },
+        "offers": {
+          "@type": "AggregateOffer",
+          "priceCurrency": "USD",
+          "lowPrice": "0",
+          "highPrice": "499",
+          "offerCount": "6"
+        }
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Prospect BD Ltd.",
+        "legalName": "Prospect BD Ltd.",
+        "url": "https://flowosbd.com/",
+        "logo": "https://flowosbd.com/brand/flowos-logo.png",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "email": "admin@flowosbd.com",
+          "contactType": "customer service"
+        }
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "FlowOS",
+        "url": "https://flowosbd.com/"
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is FlowOS?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "FlowOS is an enterprise business automation platform that combines pure finite state machines with transactional outbox dispatching, cryptographic security, and native Model Context Protocol (MCP) AI Agent governance."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does the dual-kernel Law and Work model work?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "FlowOS enforces mathematical state machine rules (Law) independently from workflow steps (Work). A step cannot advance or commit transitions that violate the underlying state machine, preventing illegal business states."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do AI agents connect to FlowOS?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "AI agents connect via the Model Context Protocol (MCP) using Streamable HTTP/SSE. FlowOS advertises 79 governed tools allowing agents to author drafts, simulate workflows, inspect audit trails, and execute bounded-autonomy tasks."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does FlowOS handle workflow versioning and SLA changes?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "FlowOS enforces strict domain immutability. In-flight workflow instances remain pinned to their creation version. Teams deploy non-breaking SLA policy adjustments via Patch versions (1.0.0 to 1.0.1) or Context Binding Revisions, with 1-click safe rollback support."
+            }
+          }
+        ]
+      }
+    ]
     </script>
+    <link rel="sitemap" type="application/xml" href="https://flowosbd.com/sitemap.xml" />
           <!-- Semantic Discovery Links for AI Agents & Crawlers -->
-    <link rel="mcp" href="https://flowos.prospectbdltd.com/mcp" />
-    <link rel="mcp-server" href="https://flowos.prospectbdltd.com/mcp" />
+    <link rel="mcp" href="https://flowosbd.com/mcp/" />
+    <link rel="mcp-server" href="https://flowosbd.com/mcp/" />
     <link rel="service-desc" type="application/json" href="/.well-known/mcp" />
     <link rel="alternate" type="application/json" href="/.well-known/mcp" title="FlowOS MCP Machine-Readable Discovery" />
     <link rel="alternate" type="application/json" href="/mcp" title="FlowOS MCP Tools JSON" />
     <link rel="alternate" type="text/html" href="/mcp" title="FlowOS MCP Interactive Portal" />
-    <script type="module" crossorigin src="/assets/index-CitLDQUR.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Bk3ywO6l.css">
+    <script type="module" crossorigin src="/assets/index-BlC1D8Zd.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-D2I0kAC7.css">
   </head>
   <body class="bg-slate-900 text-slate-100">
     <div id="root">
@@ -68,7 +139,7 @@
               FlowOS AI Agent Endpoint
             </h2>
             <p style="margin: 0; color: #a5b4fc; font-size: 0.85rem;">
-              Endpoint: <a href="https://flowos.prospectbdltd.com/mcp" style="color: #67e8f9; font-weight: bold; text-decoration: underline;">https://flowos.prospectbdltd.com/mcp</a> | Transport: <strong style="color: #ffffff;">Streamable HTTP / SSE (JSON-RPC 2.0)</strong>
+              Endpoint: <a href="https://flowosbd.com/mcp/" style="color: #67e8f9; font-weight: bold; text-decoration: underline;">https://flowosbd.com/mcp/</a> | Transport: <strong style="color: #ffffff;">Streamable HTTP / SSE (JSON-RPC 2.0)</strong>
             </p>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -87,12 +158,17 @@
       <!-- Semantic Fallback for AI Browsing Bots & Crawlers (replaced when React mounts) -->
       <header style="padding: 2rem; background: #0f172a; border-bottom: 1px solid #1e293b; text-align: center;">
         <h1 style="font-size: 2rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;">
-          Flow<span style="color: #3b82f6;">OS</span> Orchestration Platform
+          Build reliable workflows with your AI agent
         </h1>
-        <p style="color: #94a3b8; max-width: 600px; margin: 0 auto 1.25rem auto; font-size: 0.95rem;">
-          Dual-kernel mathematical state authority, zero-trust multi-tenancy, and native Model Context Protocol (MCP) agent control plane.
+        <p style="color: #94a3b8; max-width: 640px; margin: 0 auto 1.25rem auto; font-size: 0.95rem;">
+          Design, validate, simulate, execute, recover, and govern workflows through MCP. State is Law. Workflow is Work. The event log is Truth.
         </p>
         <nav style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem;">
+          <a href="/product" style="background: #1e293b; color: #e2e8f0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #334155;">Product</a>
+          <a href="/pricing" style="background: #1e293b; color: #e2e8f0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #334155;">Pricing</a>
+          <a href="/ai-agents" style="background: #1e293b; color: #e2e8f0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #334155;">AI agents</a>
+          <a href="/security" style="background: #1e293b; color: #e2e8f0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #334155;">Security</a>
+          <a href="/contact" style="background: #1e293b; color: #e2e8f0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #334155;">Contact</a>
           <a href="/mcp" style="background: #065f46; color: #a7f3d0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; border: 1px solid #059669;">
             🤖 Explore MCP Tools & Discovery (/mcp) ↗
           </a>
@@ -134,14 +210,14 @@
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
             <h2 style="font-size: 1.35rem; color: #ffffff; margin: 0;">🤖 MCP Endpoint Specification & Connect Guide</h2>
             <span style="background: #065f46; color: #a7f3d0; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold;">
-              60 Production Tools • 369 Tests Passing
+              Lifecycle control plane • placeholders, not secrets
             </span>
           </div>
 
           <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 1.25rem;">
             <tr style="border-bottom: 1px solid #334155;">
               <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8; width: 190px;">Endpoint URL</td>
-              <td style="padding: 0.6rem;"><a href="https://flowos.prospectbdltd.com/mcp" style="color: #38bdf8; font-family: monospace; font-weight: bold;">https://flowos.prospectbdltd.com/mcp</a></td>
+              <td style="padding: 0.6rem;"><a href="https://flowosbd.com/mcp" style="color: #38bdf8; font-family: monospace; font-weight: bold;">https://flowosbd.com/mcp</a></td>
             </tr>
             <tr style="border-bottom: 1px solid #334155;">
               <td style="padding: 0.6rem; font-weight: bold; color: #94a3b8;">Transport Type</td>
@@ -179,7 +255,7 @@
     }
   }
 }</pre>
-          <p style="color: #fbbf24; font-size: 0.8rem; margin: 0 0 1rem 0;">One-click sandbox: open the dashboard and choose Launch Live Sandbox. That guest workspace is disposable and is separate from this configuration.</p>
+          <p style="color: #fbbf24; font-size: 0.8rem; margin: 0 0 1rem 0;">One-click sandbox: open the dashboard and choose Launch Live Sandbox. That guest workspace is disposable, holds no production credentials, and is separate from this configuration.</p>
 
           <div style="text-align: center; margin: 1.25rem 0;">
             <a href="/mcp" id="connect-now-btn" style="background: #2563eb; color: #ffffff; padding: 0.75rem 2rem; border-radius: 0.5rem; font-weight: bold; text-decoration: none; font-size: 1rem; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37,99,235,0.4);">
@@ -193,10 +269,10 @@
               Navigate to or fetch the discovery endpoint. FlowOS separates public discovery from authenticated execution:
             </p>
             <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0.75rem;">
-              <li><strong>Interactive Browser Portal:</strong> Open <a href="/mcp" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">https://flowos.prospectbdltd.com/mcp</a> in any browser or web agent to view the interactive tool documentation and security contract.</li>
-              <li><strong>Machine-Readable JSON:</strong> Issue an HTTP <code>GET /mcp</code> with header <code>Accept: application/json</code> to receive all 61 tools, formal parameter JSON schemas, risk ratings, and human confirmation policies:</li>
+              <li><strong>Interactive Browser Portal:</strong> Open <a href="/mcp" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">https://flowosbd.com/mcp</a> in any browser or web agent to view the interactive tool documentation and security contract.</li>
+              <li><strong>Machine-Readable JSON:</strong> Issue an HTTP <code>GET /mcp</code> with header <code>Accept: application/json</code> to receive all 79 tool names, formal parameter JSON schemas, risk ratings, and human confirmation policies:</li>
             </ul>
-            <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #38bdf8; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s https://flowos.prospectbdltd.com/mcp -H "Accept: application/json"</pre>
+            <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #38bdf8; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s https://flowosbd.com/mcp -H "Accept: application/json"</pre>
           </div>
 
           <div style="background: #0f172a; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid #1e293b; margin-top: 1rem;">
@@ -207,7 +283,7 @@
             <ul style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.7; margin-left: 1.25rem; margin-bottom: 0.75rem;">
               <li><strong>Transport URL:</strong> <code>https://flowosbd.com/mcp</code></li>
               <li><strong>Required Headers:</strong> <code>x-tenant-id: &lt;YOUR_TENANT_ID&gt;</code>, <code>X-MCP-API-Key: &lt;YOUR_MCP_API_KEY&gt;</code>, <code>MCP-Protocol-Version: 2025-03-26</code></li>
-              <li><strong>Sandbox:</strong> Launch Live Sandbox on the dashboard. Leaving the API key blank does not open production execution.</li>
+              <li><strong>Sandbox:</strong> Launch Live Sandbox on the dashboard. It cannot stand in for a production tenant key, and leaving the API key blank does not open production execution.</li>
             </ul>
             <pre style="background: #020617; padding: 0.75rem; border-radius: 0.375rem; color: #34d399; font-family: monospace; font-size: 0.8rem; overflow-x: auto; margin: 0;">curl -s -X POST https://flowosbd.com/mcp \
   -H "Content-Type: application/json" \
@@ -218,7 +294,7 @@
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
           </div>
 
-          <h3 style="font-size: 1rem; color: #ffffff; margin: 1.25rem 0 0.5rem 0;">Catalog of 60 Registered MCP Tools</h3>
+          <h3 style="font-size: 1rem; color: #ffffff; margin: 1.25rem 0 0.5rem 0;">Catalog of 79 Discoverable MCP Tool Names</h3>
           <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; margin-left: 1.25rem; margin-bottom: 0;">
             <li><strong>Discovery &amp; Inspection:</strong> <code>describe_workflowclass_schema</code>, <code>list_public_workflowclasses</code>, <code>list_draft_workflowclasses</code>, <code>get_draft_workflowclass</code></li>
             <li><strong>Workflow Execution:</strong> <code>start_workflow</code>, <code>publish_event</code>, <code>complete_task</code>, <code>list_workflow_instances</code>, <code>get_workflow_instance_status</code>, <code>get_workflow_history</code></li>
@@ -243,5 +319,6 @@
       </div>
     </noscript>
 
+    <!-- dashboard-chrome-rail: 2026-09-28 -->
   </body>
 </html>

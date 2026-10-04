@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Enterprise Security, Multi-Tenant Isolation & Compliance — FlowOS</title>
+  <link rel="canonical" href="https://flowosbd.com/security" />
+  <meta name="description" content="Bank-grade security architecture in FlowOS: multi-tenant data isolation, HMAC-SHA256 non-repudiation webhooks, and agent permission boundaries." />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="FlowOS" />
+  <meta property="og:url" content="https://flowosbd.com/security" />
+  <meta property="og:title" content="Enterprise Security, Multi-Tenant Isolation & Compliance — FlowOS" />
+  <meta property="og:description" content="Bank-grade security architecture in FlowOS: multi-tenant data isolation, HMAC-SHA256 non-repudiation webhooks, and agent permission boundaries." />
+  <meta property="og:image" content="https://flowosbd.com/brand/flowos-social.jpg" />
+  <meta property="og:image:alt" content="FlowOS Security Architecture" />
+  <link rel="icon" type="image/png" href="/brand/flowos-icon.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "FlowOS Security Architecture",
+    "description": "Details multi-tenant isolation, cryptographic webhook verification, and fail-closed state machine security.",
+    "url": "https://flowosbd.com/security"
+  }
+  </script>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    a { color: #93c5fd; }
+    header, footer, main { max-width: 52rem; margin: 0 auto; padding: 1.25rem 1.25rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 1rem 0; }
+    th, td { border-bottom: 1px solid #1e293b; text-align: left; padding: 0.45rem 0.35rem; vertical-align: top; }
+    th { color: #94a3b8; font-size: 0.75rem; }
+    header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; border-bottom: 1px solid #1e293b; }
+    header a.brand { color: #fff; font-weight: 800; text-decoration: none; letter-spacing: -0.02em; }
+    nav { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; }
+    h1 { font-size: 1.8rem; line-height: 1.2; margin: 0.4rem 0 0.6rem; }
+    h2 { font-size: 1.05rem; margin: 1.6rem 0 0.4rem; }
+    .kicker { color: #94a3b8; font-size: 0.8rem; margin: 0; }
+    .seller {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.9rem;
+      padding: 0.9rem 1rem;
+      margin: 1rem 0 1.4rem;
+      font-size: 0.92rem;
+    }
+    .seller p { margin: 0.15rem 0; }
+    ul { padding-left: 1.2rem; }
+    li { margin: 0.35rem 0; }
+    footer { border-top: 1px solid #1e293b; color: #94a3b8; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">FlowOS</a>
+    <nav>
+      <a href="/product">Product</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/ai-agents">AI agents</a>
+      <a href="/security">Security</a>
+      <a href="/contact">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <p class="kicker">Last updated 30 September 2026</p>
+    <h1>Security</h1>
+    <aside class="seller">
+      <p>FlowOS is operated by [Your UK Registered Company Name Ltd].</p>
+<p>Registered in England and Wales.</p>
+<p>Company number: [8-digit UK Company Number].</p>
+<p>Registered office: [Your UK Registered Office Address].</p>
+<p>Website: https://flowosbd.com</p>
+<p>Support, sales, and billing: admin@flowosbd.com</p>
+    </aside>
+    
+    <p>This page describes the controls a customer can rely on. It is not a certification, and it does not claim a SOC 2 or ISO 27001 report.</p>
+    <ul>
+      <li><strong>Separate tenants.</strong> Each workspace has its own tenant id. A request for another tenant is refused.</li>
+      <li><strong>Sign-in.</strong> People use an account. Agents use a tenant API key. Keys are shown in full once, when they are created.</li>
+      <li><strong>Roles.</strong> A step can require a role or a capability. A caller without it cannot complete that step.</li>
+      <li><strong>State rules.</strong> A workflow cannot move a record to a status the published state machine does not allow.</li>
+      <li><strong>History.</strong> Transitions and step results are written to the event log for that tenant.</li>
+      <li><strong>Transport.</strong> The public site is served over HTTPS.</li>
+      <li><strong>Backup.</strong> A tenant can download a backup of its workflows and instances, and restore it onto another site that is compatible.</li>
+      <li><strong>Incidents.</strong> Email <a href="mailto:admin@flowosbd.com">admin@flowosbd.com</a>. Do not include a live API key or password.</li>
+    </ul>
+    
+  </main>
+  <footer>
+    <p>© 2026 [Your UK Registered Company Name Ltd]. FlowOS at https://flowosbd.com.</p>
+    <nav>
+      <a href="/product">Product</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/security">Security</a>
+      <a href="/ai-agents">AI agents</a>
+      <a href="/company">Company</a>
+      <a href="/contact">Contact</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/refunds">Refunds</a>
+      <a href="/cancellation">Cancellation</a>
+      <a href="/acceptable-use">Acceptable use</a>
+    </nav>
+  </footer>
+</body>
+</html>

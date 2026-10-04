@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Agent Governance & MCP Control Plane — FlowOS</title>
+  <link rel="canonical" href="https://flowosbd.com/ai-agents" />
+  <meta name="description" content="Model Context Protocol (MCP) interface for AI agents in FlowOS. Bounded autonomy, external agent change feeds, prompt audits, multi-turn chat, and human-in-the-loop governance." />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="FlowOS" />
+  <meta property="og:url" content="https://flowosbd.com/ai-agents" />
+  <meta property="og:title" content="AI Agent Governance & MCP Control Plane — FlowOS" />
+  <meta property="og:description" content="Model Context Protocol (MCP) interface for AI agents in FlowOS. Bounded autonomy, external agent change feeds, prompt audits, multi-turn chat, and human-in-the-loop governance." />
+  <meta property="og:image" content="https://flowosbd.com/brand/flowos-social.jpg" />
+  <meta property="og:image:alt" content="FlowOS AI Agent Control Plane" />
+  <link rel="icon" type="image/png" href="/brand/flowos-icon.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "AI Agent Governance & MCP Control Plane in FlowOS",
+    "description": "Explains bounded autonomy, dual-kernel law enforcement, external agent change feeds, and the live MCP catalog for AI agents.",
+    "url": "https://flowosbd.com/ai-agents",
+    "author": {
+      "@type": "Organization",
+      "name": "Prospect BD Ltd."
+    }
+  }
+  </script>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    a { color: #93c5fd; }
+    header, footer, main { max-width: 52rem; margin: 0 auto; padding: 1.25rem 1.25rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 1rem 0; }
+    th, td { border-bottom: 1px solid #1e293b; text-align: left; padding: 0.45rem 0.35rem; vertical-align: top; }
+    th { color: #94a3b8; font-size: 0.75rem; }
+    header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; border-bottom: 1px solid #1e293b; }
+    header a.brand { color: #fff; font-weight: 800; text-decoration: none; letter-spacing: -0.02em; }
+    nav { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; }
+    h1 { font-size: 1.8rem; line-height: 1.2; margin: 0.4rem 0 0.6rem; }
+    h2 { font-size: 1.05rem; margin: 1.6rem 0 0.4rem; }
+    .kicker { color: #94a3b8; font-size: 0.8rem; margin: 0; }
+    .seller {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.9rem;
+      padding: 0.9rem 1rem;
+      margin: 1rem 0 1.4rem;
+      font-size: 0.92rem;
+    }
+    .seller p { margin: 0.15rem 0; }
+    ul { padding-left: 1.2rem; }
+    li { margin: 0.35rem 0; }
+    footer { border-top: 1px solid #1e293b; color: #94a3b8; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">FlowOS</a>
+    <nav>
+      <a href="/product">Product</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/ai-agents">AI agents</a>
+      <a href="/security">Security</a>
+      <a href="/contact">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <p class="kicker">Last updated 3 October 2026</p>
+    <h1>AI agents</h1>
+    <aside class="seller">
+      <p>FlowOS is operated by [Your UK Registered Company Name Ltd].</p>
+<p>Registered in England and Wales.</p>
+<p>Company number: [8-digit UK Company Number].</p>
+<p>Registered office: [Your UK Registered Office Address].</p>
+<p>Website: https://flowosbd.com</p>
+<p>Support, sales, and billing: admin@flowosbd.com</p>
+    </aside>
+    
+    <p>An AI agent in FlowOS does not get a blank cheque. It calls named operations. FlowOS still decides whether that operation is allowed.</p>
+    <h2>An agent can</h2>
+    <ul>
+      <li>Read workflow state and history for its own tenant.</li>
+      <li>Draft and check a workflow before anything runs.</li>
+      <li>Suggest a next step that the published workflow already allows.</li>
+      <li>Carry out an operation the tenant key is allowed to call.</li>
+      <li>Connect through MCP, the agent interface at <a href="/mcp">/mcp</a>.</li>
+    </ul>
+    <h2>An agent cannot</h2>
+    <ul>
+      <li>Move work to a status the state machine does not allow.</li>
+      <li>See another tenant's data.</li>
+      <li>Skip a step that requires a person, or skip a high-risk action that the workflow marks for human approval.</li>
+      <li>Start live work on a Free workspace. That stays design-time until a paid plan is active.</li>
+    </ul>
+    <p>The short version: the agent proposes and, where allowed, acts. FlowOS keeps authorisation, workflow state, and the business rules.</p>
+
+    <h2>What MCP now covers</h2>
+    <ul>
+      <li>Design-time work such as draft creation, validation, linting, simulation, context binding, and publication with explicit human approval where required.</li>
+      <li>Live runtime work such as waiting-task automation, workflow start and event publication on paid plans, and durable recovery tools.</li>
+      <li>Multi-turn workflow chat using durable agent sessions, so an agent can append messages and later read the same conversation history.</li>
+      <li>Prompt audit visibility, so a tenant can inspect recorded request and response traces when audit is enabled on the selected provider.</li>
+      <li>External AI agent change feeds and plans, so a separate worker can poll FlowOS changes one by one, draft a plan, execute it, and resume safely after interruption.</li>
+    </ul>
+
+    <h2>External AI agents</h2>
+    <p>An external AI agent is a worker that runs outside the FlowOS web app runtime, for example Cursor, Claude Desktop, or another MCP client or service. FlowOS can expose changes to that worker one by one through MCP. The worker does not bypass FlowOS. It still acts through named tools, tenant isolation, approval gates, and workflow legality checks.</p>
+
+    <h2>How to read the tool catalog</h2>
+    <p>The public discovery document at <a href="/mcp">/mcp</a> lists the current MCP tools, schemas, and security metadata. That is the source of truth for the live count. Agents should read the discovery metadata first, then call the named tools they need.</p>
+    
+  </main>
+  <footer>
+    <p>© 2026 [Your UK Registered Company Name Ltd]. FlowOS at https://flowosbd.com.</p>
+    <nav>
+      <a href="/product">Product</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/security">Security</a>
+      <a href="/ai-agents">AI agents</a>
+      <a href="/company">Company</a>
+      <a href="/contact">Contact</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/refunds">Refunds</a>
+      <a href="/cancellation">Cancellation</a>
+      <a href="/acceptable-use">Acceptable use</a>
+    </nav>
+  </footer>
+</body>
+</html>
