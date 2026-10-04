@@ -83,7 +83,8 @@ export const DemoVisualSimulator: React.FC<Props> = ({
     items.sort((a, b) => {
       const ai = DEMO_NAMES.indexOf(a.name);
       const bi = DEMO_NAMES.indexOf(b.name);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      // Prioritize tenant's own workflows (-1) over system defaults
+      return (ai === -1 ? -1 : ai) - (bi === -1 ? -1 : bi);
     });
 
     return items;
@@ -142,22 +143,19 @@ export const DemoVisualSimulator: React.FC<Props> = ({
         />
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {catalog.slice(0, 8).map(item => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSelectedId(item.id)}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-                  selected?.id === item.id
-                    ? 'bg-emerald-600/20 border-emerald-500 text-emerald-200'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-600 hover:text-white'
-                }`}
-              >
-                {item.name}
-                <span className="ml-1.5 text-[10px] opacity-70">v{item.version}</span>
-              </button>
-            ))}
+          <div className="flex items-center gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800">
+            <span className="text-xs font-semibold text-slate-400 ml-2">Simulate Blueprint:</span>
+            <select
+              value={selected?.id || ''}
+              onChange={e => setSelectedId(e.target.value)}
+              className="bg-slate-950 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 min-w-[300px] outline-none focus:border-emerald-500"
+            >
+              {catalog.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} v{item.version} {DEMO_NAMES.indexOf(item.name) !== -1 ? '(System Default)' : '(Your Workflow)'}
+                </option>
+              ))}
+            </select>
           </div>
 
           {selected?.definition ? (
