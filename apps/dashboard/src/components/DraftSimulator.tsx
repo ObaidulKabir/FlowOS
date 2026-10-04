@@ -752,7 +752,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
     let hopId = targetStepId;
     let hops = 0;
-    while (hops < 8 && !isTerminalId(hopId)) {
+    while (hops < 100 && !isTerminalId(hopId)) {
       const hopStep = rawSteps.find((s: any) =>
         (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
       );
@@ -918,7 +918,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
     let hopId = workStepId;
     let hops = 0;
-    while (hops < 8 && !isTerminalId(hopId)) {
+    while (hops < 100 && !isTerminalId(hopId)) {
       const hopStep = rawSteps.find((s: any) =>
         (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
       );

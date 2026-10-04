@@ -20,7 +20,7 @@ public sealed record WorkflowContextSimulationRequest(
     object? InitialPayload = null,
     IReadOnlyList<string>? Roles = null,
     IReadOnlyList<WorkflowContextSimulationEventRequest>? Events = null,
-    int MaxSteps = 25,
+    int MaxSteps = 100,
     bool AutoAdvanceTimers = false,
     bool AutoAdvanceAgents = true,
     WorkflowContextSimulationAgentRequest? SimulatedAgent = null);
