@@ -131,10 +131,11 @@ public class AgentsController : ControllerBase
         return Ok(sessions);
     }
 
+    [HttpGet("history")]
     [HttpGet("{workflowInstanceId:guid}/history")]
     [HttpGet("instances/{workflowInstanceId:guid}/history")]
     public async Task<ActionResult<AgentExecutionHistoryDto>> GetExecutionHistory(
-        Guid workflowInstanceId,
+        Guid? workflowInstanceId = null,
         [FromQuery] DateTimeOffset? fromUtc = null,
         [FromQuery] DateTimeOffset? toUtc = null,
         [FromQuery] string? status = null,
@@ -144,8 +145,6 @@ public class AgentsController : ControllerBase
         var tenantId = _currentUser.TenantId;
         if (tenantId == Guid.Empty)
             return Forbid();
-        if (workflowInstanceId == Guid.Empty)
-            return BadRequest(new { error = "workflowInstanceId is required." });
         if (limit is < 1 or > AgentObservabilityLimits.MaximumHistoryLimit)
         {
             return BadRequest(new
@@ -264,6 +263,18 @@ public class AgentsController : ControllerBase
 
         error = null;
         return true;
+    }
+
+    [HttpGet("audits")]
+    [HttpGet("instances/{workflowInstanceId:guid}/audits")]
+    public async Task<IActionResult> GetPromptAudits(
+        [FromServices] FlowOS.Application.Common.Interfaces.Persistence.IAgentPromptAuditStore auditStore,
+        Guid? workflowInstanceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = _currentUser.TenantId;
+        var audits = await auditStore.GetByWorkflowInstanceAsync(tenantId, workflowInstanceId, cancellationToken);
+        return Ok(audits);
     }
 
     private static bool TryStatus(

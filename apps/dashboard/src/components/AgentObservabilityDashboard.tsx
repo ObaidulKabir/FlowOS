@@ -5,6 +5,7 @@ import { Activity, Clock, FileText, CheckCircle, XCircle, Wrench, AlertTriangle,
 export const AgentObservabilityDashboard: React.FC = () => {
   const [history, setHistory] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any>(null);
+  const [audits, setAudits] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,13 +16,15 @@ export const AgentObservabilityDashboard: React.FC = () => {
       const toUtc = new Date();
       const fromUtc = new Date(toUtc.getTime() - 7 * 24 * 60 * 60 * 1000); // last 7 days
       
-      const [histData, metricData] = await Promise.all([
+      const [histData, metricData, auditData] = await Promise.all([
         api.getAgentHistory(50),
-        api.getAgentEvaluationMetrics(fromUtc.toISOString(), toUtc.toISOString())
+        api.getAgentEvaluationMetrics(fromUtc.toISOString(), toUtc.toISOString()),
+        api.getPromptAudits()
       ]);
       
       setHistory(histData || []);
       setMetrics(metricData);
+      setAudits(auditData || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load observability data');
     } finally {
@@ -170,6 +173,59 @@ export const AgentObservabilityDashboard: React.FC = () => {
                     <span className="break-words">{run.errorMessage || run.ErrorMessage}</span>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <h4 className="text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
+          <FileText size={14} className="text-amber-400" />
+          Raw Prompt Audits
+        </h4>
+        {audits.length === 0 ? (
+          <div className="text-center py-6 text-slate-500 text-xs">
+            No prompt audits recorded. (Ensure 'Enable Prompt Auditing' is checked in Provider Configuration).
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {audits.map((audit, i) => (
+              <div key={i} className="border border-slate-800 bg-slate-950 rounded-xl p-4 transition-colors">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-white">
+                      {audit.providerName || audit.ProviderName}
+                    </span>
+                    <span className="px-2 py-0.5 bg-slate-800 text-[10px] text-slate-400 rounded">
+                      {audit.model || audit.Model}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    {new Date(audit.recordedAtUtc || audit.RecordedAtUtc).toLocaleString()}
+                  </span>
+                </div>
+                
+                <div className="flex gap-4 text-[10px] text-slate-400 mb-3 border-b border-slate-800 pb-2">
+                  <span>Duration: <span className="font-mono text-slate-300">{audit.durationMs || audit.DurationMs}ms</span></span>
+                  <span>Input: <span className="font-mono text-slate-300">{audit.inputTokens || audit.InputTokens || 0}</span></span>
+                  <span>Output: <span className="font-mono text-slate-300">{audit.outputTokens || audit.OutputTokens || 0}</span></span>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-[10px] font-semibold text-sky-400 mb-1 uppercase tracking-wider">Raw Request</div>
+                    <pre className="text-[10px] text-slate-300 bg-slate-900 p-3 rounded-lg overflow-x-auto border border-slate-800 font-mono">
+                      {audit.rawRequestPayload || audit.RawRequestPayload}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-emerald-400 mb-1 uppercase tracking-wider">Raw Response</div>
+                    <pre className="text-[10px] text-slate-300 bg-slate-900 p-3 rounded-lg overflow-x-auto border border-slate-800 font-mono">
+                      {audit.rawResponsePayload || audit.RawResponsePayload || '(Empty)'}
+                    </pre>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

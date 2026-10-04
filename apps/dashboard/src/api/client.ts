@@ -385,6 +385,17 @@ export const api = {
     return handleResponse(response, 'Failed to load agent history');
   },
 
+  getPromptAudits: async (
+    workflowInstanceId?: string,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<any[]> => {
+    const url = workflowInstanceId 
+      ? `/api/agents/instances/${workflowInstanceId}/audits` 
+      : `/api/agents/audits`;
+    const response = await authorizedFetch(url, {}, role);
+    return handleResponse(response, 'Failed to load prompt audits');
+  },
+
   getAgentEvaluationMetrics: async (
     fromUtc: string,
     toUtc: string,

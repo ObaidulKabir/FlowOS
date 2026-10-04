@@ -813,6 +813,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
     endpoint: '',
     apiKey: '',
     fallbackProviderAlias: '',
+    enablePromptAudit: false,
     isDefault: false,
     isEnabled: true
   });
@@ -831,6 +832,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
       endpoint: '',
       apiKey: '',
       fallbackProviderAlias: '',
+      enablePromptAudit: false,
       isDefault: items.length === 0,
       isEnabled: true
     });
@@ -850,6 +852,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
       endpoint: str(cfg.endpoint ?? cfg.Endpoint),
       apiKey: '',
       fallbackProviderAlias: str(cfg.fallbackProviderAlias ?? cfg.FallbackProviderAlias),
+      enablePromptAudit: Boolean(cfg.enablePromptAudit ?? cfg.EnablePromptAudit),
       isDefault: isDef,
       isEnabled: item.isEnabled
     });
@@ -897,13 +900,14 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
         providerName: provider,
         isEnabled: form.isEnabled,
         configuration: provider === 'flowos-hosted' || provider === 'flowos-risk'
-          ? { isDefault: form.isDefault, fallbackProviderAlias: form.fallbackProviderAlias.trim() || undefined }
+          ? { isDefault: form.isDefault, fallbackProviderAlias: form.fallbackProviderAlias.trim() || undefined, enablePromptAudit: form.enablePromptAudit }
           : {
               model: form.model.trim() || undefined,
               endpoint: form.endpoint.trim() || undefined,
               apiKey: form.apiKey.trim() || undefined,
               isDefault: form.isDefault,
-              fallbackProviderAlias: form.fallbackProviderAlias.trim() || undefined
+              fallbackProviderAlias: form.fallbackProviderAlias.trim() || undefined,
+              enablePromptAudit: form.enablePromptAudit
             }
       });
       resetForm();
@@ -1134,7 +1138,7 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
           />
         </div>
 
-        <div className="pt-1 border-t border-slate-800">
+        <div className="pt-1 border-t border-slate-800 space-y-3">
           <label className="flex items-start gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -1146,6 +1150,21 @@ const ProviderBindings: React.FC<{ items: PluginBindingDto[]; onChanged: () => P
               <span className="font-semibold text-slate-200">Set as Tenant Default Provider</span>
               <p className="text-[10px] text-slate-500">
                 Steps without an explicit agentProvider will automatically resolve to this provider.
+              </p>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.enablePromptAudit}
+              onChange={e => setForm({ ...form, enablePromptAudit: e.target.checked })}
+              className="mt-0.5 rounded border-slate-700 text-violet-600 focus:ring-violet-500 bg-slate-800"
+            />
+            <div className="text-[11px]">
+              <span className="font-semibold text-slate-200">Enable Prompt Auditing (Opt-In)</span>
+              <p className="text-[10px] text-slate-500">
+                Persist raw prompt requests and LLM responses to the database for observability.
               </p>
             </div>
           </label>
