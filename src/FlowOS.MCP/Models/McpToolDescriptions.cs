@@ -361,6 +361,24 @@ public static class McpToolDescriptions
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"requiredCapability\":\"workflow.start\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["list_tenant_teams"] =
+                "[Tenant IAM] Lists all teams and their required capabilities and hierarchy levels. " +
+                "Returns: {ok:true,data:{tenantId,teams:[{id,name,description,capabilities,hierarchy:[{order,name}],memberCount}]}}. " +
+                "Errors: MCP-AUTHZ-001, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"requiredCapabilities\":[\"capability1\"]}",
+
+            ["create_tenant_team"] =
+                "[Tenant IAM] Creates a new team with specified capabilities and hierarchy levels. Requires confirmHumanApproval. " +
+                "Returns: {ok:true,data:{tenantId,teamId,name,created:true}}. " +
+                "Errors: MCP-AUTHZ-001, MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"Artwork Team\",\"confirmHumanApproval\":true}",
+
+            ["add_team_member"] =
+                "[Tenant IAM] Adds a user to a team at a specific hierarchy level. Requires confirmHumanApproval. " +
+                "Returns: {ok:true,data:{tenantId,teamId,userId,levelName,added:true}}. " +
+                "Errors: MCP-AUTHZ-001, MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"teamId\":\"111...\",\"userId\":\"222...\",\"levelName\":\"Manager\",\"confirmHumanApproval\":true}",
+
             ["list_tenant_roles"] =
                 "[Tenant IAM] Lists tenant IAM roles and runtime capabilities. Requires iam.read; WorkflowClass/business-context roles and connector bindings are separate concepts. " +
                 "Returns: {ok:true,data:{tenantId,roles:[{id,name,capabilities,reserved}]}}. " +
@@ -862,6 +880,9 @@ public static class McpToolDescriptions
             ["inspect_instance_context"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["test_context_operations"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["diagnose_caller_permissions"] = new("security", "authenticated", true, true, false, "none", true, "low"),
+            ["list_tenant_teams"] = new("security", "authenticated", true, true, false, "none", true, "low"),
+            ["create_tenant_team"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
+            ["add_team_member"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
             ["list_tenant_roles"] = new("security", "authenticated", true, true, false, "none", true, "low"),
             ["create_tenant_role"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
             ["grant_role_capability"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
@@ -875,6 +896,9 @@ public static class McpToolDescriptions
     private static readonly IReadOnlyDictionary<string, string[]> RequiredCapabilities =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
+            ["list_tenant_teams"] = new[] { "iam.read" },
+            ["create_tenant_team"] = new[] { "iam.manage" },
+            ["add_team_member"] = new[] { "iam.manage" },
             ["list_tenant_roles"] = new[] { "iam.read" },
             ["create_tenant_role"] = new[] { "iam.manage" },
             ["grant_role_capability"] = new[] { "iam.manage" },

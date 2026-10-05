@@ -683,6 +683,7 @@ public partial class Program
         services.AddScoped<WebhookSecurityMcpTools>();
         services.AddScoped<ActionObservabilityMcpTools>();
         services.AddScoped<McpAuthorizationErrorMapper>();
+        services.AddScoped<TenantTeamMcpTools>();
         services.AddScoped<TenantIamMcpTools>();
         services.AddScoped<ExternalAgentChangeFeedMcpTools>();
         services.AddScoped<ExternalAgentPlanMcpTools>();

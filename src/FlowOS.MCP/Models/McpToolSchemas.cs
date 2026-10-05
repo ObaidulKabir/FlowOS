@@ -1748,6 +1748,61 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject ListTenantTeams() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"},
+            "requiredCapabilities":{"type":"array","items":{"type":"string"}}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject CreateTenantTeam() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["name", "confirmHumanApproval"],
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"},
+            "name":{"type":"string"},
+            "description":{"type":"string"},
+            "capabilities":{"type":"array","items":{"type":"string"}},
+            "hierarchyLevels":{
+              "type":"array",
+              "items":{
+                "type":"object",
+                "required":["name", "order"],
+                "properties":{
+                  "name":{"type":"string"},
+                  "order":{"type":"integer"}
+                }
+              }
+            },
+            "confirmHumanApproval":{"type":"boolean"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject AddTeamMember() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["teamId", "userId", "levelName", "confirmHumanApproval"],
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"},
+            "teamId":{"type":"string","format":"uuid"},
+            "userId":{"type":"string","format":"uuid"},
+            "levelName":{"type":"string"},
+            "confirmHumanApproval":{"type":"boolean"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject ChangeRoleCapability() => JObject.Parse(
         """
         {

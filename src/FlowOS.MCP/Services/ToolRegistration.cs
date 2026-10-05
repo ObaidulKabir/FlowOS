@@ -216,6 +216,15 @@ public static class ToolRegistration
         registry.Register("diagnose_caller_permissions", McpToolDescriptions.For("diagnose_caller_permissions"), McpToolSchemas.DiagnoseCallerPermissions(),
             async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.DiagnoseCallerPermissions(args)));
 
+        registry.Register("list_tenant_teams", McpToolDescriptions.For("list_tenant_teams"), McpToolSchemas.ListTenantTeams(),
+            async (args) => await ExecuteScopedAsync<TenantTeamMcpTools>(serviceProvider, t => t.ListTenantTeams(args)));
+
+        registry.Register("create_tenant_team", McpToolDescriptions.For("create_tenant_team"), McpToolSchemas.CreateTenantTeam(),
+            async (args) => await ExecuteScopedAsync<TenantTeamMcpTools>(serviceProvider, t => t.CreateTenantTeam(args)));
+
+        registry.Register("add_team_member", McpToolDescriptions.For("add_team_member"), McpToolSchemas.AddTeamMember(),
+            async (args) => await ExecuteScopedAsync<TenantTeamMcpTools>(serviceProvider, t => t.AddTeamMember(args)));
+
         registry.Register("list_tenant_roles", McpToolDescriptions.For("list_tenant_roles"), McpToolSchemas.TenantOptional(),
             async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.ListTenantRoles(args)));
 
