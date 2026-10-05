@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace FlowOS.Application.DTOs;
 
@@ -22,4 +23,5 @@ public class WorkflowSummaryDto
     public DateTime? CompletedAt { get; set; }
     public Guid? ParentWorkflowInstanceId { get; set; }
     public string? ParentStepId { get; set; }
+    public Dictionary<string, string> RoleAssignments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

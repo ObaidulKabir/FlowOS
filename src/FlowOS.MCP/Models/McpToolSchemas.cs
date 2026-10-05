@@ -697,7 +697,7 @@ public static class McpToolSchemas
                   "name":{"type":"string","minLength":1,"description":"Inbox / grant-bag name. Not a FlowOS tenant IAM role."},
                   "description":{"type":"string"},
                   "grantedCapabilities":{"type":"array","items":{"type":"string"},"description":"Capabilities this business role may execute (e.g. event.publish.EVT-APPROVE). Director may hold Manager event grants without being the inbox role."},
-                  "resolutionType":{"type":"string","enum":["Assignment","Expression","Static"]},
+                  "resolutionType":{"type":"string","enum":["Assignment","Expression","Static"],"description":"Assignment stores one person on the instance (payload.roleAssignments at start, or assign_instance_role later). Expression reads memberExpression from the business payload. Static matches staticMembers. A later assign_instance_role replaces the one Assignment person."},
                   "memberExpression":{"type":"string"},
                   "staticMembers":{"type":"array","items":{"type":"string"}}
                 },
@@ -737,7 +737,7 @@ public static class McpToolSchemas
             "correlationId":{"type":"string","format":"uuid"},
             "idempotencyKey":{"type":"string","minLength":8},
             "tenantId":{"type":"string","format":"uuid"},
-            "payload":{"type":"object","description":"Optional initial workflow payload containing event dates or business context for relative timers and steps."},
+            "payload":{"type":"object","description":"Optional initial workflow payload. roleAssignments (role name to person id) is read only here, at start, for Assignment business roles. After the instance exists, call assign_instance_role. Do not send roleAssignments on publish_event."},
             "businessReference":{
               "type":"object",
               "properties":{
@@ -1001,6 +1001,22 @@ public static class McpToolSchemas
             "correlationId":{"type":"string","format":"uuid"},
             "payload":{"type":"object"},
             "idempotencyKey":{"type":"string","minLength":8},
+            "actorId":{"type":"string","minLength":1,"description":"Person id for this event. When the waiting step lists AllowedRoles, this person must be stored for one of those roles. A different role that grants the same capability is refused. When the step lists no AllowedRoles, this person must hold a business role that grants the event. Required when the caller is a shared tenant API key (caller id is the literal api-key). Omit to use the authenticated caller id. Do not send roleAssignments here. Agent: commits and timers are not this check."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject AssignInstanceRole() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId","roleName","assigneeId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "roleName":{"type":"string","minLength":1,"description":"Declared business role with resolutionType Assignment. Expression and Static roles are rejected."},
+            "assigneeId":{"type":"string","minLength":1,"description":"Person id stored on this instance for roleName. One person per role. A later call replaces that person. Does not write tenant IAM roles."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -1017,6 +1033,7 @@ public static class McpToolSchemas
             "taskId":{"type":"string","format":"uuid"},
             "correlationId":{"type":"string","format":"uuid"},
             "idempotencyKey":{"type":"string","minLength":8},
+            "actorId":{"type":"string","minLength":1,"description":"Person id for this task. When the waiting step lists AllowedRoles, this person must be stored for one of those roles. A different role is refused. Required when the caller is a shared tenant API key (caller id is the literal api-key). Omit to use the authenticated caller id. History records this id as ActorId."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false

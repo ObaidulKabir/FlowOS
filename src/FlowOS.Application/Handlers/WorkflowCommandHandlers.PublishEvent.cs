@@ -117,42 +117,55 @@ public partial class WorkflowCommandHandlers
                 definition.BusinessRoles.Count > 0 &&
                 _businessRoleResolver != null)
             {
-                var grantedByBusinessRole = definition.BusinessRoles
-                    .SelectMany(role => role.Capabilities)
-                    .Any(capability =>
-                        requiredCapabilities.Any(required =>
-                            string.Equals(capability, required, StringComparison.OrdinalIgnoreCase)) ||
-                        string.Equals(capability, "event.publish", StringComparison.OrdinalIgnoreCase));
-                if (grantedByBusinessRole)
+                PreparedWorkflowContext? preparedForRole = null;
+                if (_workflowContextService != null)
                 {
-                    PreparedWorkflowContext? preparedForRole = null;
-                    if (_workflowContextService != null)
-                    {
-                        preparedForRole = await _workflowContextService.PrepareForInstanceAsync(
-                            request.TenantId,
-                            definition,
-                            instance.Id,
-                            request.EventType,
-                            request.Payload,
-                            cancellationToken);
-                    }
+                    preparedForRole = await _workflowContextService.PrepareForInstanceAsync(
+                        request.TenantId,
+                        definition,
+                        instance.Id,
+                        request.EventType,
+                        request.Payload,
+                        cancellationToken);
+                }
 
-                    var callerBusinessRoles = _businessRoleResolver.ResolveCallerRoles(
+                var stepRoles = currentStep?.AllowedRoles ?? new List<string>();
+                if (stepRoles.Count > 0)
+                {
+                    EnsureCallerHoldsRequiredBusinessRole(
                         definition,
                         instance,
                         preparedForRole?.Payload,
-                        _currentUser.Id);
-                    var holdsEvent = definition.BusinessRoles.Any(role =>
-                        callerBusinessRoles.Contains(role.Name, StringComparer.OrdinalIgnoreCase) &&
-                        role.Capabilities.Any(capability =>
+                        "ContextEventRole",
+                        ResolveBusinessCallerRef(request.ActorId));
+                }
+                else
+                {
+                    var grantedByBusinessRole = definition.BusinessRoles
+                        .SelectMany(role => role.Capabilities)
+                        .Any(capability =>
                             requiredCapabilities.Any(required =>
                                 string.Equals(capability, required, StringComparison.OrdinalIgnoreCase)) ||
-                            string.Equals(capability, "event.publish", StringComparison.OrdinalIgnoreCase)));
-                    if (!holdsEvent)
+                            string.Equals(capability, "event.publish", StringComparison.OrdinalIgnoreCase));
+                    if (grantedByBusinessRole)
                     {
-                        throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
-                            "BusinessEventPermission",
-                            $"Event '{request.EventType}' requires a declared business-context role that grants one of: {string.Join(", ", requiredCapabilities)}.");
+                        var callerBusinessRoles = _businessRoleResolver.ResolveCallerRoles(
+                            definition,
+                            instance,
+                            preparedForRole?.Payload,
+                            ResolveBusinessCallerRef(request.ActorId));
+                        var holdsEvent = definition.BusinessRoles.Any(role =>
+                            callerBusinessRoles.Contains(role.Name, StringComparer.OrdinalIgnoreCase) &&
+                            role.Capabilities.Any(capability =>
+                                requiredCapabilities.Any(required =>
+                                    string.Equals(capability, required, StringComparison.OrdinalIgnoreCase)) ||
+                                string.Equals(capability, "event.publish", StringComparison.OrdinalIgnoreCase)));
+                        if (!holdsEvent)
+                        {
+                            throw new FlowOS.Application.Common.Exceptions.PolicyViolationException(
+                                "BusinessEventPermission",
+                                $"Event '{request.EventType}' requires a declared business-context role that grants one of: {string.Join(", ", requiredCapabilities)}.");
+                        }
                     }
                 }
             }

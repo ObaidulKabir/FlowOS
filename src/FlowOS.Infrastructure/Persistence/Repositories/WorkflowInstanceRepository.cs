@@ -139,6 +139,7 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         CreatedAt = w.CreatedAt,
         CompletedAt = w.CompletedAt,
         ParentWorkflowInstanceId = w.ParentWorkflowInstanceId,
-        ParentStepId = w.ParentStepId
+        ParentStepId = w.ParentStepId,
+        RoleAssignments = new Dictionary<string, string>(w.RoleAssignments, StringComparer.OrdinalIgnoreCase)
     };
 }

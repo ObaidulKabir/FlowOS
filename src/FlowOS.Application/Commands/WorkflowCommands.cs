@@ -38,5 +38,18 @@ public record CompleteTaskCommand(
     Guid WorkflowInstanceId,
     Guid TaskId, // Placeholder for future Task Aggregate
     Guid? CorrelationId = null,
-    string? IdempotencyKey = null
+    string? IdempotencyKey = null,
+    string? ActorId = null
+) : IRequest<bool>, IPolicySecuredCommand;
+
+/// <summary>
+/// Names the one person who holds a declared Assignment business role on a live instance.
+/// A later call for the same role replaces that person. Does not write tenant IAM roles.
+/// </summary>
+[RequiresCapability("workflow.start")]
+public record AssignInstanceRoleCommand(
+    Guid TenantId,
+    Guid WorkflowInstanceId,
+    string RoleName,
+    string AssigneeId
 ) : IRequest<bool>, IPolicySecuredCommand;

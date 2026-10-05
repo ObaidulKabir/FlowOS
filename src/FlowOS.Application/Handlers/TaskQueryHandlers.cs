@@ -46,6 +46,8 @@ public class TaskQueryHandlers :
                     Status = w.Status.ToString(),
                     RequiredRole = requiredRoles.FirstOrDefault() ?? "User",
                     RequiredRoles = requiredRoles,
+                    AssigneeId = ResolveAssigneeId(requiredRoles, w.RoleAssignments),
+                    RoleAssignments = CopyAssignments(w.RoleAssignments),
                     AgentInsights = insights
                         .Where(i => i.WorkflowInstanceId == w.Id)
                         .Select(i => new AgentInsightDto
@@ -90,6 +92,8 @@ public class TaskQueryHandlers :
             Status = workflow.Status.ToString(),
             RequiredRole = requiredRoles.FirstOrDefault() ?? "User",
             RequiredRoles = requiredRoles,
+            AssigneeId = ResolveAssigneeId(requiredRoles, workflow.RoleAssignments),
+            RoleAssignments = CopyAssignments(workflow.RoleAssignments),
             AgentInsights = insights.Select(i => new AgentInsightDto
             {
                 AgentId = i.AgentId,
@@ -127,5 +131,26 @@ public class TaskQueryHandlers :
 
         return requiredRoles.Any(required =>
             callerRoles.Any(caller => string.Equals(caller, required, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static Dictionary<string, string> CopyAssignments(IReadOnlyDictionary<string, string>? assignments)
+        => assignments == null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(assignments, StringComparer.OrdinalIgnoreCase);
+
+    private static string? ResolveAssigneeId(
+        IReadOnlyList<string> requiredRoles,
+        IReadOnlyDictionary<string, string>? assignments)
+    {
+        if (assignments == null || assignments.Count == 0)
+            return null;
+
+        foreach (var role in requiredRoles)
+        {
+            if (assignments.TryGetValue(role, out var assignee) && !string.IsNullOrWhiteSpace(assignee))
+                return assignee;
+        }
+
+        return null;
     }
 }

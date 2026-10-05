@@ -196,7 +196,8 @@ public class ExecutionTools
                 EventType: eventType,
                 CorrelationId: correlationId,
                 Payload: payload,
-                IdempotencyKey: args["idempotencyKey"]?.ToString()
+                IdempotencyKey: args["idempotencyKey"]?.ToString(),
+                ActorId: ReadActorId(args)
             );
 
             var result = await _mediator.Send(command);
@@ -265,7 +266,8 @@ public class ExecutionTools
                 WorkflowInstanceId: instanceId,
                 TaskId: taskId,
                 CorrelationId: correlationId,
-                IdempotencyKey: args["idempotencyKey"]?.ToString()
+                IdempotencyKey: args["idempotencyKey"]?.ToString(),
+                ActorId: ReadActorId(args)
             );
 
             var result = await _mediator.Send(command);
@@ -295,6 +297,79 @@ public class ExecutionTools
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to complete task: {ex.Message}");
         }
+    }
+
+    public async Task<CallToolResult> AssignInstanceRole(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var instanceIdStr = args["workflowInstanceId"]?.ToString() ?? args["instanceId"]?.ToString();
+            if (string.IsNullOrWhiteSpace(instanceIdStr) || !Guid.TryParse(instanceIdStr, out var instanceId))
+            {
+                return McpToolResults.Fail("MCP-ARG-002", "workflowInstanceId must be a valid UUID.");
+            }
+
+            var roleName = args["roleName"]?.ToString();
+            if (string.IsNullOrWhiteSpace(roleName))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "roleName is required.");
+            }
+
+            var assigneeId = args["assigneeId"]?.ToString();
+            if (string.IsNullOrWhiteSpace(assigneeId))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "assigneeId is required.");
+            }
+
+            var command = new AssignInstanceRoleCommand(
+                TenantId: tenantId,
+                WorkflowInstanceId: instanceId,
+                RoleName: roleName.Trim(),
+                AssigneeId: assigneeId.Trim());
+
+            var result = await _mediator.Send(command);
+            if (!result)
+            {
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Workflow instance '{instanceId}' was not found.");
+            }
+
+            return McpToolResults.Success(new
+            {
+                success = true,
+                workflowInstanceId = instanceId,
+                roleName = roleName.Trim(),
+                assigneeId = assigneeId.Trim(),
+                message = $"Role '{roleName.Trim()}' is assigned to '{assigneeId.Trim()}' on this instance. A later call for the same role replaces that person."
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolResults.Fail("MCP-VALIDATION", ex.Message);
+        }
+        catch (PolicyViolationException ex)
+        {
+            return await MapAuthorizationAsync(ex, "assign_instance_role");
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to assign instance role: {ex.Message}");
+        }
+    }
+
+    private static string? ReadActorId(JObject args)
+    {
+        var actorId = args["actorId"]?.ToString();
+        return string.IsNullOrWhiteSpace(actorId) ? null : actorId.Trim();
     }
 
     private Task<CallToolResult> MapAuthorizationAsync(
@@ -464,6 +539,7 @@ public class ExecutionTools
                 currentStepId = detail.CurrentStepId,
                 status = detail.Status,
                 correlationId = detail.CorrelationId,
+                roleAssignments = detail.RoleAssignments,
                 createdAt = detail.CreatedAt,
                 timeline = detail.Timeline,
                 actions = actionLogs?.Select(a => (object)new

@@ -1,7 +1,10 @@
-using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.DTOs;
 using FlowOS.Application.Services;
-using FlowOS.Application.Common.Interfaces;
+using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FlowOS.Api.Controllers;
 
@@ -11,13 +14,13 @@ public class SimulationController : ControllerBase
 {
     private readonly IWorkflowContextSimulationService _simulationService;
     private readonly AiBusinessContextGenerator _aiGenerator;
-    private readonly McpTenantResolver _tenantResolver;
+    private readonly ICurrentUser _currentUser;
 
     public SimulationController(
         IWorkflowContextSimulationService simulationService,
         AiBusinessContextGenerator aiGenerator,
-        McpTenantResolver tenantResolver) =>
-        (_simulationService, _aiGenerator, _tenantResolver) = (simulationService, aiGenerator, tenantResolver);
+        ICurrentUser currentUser) =>
+        (_simulationService, _aiGenerator, _currentUser) = (simulationService, aiGenerator, currentUser);
 
     /// <summary>
     /// Run a simulation given an explicit payload or business‑context.
@@ -29,7 +32,10 @@ public class SimulationController : ControllerBase
         [FromQuery] Guid? tenantId)
     {
         var effectiveTenant = ResolveEffectiveTenant(request.TenantId ?? tenantId);
-        var result = await _simulationService.SimulateAsync(effectiveTenant, request, CancellationToken.None);
+        var result = await _simulationService.SimulateAsync(
+            effectiveTenant,
+            new WorkflowContextSimulationRequest(InitialPayload: request.InitialPayload),
+            CancellationToken.None);
         return Ok(result);
     }
 
@@ -57,16 +63,28 @@ public class SimulationController : ControllerBase
             // Copy optional fields if needed (roles, events, etc.) – keep defaults for now
         };
 
-        var result = await _simulationService.SimulateAsync(effectiveTenant, simRequest, CancellationToken.None);
+        var result = await _simulationService.SimulateAsync(
+            effectiveTenant,
+            new WorkflowContextSimulationRequest(InitialPayload: simRequest.InitialPayload),
+            CancellationToken.None);
         return Ok(result);
     }
 
     private Guid ResolveEffectiveTenant(Guid? target)
     {
-        if (User.IsPlatformAdmin())
+        if (!TenantIdentityRules.IsPlatformAdministrator(_currentUser.TenantId, _currentUser.Roles))
+            return _currentUser.TenantId;
+
+        if (target.HasValue && target.Value != Guid.Empty)
+            return target.Value;
+
+        if (Request.Headers.TryGetValue("x-tenant-id", out var header) &&
+            TenantIdentityRules.TryParseTenant(header.ToString(), out var headerTenant) &&
+            headerTenant != Guid.Empty)
         {
-            return target ?? _tenantResolver.ResolveFromHeader(HttpContext);
+            return headerTenant;
         }
-        return _tenantResolver.ResolveFromHeader(HttpContext);
+
+        return _currentUser.TenantId;
     }
 }

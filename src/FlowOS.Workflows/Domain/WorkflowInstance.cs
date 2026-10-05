@@ -153,13 +153,21 @@ public class WorkflowInstance : IWorkflowInstance
         if (string.IsNullOrWhiteSpace(roleName)) throw new ArgumentException("RoleName is required.", nameof(roleName));
         if (string.IsNullOrWhiteSpace(callerRef)) throw new ArgumentException("CallerRef is required.", nameof(callerRef));
 
-        RoleAssignments[roleName.Trim()] = callerRef.Trim();
+        var next = new Dictionary<string, string>(RoleAssignments, StringComparer.OrdinalIgnoreCase)
+        {
+            [roleName.Trim()] = callerRef.Trim()
+        };
+        RoleAssignments = next;
     }
 
     public void UnassignRole(string roleName)
     {
         if (string.IsNullOrWhiteSpace(roleName)) return;
-        RoleAssignments.Remove(roleName.Trim());
+        if (!RoleAssignments.ContainsKey(roleName.Trim())) return;
+
+        var next = new Dictionary<string, string>(RoleAssignments, StringComparer.OrdinalIgnoreCase);
+        next.Remove(roleName.Trim());
+        RoleAssignments = next;
     }
 
     public int GetPathTravelCount(string edgeKey)

@@ -273,9 +273,10 @@ public static class McpToolDescriptions
                 "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["get_workflow_instance_status"] =
-                "Queries the runtime execution status, current step, current state, and completion timestamps of an active or completed workflow instance. " +
+                "Queries the runtime execution status, current step, current state, completion timestamps, and roleAssignments of an active or completed workflow instance. " +
+                "roleAssignments maps each Assignment business role to the one person stored on this instance (for example Sales to user-123). " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:<WorkflowSummaryDto>}. " +
+                "Returns: {ok:true,data:{id,currentStepId,currentState,status,roleAssignments}}. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"instanceId\":\"55555555-5555-5555-5555-555555555555\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
@@ -388,38 +389,57 @@ public static class McpToolDescriptions
                 "[Lifecycle Step 4: Run Instance] Starts a live runtime execution instance through exactly one workflow or active context-binding selector. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Authorization: requires effective capability workflow.start. For API keys, role permissions are restricted by workflow:start (or *). On MCP-AUTHZ-001 call diagnose_caller_permissions. " +
+                "payload.roleAssignments sets Assignment business roles only at start. After the instance exists, call assign_instance_role. " +
                 "Returns: {ok:true,data:{workflowInstanceId,tenantId,status,correlationId,message}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-INTERNAL. " +
-                "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500}}}",
+                "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500},\"roleAssignments\":{\"Sales\":\"user-123\"}}}",
+
+            ["assign_instance_role"] =
+                "[Lifecycle Step 4: Assign Person] Names the one person who holds a declared Assignment business role on a live workflow instance. " +
+                "Use this after start when the person is not known yet. A later call for the same role replaces that person. SLA timers keep running. " +
+                "Read the stored map back with get_workflow_instance_status or list_workflow_instances (roleAssignments). " +
+                "Expression and Static roles are rejected. This does not write FlowOS tenant IAM roles. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Authorization: requires effective capability workflow.start. " +
+                "Returns: {ok:true,data:{success:true,workflowInstanceId,roleName,assigneeId,message}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"roleName\":\"Sales\",\"assigneeId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["publish_event"] =
                 "[Lifecycle Step 5: State Transition] Publishes an event to advance the state machine and workflow step of an active workflow instance. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Authorization: requires the event-specific runtime capability (or event.publish umbrella); API keys also require event:publish or *. " +
+                "When the waiting step lists AllowedRoles, actorId must be the person stored for one of those roles. A different role that grants the same capability cannot publish. " +
+                "When the step lists no AllowedRoles, actorId must hold a business role that grants the event. " +
+                "A shared tenant API key's caller id is the literal api-key, so omitting actorId does not match an assigned person. Do not send roleAssignments on this call. Timers and Agent: commits are not this person check. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,eventType,message}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-EXEC-001, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["complete_task"] =
                 "[Lifecycle Step 5: Task Execution] Completes a manual or human-in-the-loop task step within an active workflow instance. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Authorization: requires the task/step runtime capability and business-context role; API keys also require task:complete or *. " +
+                "When the waiting step lists AllowedRoles, actorId must be the person stored for one of those roles. A different role cannot complete the task. " +
+                "A shared tenant API key's caller id is the literal api-key. The history line records that person as ActorId. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,taskId,message}}. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"taskId\":\"66666666-6666-6666-6666-666666666666\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"taskId\":\"66666666-6666-6666-6666-666666666666\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["list_workflow_instances"] =
                 "[Telemetry] Lists active and completed workflow instances for the tenant with their current execution status and step. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{instances:[{id,workflowClassName,currentStep,status,createdAt}]}}. " +
+                "Each instance includes roleAssignments, the Assignment role to person map for that instance. " +
+                "Returns: {ok:true,data:{instances:[{id,workflowClassName,currentStep,status,createdAt,roleAssignments}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["get_workflow_history"] =
                 "[Audit & Telemetry] Retrieves the complete chronological audit trail and timeline of events for a workflow instance, " +
                 "including state transitions, step advances, task completions, and AI agent insights. " +
+                "roleAssignments is the current Assignment map. A TaskCompleted timeline entry puts the acting person in keyData.ActorId. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{workflowInstanceId,definitionName,status,timeline:[{eventId,eventType,timestamp,summary,keyData}]}}. " +
+                "Returns: {ok:true,data:{workflowInstanceId,definitionName,status,roleAssignments,timeline:[{eventId,eventType,timestamp,summary,keyData}]}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOT-FOUND, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}",
 
@@ -847,6 +867,7 @@ public static class McpToolDescriptions
             ["grant_role_capability"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
             ["revoke_role_capability"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
             ["start_workflow"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["assign_instance_role"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["publish_event"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["complete_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium")
         };
@@ -859,6 +880,7 @@ public static class McpToolDescriptions
             ["grant_role_capability"] = new[] { "iam.manage" },
             ["revoke_role_capability"] = new[] { "iam.manage" },
             ["start_workflow"] = new[] { "workflow.start" },
+            ["assign_instance_role"] = new[] { "workflow.start" },
             ["publish_event"] = new[] { "event.publish or event.publish.<eventId>" },
             ["complete_task"] = new[] { "task/step required capability" }
         };

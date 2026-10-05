@@ -92,7 +92,8 @@ public partial class WorkflowCommandHandlers
             definition,
             instance,
             preparedContext?.Payload,
-            "ContextTaskRole");
+            "ContextTaskRole",
+            ResolveBusinessCallerRef(request.ActorId));
 
         var domainEvent = new TaskCompleted(request.TenantId, request.TaskId, Guid.Empty);
         
@@ -183,7 +184,7 @@ public partial class WorkflowCommandHandlers
             domainEvent.AddMetadata("ToStep", instance.CurrentStepId);
             domainEvent.AddMetadata("FromState", previousState ?? "Draft");
             domainEvent.AddMetadata("ToState", instance.CurrentState ?? "Draft");
-            AssignActorMetadata(domainEvent);
+            AssignActorMetadata(domainEvent, request.ActorId);
 
             _unitOfWork.Events.Add(domainEvent);
 

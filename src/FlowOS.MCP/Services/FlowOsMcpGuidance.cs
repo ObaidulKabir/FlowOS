@@ -27,7 +27,7 @@ public static class FlowOsMcpGuidance
         - Never strip a trailing slash. Never follow HTTP 301/302 for POST; a slash redirect can switch to http:// and drop the body and API key.
         - Accept: application/json, text/event-stream. Headers: X-MCP-API-Key (or Authorization: Bearer) and x-tenant-id.
         - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com.
-        - Commercial policy: MCP is included on every package (Free through Enterprise). Packages progress Free → Starter → Builder → Team → Growth → Scale → Enterprise, metered on publications, events, and generous MCP calls. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, publish_event, complete_task, publish, activate) require a paid Active plan (stored as Managed Cloud or Enterprise) and return MCP-PLAN-REQUIRED until activated.
+        - Commercial policy: MCP is included on every package (Free through Enterprise). Packages progress Free → Starter → Builder → Team → Growth → Scale → Enterprise, metered on publications, events, and generous MCP calls. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, assign_instance_role, publish_event, complete_task, publish, activate) require a paid Active plan (stored as Managed Cloud or Enterprise) and return MCP-PLAN-REQUIRED until activated.
 
         FlowOS is a dual-kernel enterprise process operating system that strictly separates:
         1. State Authority (Mathematical State Machine) - Controls what state transitions are legally permitted.
@@ -72,10 +72,12 @@ public static class FlowOsMcpGuidance
 
         [Step 5: Drive Workflow Transitions & Inspect Telemetry]
           • Call `publish_event` with `workflowInstanceId` and `eventType` to trigger state transitions (e.g. EVT-SUBMIT).
+          • A business role with resolutionType Assignment holds one person on the instance. Set known people at start with `payload.roleAssignments`. When the person is chosen after start, call `assign_instance_role` with `workflowInstanceId`, `roleName`, and `assigneeId`. Calling it again replaces that person. Expression and Static roles are not written this way. Do not send `roleAssignments` on `publish_event`.
+          • A shared tenant API key's caller id is the literal `api-key`. Pass `actorId` (the person id) on `publish_event` and `complete_task`. When the waiting step lists `AllowedRoles`, that person must be the one stored for one of those roles. A different role that merely grants the same capability cannot act. Omit `actorId` only when the authenticated caller id is already that person. Read the current map from `get_workflow_instance_status` (`roleAssignments`) and from the task inbox (`assigneeId`).
           • Call `complete_task` with `workflowInstanceId` and `taskId` to complete human/manual tasks.
           • When the waiting step is actor `Agent`/`Either`, do not invent the next event in chat. Inspect with `get_agent_context`, then call `run_agent_task` so FlowOS hosts DecisionPacket → tenant LLM (or `flowos-risk`) → AutoCommitPolicy.
           • Call `suggest_agent_action` to run the same agent without publishing (advisory only).
-          • Call `get_workflow_instance_status` or `list_workflow_instances` to inspect runtime status, current step, and execution history.
+          • Call `get_workflow_instance_status` or `list_workflow_instances` to inspect runtime status, current step, and `roleAssignments`. Call `get_workflow_history` for the same map plus the person in a TaskCompleted `keyData.ActorId`.
 
         Tip: Call MCP Prompts (`prompts/list` & `prompts/get`) or read MCP Resources (`resources/list` & `resources/read`) for full templates.
           Preferred prompt: `design_dual_kernel_workflow`. Preferred resource: `flowos://guides/dual-kernel-design`.
@@ -1095,7 +1097,7 @@ public static class FlowOsMcpGuidance
 
         ## Live loop (this is the real agent)
 
-        Runtime tools need a Managed/Enterprise plan (`MCP-PLAN-REQUIRED` on Trial).
+        Runtime tools (`start_workflow`, `assign_instance_role`, `publish_event`, `complete_task`) need a Managed/Enterprise plan (`MCP-PLAN-REQUIRED` on Trial).
 
         1. `start_workflow` with `workflowName: "{WORKFLOW_NAME}"` or the Quote `contextBindingId`.
         2. `publish_event` the **human** gate that reaches {STEP_ID} (QuoteAutoReview: `EVT-SUBMIT` with Amount ≤ 1500). The Agent event (`EVT-ACCEPT`) is **not** this call.

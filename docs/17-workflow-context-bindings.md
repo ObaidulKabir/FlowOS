@@ -218,9 +218,10 @@ to an empty name.
 Each business role declares how its membership is resolved for a running instance
 (`RoleBlueprint.resolutionType`):
 
-* **`Assignment`** (default) — resolved from that instance's own `WorkflowInstance.RoleAssignments`,
-  written by an `AssignRole` step action or an explicit assignment call. Nothing exists until the instance
-  runs and something assigns it.
+* **`Assignment`** (default) — resolved from that instance's own `WorkflowInstance.RoleAssignments`.
+  Set it at start with `payload.roleAssignments`, or later with MCP `assign_instance_role`
+  (`workflowInstanceId`, `roleName`, `assigneeId`). One person per role; a later call replaces that person.
+  Nothing exists until something assigns it. Expression and Static roles are not written by that tool.
 * **`Expression`** — evaluated fresh against the instance's business payload every time
   (`memberExpression`, e.g. `"{{ManagerEmail}}"`). Nothing is ever stored.
 * **`Static`** — a fixed list of caller identifiers (`staticMembers`), overridable per tenant binding via
@@ -228,9 +229,12 @@ Each business role declares how its membership is resolved for a running instanc
 
 At task-completion time (`CompleteTaskCommand`), a step's `AllowedRoles` is checked against
 `IBusinessRoleResolver.ResolveCallerRoles(...)` — evaluated fresh from the instance's own state and
-business payload — never against `ICurrentUser.Roles` (the caller's FlowOS tenant login roles). Tenant
-capability checks still run first via `AuthorizeActivity`. A FlowOS platform Admin can still act on any
-step as an operational override.
+business payload — never against `ICurrentUser.Roles` (the caller's FlowOS tenant login roles). The
+same person id is used when a declared business role grants the capability required by `publish_event`.
+Pass optional `actorId` on both calls when the trusted caller is a shared tenant API key, whose
+authenticated id is the literal `api-key`. Omit `actorId` to keep using the authenticated caller id.
+Tenant capability checks still run first via `AuthorizeActivity`. A FlowOS platform Admin can still act
+on any step as an operational override.
 
 Sandbox seed creates one active binding per sample WorkflowClass. Binding names stay distinct from
 the class-compiled `WorkflowDefinition` name so activation can publish a context-runtime package:

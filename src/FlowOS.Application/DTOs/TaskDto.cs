@@ -10,6 +10,8 @@ public class TaskDto
     public string CurrentStep { get; set; } = string.Empty;
     public string RequiredRole { get; set; } = string.Empty;
     public List<string> RequiredRoles { get; set; } = new();
+    public string? AssigneeId { get; set; }
+    public Dictionary<string, string> RoleAssignments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string Status { get; set; } = string.Empty;
     public object? RelatedEntity { get; set; }
     public List<AgentInsightDto> AgentInsights { get; set; } = new();

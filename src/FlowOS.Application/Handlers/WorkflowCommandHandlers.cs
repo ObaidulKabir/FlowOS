@@ -25,7 +25,8 @@ namespace FlowOS.Application.Handlers;
 public partial class WorkflowCommandHandlers : 
     IRequestHandler<StartWorkflowCommand, Guid>,
     IRequestHandler<PublishEventCommand, bool>,
-    IRequestHandler<CompleteTaskCommand, bool>
+    IRequestHandler<CompleteTaskCommand, bool>,
+    IRequestHandler<AssignInstanceRoleCommand, bool>
 {
     private const string StartWorkflowOperation = "start_workflow";
     private const string PublishEventOperation = "publish_event";
@@ -405,11 +406,28 @@ public partial class WorkflowCommandHandlers :
         "Submitter", "Employee", "Applicant", "Requester", "OrderClerk", "User"
     };
 
+    /// <summary>
+    /// Person id used for business-role membership. A shared tenant API key is the trusted caller
+    /// but its id is the literal "api-key", so the app passes the person as actorId. Agent commits
+    /// stay on the Agent: prefix and keep using the authenticated caller.
+    /// </summary>
+    private string? ResolveBusinessCallerRef(string? actorId)
+    {
+        if (!string.IsNullOrWhiteSpace(actorId) &&
+            !actorId.StartsWith("Agent:", StringComparison.OrdinalIgnoreCase))
+        {
+            return actorId.Trim();
+        }
+
+        return _currentUser.Id;
+    }
+
     private void EnsureCallerHoldsRequiredBusinessRole(
         WorkflowDefinition definition,
         WorkflowInstance instance,
         Dictionary<string, object>? businessPayload,
-        string policyName)
+        string policyName,
+        string? callerRef = null)
     {
         if (definition.BusinessRoles.Count == 0) return;
 
@@ -428,7 +446,7 @@ public partial class WorkflowCommandHandlers :
                 definition,
                 instance,
                 businessPayload,
-                _currentUser.Id);
+                string.IsNullOrWhiteSpace(callerRef) ? _currentUser.Id : callerRef);
             hasRequiredRole = requiredRoles.Any(required =>
                 callerBusinessRoles.Contains(required, StringComparer.OrdinalIgnoreCase));
         }

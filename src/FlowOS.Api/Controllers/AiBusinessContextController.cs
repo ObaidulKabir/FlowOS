@@ -1,6 +1,8 @@
-using Microsoft.AspNetCore.Mvc;
 using FlowOS.Application.DTOs;
 using FlowOS.Application.Services;
+using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FlowOS.Api.Controllers;
 
@@ -9,10 +11,13 @@ namespace FlowOS.Api.Controllers;
 public class AiBusinessContextController : ControllerBase
 {
     private readonly AiBusinessContextGenerator _generator;
-    private readonly McpTenantResolver _tenantResolver;
+    private readonly ICurrentUser _currentUser;
 
-    public AiBusinessContextController(AiBusinessContextGenerator generator, McpTenantResolver tenantResolver) =>
-        (_generator, _tenantResolver) = (generator, tenantResolver);
+    public AiBusinessContextController(AiBusinessContextGenerator generator, ICurrentUser currentUser)
+    {
+        _generator = generator;
+        _currentUser = currentUser;
+    }
 
     /// <summary>
     /// Generates a declarative business‑context (schema + example payload) using an AI agent.
@@ -30,11 +35,19 @@ public class AiBusinessContextController : ControllerBase
 
     private Guid ResolveEffectiveTenant(Guid? target)
     {
-        // Re‑use the same helper logic used in other controllers
-        if (User.IsPlatformAdmin())
+        if (!TenantIdentityRules.IsPlatformAdministrator(_currentUser.TenantId, _currentUser.Roles))
+            return _currentUser.TenantId;
+
+        if (target.HasValue && target.Value != Guid.Empty)
+            return target.Value;
+
+        if (Request.Headers.TryGetValue("x-tenant-id", out var header) &&
+            TenantIdentityRules.TryParseTenant(header.ToString(), out var headerTenant) &&
+            headerTenant != Guid.Empty)
         {
-            return target ?? _tenantResolver.ResolveFromHeader(HttpContext);
+            return headerTenant;
         }
-        return _tenantResolver.ResolveFromHeader(HttpContext);
+
+        return _currentUser.TenantId;
     }
 }

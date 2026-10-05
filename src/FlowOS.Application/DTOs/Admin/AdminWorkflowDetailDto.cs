@@ -14,6 +14,7 @@ public class AdminWorkflowDetailDto
     public string Status { get; set; } = string.Empty;
     public Guid? CorrelationId { get; set; }
     public DateTime CreatedAt { get; set; }
+    public Dictionary<string, string> RoleAssignments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<AdminTimelineEventDto> Timeline { get; set; } = new();
 }
 

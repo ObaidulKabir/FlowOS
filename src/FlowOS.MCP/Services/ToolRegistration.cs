@@ -231,6 +231,9 @@ public static class ToolRegistration
         registry.Register("start_workflow", McpToolDescriptions.For("start_workflow"), McpToolSchemas.StartWorkflow(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.StartWorkflow(args)));
 
+        registry.Register("assign_instance_role", McpToolDescriptions.For("assign_instance_role"), McpToolSchemas.AssignInstanceRole(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.AssignInstanceRole(args)));
+
         registry.Register("publish_event", McpToolDescriptions.For("publish_event"), McpToolSchemas.PublishEvent(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.PublishEvent(args)));
 

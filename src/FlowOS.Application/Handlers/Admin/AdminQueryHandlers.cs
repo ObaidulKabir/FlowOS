@@ -144,6 +144,7 @@ public class AdminQueryHandlers :
             Status = instance.Status.ToString(),
             CorrelationId = instance.CorrelationId,
             CreatedAt = instance.CreatedAt,
+            RoleAssignments = new Dictionary<string, string>(instance.RoleAssignments, StringComparer.OrdinalIgnoreCase),
             Timeline = timeline
         };
     }
@@ -189,6 +190,13 @@ public class AdminQueryHandlers :
                 summary = "Task completed by user";
                 keyData.Add("TaskId", tc.TaskId.ToString());
                 keyData.Add("UserId", tc.CompletedBy.ToString());
+                if (evt.Metadata != null &&
+                    evt.Metadata.TryGetValue("ActorId", out var completedBy) &&
+                    !string.IsNullOrWhiteSpace(completedBy))
+                {
+                    keyData["ActorId"] = completedBy;
+                    summary = $"Task completed by {completedBy}";
+                }
                 break;
             default:
                 summary = $"Event: {evt.EventType}";
