@@ -78,6 +78,7 @@ builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassManager, FlowOS.
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassVersionManager, FlowOS.Domain.Services.WorkflowClassVersionManager>();
 builder.Services.AddScoped<FlowOS.Application.Common.Interfaces.IWorkflowCopilotService, FlowOS.Application.Services.WorkflowCopilotService>();
 builder.Services.AddScoped<IWorkflowTimeTravelService, WorkflowTimeTravelService>();
+builder.Services.AddScoped<AiBusinessContextGenerator>();
 
 builder.Services.AddMediatR(cfg =>
 {
