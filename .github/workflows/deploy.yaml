@@ -69,17 +69,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Build and Deploy Containers 
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22 
-          command_timeout: 30m
-          script: |
-            set -euo pipefail
-            cd ${{ secrets.APP_PATH }}
-            export FLOWOS_BUILD="$(git rev-list --count HEAD 2>/dev/null || echo ${{ github.run_number }})"
-            export VITE_FLOWOS_BUILD="$FLOWOS_BUILD"
-            docker builder prune --filter "until=12h" -f
-            docker compose -f docker-compose.prod.yml up --build -d
+        run: |
+          cat << 'EOF' > build_deploy.sh
+          set -ex
+          cd "${{ secrets.APP_PATH }}"
+          export FLOWOS_BUILD="$(git rev-list --count HEAD 2>/dev/null || echo ${{ github.run_number }})"
+          export VITE_FLOWOS_BUILD="$FLOWOS_BUILD"
+          docker builder prune --filter "until=12h" -f
+          docker compose -f docker-compose.prod.yml up --build -d
+          EOF
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < build_deploy.sh > build_deploy_log.txt 2>&1 || (
+            echo "BUILD AND DEPLOY FAILED. LOG:" > build_error_body.txt
+            cat build_deploy_log.txt >> build_error_body.txt
+            gh issue create --title "Build and Deploy Failure Log" --body-file build_error_body.txt --repo ObaidulKabir/FlowOS
+            exit 1
+          )
+          cat build_deploy_log.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
