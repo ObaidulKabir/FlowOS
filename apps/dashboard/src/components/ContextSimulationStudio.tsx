@@ -88,6 +88,7 @@ export const ContextSimulationStudio: React.FC<Props> = ({
   const [busy, setBusy] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
+const [payloadError, setPayloadError] = useState<string>();
   const [copied, setCopied] = useState(false);
 
   const selectedBinding = useMemo(
@@ -360,12 +361,20 @@ export const ContextSimulationStudio: React.FC<Props> = ({
               <h3 className="text-sm font-bold text-white">2. Initial source payload</h3>
               <span className="text-[10px] text-slate-500">Seeded from schema</span>
             </div>
-            <textarea
-              value={initialPayloadJson}
-              onChange={event => setInitialPayloadJson(event.target.value)}
-              spellCheck={false}
-              className="min-h-[180px] w-full rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-[11px] text-slate-200"
-            />
+                          <textarea
+                value={initialPayloadJson}
+                onChange={event => {
+                  const v = event.target.value;
+                  setInitialPayloadJson(v);
+                  try { JSON.parse(v); setPayloadError(undefined); }
+                  catch { setPayloadError('Invalid JSON'); }
+                }}
+                spellCheck={false}
+                className={`min-h-[180px] w-full rounded-xl border ${payloadError ? 'border-rose-600' : 'border-slate-700'} bg-slate-950 p-3 font-mono text-[11px] text-slate-200`}
+              />
+              {payloadError && (
+                <p className="mt-1 text-xs text-rose-400">{payloadError}</p>
+              )}
           </div>
 
           <div>
