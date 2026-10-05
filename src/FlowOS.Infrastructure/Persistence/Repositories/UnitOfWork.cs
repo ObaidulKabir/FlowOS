@@ -17,6 +17,7 @@ public class UnitOfWork : IUnitOfWork
         WorkflowClasses = new WorkflowClassRepository(context);
         Events = new DomainEventRepository(context);
         Roles = new RoleRepository(context);
+        Teams = new TeamRepository(context);
         StateMachines = new StateMachineDefinitionRepository(context);
         EventDefinitions = new EventDefinitionRepository(context);
         AgentInsights = new AgentInsightRepository(context);
@@ -30,6 +31,7 @@ public class UnitOfWork : IUnitOfWork
     public IWorkflowClassRepository WorkflowClasses { get; }
     public IDomainEventRepository Events { get; }
     public IRoleRepository Roles { get; }
+    public ITeamRepository Teams { get; }
     public IStateMachineDefinitionRepository StateMachines { get; }
     public IEventDefinitionRepository EventDefinitions { get; }
     public IAgentInsightRepository AgentInsights { get; }

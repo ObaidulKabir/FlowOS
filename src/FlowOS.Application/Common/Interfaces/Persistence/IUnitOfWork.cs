@@ -13,6 +13,7 @@ public interface IUnitOfWork
     IWorkflowClassRepository WorkflowClasses { get; }
     IDomainEventRepository Events { get; }
     IRoleRepository Roles { get; }
+    ITeamRepository Teams { get; }
     IStateMachineDefinitionRepository StateMachines { get; }
     IEventDefinitionRepository EventDefinitions { get; }
     IAgentInsightRepository AgentInsights { get; }

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Common.Interfaces.Persistence;
+using FlowOS.Core.Interfaces;
 using FlowOS.StateMachines.Engine;
 using FlowOS.Workflows.Domain;
 
@@ -10,7 +13,16 @@ namespace FlowOS.Application.Services;
 /// <inheritdoc cref="IBusinessRoleResolver"/>
 public class BusinessRoleResolver : IBusinessRoleResolver
 {
-    public IReadOnlyList<string> ResolveCallerRoles(
+    private readonly ITeamRepository? _teamRepository;
+    private readonly ICurrentUser? _currentUser;
+
+    public BusinessRoleResolver(ITeamRepository? teamRepository = null, ICurrentUser? currentUser = null)
+    {
+        _teamRepository = teamRepository;
+        _currentUser = currentUser;
+    }
+
+    public async Task<IReadOnlyList<string>> ResolveCallerRolesAsync(
         WorkflowDefinition definition,
         WorkflowInstance instance,
         Dictionary<string, object>? businessPayload,
@@ -25,7 +37,7 @@ public class BusinessRoleResolver : IBusinessRoleResolver
         var held = new List<string>();
         foreach (var role in definition.BusinessRoles)
         {
-            if (HoldsRole(role, instance, businessPayload, callerRef))
+            if (await HoldsRoleAsync(role, instance, businessPayload, callerRef))
             {
                 held.Add(role.Name);
             }
@@ -34,7 +46,7 @@ public class BusinessRoleResolver : IBusinessRoleResolver
         return held;
     }
 
-    private static bool HoldsRole(
+    private async Task<bool> HoldsRoleAsync(
         BusinessRoleDefinition role,
         WorkflowInstance instance,
         Dictionary<string, object>? businessPayload,
@@ -57,6 +69,27 @@ public class BusinessRoleResolver : IBusinessRoleResolver
                 businessPayload ?? new Dictionary<string, object>());
             return !string.IsNullOrWhiteSpace(resolved) &&
                    string.Equals(resolved, callerRef, StringComparison.OrdinalIgnoreCase);
+        }
+        
+        if (string.Equals(resolutionType, "Team", StringComparison.OrdinalIgnoreCase))
+        {
+            // If the role is resolved via Teams, we need the caller's actual Guid to check DB membership.
+            // Since CallerRef is string, we assume it's the TenantUserId Guid as string, 
+            // or we use ICurrentUser if available.
+            if (!Guid.TryParse(callerRef, out var userId) && _currentUser != null && Guid.TryParse(_currentUser.Id, out var curId))
+            {
+                userId = curId;
+            }
+            
+            if (userId != Guid.Empty && _teamRepository != null)
+            {
+                // To authorize as a Team, the user must be in a team that holds ALL of the role's required capabilities.
+                return await _teamRepository.IsUserAuthorizedForCapabilitiesAsync(
+                    instance.TenantId, 
+                    userId, 
+                    role.Capabilities);
+            }
+            return false;
         }
 
         // "Assignment" (default): nothing exists until the running instance itself records who

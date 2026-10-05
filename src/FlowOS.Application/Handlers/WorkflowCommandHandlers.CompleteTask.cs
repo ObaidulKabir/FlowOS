@@ -88,7 +88,7 @@ public partial class WorkflowCommandHandlers
                 cancellationToken);
         }
 
-        EnsureCallerHoldsRequiredBusinessRole(
+        await EnsureCallerHoldsRequiredBusinessRoleAsync(
             definition,
             instance,
             preparedContext?.Payload,

@@ -132,7 +132,7 @@ public partial class WorkflowCommandHandlers
                 var stepRoles = currentStep?.AllowedRoles ?? new List<string>();
                 if (stepRoles.Count > 0)
                 {
-                    EnsureCallerHoldsRequiredBusinessRole(
+                    await EnsureCallerHoldsRequiredBusinessRoleAsync(
                         definition,
                         instance,
                         preparedForRole?.Payload,
@@ -149,7 +149,7 @@ public partial class WorkflowCommandHandlers
                             string.Equals(capability, "event.publish", StringComparison.OrdinalIgnoreCase));
                     if (grantedByBusinessRole)
                     {
-                        var callerBusinessRoles = _businessRoleResolver.ResolveCallerRoles(
+                        var callerBusinessRoles = await _businessRoleResolver.ResolveCallerRolesAsync(
                             definition,
                             instance,
                             preparedForRole?.Payload,
@@ -249,6 +249,24 @@ public partial class WorkflowCommandHandlers
         if (result.Success)
         {
             preparedContext?.CommitDelta();
+
+            if (result.Message != null && result.Message.Contains("[SLA Reminder Fired]"))
+            {
+                // This is an SLA Reminder. The step does not change. Do not cancel the timer or fire Entry/Exit hooks.
+                if (request.EventType.Contains("ESCALAT", StringComparison.OrdinalIgnoreCase) && _teamEscalationService != null)
+                {
+                    await _teamEscalationService.TryEscalateTeamRolesAsync(definition, instance, cancellationToken);
+                }
+
+                _unitOfWork.Events.Add(domainEvent);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                
+                if (_idempotencyService != null && !string.IsNullOrWhiteSpace(request.IdempotencyKey))
+                {
+                    await _idempotencyService.CompleteAsync(request.TenantId, PublishEventOperation, request.IdempotencyKey, true, cancellationToken);
+                }
+                return true;
+            }
 
             if (_timerService != null && !string.IsNullOrEmpty(previousStepId))
             {

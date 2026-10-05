@@ -22,6 +22,7 @@ public class FlowOSDbContext : DbContext
     public DbSet<EventDefinition> EventDefinitions { get; set; }
     public DbSet<AgentInsightReadModel> AgentInsights { get; set; }
     public DbSet<Role> Roles { get; set; }
+    public DbSet<Team> Teams { get; set; }
     public DbSet<Policy> Policies { get; set; }
     public DbSet<WorkflowClass> WorkflowClasses { get; set; } // Added WorkflowClass
     public DbSet<Notification> Notifications { get; set; } // Add this

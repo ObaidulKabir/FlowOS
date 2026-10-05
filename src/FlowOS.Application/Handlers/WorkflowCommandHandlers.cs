@@ -45,6 +45,7 @@ public partial class WorkflowCommandHandlers :
     private readonly IWorkflowExecutionContextService? _workflowContextService;
     private readonly IAgentTaskQueue? _agentTaskQueue;
     private readonly IBusinessRoleResolver? _businessRoleResolver;
+    private readonly FlowOS.Application.Services.TeamEscalationService? _teamEscalationService;
 
     public WorkflowCommandHandlers(
         IUnitOfWork unitOfWork,
@@ -59,7 +60,8 @@ public partial class WorkflowCommandHandlers :
         IWorkflowExecutionContextService? workflowContextService = null,
         IAgentTaskQueue? agentTaskQueue = null,
         IActivityAuthorizationService? activityAuthorization = null,
-        IBusinessRoleResolver? businessRoleResolver = null)
+        IBusinessRoleResolver? businessRoleResolver = null,
+        FlowOS.Application.Services.TeamEscalationService? teamEscalationService = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
@@ -74,6 +76,7 @@ public partial class WorkflowCommandHandlers :
         _workflowContextService = workflowContextService;
         _agentTaskQueue = agentTaskQueue;
         _businessRoleResolver = businessRoleResolver;
+        _teamEscalationService = teamEscalationService;
     }
 
 
@@ -422,7 +425,7 @@ public partial class WorkflowCommandHandlers :
         return _currentUser.Id;
     }
 
-    private void EnsureCallerHoldsRequiredBusinessRole(
+    private async Task EnsureCallerHoldsRequiredBusinessRoleAsync(
         WorkflowDefinition definition,
         WorkflowInstance instance,
         Dictionary<string, object>? businessPayload,
@@ -442,7 +445,7 @@ public partial class WorkflowCommandHandlers :
         var hasRequiredRole = false;
         if (_businessRoleResolver != null)
         {
-            var callerBusinessRoles = _businessRoleResolver.ResolveCallerRoles(
+            var callerBusinessRoles = await _businessRoleResolver.ResolveCallerRolesAsync(
                 definition,
                 instance,
                 businessPayload,

@@ -18,7 +18,7 @@ public interface IBusinessRoleResolver
     /// against the instance's own <see cref="WorkflowInstance.RoleAssignments"/> and/or
     /// <paramref name="businessPayload"/> depending on each role's ResolutionType.
     /// </summary>
-    IReadOnlyList<string> ResolveCallerRoles(
+    Task<IReadOnlyList<string>> ResolveCallerRolesAsync(
         WorkflowDefinition definition,
         WorkflowInstance instance,
         Dictionary<string, object>? businessPayload,

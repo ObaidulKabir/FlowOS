@@ -1,17 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <ItemGroup>
-    <ProjectReference Include="..\FlowOS.Domain\FlowOS.Domain.csproj" />
-    <ProjectReference Include="..\FlowOS.Events\FlowOS.Events.csproj" />
-    <ProjectReference Include="..\FlowOS.StateMachines\FlowOS.StateMachines.csproj" />
-    <ProjectReference Include="..\FlowOS.Workflows\FlowOS.Workflows.csproj" />
-    <ProjectReference Include="..\FlowOS.Security\FlowOS.Security.csproj" />
-    <ProjectReference Include="..\FlowOS.Agents\FlowOS.Agents.csproj" />
-    <ProjectReference Include="..\FlowOS.Core\FlowOS.Core.csproj" />
+    <ProjectReference Include="..\\FlowOS.Domain\\FlowOS.Domain.csproj" />
+    <ProjectReference Include="..\\FlowOS.Events\\FlowOS.Events.csproj" />
+    <ProjectReference Include="..\\FlowOS.StateMachines\\FlowOS.StateMachines.csproj" />
+    <ProjectReference Include="..\\FlowOS.Workflows\\FlowOS.Workflows.csproj" />
+    <ProjectReference Include="..\\FlowOS.Security\\FlowOS.Security.csproj" />
+    <ProjectReference Include="..\\FlowOS.Agents\\FlowOS.Agents.csproj" />
+    <ProjectReference Include="..\\FlowOS.Core\\FlowOS.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MediatR" Version="12.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -19,5 +20,4 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
 </Project>
