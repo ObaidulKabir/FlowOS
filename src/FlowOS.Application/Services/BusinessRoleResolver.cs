@@ -94,7 +94,41 @@ public class BusinessRoleResolver : IBusinessRoleResolver
 
         // "Assignment" (default): nothing exists until the running instance itself records who
         // holds the role — see WorkflowInstance.AssignRole.
-        return instance.RoleAssignments.TryGetValue(role.Name, out var assignee) &&
-               string.Equals(assignee, callerRef, StringComparison.OrdinalIgnoreCase);
+        if (instance.RoleAssignments.TryGetValue(role.Name, out var assignee))
+        {
+            if (string.Equals(assignee, callerRef, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Handle system-generated team assignments (team:{teamId}:{hierarchyOrder})
+            if (assignee.StartsWith("team:", StringComparison.OrdinalIgnoreCase) && _teamRepository != null)
+            {
+                var parts = assignee.Split(':');
+                if (parts.Length == 3 && 
+                    Guid.TryParse(parts[1], out var teamId) && 
+                    int.TryParse(parts[2], out var requiredOrder))
+                {
+                    if (!Guid.TryParse(callerRef, out var userId) && _currentUser != null && Guid.TryParse(_currentUser.Id, out var curId))
+                    {
+                        userId = curId;
+                    }
+
+                    if (userId != Guid.Empty)
+                    {
+                        var team = await _teamRepository.GetByIdAsync(instance.TenantId, teamId);
+                        if (team != null)
+                        {
+                            var member = team.Members.FirstOrDefault(m => m.TenantUserId == userId);
+                            // The user is authorized if they are in the team and at or above the assigned hierarchy level
+                            if (member != null && member.HierarchyOrder >= requiredOrder)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return false;
     }
 }

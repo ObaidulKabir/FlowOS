@@ -101,14 +101,14 @@ public sealed class TenantTeamMcpTools
                 {
                     int order = token["order"]?.Value<int>() ?? 0;
                     string levelName = token["name"]?.ToString() ?? $"Level {order}";
-                    hierarchyLevels.Add(new TeamHierarchyLevel(team.Id, levelName, order));
+                    hierarchyLevels.Add(new TeamHierarchyLevel(levelName, order));
                 }
             }
             else
             {
                 // Default minimum hierarchy
-                hierarchyLevels.Add(new TeamHierarchyLevel(team.Id, "Member", 0));
-                hierarchyLevels.Add(new TeamHierarchyLevel(team.Id, "Manager", 1));
+                hierarchyLevels.Add(new TeamHierarchyLevel("Member", 0));
+                hierarchyLevels.Add(new TeamHierarchyLevel("Manager", 1));
             }
 
             team.SetHierarchy(hierarchyLevels);
