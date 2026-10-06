@@ -72,6 +72,7 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
   let token = session.token?.trim() || undefined;
   let apiKey = session.apiKey?.trim() || undefined;
   let tenantId = session.tenantId;
+  const hasExplicitTenantContext = Boolean(tenantId && !isPlaygroundTenant(tenantId));
 
   if (token && tokenIsUnusable(token)) {
     token = undefined;
@@ -87,9 +88,9 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
 
   if (isPlaygroundSession(session, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
     apiKey = apiKey || DEMO_API_KEY;
-    tenantId = DEMO_TENANT_ID;
+    tenantId = hasExplicitTenantContext ? tenantId : DEMO_TENANT_ID;
     token = undefined;
-  } else if (isDemoApiKey(apiKey)) {
+  } else if (isDemoApiKey(apiKey) && !hasExplicitTenantContext) {
     tenantId = DEMO_TENANT_ID;
     token = undefined;
   }
@@ -945,5 +946,4 @@ export interface UpsertPluginBindingRequest {
   isEnabled?: boolean;
   configuration?: Record<string, unknown>;
 }
-
 

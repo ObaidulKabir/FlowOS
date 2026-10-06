@@ -73,13 +73,21 @@ function App() {
   };
 
   const handleSwitchToTenant = () => {
+    const current = getAuthSession();
+    const sandbox = getDefaultSandboxSession();
+    const hasLiveCredentials = Boolean(current.apiKey?.trim() || current.token?.trim());
+    const tenantName =
+      current.tenantName && current.tenantName !== 'Platform Administrator'
+        ? current.tenantName
+        : sandbox.tenantName;
     const tenantSession: AuthSession = {
       role: 'Tenant',
-      tenantId: '22222222-2222-2222-2222-222222222222',
-      tenantName: 'Demo Client Tenant',
-      apiKey: 'flowos_prod_secret_key_32_chars_min',
-      username: 'demo-tenant-user',
-      isSandbox: true,
+      tenantId: current.tenantId || sandbox.tenantId,
+      tenantName,
+      apiKey: hasLiveCredentials ? current.apiKey : sandbox.apiKey,
+      token: hasLiveCredentials ? current.token : undefined,
+      username: current.username || 'demo-tenant-user',
+      isSandbox: hasLiveCredentials ? current.isSandbox : true,
       isEmailVerified: true
     };
     setSession(setAuthSession(tenantSession));
