@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult, TenantDto, WorkflowClassStatus } from '../types';
-import { api, setActiveTenantId } from '../api/client';
+import { api } from '../api/client';
 import { TenantManager } from './TenantManager';
 import { WorkflowTable } from './WorkflowTable';
 import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
@@ -23,7 +23,7 @@ import {
 interface Props {
   session: AuthSession;
   onGoHome: () => void;
-  onSwitchRole: () => void;
+  onSwitchRole: (tenantContext?: { tenantId: string; tenantName?: string }) => void;
   onRegister: () => void;
   onSignOut: () => void;
   mcpUrl: string;
@@ -136,11 +136,13 @@ export const AdminDashboard: React.FC<Props> = ({
   };
 
   const handleSwitchToTenantView = () => {
-    if (selectedTenantFilter) {
-      const selectedTenant = tenants.find(item => item.tenantId === selectedTenantFilter);
-      setActiveTenantId(selectedTenantFilter, selectedTenant?.name);
+    if (!selectedTenantFilter) {
+      onSwitchRole();
+      return;
     }
-    onSwitchRole();
+
+    const selectedTenant = tenants.find(item => item.tenantId === selectedTenantFilter);
+    onSwitchRole({ tenantId: selectedTenantFilter, tenantName: selectedTenant?.name });
   };
 
   return (

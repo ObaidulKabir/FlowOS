@@ -72,22 +72,25 @@ function App() {
     setCurrentView('dashboard');
   };
 
-  const handleSwitchToTenant = () => {
+  const handleSwitchToTenant = (tenantContext?: { tenantId: string; tenantName?: string }) => {
     const current = getAuthSession();
     const sandbox = getDefaultSandboxSession();
-    const hasLiveCredentials = Boolean(current.apiKey?.trim() || current.token?.trim());
+    const hasPortableTenantContext = Boolean(current.token?.trim()) && current.isSandbox !== true;
     const tenantName =
-      current.tenantName && current.tenantName !== 'Platform Administrator'
+      tenantContext?.tenantName ||
+      (current.tenantName && current.tenantName !== 'Platform Administrator'
         ? current.tenantName
-        : sandbox.tenantName;
+        : sandbox.tenantName);
     const tenantSession: AuthSession = {
       role: 'Tenant',
-      tenantId: current.tenantId || sandbox.tenantId,
+      tenantId: hasPortableTenantContext
+        ? (tenantContext?.tenantId || current.tenantId || sandbox.tenantId)
+        : sandbox.tenantId,
       tenantName,
-      apiKey: hasLiveCredentials ? current.apiKey : sandbox.apiKey,
-      token: hasLiveCredentials ? current.token : undefined,
+      apiKey: hasPortableTenantContext ? current.apiKey : sandbox.apiKey,
+      token: hasPortableTenantContext ? current.token : undefined,
       username: current.username || 'demo-tenant-user',
-      isSandbox: hasLiveCredentials ? current.isSandbox : true,
+      isSandbox: hasPortableTenantContext ? current.isSandbox : true,
       isEmailVerified: true
     };
     setSession(setAuthSession(tenantSession));
