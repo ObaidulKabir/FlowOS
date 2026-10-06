@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import { 
+  Check,
   GitCommit, 
   Shield, 
   Layers,
@@ -191,6 +192,9 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
   });
 
   const activeStep = steps.find(s => s.stepId.toLowerCase() === (currentStepId || '').toLowerCase());
+  const workflowFinished =
+    String(instanceStatus || '').toLowerCase() === 'completed' ||
+    ['end', 'none'].includes(String(currentStepId || '').trim().toLowerCase());
 
   const safeId = (id: string) => (id || '').toString().replace(/[^a-zA-Z0-9_]/g, '_');
 
@@ -198,6 +202,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     let chart = 'flowchart TD\n';
     chart += 'classDef current fill:#f59e0b,stroke:#b45309,color:#000,stroke-width:3px\n';
     chart += 'classDef completed fill:#0f766e,stroke:#047857,color:#fff\n';
+    chart += 'classDef reached fill:#059669,stroke:#34d399,color:#fff,stroke-width:3px\n';
     chart += 'classDef pending fill:#1e293b,stroke:#334155,color:#cbd5e1\n\n';
 
     const activeTokens = (currentStepId || '')
@@ -243,6 +248,28 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
          displayLabel += `<br/>⚡ ${step.totalHooks} Hook${step.totalHooks > 1 ? 's' : ''}`;
       }
       chart += `  ${safeId(step.stepId)}${shapeStart}"${displayLabel}"${shapeEnd}${className}\n`;
+    });
+
+    const knownIds = new Set(orderedSteps.map(step => step.stepId.toLowerCase()));
+    const endTargets = new Set<string>();
+    const noteEnd = (target: string) => {
+      const key = String(target || '').trim();
+      if (!key) return;
+      const normalized = key.toLowerCase();
+      if ((normalized === 'end' || normalized === 'none') && !knownIds.has(normalized)) {
+        endTargets.add(key);
+      }
+    };
+    orderedSteps.forEach(step => {
+      Object.values(step.nextSteps).forEach(target => noteEnd(String(target)));
+      Object.values(step.conditions).forEach(target => noteEnd(String(target)));
+    });
+    const activeIsEnd = activeTokens.some(token => token === 'end' || token === 'none');
+    if (activeIsEnd) endTargets.add('END');
+    const workflowFinished =
+      String(instanceStatus || '').toLowerCase() === 'completed' || activeIsEnd;
+    endTargets.forEach(target => {
+      chart += `  ${safeId(target)}(((END)))${workflowFinished ? ':::reached' : ':::pending'}\n`;
     });
 
     chart += '\n';
@@ -353,17 +380,31 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
 
       {/* Live Instance Status Banner */}
       {currentStepId && (
-        <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className={`rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 border ${
+          workflowFinished
+            ? 'bg-emerald-950/50 border-emerald-500/40'
+            : 'bg-slate-900/90 border-slate-700/80'
+        }`}>
           <div className="flex items-center gap-3">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-            </span>
+            {workflowFinished ? (
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-slate-950">
+                <Check size={14} />
+              </span>
+            ) : (
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+              </span>
+            )}
             <div>
               <div className="text-xs font-semibold text-white flex flex-wrap items-center gap-2">
-                <span>Active Execution Step{(currentStepId || '').includes(',') ? 's' : ''}:</span>
+                <span>{workflowFinished ? 'Workflow reached' : `Active Execution Step${(currentStepId || '').includes(',') ? 's' : ''}:`}</span>
                 {(currentStepId || '').split(',').map((tok, tIdx) => (
-                  <span key={tIdx} className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-xs border border-amber-500/30">
+                  <span key={tIdx} className={`px-2 py-0.5 rounded font-mono text-xs border ${
+                    workflowFinished
+                      ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  }`}>
                     {tok.trim()}
                   </span>
                 ))}
@@ -376,17 +417,23 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
                     </span>
                   </>
                 )}
-                <span className="text-slate-500">•</span>
-                <span>Active Role:</span>
-                <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-xs border border-indigo-500/30 flex items-center gap-1 font-semibold">
-                  <UserCheck size={12} className="text-indigo-400" />
-                  {activeStep?.roles && activeStep.roles.length > 0 
-                    ? activeStep.roles.join(', ') 
-                    : (activeStep?.stepType.toLowerCase().includes('human') ? 'Unassigned' : 'System')}
-                </span>
+                {!workflowFinished && (
+                  <>
+                    <span className="text-slate-500">•</span>
+                    <span>Active Role:</span>
+                    <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-xs border border-indigo-500/30 flex items-center gap-1 font-semibold">
+                      <UserCheck size={12} className="text-indigo-400" />
+                      {activeStep?.roles && activeStep.roles.length > 0 
+                        ? activeStep.roles.join(', ') 
+                        : (activeStep?.stepType.toLowerCase().includes('human') ? 'Unassigned' : 'System')}
+                    </span>
+                  </>
+                )}
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                {activeStep?.roles && activeStep.roles.length > 0 
+                {workflowFinished
+                  ? `Both kernels are finished. Workflow step is END${currentState ? ` and the state machine is ${currentState}` : ''}.`
+                  : activeStep?.roles && activeStep.roles.length > 0 
                   ? `Pausing in engine: Awaiting Human Task sign-off by role [${activeStep.roles.join(', ')}]`
                   : activeStep?.stepType.toLowerCase().includes('human')
                   ? `Pausing in engine: Awaiting Human Task sign-off (Any Role)`

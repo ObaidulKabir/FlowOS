@@ -132,6 +132,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     '';
   const [currentStepId, setCurrentStepId] = useState<string>(initialStartStepId);
   const [currentState, setCurrentState] = useState<string>(initialLegalState);
+  const [completedStepIds, setCompletedStepIds] = useState<string[]>([]);
   const [history, setHistory] = useState<string[]>([]);
   const [activeSideTab, setActiveSideTab] = useState<'controls' | 'context'>('controls');
 
@@ -406,6 +407,19 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return !key || key === 'end' || key === 'none';
   };
 
+  const rememberCompletedSteps = (stepIds: string[]) => {
+    setCompletedStepIds(prev => {
+      const next = [...prev];
+      stepIds.forEach(stepId => {
+        const key = String(stepId || '').trim();
+        if (!key || isTerminalId(key)) return;
+        if (next.some(existing => existing.toLowerCase() === key.toLowerCase())) return;
+        next.push(key);
+      });
+      return next;
+    });
+  };
+
   const isAutoCloseStep = (step: any) => {
     if (!step) return false;
     const type = String(getProp(step, 'stepType', 'StepType') || '').toLowerCase();
@@ -609,6 +623,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const resetSimulation = () => {
     setCurrentStepId(startStepId);
     setCurrentState(initialState);
+    setCompletedStepIds([]);
     const startStep = rawSteps.find((s: any) => 
       (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (startStepId || '').toLowerCase()
     );
@@ -750,6 +765,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
+    const departed = [currentStepId];
     let hopId = targetStepId;
     let hops = 0;
     while (hops < 100 && !isTerminalId(hopId)) {
@@ -759,6 +775,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       const decisionTarget = resolveDecisionTarget(hopStep);
       if (decisionTarget) {
         newLogs.push(`[Role: System] Auto-advanced Decision -> ${decisionTarget} (from ${hopId})`);
+        departed.push(hopId);
         hopId = decisionTarget;
         hops += 1;
         continue;
@@ -768,6 +785,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       newLogs.push(
         `[Role: System] Auto-advanced "${route.outcome}" -> Step: ${route.target} (close-out from ${hopId})`
       );
+      departed.push(hopId);
       hopId = route.target;
       hops += 1;
     }
@@ -776,6 +794,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       newLogs.push('[SYSTEM] Reached End of Workflow.');
     }
 
+    rememberCompletedSteps(departed);
     setHistory(prev => [...prev, ...newLogs]);
     setCurrentStepId(hopId);
   };
@@ -916,6 +935,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
+    const departed = [currentStepId];
     let hopId = workStepId;
     let hops = 0;
     while (hops < 100 && !isTerminalId(hopId)) {
@@ -925,6 +945,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       const decisionTarget = resolveDecisionTarget(hopStep);
       if (decisionTarget) {
         newLogs.push(`[Role: System] Auto-advanced Decision -> ${decisionTarget} (from ${hopId})`);
+        departed.push(hopId);
         hopId = decisionTarget;
         hops += 1;
         continue;
@@ -934,6 +955,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       newLogs.push(
         `[Role: System] Auto-advanced "${route.outcome}" -> Step: ${route.target} (close-out from ${hopId})`
       );
+      departed.push(hopId);
       hopId = route.target;
       hops += 1;
     }
@@ -941,6 +963,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       hopId = hopId?.trim() ? hopId : 'END';
       newLogs.push('[SYSTEM] Reached End of Workflow.');
     }
+    rememberCompletedSteps(departed);
 
     const landedStep = rawSteps.find((s: any) =>
       (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
@@ -1545,7 +1568,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
            <WorkflowGraphVisualizer 
               definition={pack} 
               currentStepId={currentStepId} 
-              currentState={currentState} 
+              currentState={currentState}
+              instanceStatus={isSimulationComplete ? 'Completed' : 'Running'}
+              completedSteps={completedStepIds}
               initialView="both" 
            />
         </div>
@@ -1580,14 +1605,16 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Active Context</h4>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
-                    isDecisionStep || Object.keys(rawConditions).length > 0
+                    isSimulationComplete
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : isDecisionStep || Object.keys(rawConditions).length > 0
                       ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
                       : isHumanTask 
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' 
                       : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                   }`}>
-                    {isDecisionStep || Object.keys(rawConditions).length > 0 ? <Sparkles size={11} /> : isHumanTask ? <UserCheck size={11} /> : <Cpu size={11} />}
-                    {isDecisionStep || Object.keys(rawConditions).length > 0 ? 'Decision Step' : isHumanTask ? 'Human Task' : 'Automated Action'}
+                    {isSimulationComplete ? <Check size={11} /> : isDecisionStep || Object.keys(rawConditions).length > 0 ? <Sparkles size={11} /> : isHumanTask ? <UserCheck size={11} /> : <Cpu size={11} />}
+                    {isSimulationComplete ? 'Reached END' : isDecisionStep || Object.keys(rawConditions).length > 0 ? 'Decision Step' : isHumanTask ? 'Human Task' : 'Automated Action'}
                   </span>
                 </div>
 
