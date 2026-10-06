@@ -135,6 +135,13 @@ export const TenantDashboard: React.FC<Props> = ({
   const [startWorkflowName, setStartWorkflowName] = useState('ExpenseApprovalV2');
   const [startingInstance, setStartingInstance] = useState(false);
 
+  // Pre-fill the selected blueprint name when launching from the workspace
+  useEffect(() => {
+    if (showStartModal && selectedBlueprint && !isCreatingBlueprint) {
+      setStartWorkflowName(selectedBlueprint.name);
+    }
+  }, [showStartModal, selectedBlueprint, isCreatingBlueprint]);
+
   const [simulationTarget, setSimulationTarget] = useState<{
     bindingId?: string;
     revision?: 'draft' | 'active';
@@ -1158,55 +1165,14 @@ export const TenantDashboard: React.FC<Props> = ({
             <div className="space-y-4 text-xs">
               <div>
                 <label className="text-slate-300 font-bold block mb-2 text-sm text-emerald-400 flex items-center gap-1.5">
-                  <Sparkles size={14}/> Select Example Demo Workflow
+                  <Sparkles size={14}/> Select Workflow Blueprint
                 </label>
                 <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
-                  {[
-                    {
-                      name: 'OrderSagaFulfillment',
-                      title: 'Order Saga Fulfillment',
-                      badge: 'Distributed Sagas',
-                      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-                      desc: 'Stripe payment hold, warehouse inventory locking, and OnFailure rollback compensations.'
-                    },
-                    {
-                      name: 'LoanUnderwritingFlow',
-                      title: 'Loan Underwriting Flow',
-                      badge: 'Decision Engine & HMAC',
-                      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-                      desc: 'Credit score / DTI routing rules, 48h SLA underwriter tasks, and HMAC-SHA256 signed wire webhooks.'
-                    },
-                    {
-                      name: 'SecOpsAccessGovernance',
-                      title: 'SecOps Access Governance',
-                      badge: 'Zero-Trust SLAs',
-                      badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
-                      desc: 'Privileged access with 24h SLA auto-escalation to SecOps Director and 8h automated revocation timers.'
-                    },
-                    {
-                      name: 'IncidentAlertEscalation',
-                      title: 'Incident Alert Escalation',
-                      badge: 'Alerts & Escalation',
-                      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-                      desc: 'L1 SLA warning alerts at 1h/3h, 4h timeout escalate to On-Call, and Critical severity skips straight to the pager inbox.'
-                    },
-                    {
-                      name: 'QuoteAutoReview',
-                      title: 'Quote Auto Review',
-                      badge: 'AI Agent Actor',
-                      badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-                      desc: 'In-bound quotes wait on actor Agent and auto-commit EVT-ACCEPT; over-limit quotes stay in the Advisor inbox.'
-                    },
-                    {
-                      name: 'ExpenseApprovalV2',
-                      title: 'Expense Approval V2',
-                      badge: 'Multi-Tier Approval',
-                      badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-                      desc: 'Multi-tier manager/director approval with role permissions and audit trail logging.'
-                    }
-                  ].map(preset => (
+                  {blueprints
+                    .filter(bp => bp.status === WorkflowClassStatus.Published || bp.status === WorkflowClassStatus.Public || bp.name === 'ExpenseApprovalV2')
+                    .map(preset => (
                     <div
-                      key={preset.name}
+                      key={preset.id}
                       onClick={() => setStartWorkflowName(preset.name)}
                       className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
                         startWorkflowName === preset.name
@@ -1215,14 +1181,21 @@ export const TenantDashboard: React.FC<Props> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-white text-xs">{preset.title}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${preset.badgeColor}`}>
-                          {preset.badge}
+                        <span className="font-bold text-white text-xs">{preset.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full border font-semibold bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                          v{preset.version}
                         </span>
                       </div>
-                      <p className="text-slate-400 text-[11px] leading-relaxed">{preset.desc}</p>
+                      <p className="text-slate-400 text-[11px] leading-relaxed line-clamp-2">
+                        {preset.description || 'No description provided.'}
+                      </p>
                     </div>
                   ))}
+                  {blueprints.filter(bp => bp.status === WorkflowClassStatus.Published || bp.status === WorkflowClassStatus.Public).length === 0 && (
+                    <div className="p-3 text-xs text-slate-500 text-center border border-dashed border-slate-800 rounded-xl">
+                      No published workflows available. Publish a draft first.
+                    </div>
+                  )}
                 </div>
               </div>
 
