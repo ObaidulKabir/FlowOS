@@ -46,7 +46,7 @@ const parseSchema = (schema?: string): any | undefined => {
 };
 
 const seedValue = (schema: any): unknown => {
-  if (!schema) return {};
+  if (!schema || Object.keys(schema).length === 0) return {};
   if (schema.default !== undefined) return schema.default;
   if (schema.type === 'object' || schema.properties) {
     return Object.fromEntries(
@@ -62,7 +62,12 @@ const seedValue = (schema: any): unknown => {
 const seedJson = (schema?: string) => JSON.stringify(seedValue(parseSchema(schema)), null, 2);
 
 const parseObject = (value: string, label: string): Record<string, unknown> => {
-  const parsed = JSON.parse(value || '{}');
+  let parsed;
+  try {
+    parsed = JSON.parse(value || '{}');
+  } catch (err) {
+    throw new Error(`${label} must be valid JSON.`);
+  }
   if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
     throw new Error(`${label} must be a JSON object.`);
   }

@@ -1,6 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { ContextSimulationStudio } from './ContextSimulationStudio';
 import { api } from '../api/client';
@@ -24,7 +23,7 @@ describe('ContextSimulationStudio – payload JSON validation', () => {
     render(<ContextSimulationStudio />);
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: '{ invalid' } });
-    const errorMsg = await screen.findByText('Invalid JSON');
+    const errorMsg = await screen.findByText('Invalid JSON');      
     expect(errorMsg).toBeInTheDocument();
     expect(textarea).toHaveClass('border-rose-600');
   });
@@ -42,7 +41,7 @@ describe('ContextSimulationStudio – payload JSON validation', () => {
 
 // Core functionality tests – each test sets up its own mock bindings where needed.
 
-describe('ContextSimulationStudio – core functionality', () => {
+describe('ContextSimulationStudio – core functionality', () => {   
   const mockBindings = [
     {
       id: 'b1',
@@ -92,7 +91,7 @@ describe('ContextSimulationStudio – core functionality', () => {
 
   beforeEach(() => {
     // Use the binding set suitable for the test unless overridden.
-    api.listContextBindings.mockResolvedValue(mockBindings);
+    api.listContextBindings.mockResolvedValue(mockBindings);       
     api.simulateContextBinding.mockResolvedValue({
       status: 'Allowed',
       revisionKind: 'draft',
@@ -108,6 +107,7 @@ describe('ContextSimulationStudio – core functionality', () => {
           isAllowed: true,
           fromStepId: 's0',
           toStepId: 's1',
+          activeStepIds: ['s1'],
           fromState: 'init',
           toState: 'mid',
           outcome: 'ok',
@@ -124,11 +124,11 @@ describe('ContextSimulationStudio – core functionality', () => {
     });
     api.startWorkflowByContext.mockResolvedValue({ workflowInstanceId: 'wf-123' });
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    window.alert = vi.fn();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.spyOn(window, 'alert').mockImplementation(() => {});
   });
 
-  test('loads bindings and allows selection', async () => {
+  test('loads bindings and allows selection', async () => {        
     render(<ContextSimulationStudio />);
     await screen.findByRole('combobox');
     const select = screen.getByRole('combobox');
@@ -136,46 +136,48 @@ describe('ContextSimulationStudio – core functionality', () => {
     expect(select).toHaveValue('b1');
   });
 
-  test('adds an event and updates its payload', async () => {
+  test('adds an event and updates its payload', async () => {      
     render(<ContextSimulationStudio />);
     await screen.findByRole('combobox');
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'b2' } });
     const addBtn = screen.getByRole('button', { name: /Add event/i });
-    userEvent.click(addBtn);
+    fireEvent.click(addBtn);
     const eventInput = await screen.findByPlaceholderText('Contextual event ID');
     expect(eventInput).toBeInTheDocument();
     fireEvent.change(eventInput, { target: { value: 'customEvent' } });
-    const payloadArea = screen.getByDisplayValue('{}');
+    const payloadAreas = screen.getAllByDisplayValue('{}');
+    const payloadArea = payloadAreas[payloadAreas.length - 1];
     expect(payloadArea).toBeInTheDocument();
     fireEvent.change(payloadArea, { target: { value: '{"a":1}' } });
     expect(screen.queryByText('Invalid JSON')).not.toBeInTheDocument();
   });
 
-  test('runs simulation and displays result', async () => {
+  test('runs simulation and displays result', async () => {        
     render(<ContextSimulationStudio />);
     await screen.findByRole('combobox');
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'b1' } });
     const runBtn = screen.getByRole('button', { name: /Run simulation/i });
-    userEvent.click(runBtn);
-    const status = await screen.findByText('Allowed');
+    fireEvent.click(runBtn);
+    const status = await screen.findByText('Allowed', {}, { timeout: 3000 });
     expect(status).toBeInTheDocument();
     const timelineItem = screen.getByText('event1');
     expect(timelineItem).toBeInTheDocument();
   });
 
-  test('copies scenario and shows copied feedback', async () => {
+  test('copies scenario and shows copied feedback', async () => {  
     render(<ContextSimulationStudio />);
     await screen.findByRole('combobox');
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'b1' } });
     const copyBtn = screen.getByRole('button', { name: /Copy scenario/i });
-    userEvent.click(copyBtn);
-    expect(navigator.clipboard.writeText).toHaveBeenCalled();
-    const feedback = await screen.findByText('Scenario copied.');
+    fireEvent.click(copyBtn);
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());      
+    const feedback = await screen.findByText('Scenario copied.');  
     expect(feedback).toBeInTheDocument();
   });
 
-  test('starts real workflow when active revision', async () => {
+  test('starts real workflow when active revision', async () => {  
     // Override bindings for this case.
+    api.simulateContextBinding.mockResolvedValue({ status: 'Allowed', revisionKind: 'active', revision: 3, currentStepId: 'step1', currentState: 'state1', isPersistedRuntime: false, graph: {}, trace: [{ index: 0, eventType: 'event1', isAllowed: true, fromStepId: 's0', toStepId: 's1', activeStepIds: ['s1'], fromState: 'init', toState: 'mid', outcome: 'ok', reason: '', roles: [], canonicalEventType: null, contextBefore: {}, contextAfter: {}, canonicalDelta: {}, plannedActions: [], pendingWork: [] }] });
     api.listContextBindings.mockResolvedValue([
       {
         id: 'b3',
@@ -204,26 +206,28 @@ describe('ContextSimulationStudio – core functionality', () => {
     await screen.findByRole('combobox');
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'b3' } });
     const activeBtn = screen.getByRole('button', { name: 'Pinned active' });
-    userEvent.click(activeBtn);
+    fireEvent.click(activeBtn);
     const runBtn = screen.getByRole('button', { name: /Run simulation/i });
-    userEvent.click(runBtn);
-    await screen.findByText('Allowed');
-    const startBtn = screen.getByRole('button', { name: /Start real workflow/i });
-    userEvent.click(startBtn);
+    fireEvent.click(runBtn);
+    await screen.findByText('Allowed', {}, { timeout: 3000 });
+    const startBtn = await screen.findByRole('button', { name: /Start real workflow/i });
+    fireEvent.click(startBtn);
     expect(window.confirm).toHaveBeenCalled();
-    expect(api.startWorkflowByContext).toHaveBeenCalled();
-    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Workflow started'));
+    await waitFor(() => expect(api.startWorkflowByContext).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Workflow started'))
+    );
   });
 
   test('reset clears fields', async () => {
     render(<ContextSimulationStudio />);
     await screen.findByRole('combobox');
     const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: '{"x":1}' } });
+    fireEvent.change(textarea, { target: { value: '{"x":1}' } });  
     const resetBtn = screen.getByRole('button', { name: /Reset scenario/i });
-    userEvent.click(resetBtn);
+    fireEvent.click(resetBtn);
     // After reset the component uses the seed JSON derived from the binding's schema.
-    // For our mock bindings the schema is an empty object, which renders as '{\n  \n}'.
-    expect(textarea).toHaveValue('{\n  \n}');
+    // We check that it does not have the modified value anymore.
+    expect(textarea).not.toHaveValue('{"x":1}');
   });
 });

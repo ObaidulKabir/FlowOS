@@ -61,6 +61,10 @@ const formatCount = (value?: number) =>
 const blueprintStatusName = (status: WorkflowClass['status']) =>
   (typeof status === 'number' ? WorkflowClassStatus[status] : String(status)).toLowerCase();
 
+const isLaunchableBlueprint = (status: WorkflowClass['status']) =>
+  ['published', 'shared', 'public'].includes(blueprintStatusName(status));
+
+
 const summarizeInstances = (instances: WorkflowInstance[]) => {
   const counts = { running: 0, waiting: 0, completed: 0, failed: 0 };
   instances.forEach(instance => {
@@ -251,9 +255,7 @@ export const TenantDashboard: React.FC<Props> = ({
     });
   }, [instances]);
 
-  const publishedBlueprints = blueprints.filter(item =>
-    ['published', 'public'].includes(blueprintStatusName(item.status))
-  ).length;
+  const publishedBlueprints = blueprints.filter(item => isLaunchableBlueprint(item.status)).length;
   const draftBlueprints = blueprints.filter(item =>
     blueprintStatusName(item.status) === 'draft'
   ).length;
@@ -1169,7 +1171,7 @@ export const TenantDashboard: React.FC<Props> = ({
                 </label>
                 <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
                   {blueprints
-                    .filter(bp => bp.status === WorkflowClassStatus.Published || bp.status === WorkflowClassStatus.Public || bp.name === 'ExpenseApprovalV2')
+                    .filter(bp => isLaunchableBlueprint(bp.status))
                     .map(preset => (
                     <div
                       key={preset.id}
@@ -1191,9 +1193,9 @@ export const TenantDashboard: React.FC<Props> = ({
                       </p>
                     </div>
                   ))}
-                  {blueprints.filter(bp => bp.status === WorkflowClassStatus.Published || bp.status === WorkflowClassStatus.Public).length === 0 && (
+                  {blueprints.filter(bp => isLaunchableBlueprint(bp.status)).length === 0 && (
                     <div className="p-3 text-xs text-slate-500 text-center border border-dashed border-slate-800 rounded-xl">
-                      No published workflows available. Publish a draft first.
+                      No launchable workflows available. Publish or share a workflow first.
                     </div>
                   )}
                 </div>
@@ -1276,3 +1278,4 @@ export const TenantDashboard: React.FC<Props> = ({
     </>
   );
 };
+

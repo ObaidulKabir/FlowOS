@@ -40,7 +40,7 @@ describe('TenantDashboard - Launch Instance Modal', () => {
     { id: '1', name: 'DraftWorkflow', version: 1, status: WorkflowClassStatus.Draft },
     { id: '2', name: 'PublishedWorkflow', version: 1, status: WorkflowClassStatus.Published },
     { id: '3', name: 'PublicWorkflow', version: 1, status: WorkflowClassStatus.Public },
-    { id: '4', name: 'ExpenseApprovalV2', version: 1, status: WorkflowClassStatus.Shared },
+    { id: '4', name: 'FlowOS Content Studio', version: 1, status: WorkflowClassStatus.Shared },
   ];
 
   beforeEach(() => {
@@ -81,5 +81,7 @@ describe('TenantDashboard - Launch Instance Modal', () => {
     // we ensure the text of the workflows appears.
     expect(screen.getAllByText('PublishedWorkflow').length).toBeGreaterThan(0);
     expect(screen.getAllByText('PublicWorkflow').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('FlowOS Content Studio').length).toBeGreaterThan(0);
   });
 });
+

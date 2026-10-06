@@ -29,6 +29,7 @@ export interface WorkflowClass {
   id: string;
   tenantId: string;
   name: string;
+  description?: string;
   version: string;
   scope: WorkflowClassScope;
   status: WorkflowClassStatus;
@@ -42,6 +43,7 @@ export interface WorkflowClass {
 
 export interface CreateDraftRequest {
   name: string;
+  description?: string;
   version: string;
   definition: any;
 }
@@ -536,5 +538,4 @@ export interface TimeTravelForkResult {
   contextType?: string;
   projectedCanonicalContext?: Record<string, unknown>;
 }
-
 
