@@ -264,13 +264,6 @@ public class WorkflowClassesController : ControllerBase
         if (targetTenantId.HasValue && targetTenantId.Value != Guid.Empty)
             return targetTenantId.Value;
 
-        if (Request.Headers.TryGetValue("x-tenant-id", out var hVal) &&
-            TenantIdentityRules.TryParseTenant(hVal.ToString(), out var hTenant) &&
-            hTenant != Guid.Empty)
-        {
-            return hTenant;
-        }
-
         return _currentUser.TenantId;
     }
 

@@ -9,6 +9,7 @@ using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Services;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Core.Security;
 using FlowOS.UnitTests.Workflows;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -217,5 +218,41 @@ public class WorkflowClassesControllerTests : IClassFixture<CustomWebApplication
             new CopyWorkflowClassRequest { NewTenantId = requestedTenantId });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task List_WhenPlatformAdminProvidesTenantQuery_UsesRequestedTenantScope()
+    {
+        var currentAdminTenantId = TenantIdentityRules.DemoTenantId;
+        var requestedTenantId = Guid.NewGuid();
+        var currentTenantWorkflow = CreateWorkflowClass(currentAdminTenantId, "CurrentTenantPrivate");
+        var requestedTenantWorkflow = CreateWorkflowClass(requestedTenantId, "RequestedTenantPrivate");
+        var publicWorkflow = CreateWorkflowClass(Guid.Empty, "PublicTemplate");
+
+        var manager = new WorkflowClassManager();
+        manager.Publish(publicWorkflow);
+        manager.SubmitForReview(publicWorkflow);
+        manager.ApproveAsPublic(publicWorkflow);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            db.WorkflowClasses.Add(currentTenantWorkflow);
+            db.WorkflowClasses.Add(requestedTenantWorkflow);
+            db.WorkflowClasses.Add(publicWorkflow);
+            await db.SaveChangesAsync();
+        }
+
+        SetHeaders(currentAdminTenantId);
+
+        var response = await _client.GetAsync($"/api/workflow-classes?tenantId={requestedTenantId}");
+
+        response.EnsureSuccessStatusCode();
+        var items = await response.Content.ReadFromJsonAsync<List<WorkflowClassResponseDto>>();
+
+        Assert.NotNull(items);
+        Assert.Contains(items!, item => item.Name == "RequestedTenantPrivate");
+        Assert.Contains(items!, item => item.Name == "PublicTemplate");
+        Assert.DoesNotContain(items!, item => item.Name == "CurrentTenantPrivate");
     }
 }

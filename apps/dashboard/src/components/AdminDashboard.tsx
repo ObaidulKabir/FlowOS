@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AuthSession, WorkflowClass, WorkflowInstance, ValidationResult, TenantDto, WorkflowClassStatus } from '../types';
+import { AuthSession, WorkflowClass, WorkflowClassScope, WorkflowInstance, ValidationResult, TenantDto, WorkflowClassStatus } from '../types';
 import { api } from '../api/client';
 import { TenantManager } from './TenantManager';
 import { WorkflowTable } from './WorkflowTable';
@@ -57,11 +57,34 @@ export const AdminDashboard: React.FC<Props> = ({
   const [selectedBlueprint, setSelectedBlueprint] = useState<WorkflowClass | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
+  const effectiveTenantScope = selectedTenantFilter || session.tenantId;
+  const effectiveTenantName = selectedTenantFilter
+    ? tenants.find(item => item.tenantId === selectedTenantFilter)?.name || selectedTenantFilter
+    : session.tenantName || session.tenantId;
+
+  const resolveBlueprintTenantScope = (blueprint?: WorkflowClass | null) =>
+    selectedTenantFilter || blueprint?.tenantId || session.tenantId;
+
+  const isSharedCatalogEntry = (blueprint: WorkflowClass) =>
+    blueprint.scope === WorkflowClassScope.Shared || blueprint.status === WorkflowClassStatus.Shared;
+
+  const isPublicCatalogEntry = (blueprint: WorkflowClass) =>
+    blueprint.scope === WorkflowClassScope.Public || blueprint.status === WorkflowClassStatus.Public;
+
+  const matchesCatalogSubTab = (blueprint: WorkflowClass) => {
+    if (catalogSubTab === 'All') return true;
+    if (catalogSubTab === 'Drafts') return blueprint.status === WorkflowClassStatus.Draft;
+    if (catalogSubTab === 'Published') return blueprint.status === WorkflowClassStatus.Published;
+    if (catalogSubTab === 'Shared') return isSharedCatalogEntry(blueprint);
+    if (catalogSubTab === 'Public') return isPublicCatalogEntry(blueprint);
+    return true;
+  };
+
   const loadData = async (tenantIdOverride?: string) => {
     setLoading(true);
     setError(null);
     const notices: string[] = [];
-    const targetTenantId = tenantIdOverride !== undefined ? tenantIdOverride : selectedTenantFilter;
+    const targetTenantId = tenantIdOverride ?? effectiveTenantScope;
 
     try {
       const tList = await api.listTenants();
@@ -71,9 +94,8 @@ export const AdminDashboard: React.FC<Props> = ({
       notices.push(err.message || 'Failed to load tenants');
     }
 
-    const effectiveTenant = targetTenantId !== undefined ? targetTenantId : selectedTenantFilter;
     try {
-      const bpList = await api.list(undefined, undefined, 'Admin', effectiveTenant || undefined);
+      const bpList = await api.list(undefined, undefined, 'Admin', targetTenantId);
       setBlueprints(bpList);
     } catch (err: any) {
       setBlueprints([]);
@@ -101,17 +123,17 @@ export const AdminDashboard: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    void loadData(selectedTenantFilter);
+    void loadData(selectedTenantFilter || undefined);
   }, [activeTab, selectedTenantFilter]);
 
   // Blueprints waiting for admin approval (Shared scope in Submitted/Shared status)
-  const pendingApprovals = blueprints.filter(b => b.scope === 1 || b.status === 2);
+  const pendingApprovals = blueprints.filter(isSharedCatalogEntry);
 
   const handleApprove = async (id: string) => {
     try {
-      await api.approve(id);
+      await api.approve(id, effectiveTenantScope);
       alert('Workflow approved for global platform catalog!');
-      await loadData();
+      await loadData(effectiveTenantScope);
     } catch (err: any) {
       alert(`Approval failed: ${err.message}`);
     }
@@ -119,8 +141,8 @@ export const AdminDashboard: React.FC<Props> = ({
 
   const handleDeprecate = async (id: string) => {
     try {
-      await api.deprecate(id, 'Admin');
-      await loadData();
+      await api.deprecate(id, 'Admin', effectiveTenantScope);
+      await loadData(effectiveTenantScope);
     } catch (err: any) {
       alert(`Deprecate failed: ${err.message}`);
     }
@@ -128,8 +150,8 @@ export const AdminDashboard: React.FC<Props> = ({
 
   const handleAbandon = async (id: string) => {
     try {
-      await api.abandon(id, 'Admin');
-      await loadData();
+      await api.abandon(id, 'Admin', effectiveTenantScope);
+      await loadData(effectiveTenantScope);
     } catch (err: any) {
       alert(`Abandon failed: ${err.message}`);
     }
@@ -328,7 +350,7 @@ export const AdminDashboard: React.FC<Props> = ({
                 isAdmin={true}
                 onView={async (id) => {
                   const bp = blueprints.find(b => b.id === id);
-                  const item = await api.get(id, 'Admin', selectedTenantFilter || bp?.tenantId || undefined);
+                  const item = await api.get(id, 'Admin', resolveBlueprintTenantScope(bp));
                   setSelectedBlueprint(item);
                 }}
                 onApprove={handleApprove}
@@ -351,7 +373,7 @@ export const AdminDashboard: React.FC<Props> = ({
                     }}
                     className="bg-slate-950 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-purple-500 focus:outline-none"
                   >
-                    <option value="">Default Active Context</option>
+                    <option value="">{`Session Tenant: ${effectiveTenantName}`}</option>
                     {tenants.map(t => (
                       <option key={t.tenantId} value={t.tenantId}>
                         {t.name} ({t.tenantId.substring(0, 8)}...)
@@ -386,19 +408,12 @@ export const AdminDashboard: React.FC<Props> = ({
               </div>
 
               <WorkflowTable
-                items={blueprints.filter(bp => {
-                  if (catalogSubTab === 'All') return true;
-                  if (catalogSubTab === 'Drafts') return bp.status === WorkflowClassStatus.Draft;
-                  if (catalogSubTab === 'Published') return bp.status === WorkflowClassStatus.Published;
-                  if (catalogSubTab === 'Shared') return bp.scope === 1 || bp.status === 2;
-                  if (catalogSubTab === 'Public') return bp.scope === 2 || bp.status === 3;
-                  return true;
-                })}
+                items={blueprints.filter(matchesCatalogSubTab)}
                 currentTab={catalogSubTab}
                 isAdmin={true}
                 onView={async (id) => {
                   const bp = blueprints.find(b => b.id === id);
-                  const item = await api.get(id, 'Admin', selectedTenantFilter || bp?.tenantId || undefined);
+                  const item = await api.get(id, 'Admin', resolveBlueprintTenantScope(bp));
                   setSelectedBlueprint(item);
                 }}
                 onApprove={handleApprove}
@@ -539,7 +554,7 @@ export const AdminDashboard: React.FC<Props> = ({
               const res = await api.validate(
                 selectedBlueprint.id,
                 'Admin',
-                selectedTenantFilter || selectedBlueprint.tenantId || undefined
+                resolveBlueprintTenantScope(selectedBlueprint)
               );
               setValidationResult(res);
             }

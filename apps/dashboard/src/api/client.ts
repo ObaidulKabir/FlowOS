@@ -156,6 +156,10 @@ export const getActiveTenantId = (): string => {
   return getAuthSession().tenantId;
 };
 
+const resolveRequestedTenantId = (tenantIdOverride?: string): string => {
+  return tenantIdOverride ?? getActiveTenantId();
+};
+
 export const setActiveTenantId = (id: string, name?: string) => {
   const current = getAuthSession();
   const updated: AuthSession = {
@@ -173,7 +177,7 @@ export const getHeaders = (
 ) => {
   const session = getAuthSession();
   const role = roleOverride || session.role;
-  const tenantId = tenantIdOverride || session.tenantId;
+  const tenantId = tenantIdOverride ?? session.tenantId;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-tenant-id': tenantId,
@@ -254,7 +258,7 @@ const handleResponse = async (response: Response, errorMessage: string) => {
 
 export const api = {
   list: async (scope?: WorkflowClassScope, status?: WorkflowClassStatus, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass[]> => {
-    const tenantId = tenantIdOverride || getActiveTenantId();
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
     const params = new URLSearchParams();
     if (tenantId) {
       params.append('tenantId', tenantId);
@@ -273,7 +277,7 @@ export const api = {
   },
 
   get: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass> => {
-    const tenantId = tenantIdOverride || getActiveTenantId();
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
     const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
     const response = await authorizedFetch(`${API_BASE}/${id}${query}`, {}, role);
     return handleResponse(response, 'Failed to get workflow class');
@@ -302,7 +306,7 @@ export const api = {
   },
 
   validate: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<ValidationResult> => {
-    const tenantId = tenantIdOverride || getActiveTenantId();
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
     const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
     const response = await authorizedFetch(`${API_BASE}/${id}/validate${query}`, { method: 'POST' }, role);
     return handleResponse(response, 'Failed to validate');
@@ -330,21 +334,21 @@ export const api = {
   },
 
   deprecate: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass> => {
-    const tenantId = tenantIdOverride || getActiveTenantId();
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
     const headers = getHeaders(role, 'default', tenantId);
     const response = await fetch(`${API_BASE}/${id}/deprecate?tenantId=${tenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to deprecate');
   },
 
-  abandon: async (id: string, role?: 'Tenant' | 'Admin'): Promise<WorkflowClass> => {
-    const headers = getHeaders(role);
-    const tenantId = getActiveTenantId();
+  abandon: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass> => {
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
+    const headers = getHeaders(role, 'default', tenantId);
     const response = await fetch(`${API_BASE}/${id}/abandon?tenantId=${tenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to abandon');
   },
 
   approve: async (id: string, tenantIdOverride?: string): Promise<WorkflowClass> => {
-    const tenantId = tenantIdOverride || getActiveTenantId();
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
     const headers = getHeaders('Admin', 'default', tenantId);
     const response = await fetch(`${API_BASE}/${id}/approve?tenantId=${tenantId}`, { method: 'POST', headers });
     return handleResponse(response, 'Failed to approve');
