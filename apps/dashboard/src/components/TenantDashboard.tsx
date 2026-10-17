@@ -7,7 +7,8 @@ import {
   WorkflowInstance,
   ValidationResult,
   CreateDraftRequest,
-  TenantDto
+  TenantDto,
+  PlanRequestDto
 } from '../types';
 import { api, setActiveTenantId } from '../api/client';
 import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
@@ -34,7 +35,7 @@ import {
   Building2, Plus, RefreshCw, Key, Activity, 
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
   Bot, AlertTriangle, ShieldAlert,
-  UserCheck, Clock, Shield
+  UserCheck, Clock, Shield, SendHorizontal, X, ChevronDown
 } from 'lucide-react';
 
 interface Props {
@@ -139,6 +140,16 @@ export const TenantDashboard: React.FC<Props> = ({
   const [startWorkflowName, setStartWorkflowName] = useState('ExpenseApprovalV2');
   const [startingInstance, setStartingInstance] = useState(false);
 
+  // Plan Request Modal
+  const [showPlanRequestModal, setShowPlanRequestModal] = useState(false);
+  const [planRequestPlan, setPlanRequestPlan] = useState('Team');
+  const [planRequestPaymentRef, setPlanRequestPaymentRef] = useState('');
+  const [planRequestEmail, setPlanRequestEmail] = useState('');
+  const [planRequestNotes, setPlanRequestNotes] = useState('');
+  const [planRequestSubmitting, setPlanRequestSubmitting] = useState(false);
+  const [planRequestError, setPlanRequestError] = useState<string | null>(null);
+  const [currentPlanRequest, setCurrentPlanRequest] = useState<PlanRequestDto | null>(null);
+
   // Pre-fill the selected blueprint name when launching from the workspace
   useEffect(() => {
     if (showStartModal && selectedBlueprint && !isCreatingBlueprint) {
@@ -174,6 +185,14 @@ export const TenantDashboard: React.FC<Props> = ({
         throw failed.reason;
       }
       if (failed) setError(failed.reason?.message || 'Some workspace counts could not be loaded');
+
+      // Load current plan request state (non-blocking)
+      if (!session.isSandbox) {
+        try {
+          const pr = await api.getPlanRequest(session.tenantId);
+          setCurrentPlanRequest(pr);
+        } catch { /* ignore */ }
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load workspace data');
     } finally {
@@ -483,19 +502,142 @@ export const TenantDashboard: React.FC<Props> = ({
           <div className="bg-gradient-to-r from-amber-900/90 via-slate-900 to-orange-900/90 border-b border-amber-500/40 px-6 py-2.5 text-xs text-amber-100 flex flex-wrap items-center justify-between gap-3 shadow-md">
             <div className="flex items-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-              <span className="font-bold">Free / unpaid tenant:</span>
+              <span className="font-bold">Free / Trial tenant:</span>
               <span className="text-slate-200 hidden sm:inline">
-                Runtime execution is blocked (start, publish, complete). Design-time simulate, lint, and drafts still work. Ask admin@flowosbd.com to activate Starter through Scale, or Enterprise.
+                Runtime execution is blocked. Request Starter, Builder, Team, Growth, Scale, or Enterprise. An admin activates it before the payment gateway is connected.
               </span>
             </div>
-            <a
-              href="mailto:admin@flowosbd.com?subject=FlowOS%20paid%20plan%20activation"
-              className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-all shadow"
-            >
-              Contact admin@flowosbd.com
-            </a>
+            {currentPlanRequest?.status === 'Pending' ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-700/60 border border-amber-500/50 text-amber-200 rounded-lg text-xs font-semibold">
+                <Clock size={12} className="animate-pulse" />
+                Plan request pending admin review
+              </span>
+            ) : currentPlanRequest?.status === 'Rejected' ? (
+              <button
+                onClick={() => setShowPlanRequestModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1 bg-red-700/60 hover:bg-amber-500 border border-red-500/50 text-red-200 hover:text-slate-950 rounded-lg transition-all text-xs font-semibold"
+              >
+                <AlertTriangle size={12} />
+                Rejected — Re-submit plan request
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowPlanRequestModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-all shadow text-xs"
+              >
+                <SendHorizontal size={13} />
+                Request Plan Activation
+              </button>
+            )}
           </div>
         )}
+        {/* Plan Request Modal */}
+        {showPlanRequestModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+              <button
+                onClick={() => { setShowPlanRequestModal(false); setPlanRequestError(null); }}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+              <h2 className="text-lg font-bold text-white mb-1">Request Plan Activation</h2>
+              <p className="text-xs text-slate-400 mb-5">
+                An admin will review your request and activate your plan. No payment gateway needed — the admin confirms payment manually.
+              </p>
+              {planRequestError && (
+                <div className="mb-4 p-3 bg-red-900/40 border border-red-500/40 rounded-lg text-xs text-red-300">
+                  {planRequestError}
+                </div>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Plan</label>
+                  <div className="relative">
+                    <select
+                      value={planRequestPlan}
+                      onChange={e => setPlanRequestPlan(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white appearance-none pr-8"
+                    >
+                      <option value="Starter">Starter</option>
+                      <option value="Builder">Builder</option>
+                      <option value="Team">Team</option>
+                      <option value="Growth">Growth</option>
+                      <option value="Scale">Scale</option>
+                      <option value="Enterprise">Enterprise</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2.5 top-2.5 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Payment Reference <span className="text-slate-500">(optional — bank transfer ref, invoice #, etc.)</span></label>
+                  <input
+                    type="text"
+                    value={planRequestPaymentRef}
+                    onChange={e => setPlanRequestPaymentRef(e.target.value)}
+                    placeholder="e.g. INV-2026-001 or wire ref"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Billing Contact Email <span className="text-slate-500">(optional)</span></label>
+                  <input
+                    type="email"
+                    value={planRequestEmail}
+                    onChange={e => setPlanRequestEmail(e.target.value)}
+                    placeholder="billing@yourcompany.com"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Notes <span className="text-slate-500">(optional)</span></label>
+                  <textarea
+                    value={planRequestNotes}
+                    onChange={e => setPlanRequestNotes(e.target.value)}
+                    placeholder="Any context for the admin…"
+                    rows={2}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 resize-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  disabled={planRequestSubmitting}
+                  onClick={async () => {
+                    setPlanRequestSubmitting(true);
+                    setPlanRequestError(null);
+                    try {
+                      const result = await api.submitPlanRequest(
+                        session.tenantId,
+                        planRequestPlan,
+                        planRequestPaymentRef || undefined,
+                        planRequestEmail || undefined,
+                        planRequestNotes || undefined
+                      );
+                      setCurrentPlanRequest(result);
+                      setShowPlanRequestModal(false);
+                    } catch (err: any) {
+                      setPlanRequestError(err.message || 'Failed to submit request');
+                    } finally {
+                      setPlanRequestSubmitting(false);
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-lg transition-all"
+                >
+                  <SendHorizontal size={14} />
+                  {planRequestSubmitting ? 'Submitting…' : 'Submit Request'}
+                </button>
+                <button
+                  onClick={() => { setShowPlanRequestModal(false); setPlanRequestError(null); }}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-all text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full space-y-6">
       
       {/* Workspace Banner */}

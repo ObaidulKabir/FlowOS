@@ -75,6 +75,45 @@ public sealed class EntitlementHttpTests
         Assert.DoesNotContain(TenantEntitlementPolicy.PlanRequiredCode, paidBody);
     }
 
+    [Fact]
+    public async Task NeverExpiresTenantKey_Authenticates_ExpiredKeyAndWrongTenantDoNot()
+    {
+        await using var app = BuildApp(enforceBilling: true);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        string rawKey;
+        string expiredKey;
+        Guid tenantId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            var tenant = new Tenant("Permanent Key Tenant");
+            rawKey = TenantApiKey.GenerateRawKey();
+            expiredKey = TenantApiKey.GenerateRawKey();
+            db.Tenants.Add(tenant);
+            db.TenantApiKeys.Add(new TenantApiKey(tenant.TenantId, "MCP", rawKey, expiresAt: null));
+            db.TenantApiKeys.Add(new TenantApiKey(
+                tenant.TenantId,
+                "Old",
+                expiredKey,
+                expiresAt: DateTime.UtcNow.AddMinutes(-5)));
+            await db.SaveChangesAsync();
+            tenantId = tenant.TenantId;
+        }
+
+        var (ok, _) = await CallTool(client, tenantId, "list_public_workflowclasses", new { }, rawKey);
+        Assert.Equal(HttpStatusCode.OK, ok);
+
+        var (denied, deniedBody) = await CallTool(client, tenantId, "list_public_workflowclasses", new { }, expiredKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, denied);
+        Assert.Contains("Invalid or unknown tenant API key", deniedBody);
+
+        var (cross, crossBody) = await CallTool(client, Guid.NewGuid(), "list_public_workflowclasses", new { }, rawKey);
+        Assert.Equal(HttpStatusCode.Forbidden, cross);
+        Assert.Contains("Cross-tenant access forbidden", crossBody);
+    }
+
     private static Microsoft.AspNetCore.Builder.WebApplication BuildApp(bool enforceBilling) =>
         FlowOS.MCP.Program.BuildHttpApp([], builder =>
         {
@@ -105,7 +144,8 @@ public sealed class EntitlementHttpTests
         HttpClient client,
         Guid tenantId,
         string toolName,
-        object args)
+        object args,
+        string? apiKey = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp")
         {
@@ -117,7 +157,7 @@ public sealed class EntitlementHttpTests
                 @params = new { name = toolName, arguments = args }
             }), Encoding.UTF8, "application/json")
         };
-        request.Headers.Add("X-MCP-API-Key", ApiKey);
+        request.Headers.Add("X-MCP-API-Key", apiKey ?? ApiKey);
         request.Headers.Add("x-tenant-id", tenantId.ToString());
         request.Headers.Add("MCP-Protocol-Version", McpJsonRpcDispatcher.SupportedProtocolVersion);
         request.Headers.TryAddWithoutValidation("Accept", "application/json, text/event-stream");

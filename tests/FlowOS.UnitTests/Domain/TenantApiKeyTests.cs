@@ -131,6 +131,15 @@ public class TenantApiKeyTests
         Assert.False(activeKey.IsExpired);
         Assert.True(activeKey.IsActive);
 
+        var neverExpires = new TenantApiKey(
+            Guid.NewGuid(),
+            "Permanent Key",
+            TenantApiKey.GenerateRawKey(),
+            expiresAt: null);
+        Assert.Null(neverExpires.ExpiresAt);
+        Assert.False(neverExpires.IsExpired);
+        Assert.True(neverExpires.IsActive);
+
         activeKey.Revoke();
         Assert.True(activeKey.IsRevoked);
         Assert.False(activeKey.IsActive);

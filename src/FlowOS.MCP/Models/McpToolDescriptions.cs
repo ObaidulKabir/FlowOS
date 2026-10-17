@@ -409,7 +409,8 @@ public static class McpToolDescriptions
                 "Authorization: requires effective capability workflow.start. For API keys, role permissions are restricted by workflow:start (or *). On MCP-AUTHZ-001 call diagnose_caller_permissions. " +
                 "payload.roleAssignments sets Assignment business roles only at start. After the instance exists, call assign_instance_role. (Note: For ResolutionType 'Team', the engine auto-assigns 'team:{id}:0'.) " +
                 "Returns: {ok:true,data:{workflowInstanceId,tenantId,status,correlationId,message}}. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-INTERNAL. " +
+                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500},\"roleAssignments\":{\"Sales\":\"user-123\"}}}",
 
             ["assign_instance_role"] =
@@ -431,7 +432,8 @@ public static class McpToolDescriptions
                 "When the step lists no AllowedRoles, actorId must hold a business role that grants the event. " +
                 "A shared tenant API key's caller id is the literal api-key, so omitting actorId does not match an assigned person. Do not send roleAssignments on this call. Timers and Agent: commits are not this person check. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,eventType,message}}. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-EXEC-001, MCP-INTERNAL. " +
+                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-EXEC-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["complete_task"] =
@@ -441,7 +443,8 @@ public static class McpToolDescriptions
                 "When the waiting step lists AllowedRoles, actorId must be the person stored for one of those roles (or a valid team member if assigned to 'team:{id}:{level}'). A different role cannot complete the task. " +
                 "A shared tenant API key's caller id is the literal api-key. The history line records that person as ActorId. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,taskId,message}}. " +
-                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-INTERNAL. " +
+                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"taskId\":\"66666666-6666-6666-6666-666666666666\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["list_workflow_instances"] =

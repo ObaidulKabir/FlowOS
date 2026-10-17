@@ -153,6 +153,28 @@ export interface TenantApiKeyDto {
   isActive?: boolean;
 }
 
+export interface PlanRequestDto {
+  requestedPlan: string;
+  commercialTier?: string;
+  paymentReference?: string;
+  billingContactEmail?: string;
+  requestedAt: string;
+  notes?: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  reviewedAt?: string;
+  reviewedBy?: string;
+  adminNotes?: string;
+}
+
+export interface TenantPlanRequestItem {
+  tenantId: string;
+  tenantName: string;
+  currentPlan: string;
+  currentBillingStatus: string;
+  canRunRuntime: boolean;
+  planRequest: PlanRequestDto;
+}
+
 export interface TenantDto {
   tenantId: string;
   name: string;
@@ -161,6 +183,7 @@ export interface TenantDto {
   billingStatus?: string;
   canRunRuntime?: boolean;
   createdAt: string;
+  planRequest?: PlanRequestDto;
   keyCount: number;
   keys: TenantApiKeyDto[];
 }

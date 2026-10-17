@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api, getActiveTenantId, setActiveTenantId } from '../api/client';
-import { TenantDto } from '../types';
+import { TenantDto, TenantPlanRequestItem } from '../types';
 import { mcpRpcUrl } from '../mcpUrl';
-import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles, Layers } from 'lucide-react';
+import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles, Layers, Clock, X, ChevronDown, SendHorizontal, ShieldAlert } from 'lucide-react';
 import { ApiKeyScopePicker } from './ApiKeyScopePicker';
 import { API_KEY_SCOPE_PRESETS } from '../lib/apiKeyScopes';
 
@@ -73,6 +73,18 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   const [codeTab, setCodeTab] = useState<'appsettings' | 'python' | 'curl'>('appsettings');
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
+  // Plan Request Admin State
+  const [planRequests, setPlanRequests] = useState<TenantPlanRequestItem[]>([]);
+  const [reviewingRequest, setReviewingRequest] = useState<TenantPlanRequestItem | null>(null);
+  const [reviewPlan, setReviewPlan] = useState('Managed');
+  const [reviewBillingStatus, setReviewBillingStatus] = useState<'Active' | 'Unpaid'>('Active');
+  const [reviewAdminNotes, setReviewAdminNotes] = useState('');
+  const [reviewRejectReason, setReviewRejectReason] = useState('');
+  const [reviewMode, setReviewMode] = useState<'approve' | 'reject'>('approve');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [planRequestsLoading, setPlanRequestsLoading] = useState(false);
+  const [showPlanRequestsPanel, setShowPlanRequestsPanel] = useState(false);
+
   const loadTenants = async () => {
     setLoading(true);
     setError(null);
@@ -86,9 +98,51 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
     }
   };
 
+  const loadPlanRequests = async () => {
+    setPlanRequestsLoading(true);
+    try {
+      const data = await api.listPlanRequests();
+      setPlanRequests(data.filter(item => item.planRequest?.status === 'Pending'));
+    } catch (err: any) {
+      setError(err.message || 'Failed to load plan requests');
+    } finally {
+      setPlanRequestsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadTenants();
+    loadPlanRequests();
   }, []);
+
+  const openReview = (item: TenantPlanRequestItem, mode: 'approve' | 'reject') => {
+    setReviewingRequest(item);
+    setReviewMode(mode);
+    setReviewPlan(item.planRequest.requestedPlan || 'Team');
+    setReviewBillingStatus('Active');
+    setReviewAdminNotes('');
+    setReviewRejectReason('');
+  };
+
+  const handleReview = async () => {
+    if (!reviewingRequest) return;
+    setReviewSubmitting(true);
+    setError(null);
+    try {
+      if (reviewMode === 'approve') {
+        await api.setTenantPlan(reviewingRequest.tenantId, reviewPlan, reviewBillingStatus, reviewAdminNotes || undefined);
+      } else {
+        await api.rejectPlanRequest(reviewingRequest.tenantId, reviewRejectReason || undefined);
+      }
+      setReviewingRequest(null);
+      await loadTenants();
+      await loadPlanRequests();
+    } catch (err: any) {
+      setError(err.message || 'Failed to review plan request');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -213,11 +267,18 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={loadTenants}
+            onClick={() => { loadTenants(); loadPlanRequests(); }}
             className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs flex items-center gap-1.5 transition-all"
             title="Refresh tenants"
           >
             <RefreshCw size={14} /> Refresh
+          </button>
+          <button
+            onClick={() => setShowPlanRequestsPanel(open => !open)}
+            className="px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+          >
+            <Clock size={14} />
+            Plan requests{planRequests.length > 0 ? ` (${planRequests.length})` : ''}
           </button>
           <button
             onClick={() => setShowRegisterModal(true)}
@@ -227,6 +288,49 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
           </button>
         </div>
       </div>
+
+      {showPlanRequestsPanel && (
+        <div className="bg-slate-900/70 border border-amber-500/30 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-bold text-white">Pending plan requests</h4>
+            <span className="text-[11px] text-slate-400">Activation is manual until the payment gateway is connected.</span>
+          </div>
+          {planRequestsLoading ? (
+            <p className="text-xs text-slate-400">Loading requests…</p>
+          ) : planRequests.length === 0 ? (
+            <p className="text-xs text-slate-400">No tenant is waiting for a plan.</p>
+          ) : (
+            <div className="space-y-2">
+              {planRequests.map(item => (
+                <div key={item.tenantId} className="flex flex-wrap items-center justify-between gap-3 bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+                  <div className="text-xs text-slate-300">
+                    <div className="font-semibold text-white">{item.tenantName}</div>
+                    <div>
+                      Requests <span className="text-amber-300">{item.planRequest.requestedPlan}</span>
+                      {' '}· current {item.currentPlan} / {item.currentBillingStatus}
+                      {item.planRequest.paymentReference ? ` · ref ${item.planRequest.paymentReference}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openReview(item, 'approve')}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => openReview(item, 'reject')}
+                      className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded text-[11px] font-semibold"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="bg-rose-900/40 border border-rose-700 text-rose-300 px-4 py-3 rounded-xl flex items-center justify-between text-xs">
@@ -852,6 +956,71 @@ headers = {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {reviewingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {reviewMode === 'approve' ? 'Activate plan' : 'Reject plan request'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {reviewingRequest.tenantName} asked for {reviewingRequest.planRequest.requestedPlan}.
+                </p>
+              </div>
+              <button onClick={() => setReviewingRequest(null)} className="text-slate-400 hover:text-white"><X size={16} /></button>
+            </div>
+            {reviewMode === 'approve' ? (
+              <>
+                <label className="block text-xs text-slate-400">
+                  Plan
+                  <select
+                    value={reviewPlan}
+                    onChange={e => setReviewPlan(e.target.value)}
+                    className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                  >
+                    {['Starter', 'Builder', 'Team', 'Growth', 'Scale', 'Enterprise'].map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs text-slate-400">
+                  Notes
+                  <textarea
+                    value={reviewAdminNotes}
+                    onChange={e => setReviewAdminNotes(e.target.value)}
+                    rows={2}
+                    className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                  />
+                </label>
+              </>
+            ) : (
+              <label className="block text-xs text-slate-400">
+                Reason
+                <textarea
+                  value={reviewRejectReason}
+                  onChange={e => setReviewRejectReason(e.target.value)}
+                  rows={2}
+                  className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                />
+              </label>
+            )}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setReviewingRequest(null)} className="px-3 py-2 text-xs text-slate-300">Cancel</button>
+              <button
+                onClick={handleReview}
+                disabled={reviewSubmitting}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50 ${
+                  reviewMode === 'approve' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
+                }`}
+              >
+                {reviewSubmitting ? 'Saving…' : reviewMode === 'approve' ? 'Activate' : 'Reject'}
+              </button>
+            </div>
           </div>
         </div>
       )}

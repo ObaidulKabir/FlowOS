@@ -92,6 +92,104 @@ public class TenantEntitlementApiTests : IClassFixture<CustomWebApplicationFacto
         allowed.EnsureSuccessStatusCode();
     }
 
+    [Fact]
+    public async Task PlanRequest_ApproveActivatesRuntime_AndRejectLeavesTrial()
+    {
+        var (client, tenantId, _, _) = CreateClient(enforceBilling: true, paid: false);
+
+        var invalid = await client.PostAsJsonAsync($"/api/tenants/{tenantId}/plan-request", new { plan = "Gold" });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        var submitted = await client.PostAsJsonAsync($"/api/tenants/{tenantId}/plan-request", new
+        {
+            plan = "Team",
+            paymentReference = "INV-1",
+            notes = "Paid by transfer"
+        });
+        submitted.EnsureSuccessStatusCode();
+        var request = await submitted.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Team", request.GetProperty("requestedPlan").GetString());
+        Assert.Equal("Managed", request.GetProperty("commercialTier").GetString());
+        Assert.Equal("Pending", request.GetProperty("status").GetString());
+
+        var listed = await client.GetFromJsonAsync<JsonElement>("/api/admin/tenants/plan-requests");
+        Assert.Contains(listed.EnumerateArray(), item =>
+            item.GetProperty("tenantId").GetGuid() == tenantId &&
+            item.GetProperty("planRequest").GetProperty("requestedPlan").GetString() == "Team");
+
+        var stillTrial = await client.GetFromJsonAsync<JsonElement>($"/api/tenants/{tenantId}");
+        Assert.Equal("Trial", stillTrial.GetProperty("plan").GetString());
+        Assert.False(stillTrial.GetProperty("canRunRuntime").GetBoolean());
+
+        var approved = await client.PostAsJsonAsync($"/api/admin/tenants/{tenantId}/plan", new
+        {
+            plan = "Team",
+            billingStatus = "Active",
+            adminNotes = "Transfer confirmed"
+        });
+        approved.EnsureSuccessStatusCode();
+        var activated = await approved.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Managed", activated.GetProperty("plan").GetString());
+        Assert.Equal("Active", activated.GetProperty("billingStatus").GetString());
+        Assert.True(activated.GetProperty("canRunRuntime").GetBoolean());
+
+        var after = await client.GetFromJsonAsync<JsonElement>($"/api/tenants/{tenantId}/plan-request");
+        Assert.Equal("Approved", after.GetProperty("status").GetString());
+
+        var (other, otherId, _, _) = CreateClient(enforceBilling: true, paid: false);
+        var otherRequest = await other.PostAsJsonAsync($"/api/tenants/{otherId}/plan-request", new { plan = "Builder" });
+        otherRequest.EnsureSuccessStatusCode();
+        var rejected = await other.PostAsJsonAsync($"/api/admin/tenants/{otherId}/plan-request/reject", new { reason = "Need invoice" });
+        rejected.EnsureSuccessStatusCode();
+        var rejectedBody = await other.GetFromJsonAsync<JsonElement>($"/api/tenants/{otherId}/plan-request");
+        Assert.Equal("Rejected", rejectedBody.GetProperty("status").GetString());
+        var otherTenant = await other.GetFromJsonAsync<JsonElement>($"/api/tenants/{otherId}");
+        Assert.Equal("Trial", otherTenant.GetProperty("plan").GetString());
+        Assert.False(otherTenant.GetProperty("canRunRuntime").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("Starter", "Managed")]
+    [InlineData("Builder", "Managed")]
+    [InlineData("Growth", "Managed")]
+    [InlineData("Scale", "Managed")]
+    [InlineData("Enterprise", "Enterprise")]
+    public async Task Approve_CatalogPlan_StoresRuntimePlanAndAllowsExecution(string requested, string stored)
+    {
+        var (client, tenantId, _, _) = CreateClient(enforceBilling: true, paid: false);
+        var submitted = await client.PostAsJsonAsync($"/api/tenants/{tenantId}/plan-request", new { plan = requested });
+        submitted.EnsureSuccessStatusCode();
+
+        var approved = await client.PostAsJsonAsync($"/api/admin/tenants/{tenantId}/plan", new
+        {
+            plan = requested,
+            billingStatus = "Active"
+        });
+        approved.EnsureSuccessStatusCode();
+        var body = await approved.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(stored, body.GetProperty("plan").GetString());
+        Assert.True(body.GetProperty("canRunRuntime").GetBoolean());
+    }
+
+    [Fact]
+    public async Task NeverExpiresKey_IsStoredWithoutAnExpiry()
+    {
+        var (client, tenantId, _, _) = CreateClient(enforceBilling: false, paid: true);
+        var created = await client.PostAsJsonAsync($"/api/tenants/{tenantId}/keys", new
+        {
+            name = "MCP",
+            expiresInDays = 0
+        });
+        created.EnsureSuccessStatusCode();
+        var key = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, key.GetProperty("expiresAt").ValueKind);
+
+        var listed = await client.GetFromJsonAsync<JsonElement>($"/api/tenants/{tenantId}/keys");
+        var match = listed.EnumerateArray().First(item => item.GetProperty("name").GetString() == "MCP");
+        Assert.False(match.GetProperty("isExpired").GetBoolean());
+        Assert.True(match.GetProperty("isActive").GetBoolean());
+    }
+
     private (HttpClient Client, Guid TenantId, Guid DefinitionId, Guid WorkflowClassId) CreateClient(
         bool enforceBilling,
         bool paid)

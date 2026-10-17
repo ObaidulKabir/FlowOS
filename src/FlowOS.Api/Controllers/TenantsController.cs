@@ -11,6 +11,7 @@ using FlowOS.Domain.Entities;
 using FlowOS.Infrastructure.Persistence;
 using FlowOS.Infrastructure.Services;
 using FlowOS.Infrastructure.Services.Security;
+using FlowOS.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,7 @@ public class TenantsController : ControllerBase
             BillingStatus = t.BillingStatus.ToString(),
             CanRunRuntime = t.CanRunRuntime,
             CreatedAt = t.CreatedAt,
+            PlanRequest = t.GetPlanRequest(),
             KeyCount = keyLookup[t.TenantId].Count(),
             Keys = keyLookup[t.TenantId].Select(k => new TenantApiKeyDto
             {
@@ -201,6 +203,7 @@ public class TenantsController : ControllerBase
             BillingStatus = tenant.BillingStatus.ToString(),
             CanRunRuntime = tenant.CanRunRuntime,
             CreatedAt = tenant.CreatedAt,
+            PlanRequest = tenant.GetPlanRequest(),
             KeyCount = keys.Count,
             Keys = keys
         });
@@ -290,6 +293,50 @@ public class TenantsController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    [HttpPost("{id:guid}/plan-request")]
+    public async Task<IActionResult> SubmitPlanRequest(Guid id, [FromBody] SubmitPlanRequest request)
+    {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
+        var tenant = await _context.Tenants.FindAsync(id);
+        if (tenant == null) return NotFound("Tenant not found.");
+
+        if (request == null || !CommercialPlans.TryMap(request.Plan, out var storedPlan, out var displayName))
+            return BadRequest("Plan must be Starter, Builder, Team, Growth, Scale, or Enterprise.");
+
+        var planDto = new PlanRequestDto
+        {
+            RequestedPlan = displayName,
+            CommercialTier = storedPlan.ToString(),
+            PaymentReference = request.PaymentReference?.Trim(),
+            BillingContactEmail = request.BillingContactEmail?.Trim(),
+            Notes = request.Notes?.Trim(),
+            RequestedAt = DateTime.UtcNow,
+            Status = "Pending"
+        };
+
+        tenant.SetPlanRequest(planDto);
+        await _context.SaveChangesAsync();
+
+        return Ok(planDto);
+    }
+
+    [HttpGet("{id:guid}/plan-request")]
+    public async Task<IActionResult> GetPlanRequest(Guid id)
+    {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
+        var tenant = await _context.Tenants.FindAsync(id);
+        if (tenant == null) return NotFound("Tenant not found.");
+
+        var req = tenant.GetPlanRequest();
+        if (req == null) return NotFound("No plan request found for this tenant.");
+
+        return Ok(req);
     }
 
     [HttpGet("{id}/backup")]
@@ -389,6 +436,7 @@ public class TenantDto
     public string BillingStatus { get; set; } = string.Empty;
     public bool CanRunRuntime { get; set; }
     public DateTime CreatedAt { get; set; }
+    public PlanRequestDto? PlanRequest { get; set; }
     public int KeyCount { get; set; }
     public List<TenantApiKeyDto> Keys { get; set; } = new();
 }

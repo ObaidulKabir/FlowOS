@@ -26,8 +26,10 @@ public static class FlowOsMcpGuidance
         - On https://flowosbd.com the JSON-RPC path is `/mcp/` (trailing slash required). On https://flowos.prospectbdltd.com it is `/mcp`.
         - Never strip a trailing slash. Never follow HTTP 301/302 for POST; a slash redirect can switch to http:// and drop the body and API key.
         - Accept: application/json, text/event-stream. Headers: X-MCP-API-Key (or Authorization: Bearer) and x-tenant-id.
-        - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com.
-        - Commercial policy: MCP is included on every package (Free through Enterprise). Packages progress Free → Starter → Builder → Team → Growth → Scale → Enterprise, metered on publications, events, and generous MCP calls. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, assign_instance_role, publish_event, complete_task, publish, activate) require a paid Active plan (stored as Managed Cloud or Enterprise) and return MCP-PLAN-REQUIRED until activated.
+        - X-MCP-API-Key must be a tenant application key that starts with `flw_live_`. Expires In (Days) 0 stores no expiry, so that key does not expire until it is revoked. A dashboard login token starts with `eyJ` and expires in 24 hours; do not send it as X-MCP-API-Key.
+        - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com. A key created on another host or an in-memory database returns HTTP 401 Invalid or unknown tenant API key.
+        - x-tenant-id must be the tenant that owns the key, or be omitted so the key selects its tenant. A mismatch returns Cross-tenant access forbidden.
+        - Commercial policy: MCP is included on every package (Free through Enterprise). Packages progress Free → Starter → Builder → Team → Growth → Scale → Enterprise, metered on publications, events, and generous MCP calls. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, assign_instance_role, publish_event, complete_task, publish, activate) require a paid Active plan (stored as Managed Cloud or Enterprise) and return HTTP 402 MCP-PLAN-REQUIRED until an admin activates the plan. That 402 is not key expiry. The tenant requests Starter, Builder, Team, Growth, Scale, or Enterprise; an admin approves it. Starter through Scale are stored as Managed with billing Active. Enterprise is stored as Enterprise. A rejected request leaves the tenant on Trial.
 
         FlowOS is a dual-kernel enterprise process operating system that strictly separates:
         1. State Authority (Mathematical State Machine) - Controls what state transitions are legally permitted.
@@ -1124,7 +1126,7 @@ public static class FlowOsMcpGuidance
 
         ## Failure troubleshooting
 
-        - `MCP-PLAN-REQUIRED` / persisted `ENTITLEMENT_DENIED`: activate Managed/Enterprise; no provider call was made.
+        - `MCP-PLAN-REQUIRED` / persisted `ENTITLEMENT_DENIED`: the tenant plan is not active. This is not an expired `flw_live_` key. An admin approves Starter, Builder, Team, Growth, Scale, or Enterprise; no provider call was made.
         - `MCP-HOSTED-LLM-QUOTA` / persisted `HOSTED_QUOTA_DENIED`: the durable UTC-day tenant cap is exhausted. Wait for UTC reset, raise the operator cap, or bind BYO. BYO usage is not charged to hosted quota.
         - `MCP-HOSTED-LLM-UNAVAILABLE` / persisted `PROVIDER_CONFIGURATION`: configure the platform key on the process that executes the job.
         - `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`: inspect provider/BYO configuration and retry policy. Failed provider runs never generate a successful AgentInsight.

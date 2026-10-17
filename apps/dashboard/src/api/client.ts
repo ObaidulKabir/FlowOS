@@ -8,7 +8,8 @@ import {
   ResendVerificationResponse, TenantUserDto, TenantDto,
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
   WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
-  TenantApiKeyDto, CreateKeyResponse, TenantRoleDto, AgentEvaluationMetrics
+  TenantApiKeyDto, CreateKeyResponse, TenantRoleDto, AgentEvaluationMetrics,
+  PlanRequestDto, TenantPlanRequestItem
 } from '../types';
 
 const API_BASE = '/api/workflow-classes';
@@ -495,16 +496,56 @@ export const api = {
 
   setTenantPlan: async (
     tenantId: string,
-    plan: 'Managed' | 'Enterprise' = 'Managed',
-    billingStatus: 'Unpaid' | 'Active' | 'PastDue' | 'Canceled' = 'Active'
+    plan: string = 'Managed',
+    billingStatus: 'Unpaid' | 'Active' | 'PastDue' | 'Canceled' = 'Active',
+    adminNotes?: string
   ): Promise<{ tenantId: string; name: string; plan: string; billingStatus: string; canRunRuntime: boolean }> => {
     const headers = getHeaders('Admin');
     const response = await fetch(`/api/admin/tenants/${tenantId}/plan`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ plan, billingStatus })
+      body: JSON.stringify({ plan, billingStatus, adminNotes })
     });
     return handleResponse(response, 'Failed to set tenant plan');
+  },
+
+  submitPlanRequest: async (
+    tenantId: string,
+    plan: string,
+    paymentReference?: string,
+    billingContactEmail?: string,
+    notes?: string
+  ): Promise<PlanRequestDto> => {
+    const headers = getHeaders();
+    const response = await fetch(`/api/tenants/${tenantId}/plan-request`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ plan, paymentReference, billingContactEmail, notes })
+    });
+    return handleResponse(response, 'Failed to submit plan request');
+  },
+
+  getPlanRequest: async (tenantId: string): Promise<PlanRequestDto | null> => {
+    const headers = getHeaders();
+    const response = await fetch(`/api/tenants/${tenantId}/plan-request`, { headers });
+    if (response.status === 404) return null;
+    return handleResponse(response, 'Failed to get plan request');
+  },
+
+  listPlanRequests: async (): Promise<TenantPlanRequestItem[]> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch('/api/admin/tenants/plan-requests', { headers });
+    return handleResponse(response, 'Failed to list plan requests');
+  },
+
+  rejectPlanRequest: async (tenantId: string, reason?: string): Promise<void> => {
+    const headers = getHeaders('Admin');
+    const response = await fetch(`/api/admin/tenants/${tenantId}/plan-request/reject`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ reason })
+    });
+    return handleResponse(response, 'Failed to reject plan request');
   },
 
   registerTenant: async (

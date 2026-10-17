@@ -1,3 +1,4 @@
+using FlowOS.Api.Models;
 using FlowOS.Application.Commands.Admin;
 using FlowOS.Application.Queries.Admin;
 using FlowOS.Core.Interfaces;
@@ -87,13 +88,38 @@ public class AdminController : ControllerBase
         return Ok(result);
     }
 
+    // ── Plan management ────────────────────────────────────────────────
+
+    [HttpGet("tenants/plan-requests")]
+    public async Task<IActionResult> ListPlanRequests()
+    {
+        var tenants = await _db.Tenants
+            .AsNoTracking()
+            .ToListAsync();
+
+        var items = tenants
+            .Select(t => new { tenant = t, req = t.GetPlanRequest() })
+            .Where(x => x.req != null)
+            .Select(x => new TenantPlanRequestItemDto
+            {
+                TenantId = x.tenant.TenantId,
+                TenantName = x.tenant.Name,
+                CurrentPlan = x.tenant.Plan.ToString(),
+                CurrentBillingStatus = x.tenant.BillingStatus.ToString(),
+                CanRunRuntime = x.tenant.CanRunRuntime,
+                PlanRequest = x.req!
+            })
+            .ToList();
+
+        return Ok(items);
+    }
+
     [HttpPost("tenants/{id:guid}/plan")]
     public async Task<IActionResult> SetTenantPlan(Guid id, [FromBody] SetTenantPlanRequest request)
     {
-        if (!Enum.TryParse<TenantPlan>(request.Plan, ignoreCase: true, out var plan) ||
-            plan is TenantPlan.None or TenantPlan.Trial)
+        if (!CommercialPlans.TryMap(request.Plan, out var plan, out _))
         {
-            return BadRequest("Plan must be Managed or Enterprise.");
+            return BadRequest("Plan must be Starter, Builder, Team, Growth, Scale, Managed, or Enterprise.");
         }
 
         if (!Enum.TryParse<TenantBillingStatus>(request.BillingStatus, ignoreCase: true, out var billingStatus))
@@ -106,6 +132,18 @@ public class AdminController : ControllerBase
             return NotFound();
 
         tenant.AssignPlan(plan, billingStatus);
+
+        // Auto-approve any pending plan request
+        var existingReq = tenant.GetPlanRequest();
+        if (existingReq != null && existingReq.Status == "Pending")
+        {
+            existingReq.Status = "Approved";
+            existingReq.ReviewedAt = DateTime.UtcNow;
+            existingReq.ReviewedBy = _currentUser.Id ?? "admin";
+            existingReq.AdminNotes = request.AdminNotes?.Trim();
+            tenant.SetPlanRequest(existingReq);
+        }
+
         await _db.SaveChangesAsync();
 
         return Ok(new
@@ -117,10 +155,36 @@ public class AdminController : ControllerBase
             canRunRuntime = tenant.CanRunRuntime
         });
     }
+
+    [HttpPost("tenants/{id:guid}/plan-request/reject")]
+    public async Task<IActionResult> RejectPlanRequest(Guid id, [FromBody] RejectPlanRequest request)
+    {
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.TenantId == id);
+        if (tenant == null)
+            return NotFound();
+
+        var existingReq = tenant.GetPlanRequest();
+        if (existingReq == null)
+            return NotFound("No plan request found for this tenant.");
+
+        if (existingReq.Status != "Pending")
+            return BadRequest($"Plan request is already '{existingReq.Status}' and cannot be rejected again.");
+
+        existingReq.Status = "Rejected";
+        existingReq.ReviewedAt = DateTime.UtcNow;
+        existingReq.ReviewedBy = _currentUser.Id ?? "admin";
+        existingReq.AdminNotes = request.Reason?.Trim();
+        tenant.SetPlanRequest(existingReq);
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Plan request rejected.", tenantId = id });
+    }
 }
 
 public sealed class SetTenantPlanRequest
 {
     public string Plan { get; set; } = "Managed";
     public string BillingStatus { get; set; } = "Active";
+    public string? AdminNotes { get; set; }
 }
