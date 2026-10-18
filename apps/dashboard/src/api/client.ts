@@ -252,6 +252,10 @@ const handleResponse = async (response: Response, errorMessage: string) => {
     } catch {
       // Ignore parsing error, use status
     }
+    const session = getAuthSession();
+    if (response.status === 401 && !session.isSandbox && !session.apiKey && !session.token) {
+      errorDetails += ': No active credential. Sign in again to continue.';
+    }
     throw new Error(`${errorMessage}${errorDetails}`);
   }
   return response.json();

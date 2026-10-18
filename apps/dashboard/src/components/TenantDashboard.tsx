@@ -202,7 +202,7 @@ export const TenantDashboard: React.FC<Props> = ({
 
   useEffect(() => {
     loadData();
-  }, [activeHub, session.tenantId]);
+  }, [activeHub, session.tenantId, session.token, session.apiKey]);
 
   const handleCopyTenantId = () => {
     navigator.clipboard.writeText(session.tenantId);
@@ -825,7 +825,14 @@ export const TenantDashboard: React.FC<Props> = ({
       {error && (
         <div className="p-4 bg-rose-900/30 border border-rose-700 rounded-xl text-xs text-rose-300 flex items-center gap-2">
           <AlertTriangle size={15} className="shrink-0 text-rose-400" />
-          <span>{error}</span>
+          <span>{error.includes('HTTP 401')
+            ? 'Your session cannot access this tenant. Sign in again to continue.'
+            : error}</span>
+          {error.includes('HTTP 401') && (
+            <button type="button" onClick={onSwitchWorkspace} className="ml-auto shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-500">
+              Sign in again
+            </button>
+          )}
         </div>
       )}
 

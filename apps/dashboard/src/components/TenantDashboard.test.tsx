@@ -83,5 +83,41 @@ describe('TenantDashboard - Launch Instance Modal', () => {
     expect(screen.getAllByText('PublicWorkflow').length).toBeGreaterThan(0);
     expect(screen.getAllByText('FlowOS Content Studio').length).toBeGreaterThan(0);
   });
+
+  test('offers sign-in after a 401 and reloads instances when credentials change for the same tenant', async () => {
+    const onSwitchWorkspace = vi.fn();
+    api.listInstances.mockRejectedValueOnce(new Error('Failed to list workflow instances (HTTP 401 )'));
+    const { rerender } = render(
+      <TenantDashboard
+        session={{ ...mockSession, apiKey: undefined, token: 'expired-token' } as any}
+        onSwitchWorkspace={onSwitchWorkspace}
+        onGoHome={vi.fn()}
+        onSwitchRole={vi.fn()}
+        onRegister={vi.fn()}
+        onSignOut={vi.fn()}
+        mcpUrl="http://localhost:5183/mcp"
+      />
+    );
+
+    const signIn = await screen.findByRole('button', { name: 'Sign in again' });
+    expect(screen.queryByText('Failed to list workflow instances (HTTP 401 )')).not.toBeInTheDocument();
+    fireEvent.click(signIn);
+    expect(onSwitchWorkspace).toHaveBeenCalledOnce();
+
+    rerender(
+      <TenantDashboard
+        session={{ ...mockSession, apiKey: undefined, token: 'renewed-token' } as any}
+        onSwitchWorkspace={onSwitchWorkspace}
+        onGoHome={vi.fn()}
+        onSwitchRole={vi.fn()}
+        onRegister={vi.fn()}
+        onSignOut={vi.fn()}
+        mcpUrl="http://localhost:5183/mcp"
+      />
+    );
+
+    await waitFor(() => expect(api.listInstances).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sign in again' })).not.toBeInTheDocument());
+  });
 });
 

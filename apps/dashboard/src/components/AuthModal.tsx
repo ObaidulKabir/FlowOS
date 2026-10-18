@@ -80,11 +80,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setError('Tenant ID is required.');
         return;
       }
+      if (!loginApiKey.trim()) {
+        setError('Tenant API key is required.');
+        return;
+      }
       const session: AuthSession = {
         role: 'Tenant',
         tenantId: loginTenantId.trim(),
         tenantName: 'Client Tenant',
-        apiKey: loginApiKey.trim() || undefined,
+        apiKey: loginApiKey.trim(),
         username: `api-user@${loginTenantId.substring(0, 8)}.flowos`,
         isSandbox: false,
         isEmailVerified: true
@@ -582,7 +586,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <span>Tenant API Key</span>
                   </label>
                   <input
-                    type="text"
+                    type="password"
+                    required
                     placeholder="<YOUR_MCP_API_KEY>"
                     value={loginApiKey}
                     onChange={(e) => setLoginApiKey(e.target.value)}
