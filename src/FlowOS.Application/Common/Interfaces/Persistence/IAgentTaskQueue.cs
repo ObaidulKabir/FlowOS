@@ -66,6 +66,10 @@ public sealed record AgentTaskJobSnapshot(
             or AgentTaskJobStatus.Cancelled;
 }
 
+public sealed record AgentTaskClaimExecutionResult<TResult>(
+    bool Executed,
+    TResult? Result);
+
 public interface IAgentTaskQueue
 {
     /// <summary>
@@ -93,9 +97,22 @@ public interface IAgentTaskQueue
         TimeSpan claimDuration,
         CancellationToken cancellationToken = default);
 
+    Task<bool> RenewClaimAsync(
+        Guid jobId,
+        string claimant,
+        TimeSpan claimDuration,
+        CancellationToken cancellationToken = default);
+
     Task<bool> CompleteAsync(
         Guid jobId,
         string claimant,
+        CancellationToken cancellationToken = default);
+
+    Task<AgentTaskClaimExecutionResult<TResult>> ExecuteWhileClaimOwnedAsync<TResult>(
+        Guid jobId,
+        string claimant,
+        int attempt,
+        Func<CancellationToken, Task<TResult>> action,
         CancellationToken cancellationToken = default);
 
     Task<AgentTaskJobStatus?> RetryAsync(

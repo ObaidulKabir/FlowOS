@@ -65,6 +65,19 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject GetAgentTaskJob() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["jobId"],
+          "properties":{
+            "jobId":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject GetAgentExecutionHistory() => JObject.Parse(
         """
         {

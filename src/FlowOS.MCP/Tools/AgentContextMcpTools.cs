@@ -4,6 +4,7 @@ using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.Tools;
@@ -13,15 +14,19 @@ public class AgentContextMcpTools
     private readonly IDecisionPacketBuilder _packetBuilder;
     private readonly IPluginBindingRegistryService _pluginBindings;
     private readonly IAgentToolHost? _toolHost;
+    private readonly bool _allowGatewayPrefetch;
 
     public AgentContextMcpTools(
         IDecisionPacketBuilder packetBuilder,
         IPluginBindingRegistryService pluginBindings,
-        IAgentToolHost? toolHost = null)
+        IAgentToolHost? toolHost = null,
+        IConfiguration? configuration = null)
     {
         _packetBuilder = packetBuilder;
         _pluginBindings = pluginBindings;
         _toolHost = toolHost;
+        _allowGatewayPrefetch = configuration?.GetValue<bool?>(
+            "FlowOS:Agents:AllowGatewayPrefetch") ?? true;
     }
 
     public async Task<CallToolResult> GetAgentContext(JObject args)
@@ -41,7 +46,9 @@ public class AgentContextMcpTools
             if (packet == null)
                 return McpToolResults.Fail("MCP-NOTFOUND-001", "Workflow instance was not found.");
 
-            var prefetch = args["prefetch"]?.Value<bool>() ?? true;
+            var prefetch = args["prefetch"]?.Value<bool>() ?? _allowGatewayPrefetch;
+            if (prefetch && !_allowGatewayPrefetch)
+                return McpToolResults.Fail("MCP-ARG-001", "Gateway prefetch is disabled; request context with prefetch:false.");
             var prefetched = false;
             if (prefetch && _toolHost != null)
             {
@@ -99,6 +106,8 @@ public class AgentContextMcpTools
                 return McpToolResults.Fail("MCP-NOTFOUND-001", "Workflow class or context binding was not found.");
 
             var prefetch = args["prefetch"]?.Value<bool>() ?? false;
+            if (prefetch && !_allowGatewayPrefetch)
+                return McpToolResults.Fail("MCP-ARG-001", "Gateway prefetch is disabled; request context with prefetch:false.");
             var prefetched = false;
             if (prefetch && _toolHost != null)
             {

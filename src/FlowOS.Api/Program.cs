@@ -94,7 +94,11 @@ builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.Workf
 builder.Services.AddHostedService<FlowOS.Infrastructure.BackgroundServices.InMemoryDataCleanupService>();
 builder.Services.Configure<AgentTaskProcessorOptions>(
     builder.Configuration.GetSection(AgentTaskProcessorOptions.ConfigurationSection));
-builder.Services.AddHostedService<AgentTaskProcessorService>();
+if (builder.Configuration.GetValue<bool?>(
+        $"{AgentTaskProcessorOptions.ConfigurationSection}:Enabled") ?? true)
+{
+    builder.Services.AddHostedService<AgentTaskProcessorService>();
+}
 
 builder.Services.AddCors(options =>
 {

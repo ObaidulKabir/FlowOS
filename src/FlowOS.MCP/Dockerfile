@@ -27,11 +27,11 @@ RUN dotnet restore "src/FlowOS.MCP/FlowOS.MCP.csproj"
 # Copy the rest of the source code
 COPY . .
 WORKDIR "/src/src/FlowOS.MCP"
-RUN dotnet build "FlowOS.MCP.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet build "FlowOS.MCP.csproj" -c $BUILD_CONFIGURATION -o /app/build --no-restore
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "FlowOS.MCP.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "FlowOS.MCP.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false --no-restore
 
 FROM base AS final
 WORKDIR /app

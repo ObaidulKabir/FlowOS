@@ -36,6 +36,12 @@ public interface IAgentTaskCoordinator
         TimeSpan claimDuration,
         CancellationToken cancellationToken = default);
 
+    Task<AgentTaskSynchronousResult> EnqueueAndWaitAsync(
+        AgentTaskEnqueueRequest request,
+        TimeSpan waitTimeout,
+        TimeSpan pollInterval,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AgentTaskEnqueueResult>> EnqueueCurrentStepAsync(
         Guid tenantId,
         Guid workflowInstanceId,

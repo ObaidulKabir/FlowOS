@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Domain.Entities;
+using FlowOS.Domain.Enums;
 using FlowOS.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
@@ -111,6 +113,102 @@ public sealed class PostgresConcurrencyTests : IClassFixture<PostgresConcurrency
         Assert.Equal(newOwner, newHandle!.OwnerId);
     }
 
+    [Fact]
+    public async Task AgentJobs_TwoWorkers_ClaimEachJobOnce()
+    {
+        var firstJobId = await SeedAgentJobAsync();
+        var secondJobId = await SeedAgentJobAsync();
+        await using var firstContext = _fixture.CreateContext();
+        await using var secondContext = _fixture.CreateContext();
+        var firstQueue = new AgentTaskQueue(firstContext);
+        var secondQueue = new AgentTaskQueue(secondContext);
+
+        var batches = await Task.WhenAll(
+            firstQueue.ClaimBatchAsync("worker-a", 1, TimeSpan.FromMinutes(2)),
+            secondQueue.ClaimBatchAsync("worker-b", 1, TimeSpan.FromMinutes(2)));
+
+        Assert.All(batches, batch => Assert.Single(batch));
+        Assert.Equal(2, batches.SelectMany(batch => batch).Select(claim => claim.JobId).Distinct().Count());
+        Assert.Contains(batches.SelectMany(batch => batch), claim => claim.JobId == firstJobId);
+        Assert.Contains(batches.SelectMany(batch => batch), claim => claim.JobId == secondJobId);
+    }
+
+    [Fact]
+    public async Task AgentJobs_HeartbeatAndCrashRecovery_RejectsStaleOwner()
+    {
+        var jobId = await SeedAgentJobAsync();
+        var clock = new AdjustableClock(DateTimeOffset.UtcNow);
+        await using var firstContext = _fixture.CreateContext();
+        await using var secondContext = _fixture.CreateContext();
+        var firstQueue = new AgentTaskQueue(firstContext, clock);
+        var secondQueue = new AgentTaskQueue(secondContext, clock);
+
+        var claim = await firstQueue.ClaimAsync(jobId, "worker-a", TimeSpan.FromSeconds(10));
+        Assert.NotNull(claim);
+
+        clock.Advance(TimeSpan.FromSeconds(6));
+        Assert.True(await firstQueue.RenewClaimAsync(jobId, "worker-a", TimeSpan.FromSeconds(10)));
+        Assert.False(await secondQueue.RenewClaimAsync(jobId, "worker-b", TimeSpan.FromSeconds(10)));
+        clock.Advance(TimeSpan.FromSeconds(6));
+        Assert.Equal(0, await secondQueue.ReconcileAsync());
+        Assert.Empty(await secondQueue.ClaimBatchAsync(
+            "worker-b", 1, TimeSpan.FromSeconds(10)));
+
+        // Simulate the first process dying: its heartbeat stops until the claim expires.
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.False(await firstQueue.CompleteAsync(jobId, "worker-a"));
+        Assert.Equal(1, await secondQueue.ReconcileAsync());
+        var reclaimed = Assert.Single(await secondQueue.ClaimBatchAsync(
+            "worker-b", 1, TimeSpan.FromSeconds(10)));
+        Assert.Equal(jobId, reclaimed.JobId);
+        Assert.Equal(2, reclaimed.Attempt);
+        Assert.False(await firstQueue.RenewClaimAsync(jobId, "worker-a", TimeSpan.FromSeconds(10)));
+        Assert.False(await firstQueue.CompleteAsync(jobId, "worker-a"));
+        Assert.True(await secondQueue.CompleteAsync(jobId, "worker-b"));
+        Assert.Equal(AgentTaskJobStatus.Completed, (await firstQueue.GetAsync(jobId))?.Status);
+    }
+
+    [Fact]
+    public async Task AgentJobs_TransactionalFence_RollsBackWhenClaimExpiresBeforeCommit()
+    {
+        var tenantId = Guid.NewGuid();
+        var jobId = await SeedAgentJobAsync(tenantId);
+        var clock = new AdjustableClock(DateTimeOffset.UtcNow);
+        await using var context = _fixture.CreateContext();
+        var queue = new AgentTaskQueue(context, clock);
+
+        Assert.NotNull(await queue.ClaimAsync(
+            jobId,
+            "worker-fence",
+            TimeSpan.FromSeconds(5)));
+
+        var fenced = await queue.ExecuteWhileClaimOwnedAsync(
+            jobId,
+            "worker-fence",
+            1,
+            async cancellationToken =>
+            {
+                context.WorkflowContextBindings.Add(
+                    new WorkflowContextBinding(
+                        tenantId,
+                        "FenceTest",
+                        "Rollback-Expected"));
+                await context.SaveChangesAsync(cancellationToken);
+                clock.Advance(TimeSpan.FromSeconds(6));
+                return true;
+            });
+
+        Assert.False(fenced.Executed);
+
+        await using var verificationContext = _fixture.CreateContext();
+        Assert.False(await verificationContext.WorkflowContextBindings.AnyAsync(
+            binding => binding.Name == "Rollback-Expected" &&
+                       binding.TenantId == tenantId));
+        var snapshot = await new AgentTaskQueue(verificationContext, clock).GetAsync(jobId);
+        Assert.Equal(AgentTaskJobStatus.Claimed, snapshot?.Status);
+        Assert.Equal("worker-fence", snapshot?.Claimant);
+    }
+
     // ─── WorkflowContextBinding Optimistic Concurrency ──────────────────────────
 
     /// <summary>
@@ -211,7 +309,28 @@ public sealed class PostgresConcurrencyTests : IClassFixture<PostgresConcurrency
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
+    private async Task<Guid> SeedAgentJobAsync(Guid? tenantId = null)
+    {
+        await using var context = _fixture.CreateContext();
+        var queue = new AgentTaskQueue(context);
+        var enqueued = await queue.EnqueueAsync(new AgentTaskEnqueueRequest(
+            tenantId ?? Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Review",
+            "risk-agent",
+            null,
+            AllowAutoCommit: true,
+            RequireAgentActor: true,
+            AgentTaskSource.WorkflowEntry));
+        return enqueued.JobId;
+    }
 
+    private sealed class AdjustableClock(DateTimeOffset initialUtc) : TimeProvider
+    {
+        private DateTimeOffset _utcNow = initialUtc;
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+        public void Advance(TimeSpan duration) => _utcNow = _utcNow.Add(duration);
+    }
 
     private async Task<Guid> SeedContextBindingAsync(Guid tenantId, string contextType, string name)
     {

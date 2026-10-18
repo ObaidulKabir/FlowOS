@@ -5,11 +5,13 @@ using FlowOS.MCP.Models;
 using FlowOS.MCP.Server;
 using FlowOS.MCP.Services;
 using FlowOS.Infrastructure.Persistence;
+using FlowOS.Security.Interfaces;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Headers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -109,6 +111,73 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         var unknownResponse = await _client.SendAsync(unknownKey);
         Assert.Equal(HttpStatusCode.Unauthorized, unknownResponse.StatusCode);
         Assert.Contains("Invalid or unknown tenant API key", await unknownResponse.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Login_jwt_uses_its_own_tenant_and_role_without_a_tenant_header()
+    {
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var jwt = _app.Services.GetRequiredService<IJwtTokenService>();
+        var token = jwt.GenerateToken(userId, "user@example.test", "Tenant User", tenantId, "Tenant", "Tenant");
+
+        using var request = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"diagnose_caller_permissions","arguments":{}}}""");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("MCP-Protocol-Version", McpJsonRpcDispatcher.SupportedProtocolVersion);
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var envelope = JObject.Parse(await response.Content.ReadAsStringAsync());
+        var result = JObject.Parse(envelope["result"]?["content"]?[0]?["text"]?.ToString() ?? "{}");
+        Assert.Equal(tenantId.ToString(), result["data"]?["tenantId"]?.ToString());
+        Assert.Equal("Tenant", result["data"]?["roles"]?[0]?.ToString());
+        Assert.Equal("serviceOrUser", result["data"]?["credentialType"]?.ToString());
+    }
+
+    [Fact]
+    public async Task Valid_login_jwt_works_when_a_stale_api_key_header_is_also_present()
+    {
+        var jwt = _app.Services.GetRequiredService<IJwtTokenService>();
+        var token = jwt.GenerateToken(
+            Guid.NewGuid(), "user@example.test", "Tenant User", Guid.NewGuid(), "Tenant", "Tenant");
+
+        using var request = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""");
+        request.Headers.Add("X-API-Key", "stale-or-unknown-key");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_jwt_with_a_different_requested_tenant_is_forbidden()
+    {
+        var jwt = _app.Services.GetRequiredService<IJwtTokenService>();
+        var token = jwt.GenerateToken(Guid.NewGuid(), "user@example.test", "Tenant User", Guid.NewGuid(), "Tenant", "Tenant");
+
+        using var request = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""");
+        request.Headers.Add("X-API-Key", token);
+        request.Headers.Add("x-tenant-id", Guid.NewGuid().ToString());
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("Cross-tenant access forbidden", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Expired_login_jwt_fails_closed_with_sign_in_guidance()
+    {
+        var jwt = _app.Services.GetRequiredService<IJwtTokenService>();
+        var token = jwt.GenerateToken(
+            Guid.NewGuid(), "user@example.test", "Tenant User", Guid.NewGuid(), "Tenant", "Tenant",
+            lifetime: TimeSpan.FromMinutes(-1));
+
+        using var request = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains("Sign in again", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

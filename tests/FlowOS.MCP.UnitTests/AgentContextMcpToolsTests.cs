@@ -4,12 +4,52 @@ using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
 using FlowOS.MCP.Services;
 using FlowOS.MCP.Tools;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.UnitTests;
 
 public sealed class AgentContextMcpToolsTests
 {
+    [Fact]
+    public async Task GetAgentContext_GatewayPrefetchDisabled_RejectsExplicitRequest()
+    {
+        McpRequestContext.Clear();
+        var tenantId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        var packet = new DecisionPacket(
+            tenantId, instanceId, "Review", "Waiting", "HumanTask", "Either",
+            "", "", new Dictionary<string, object?>(), Array.Empty<string>(),
+            Array.Empty<string>(), Array.Empty<string>(), Array.Empty<SlaReminderFact>(),
+            null, new Dictionary<string, object>(), "", null, null,
+            Array.Empty<AgentToolDescriptor>(), null);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FlowOS:Agents:AllowGatewayPrefetch"] = "false"
+            })
+            .Build();
+        var tools = new AgentContextMcpTools(
+            new StubPacketBuilder(packet),
+            new InMemoryPromptRegistry(),
+            configuration: configuration);
+        try
+        {
+            var forbidden = await tools.GetAgentContext(
+                JObject.FromObject(new { tenantId, workflowInstanceId = instanceId, prefetch = true }));
+            Assert.True(forbidden.IsError);
+
+            var defaultRequest = await tools.GetAgentContext(
+                JObject.FromObject(new { tenantId, workflowInstanceId = instanceId }));
+            Assert.False(defaultRequest.IsError);
+            Assert.False(JObject.Parse(defaultRequest.Content.Single().Text)["data"]!["agentContext"]!["prefetched"]?.Value<bool>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
     [Fact]
     public async Task GetAgentContext_ReturnsComposedPromptDataToolsProviderWithoutRunningAgent()
     {

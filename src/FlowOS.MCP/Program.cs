@@ -1,5 +1,6 @@
 using FlowOS.Application.Behaviors;
 using FlowOS.Application.Common.Interfaces;
+using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.Services;
 using FlowOS.Application.Commands.Governance;
 using FlowOS.Core.Interfaces;
@@ -29,6 +30,7 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 
 namespace FlowOS.MCP;
@@ -38,10 +40,49 @@ public partial class Program
     static async Task Main(string[] args)
     {
         var transport = Environment.GetEnvironmentVariable("MCP_TRANSPORT") ?? "stdio";
-        if (string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(transport, "worker", StringComparison.OrdinalIgnoreCase))
+            await RunWorkerAsync(args);
+        else if (string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase))
             await RunHttpAsync(args);
         else
             await RunStdioAsync(args);
+    }
+
+    public static IHost BuildWorkerHost(string[] args)
+    {
+        return Host.CreateDefaultBuilder(args)
+            .ConfigureServices((context, services) =>
+            {
+                AddFlowOsMcpServices(
+                    services,
+                    includeAutoPilot: context.Configuration.GetValue<bool>(
+                        "FlowOS:Agents:Worker:RunExternalAutoPilot"));
+                services.AddScoped<AgentWorkerCurrentUser>();
+                services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<AgentWorkerCurrentUser>());
+                services.Configure<AgentTaskProcessorOptions>(
+                    context.Configuration.GetSection(AgentTaskProcessorOptions.ConfigurationSection));
+                services.AddHostedService<AgentTaskProcessorService>();
+            })
+            .Build();
+    }
+
+    private static async Task RunWorkerAsync(string[] args)
+    {
+        using var host = BuildWorkerHost(args);
+        var connection = host.Services.GetRequiredService<IConfiguration>()
+            .GetConnectionString("DefaultConnection");
+        if (!PostgresConnection.HasUsableHost(connection))
+            throw new InvalidOperationException("Trusted agent workers require a PostgreSQL connection.");
+
+        if (host.Services.GetRequiredService<IConfiguration>().GetValue<bool>(
+                "FlowOS:Agents:Worker:RunExternalAutoPilot"))
+        {
+            ToolRegistration.RegisterAll(
+                host.Services.GetRequiredService<IToolRegistry>(),
+                host.Services);
+        }
+
+        await host.RunAsync();
     }
 
     static async Task RunStdioAsync(string[] args)
@@ -49,7 +90,10 @@ public partial class Program
         var host = Host.CreateDefaultBuilder(args)
             .ConfigureServices((context, services) =>
             {
-                AddFlowOsMcpServices(services);
+                AddFlowOsMcpServices(
+                    services,
+                    includeAutoPilot: context.Configuration.GetValue<bool?>(
+                        "FlowOS:Agents:ExternalAutoPilotEnabled") ?? true);
                 services.AddSingleton<McpServer>();
                 services.AddHostedService<McpHostedService>();
             })
@@ -80,7 +124,10 @@ public partial class Program
 
         builder.WebHost.UseUrls(Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "http://0.0.0.0:8080");
 
-        AddFlowOsMcpServices(builder.Services);
+        AddFlowOsMcpServices(
+            builder.Services,
+            includeAutoPilot: builder.Configuration.GetValue<bool?>(
+                "FlowOS:Agents:ExternalAutoPilotEnabled") ?? true);
         configureBuilder?.Invoke(builder);
 
         var apiKey = builder.Configuration["MCP_API_KEY"];
@@ -163,6 +210,9 @@ public partial class Program
             Guid? dbResolvedTenantId = null;
             IReadOnlyCollection<string> resolvedScopes = Array.Empty<string>();
             var isTenantApiKeyCredential = false;
+            string? jwtRole = null;
+            string? jwtCallerId = null;
+            var attemptedJwt = false;
 
             if (isAuthRequired)
             {
@@ -200,8 +250,34 @@ public partial class Program
                     isTenantApiKeyCredential = true;
                 }
 
+                if (!isValidKey)
+                {
+                    var bearer = context.Request.Headers.Authorization.FirstOrDefault();
+                    var jwtValue = !string.IsNullOrWhiteSpace(bearer) &&
+                                   bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                        ? bearer["Bearer ".Length..].Trim()
+                        : suppliedApiKey;
+                    if (!string.IsNullOrWhiteSpace(jwtValue) && jwtValue.Split('.').Length == 3)
+                    {
+                        attemptedJwt = true;
+                        var principal = context.RequestServices.GetRequiredService<IJwtTokenService>()
+                            .ValidateToken(jwtValue);
+                        var credentialTenant = FlowOS.Core.Security.TenantIdentityRules.CredentialTenant(
+                            principal?.FindFirst("tenant_id")?.Value);
+                        jwtRole = principal?.FindFirst(ClaimTypes.Role)?.Value;
+                        jwtCallerId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                        if (credentialTenant.HasValue &&
+                            !string.IsNullOrWhiteSpace(jwtRole) &&
+                            !string.IsNullOrWhiteSpace(jwtCallerId))
+                        {
+                            dbResolvedTenantId = credentialTenant.Value;
+                            isValidKey = true;
+                        }
+                    }
+                }
+
                 var tenantKeyLookupFailed = false;
-                if (!isValidKey && !string.IsNullOrWhiteSpace(suppliedApiKey))
+                if (!isValidKey && !attemptedJwt && !string.IsNullOrWhiteSpace(suppliedApiKey))
                 {
                     try
                     {
@@ -234,7 +310,7 @@ public partial class Program
 
                 if (!isValidKey)
                 {
-                    context.Response.Headers.WWWAuthenticate = "ApiKey";
+                    context.Response.Headers.WWWAuthenticate = attemptedJwt ? "Bearer" : "ApiKey";
                     if (tenantKeyLookupFailed)
                     {
                         await WriteHttpError(
@@ -246,8 +322,10 @@ public partial class Program
                     }
 
                     var message = string.IsNullOrWhiteSpace(suppliedApiKey)
-                        ? "Authentication required. Provide X-MCP-API-Key (or X-API-Key) and x-tenant-id."
-                        : "Invalid or unknown tenant API key.";
+                        ? "Authentication required. Provide a tenant API key or a login JWT."
+                        : attemptedJwt
+                            ? "Invalid or expired login JWT. Sign in again."
+                            : "Invalid or unknown tenant API key.";
                     await WriteHttpError(context, StatusCodes.Status401Unauthorized, -32001, message);
                     return;
                 }
@@ -276,7 +354,7 @@ public partial class Program
 
             if (dbResolvedTenantId.HasValue && tenantId != Guid.Empty && tenantId != dbResolvedTenantId.Value)
             {
-                await WriteHttpError(context, StatusCodes.Status403Forbidden, -32003, "Cross-tenant access forbidden. The authenticated API key is not authorized for the requested tenant context.");
+                await WriteHttpError(context, StatusCodes.Status403Forbidden, -32003, "Cross-tenant access forbidden. The authenticated credential is not authorized for the requested tenant context.");
                 return;
             }
 
@@ -298,7 +376,8 @@ public partial class Program
                 ? FlowOS.Core.Security.TenantIdentityRules.ResolveApiKeyRole(
                     resolvedScopes,
                     FlowOS.Core.Security.TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
-                : serviceRole;
+                : jwtRole ?? serviceRole;
+            McpRequestContext.CallerId = jwtCallerId;
             McpRequestContext.Scopes = resolvedScopes;
             McpRequestContext.IsApiKey = isTenantApiKeyCredential;
             McpRequestContext.IsAuthenticatedTransport = true;
@@ -362,8 +441,9 @@ public partial class Program
                 },
                 auth = new
                 {
-                    type = "apiKey",
+                    type = "apiKeyOrBearerJwt",
                     header = "X-MCP-API-Key",
+                    bearerHeader = "Authorization",
                     tenantHeader = "x-tenant-id",
                     sandboxAllowed = true
                 },
@@ -441,7 +521,7 @@ public partial class Program
                     followRedirectsOnPost = false
                 },
                 methodsSupported = new[] { "GET", "POST", "OPTIONS" },
-                authentication = "Header X-MCP-API-Key or Authorization: Bearer, plus x-tenant-id header",
+                authentication = "Tenant key via X-MCP-API-Key or login JWT via Authorization: Bearer. x-tenant-id is optional when the credential contains a tenant; a mismatch is forbidden.",
                 tools = toolItems.Select(t => new
                 {
                     name = t.Name,
@@ -619,7 +699,7 @@ public partial class Program
         }));
     }
 
-    static void AddFlowOsMcpServices(IServiceCollection services)
+    static void AddFlowOsMcpServices(IServiceCollection services, bool includeAutoPilot = true)
     {
         services.AddScoped<EventPublishingInterceptor>();
         services.AddScoped<ExternalAgentChangeInterceptor>();
@@ -684,12 +764,14 @@ public partial class Program
         services.AddScoped<ActionObservabilityMcpTools>();
         services.AddScoped<McpAuthorizationErrorMapper>();
         services.AddScoped<TenantTeamMcpTools>();
+        services.AddScoped<ITeamRepository>(sp => sp.GetRequiredService<IUnitOfWork>().Teams);
         services.AddScoped<TenantIamMcpTools>();
         services.AddScoped<ExternalAgentChangeFeedMcpTools>();
         services.AddScoped<ExternalAgentPlanMcpTools>();
         services.AddScoped<IExternalAIAgentPlanner, DefaultExternalAIAgentPlanner>();
         services.AddScoped<IExternalAIAgentExecutor, DefaultExternalAIAgentExecutor>();
-        services.AddHostedService<ExternalAIAgentAutoPilotService>();
+        if (includeAutoPilot)
+            services.AddHostedService<ExternalAIAgentAutoPilotService>();
     }
 
     private static async Task InitializePostgresPersistenceAsync(

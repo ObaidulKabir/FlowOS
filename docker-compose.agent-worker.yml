@@ -1,0 +1,23 @@
+# Run this compose file on a separate, trusted worker machine.
+# Never run it on the production API host to claim host-level resource isolation.
+services:
+  agent-worker:
+    build:
+      context: .
+      dockerfile: src/FlowOS.MCP/Dockerfile
+    restart: unless-stopped
+    environment:
+      MCP_TRANSPORT: worker
+      ASPNETCORE_ENVIRONMENT: Production
+      UseInMemoryDatabase: "false"
+      ConnectionStrings__DefaultConnection: ${FLOWOS_AGENT_DATABASE_URL:?Private PostgreSQL connection is required}
+      FlowOS__Agents__Worker__BatchSize: ${FLOWOS_AGENT_BATCH_SIZE:-2}
+      FlowOS__Agents__Worker__MaxParallelism: ${FLOWOS_AGENT_PARALLELISM:-2}
+      FlowOS__Agents__Worker__RunExternalAutoPilot: ${FLOWOS_AGENT_EXTERNAL_AUTOPILOT:-false}
+      FLOWOS_HOSTED_LLM_ENABLED: ${FLOWOS_HOSTED_LLM_ENABLED:-false}
+      FLOWOS_HOSTED_LLM_API_KEY: ${FLOWOS_HOSTED_LLM_API_KEY:-}
+      FLOWOS_HOSTED_LLM_MODEL: ${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      FLOWOS_HOSTED_LLM_MAX_PER_DAY: ${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
+    mem_limit: 2g
+    cpus: 2
+    # No ports: the worker only polls the private PostgreSQL queue.

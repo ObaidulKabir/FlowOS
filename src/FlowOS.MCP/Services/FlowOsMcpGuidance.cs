@@ -25,10 +25,11 @@ public static class FlowOsMcpGuidance
         - Use the absolute `url` from GET discovery / GET /.well-known/mcp exactly.
         - On https://flowosbd.com the JSON-RPC path is `/mcp/` (trailing slash required). On https://flowos.prospectbdltd.com it is `/mcp`.
         - Never strip a trailing slash. Never follow HTTP 301/302 for POST; a slash redirect can switch to http:// and drop the body and API key.
-        - Accept: application/json, text/event-stream. Headers: X-MCP-API-Key (or Authorization: Bearer) and x-tenant-id.
-        - X-MCP-API-Key must be a tenant application key that starts with `flw_live_`. Expires In (Days) 0 stores no expiry, so that key does not expire until it is revoked. A dashboard login token starts with `eyJ` and expires in 24 hours; do not send it as X-MCP-API-Key.
+        - Accept: application/json, text/event-stream. Use X-MCP-API-Key for a tenant application key, or Authorization: Bearer for a dashboard login JWT. Never send credentials in tool arguments.
+        - A tenant application key starts with `flw_live_`. Expires In (Days) 0 stores no expiry, so that key does not expire until it is revoked. A dashboard login JWT expires in 24 hours; sign in again when it expires. JWTs use the caller's tenant, role, and identity, not the MCP service role.
+        - Login JWTs must be issued by this FlowOS host. The API and MCP must share the same JWT signing configuration; never send a token issued by another deployment.
         - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com. A key created on another host or an in-memory database returns HTTP 401 Invalid or unknown tenant API key.
-        - x-tenant-id must be the tenant that owns the key, or be omitted so the key selects its tenant. A mismatch returns Cross-tenant access forbidden.
+        - x-tenant-id must match the credential's tenant, or be omitted so the key or JWT selects its tenant. A mismatch returns Cross-tenant access forbidden.
         - Commercial policy: MCP is included on every package (Free through Enterprise). Packages progress Free → Starter → Builder → Team → Growth → Scale → Enterprise, metered on publications, events, and generous MCP calls. Trial keys may discover, lint, validate, and simulate. Runtime tools (start_workflow, assign_instance_role, publish_event, complete_task, publish, activate) require a paid Active plan (stored as Managed Cloud or Enterprise) and return HTTP 402 MCP-PLAN-REQUIRED until an admin activates the plan. That 402 is not key expiry. The tenant requests Starter, Builder, Team, Growth, Scale, or Enterprise; an admin approves it. Starter through Scale are stored as Managed with billing Active. Enterprise is stored as Enterprise. A rejected request leaves the tenant on Trial.
 
         FlowOS is a dual-kernel enterprise process operating system that strictly separates:

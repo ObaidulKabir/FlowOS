@@ -12,6 +12,7 @@ public static class McpRequestContext
 {
     private static readonly AsyncLocal<Guid> TenantIdCurrent = new();
     private static readonly AsyncLocal<string?> RoleCurrent = new();
+    private static readonly AsyncLocal<string?> CallerIdCurrent = new();
     private static readonly AsyncLocal<IReadOnlyCollection<string>?> ScopesCurrent = new();
     private static readonly AsyncLocal<bool> ApiKeyCurrent = new();
     private static readonly AsyncLocal<bool> AuthenticatedTransportCurrent = new();
@@ -26,6 +27,12 @@ public static class McpRequestContext
     {
         get => RoleCurrent.Value;
         set => RoleCurrent.Value = value;
+    }
+
+    public static string? CallerId
+    {
+        get => CallerIdCurrent.Value;
+        set => CallerIdCurrent.Value = value;
     }
 
     public static IReadOnlyCollection<string> Scopes
@@ -50,6 +57,7 @@ public static class McpRequestContext
     {
         TenantIdCurrent.Value = Guid.Empty;
         RoleCurrent.Value = null;
+        CallerIdCurrent.Value = null;
         ScopesCurrent.Value = null;
         ApiKeyCurrent.Value = false;
         AuthenticatedTransportCurrent.Value = false;
@@ -58,7 +66,7 @@ public static class McpRequestContext
 
 public class McpCurrentUser : ICurrentUser
 {
-    public string? Id => "mcp-agent";
+    public string? Id => McpRequestContext.CallerId ?? "mcp-agent";
 
     public Guid TenantId => McpRequestContext.TenantId;
 

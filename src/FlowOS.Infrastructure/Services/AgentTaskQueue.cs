@@ -102,6 +102,7 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
                     WHERE "Id" = {jobId}
                     FOR UPDATE SKIP LOCKED
                     """)
+                .AsNoTracking()
                 .SingleOrDefaultAsync(cancellationToken);
             if (job == null)
             {
@@ -109,6 +110,7 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
                 return null;
             }
 
+            TrackFreshJob(job);
             var claim = TryClaim(job, normalizedClaimant, now, expiresAt);
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -153,10 +155,14 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
                     LIMIT {batchSize}
                     FOR UPDATE SKIP LOCKED
                     """)
+                .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
             foreach (var job in jobs)
+            {
+                TrackFreshJob(job);
                 job.Claim(normalizedClaimant, now, expiresAt);
+            }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -181,6 +187,21 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
         return candidates.Select(ToClaim).ToArray();
     }
 
+    public Task<bool> RenewClaimAsync(
+        Guid jobId,
+        string claimant,
+        TimeSpan claimDuration,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateClaimArguments(claimant, claimDuration);
+        var now = UtcNow();
+        return WithLockedJobAsync(
+            jobId,
+            job => job.RenewClaim(claimant, now, now.Add(claimDuration)),
+            false,
+            cancellationToken);
+    }
+
     public Task<bool> CompleteAsync(
         Guid jobId,
         string claimant,
@@ -195,7 +216,9 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
                 if (job.IsTerminal ||
                     job.Status != AgentTaskJobStatus.Claimed ||
                     string.IsNullOrWhiteSpace(normalizedClaimant) ||
-                    !string.Equals(job.Claimant, normalizedClaimant, StringComparison.Ordinal))
+                    !string.Equals(job.Claimant, normalizedClaimant, StringComparison.Ordinal) ||
+                    job.ClaimExpiresAtUtc is null ||
+                    job.ClaimExpiresAtUtc <= UtcNow())
                 {
                     return false;
                 }
@@ -205,6 +228,74 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
             },
             false,
             cancellationToken);
+
+    public async Task<AgentTaskClaimExecutionResult<TResult>> ExecuteWhileClaimOwnedAsync<TResult>(
+        Guid jobId,
+        string claimant,
+        int attempt,
+        Func<CancellationToken, Task<TResult>> action,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        if (jobId == Guid.Empty)
+            return new AgentTaskClaimExecutionResult<TResult>(false, default);
+        if (string.IsNullOrWhiteSpace(claimant))
+            throw new ArgumentException("Claimant is required.", nameof(claimant));
+        if (attempt < 1)
+            throw new ArgumentOutOfRangeException(nameof(attempt));
+
+        var normalizedClaimant = claimant.Trim();
+
+        if (IsNpgsql)
+        {
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.ReadCommitted,
+                cancellationToken);
+            var job = await _dbContext.AgentTaskJobs
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "AgentTaskJobs"
+                    WHERE "Id" = {jobId}
+                    FOR UPDATE
+                    """)
+                .AsNoTracking()
+                .SingleOrDefaultAsync(cancellationToken);
+            if (job == null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return new AgentTaskClaimExecutionResult<TResult>(false, default);
+            }
+
+            TrackFreshJob(job);
+            if (!CanExecuteClaimedAction(job, normalizedClaimant, attempt, UtcNow()))
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return new AgentTaskClaimExecutionResult<TResult>(false, default);
+            }
+
+            var result = await action(cancellationToken);
+            if (!CanExecuteClaimedAction(job, normalizedClaimant, attempt, UtcNow()))
+            {
+                return new AgentTaskClaimExecutionResult<TResult>(false, default);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return new AgentTaskClaimExecutionResult<TResult>(true, result);
+        }
+
+        var fallbackJob = await _dbContext.AgentTaskJobs
+            .SingleOrDefaultAsync(x => x.Id == jobId, cancellationToken);
+        if (fallbackJob == null ||
+            !CanExecuteClaimedAction(fallbackJob, normalizedClaimant, attempt, UtcNow()))
+        {
+            return new AgentTaskClaimExecutionResult<TResult>(false, default);
+        }
+
+        var fallbackResult = await action(cancellationToken);
+        return CanExecuteClaimedAction(fallbackJob, normalizedClaimant, attempt, UtcNow())
+            ? new AgentTaskClaimExecutionResult<TResult>(true, fallbackResult)
+            : new AgentTaskClaimExecutionResult<TResult>(false, default);
+    }
 
     public Task<AgentTaskJobStatus?> RetryAsync(
         Guid jobId,
@@ -372,8 +463,11 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
                     LIMIT {ReconcileBatchSize}
                     FOR UPDATE SKIP LOCKED
                     """)
+                .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
+            foreach (var job in expired)
+                TrackFreshJob(job);
             var reconciled = Reconcile(expired, now);
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -447,6 +541,7 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
                     WHERE "Id" = {jobId}
                     FOR UPDATE
                     """)
+                .AsNoTracking()
                 .SingleOrDefaultAsync(cancellationToken);
             if (job == null)
             {
@@ -454,6 +549,7 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
                 return missingResult;
             }
 
+            TrackFreshJob(job);
             var result = mutation(job);
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -468,6 +564,14 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
         var fallbackResult = mutation(fallbackJob);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return fallbackResult;
+    }
+
+    private void TrackFreshJob(AgentTaskJob job)
+    {
+        var tracked = _dbContext.AgentTaskJobs.Local.FirstOrDefault(x => x.Id == job.Id);
+        if (tracked != null)
+            _dbContext.Entry(tracked).State = EntityState.Detached;
+        _dbContext.AgentTaskJobs.Attach(job);
     }
 
     private async Task<AgentTaskJobSnapshot?> GetSnapshotAsync(
@@ -529,6 +633,17 @@ public sealed class AgentTaskQueue : IAgentTaskQueue
 
         return count;
     }
+
+    private static bool CanExecuteClaimedAction(
+        AgentTaskJob job,
+        string claimant,
+        int attempt,
+        DateTime nowUtc) =>
+        job.Status == AgentTaskJobStatus.Claimed &&
+        string.Equals(job.Claimant, claimant, StringComparison.Ordinal) &&
+        job.Attempts == attempt &&
+        job.ClaimExpiresAtUtc is { } expiresAt &&
+        expiresAt > nowUtc;
 
     private static AgentTaskClaim? TryClaim(
         AgentTaskJob job,
