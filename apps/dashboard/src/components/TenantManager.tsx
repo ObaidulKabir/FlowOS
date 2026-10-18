@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, getActiveTenantId, setActiveTenantId } from '../api/client';
 import { TenantDto, TenantPlanRequestItem } from '../types';
 import { mcpRpcUrl } from '../mcpUrl';
-import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles, Layers, Clock, X, ChevronDown, SendHorizontal, ShieldAlert } from 'lucide-react';
+import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles, Layers, Clock, X } from 'lucide-react';
 import { ApiKeyScopePicker } from './ApiKeyScopePicker';
 import { API_KEY_SCOPE_PRESETS } from '../lib/apiKeyScopes';
 
