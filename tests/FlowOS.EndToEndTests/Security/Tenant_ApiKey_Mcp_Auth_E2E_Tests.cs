@@ -56,6 +56,7 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         {
             builder.UseEnvironment("Development");
             builder.UseSetting("UseInMemoryDatabase", "true");
+            builder.UseSetting("FlowOS:Identity:AllowMockAuth", "false");
             builder.ConfigureTestServices(services => UseNamedInMemoryDatabase(services, _sharedDb));
         });
         _api = _apiFactory.CreateClient();
@@ -141,6 +142,12 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         var apiWithKey = await _api.SendAsync(AuthorizedApi(HttpMethod.Get, $"/api/tenants/{tenantId}", generatedKey!, tenantId));
         Assert.Equal(HttpStatusCode.OK, apiWithKey.StatusCode);
 
+        var instanceList = await _api.SendAsync(AuthorizedApi(
+            HttpMethod.Get, $"/api/workflows?tenantId={tenantId}", generatedKey!, tenantId));
+        Assert.Equal(HttpStatusCode.OK, instanceList.StatusCode);
+        using (var instances = JsonDocument.Parse(await instanceList.Content.ReadAsStringAsync()))
+            Assert.Equal(JsonValueKind.Array, instances.RootElement.ValueKind);
+
         var discovery = await _mcpClient.GetAsync("/mcp");
         Assert.Equal(HttpStatusCode.OK, discovery.StatusCode);
         Assert.Contains("FlowOS MCP Server", await discovery.Content.ReadAsStringAsync());
@@ -197,6 +204,10 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         var revoked = await SendMcpAsync(_mcpClient, "/mcp", InitializeBody, tenantId, generatedKey!);
         Assert.Equal(HttpStatusCode.Unauthorized, revoked.response.StatusCode);
         Assert.Contains("Invalid or unknown tenant API key", revoked.body);
+
+        var revokedInstanceList = await _api.SendAsync(AuthorizedApi(
+            HttpMethod.Get, $"/api/workflows?tenantId={tenantId}", generatedKey!, tenantId));
+        Assert.Equal(HttpStatusCode.Unauthorized, revokedInstanceList.StatusCode);
     }
 
     [Fact]
@@ -263,6 +274,7 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-Mock-Role", "Admin");
         request.Headers.Add("x-tenant-id", FlowOS.Core.Security.TenantIdentityRules.DemoTenantId.ToString());
+        request.Headers.Add("X-API-Key", "flowos_prod_secret_key_32_chars_min");
         if (body != null)
             request.Content = JsonContent.Create(body);
         return request;

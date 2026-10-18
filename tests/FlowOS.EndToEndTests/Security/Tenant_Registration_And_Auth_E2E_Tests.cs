@@ -11,6 +11,7 @@ using FlowOS.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -25,6 +26,11 @@ public class Tenant_Registration_And_Auth_E2E_Tests : IClassFixture<WebApplicati
     {
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            builder.ConfigureAppConfiguration((_, configuration) =>
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["FlowOS:Identity:AllowMockAuth"] = "false"
+                }));
             builder.ConfigureTestServices(services =>
             {
                 var contextDescriptors = services.Where(d => d.ServiceType == typeof(FlowOSDbContext)).ToList();
@@ -136,6 +142,26 @@ public class Tenant_Registration_And_Auth_E2E_Tests : IClassFixture<WebApplicati
 
         var workflowsResponse = await _client.SendAsync(workflowsRequest);
         Assert.Equal(HttpStatusCode.OK, workflowsResponse.StatusCode);
+
+        // The dashboard's instance list uses a different endpoint from the blueprint catalog.
+        using var instancesRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/workflows?tenantId={tenantId}");
+        instancesRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
+        instancesRequest.Headers.Add("X-API-Key", jwtToken);
+        instancesRequest.Headers.Add("x-tenant-id", tenantId.ToString());
+        instancesRequest.Headers.Add("X-Mock-Role", "Tenant");
+        var instancesResponse = await _client.SendAsync(instancesRequest);
+        Assert.Equal(HttpStatusCode.OK, instancesResponse.StatusCode);
+        using var instancesJson = JsonDocument.Parse(await instancesResponse.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Array, instancesJson.RootElement.ValueKind);
+
+        using var missingCredentials = new HttpRequestMessage(HttpMethod.Get, $"/api/workflows?tenantId={tenantId}");
+        missingCredentials.Headers.Add("x-tenant-id", tenantId.ToString());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _client.SendAsync(missingCredentials)).StatusCode);
+
+        using var wrongTenant = new HttpRequestMessage(HttpMethod.Get, $"/api/workflows?tenantId={Guid.NewGuid()}");
+        wrongTenant.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
+        wrongTenant.Headers.Add("x-tenant-id", Guid.NewGuid().ToString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.SendAsync(wrongTenant)).StatusCode);
     }
 
     [Fact]
