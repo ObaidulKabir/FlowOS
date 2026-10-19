@@ -1,0 +1,268 @@
+name: flowos-cluster
+
+services:
+  # ===========================================================================
+  # VPS 0: Dedicated Hardware/Gateway Load Balancer Node (NGINX)
+  # Internal IP: 10.20.0.10 | Hostname: vps-lb.internal
+  # Load balances traffic across all backend VPS application nodes
+  # ===========================================================================
+  vps-lb:
+    image: nginx:1.27-alpine
+    container_name: vps-lb
+    hostname: vps-lb.internal
+    networks:
+      vps-network:
+        ipv4_address: 10.20.0.10
+        aliases:
+          - vps-lb
+          - lb.internal
+    ports:
+      - "80:80"       # Ingress: FlowOS Dashboard + API Gateway
+      - "5183:5183"   # Ingress: FlowOS Standard API Port (Load Balanced)
+      - "8080:8080"   # Ingress: Alternative API Port (Load Balanced)
+      - "8081:8081"   # Ingress: MCP Control Plane (Streamable HTTP)
+    volumes:
+      - ./docker/nginx/nginx-cluster-lb.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - vps1-flowos-api
+      - vps2-flowos-api
+      - vps3-flowos-api
+      - vps-dashboard
+      - vps-mcp
+    restart: unless-stopped
+
+  # ===========================================================================
+  # VPS 1: FlowOS Application Node 1
+  # Internal IP: 10.20.0.11 | Hostname: vps1.internal
+  # Direct Debug Port: 5181 -> 8080
+  # ===========================================================================
+  vps1-flowos-api:
+    image: flowos-api
+    build:
+      context: .
+      dockerfile: src/FlowOS.Api/Dockerfile
+    container_name: vps1-flowos-api
+    hostname: vps1.internal
+    networks:
+      vps-network:
+        ipv4_address: 10.20.0.11
+        aliases:
+          - vps1
+          - vps1.internal
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - NODE_NAME=vps1
+      - NODE_IP=10.20.0.11
+      - FLOWOS_BUILD=${FLOWOS_BUILD:-0}
+      - UseInMemoryDatabase=false
+      - ConnectionStrings__DefaultConnection=Host=10.20.0.20;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
+    volumes:
+      - ./flowos-config:/app/flowos-config
+    ports:
+      - "5181:8080"   # Direct access to VPS 1 for debugging/testing
+    depends_on:
+      vps-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===========================================================================
+  # VPS 2: FlowOS Application Node 2
+  # Internal IP: 10.20.0.12 | Hostname: vps2.internal
+  # Direct Debug Port: 5182 -> 8080
+  # ===========================================================================
+  vps2-flowos-api:
+    image: flowos-api
+    build:
+      context: .
+      dockerfile: src/FlowOS.Api/Dockerfile
+    container_name: vps2-flowos-api
+    hostname: vps2.internal
+    networks:
+      vps-network:
+        ipv4_address: 10.20.0.12
+        aliases:
+          - vps2
+          - vps2.internal
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - NODE_NAME=vps2
+      - NODE_IP=10.20.0.12
+      - FLOWOS_BUILD=${FLOWOS_BUILD:-0}
+      - UseInMemoryDatabase=false
+      - ConnectionStrings__DefaultConnection=Host=10.20.0.20;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
+    volumes:
+      - ./flowos-config:/app/flowos-config
+    ports:
+      - "5182:8080"   # Direct access to VPS 2 for debugging/testing
+    depends_on:
+      vps-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===========================================================================
+  # VPS 3: FlowOS Application Node 3
+  # Internal IP: 10.20.0.13 | Hostname: vps3.internal
+  # Direct Debug Port: 5184 -> 8080
+  # ===========================================================================
+  vps3-flowos-api:
+    image: flowos-api
+    build:
+      context: .
+      dockerfile: src/FlowOS.Api/Dockerfile
+    container_name: vps3-flowos-api
+    hostname: vps3.internal
+    networks:
+      vps-network:
+        ipv4_address: 10.20.0.13
+        aliases:
+          - vps3
+          - vps3.internal
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - NODE_NAME=vps3
+      - NODE_IP=10.20.0.13
+      - FLOWOS_BUILD=${FLOWOS_BUILD:-0}
+      - UseInMemoryDatabase=false
+      - ConnectionStrings__DefaultConnection=Host=10.20.0.20;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
+    volumes:
+      - ./flowos-config:/app/flowos-config
+    ports:
+      - "5184:8080"   # Direct access to VPS 3 for debugging/testing
+    depends_on:
+      vps-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===========================================================================
+  # VPS DB: Dedicated PostgreSQL Database Node
+  # Internal IP: 10.20.0.20 | Hostname: vps-db.internal
+  # Provides state persistence and distributed lease coordination
+  # ===========================================================================
+  vps-db:
+    image: postgres:15-alpine
+    container_name: vps-db
+    hostname: vps-db.internal
+    networks:
+      vps-network:
+        ipv4_address: 10.20.0.20
+        aliases:
+          - vps-db
+          - db.internal
+          - postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=flowos
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flowos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - vps-cluster-db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"   # Direct DB port for inspection
+    restart: unless-stopped
+
+  # ===========================================================================
+  # VPS Dashboard: FlowOS Web UI Node
+  # Internal IP: 10.20.0.30 | Hostname: vps-dashboard.internal
+  # Connected through the Load Balancer (10.20.0.10)
+  # ===========================================================================
+  vps-dashboard:
+    image: flowos-dashboard
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+    container_name: vps-dashboard
+    hostname: vps-dashboard.internal
+    command: npm run dev -- --host --port 3000
+    networks:
+      vps-network:
+        ipv4_address: 10.20.0.30
+        aliases:
+          - vps-dashboard
+          - dashboard.internal
+    environment:
+      - VITE_API_TARGET=http://10.20.0.10:8080
+      - VITE_FLOWOS_BUILD=${FLOWOS_BUILD:-0}
+    volumes:
+      - ./apps/dashboard:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"   # Direct host access to Dashboard
+    restart: unless-stopped
+
+  # ===========================================================================
+  # VPS MCP: FlowOS AI Agent Control Plane Node
+  # Internal IP: 10.20.0.14 | Hostname: vps-mcp.internal
+  # ===========================================================================
+  vps-mcp:
+    image: flowos-mcp
+    build:
+      context: .
+      dockerfile: src/FlowOS.MCP/Dockerfile
+    container_name: vps-mcp
+    hostname: vps-mcp.internal
+    networks:
+      vps-network:
+        ipv4_address: 10.20.0.14
+        aliases:
+          - vps-mcp
+          - mcp.internal
+    environment:
+      - MCP_TRANSPORT=http
+      - FLOWOS_BUILD=${FLOWOS_BUILD:-0}
+      - MCP_API_KEY=${MCP_API_KEY:-local-development-key-change-me}
+      - MCP_ROLE=${MCP_ROLE:-Admin}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-*}
+      - ASPNETCORE_URLS=http://+:8080
+      - UseInMemoryDatabase=false
+      - ConnectionStrings__DefaultConnection=Host=10.20.0.20;Port=5432;Database=flowos;Username=postgres;Password=password;
+      - FLOWOS_API_URL=http://10.20.0.10:8080
+      - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
+      - FLOWOS_HOSTED_LLM_ENABLED=${FLOWOS_HOSTED_LLM_ENABLED:-true}
+      - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
+      - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
+    ports:
+      - "8082:8080"   # Direct host access to MCP
+    depends_on:
+      vps-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+# =============================================================================
+# Virtual VPS Subnet (10.20.0.0/24)
+# Simulates a private data center / cloud VPC network
+# =============================================================================
+networks:
+  vps-network:
+    name: flowos-vps-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.20.0.0/24
+          gateway: 10.20.0.1
+
+# =============================================================================
+# Persistent Volumes
+# =============================================================================
+volumes:
+  vps-cluster-db-data:
+    name: flowos_vps_cluster_db_data

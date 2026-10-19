@@ -31,10 +31,12 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 21 | [Competitive Comparison](21-competitive-comparison.md) | OS-1 vs Temporal, Camunda 8, Step Functions, Conductor/Orkes, n8n/Zapier |
 | 22 | [DesignedApp & FlowOS release](22-designed-app-flowos-version.md) | Blueprint, Business Context, and AI Context record the FlowOS release they depend on |
 | 23 | [Tenant backup & site restore](23-tenant-backup.md) | Download a point-in-time Designed App and running instances, restore on another site |
+| 24 | [Load Balancing & Multi-VPS](24-load-balancing-and-multi-vps.md) | High-availability multi-node cluster, virtual VPS network, and NGINX load balancer |
 
 ## Reading paths
 
 * **"I want to run it and try the API"** → Start with [Getting Started](01-getting-started.md), then [API Reference](14-api-reference.md).
+* **"I want to run a load-balanced multi-VPS cluster"** → [Load Balancing & Multi-VPS](24-load-balancing-and-multi-vps.md).
 * **"I want to design a business process"** → [Core Concepts](02-core-concepts.md) → [State Machines](03-state-machines.md) → [Events](04-events-and-registry.md) → [Workflows](05-workflows-and-versioning.md) → [WorkflowClass Governance](09-workflow-class-governance.md).
 * **"I'm building a client application"** → [Human Tasks & Decisions](06-human-tasks-and-decisions.md) → [Notifications](10-notifications.md) → [Anti-Patterns](12-anti-patterns.md) → [Sample Applications](16-sample-applications.md).
 * **"I am integrating an AI agent"** → [AI Agents & Insights](07-ai-agents-and-insights.md) → [MCP & AI Agent Automation](13-mcp-and-ai-agent-integration.md) → [Commercial Policy](18-commercial-and-mcp-entitlements.md) → [Hosted LLM & Automation Policy](20-hosted-llm-and-automation-policy.md).

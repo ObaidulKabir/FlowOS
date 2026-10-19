@@ -37,6 +37,19 @@ docker compose -f docker-compose.prod.yml up -d --build
 *   **MCP server**: `http://localhost:8081` (`POST /mcp` Streamable HTTP or stdio)
 *   **PostgreSQL**: `localhost:5432`
 
+### Running the Load-Balanced Multi-VPS Cluster
+To run FlowOS in a high-availability cluster simulating multiple VPS instances with a database and NGINX load balancer on a private virtual network (`10.20.0.0/24`):
+```bash
+docker-compose -f docker-compose.cluster.yml up -d --build
+```
+*   **Load Balancer Gateway**: `http://localhost:5183` or `http://localhost` (Health check: `/health` with `X-Served-By` header)
+*   **Cluster Topology**: `http://localhost/health/cluster`
+*   **Dashboard**: `http://localhost:3000`
+*   **Direct VPS Nodes**: `http://localhost:5181` (VPS 1), `http://localhost:5182` (VPS 2), `http://localhost:5184` (VPS 3)
+*   **Verification Script**: `.\scripts\test-cluster.ps1` (or `./scripts/test-cluster.sh`)
+
+See [Chapter 24 — Load Balancing & Multi-VPS](docs/24-load-balancing-and-multi-vps.md) for full architecture details.
+
 ## 🧪 Testing
 
 Run the full automated test suite (369 tests: 303 unit, 28 end-to-end, and 38 MCP contract tests):
