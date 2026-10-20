@@ -4,6 +4,7 @@ import {
   Terminal, Cpu, Layers, Check, Code2, Mail
 } from 'lucide-react';
 import { PlatformComparison } from './PlatformComparison';
+import { SystemArchitecture } from './SystemArchitecture';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { AuthModalMode } from './AuthModal';
 import { usePlatformMetrics } from '../platformMetrics';
@@ -273,7 +274,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <SystemArchitecture />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10">
           
           {/* Axiom 1 */}
           <div className="bg-slate-900/80 border border-slate-800 p-7 rounded-3xl relative overflow-hidden group hover:border-blue-500/40 transition-all">
