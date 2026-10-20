@@ -1,99 +1,172 @@
-import React from 'react';
-import { ArrowDown, ArrowRight, Bot, Building2, Database, LayoutDashboard, Scale, Server, Sparkles, Workflow } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import mermaid from 'mermaid';
 
-type Tone = 'blue' | 'purple' | 'cyan' | 'orange';
+const actionChart = `sequenceDiagram
+  participant App as Business application
+  participant OS as FlowOS
+  participant Agent as Agent worker
+  participant Human as Inbox
+  App->>OS: Publish an event or complete a task
+  OS->>OS: Check policy, Law, and Work
+  OS->>Agent: DecisionPacket
+  Agent->>OS: Suggested legal event
+  alt Confidence is inside auto-commit
+    OS->>OS: Publish as the agent
+  else A person must confirm
+    OS->>Human: Park a Smart Action
+    Human->>OS: Confirm
+  end
+  OS-->>App: New state, step, and history`;
 
-const toneClass: Record<Tone, { band: string; card: string; chip: string; text: string }> = {
-  blue: {
-    band: 'border-blue-500/40 bg-blue-500/10',
-    card: 'border-blue-400/50 bg-blue-950/70',
-    chip: 'bg-blue-500',
-    text: 'text-blue-200'
-  },
-  purple: {
-    band: 'border-purple-500/40 bg-purple-500/10',
-    card: 'border-purple-400/50 bg-purple-950/70',
-    chip: 'bg-purple-500',
-    text: 'text-purple-200'
-  },
-  cyan: {
-    band: 'border-cyan-500/40 bg-cyan-500/10',
-    card: 'border-cyan-400/50 bg-cyan-950/70',
-    chip: 'bg-cyan-500',
-    text: 'text-cyan-200'
-  },
-  orange: {
-    band: 'border-orange-500/40 bg-orange-500/10',
-    card: 'border-orange-400/50 bg-orange-950/70',
-    chip: 'bg-orange-500',
-    text: 'text-orange-200'
-  }
+let renderQueue: Promise<void> = Promise.resolve();
+
+const MermaidGraph: React.FC<{ chart: string; label: string }> = ({ chart, label }) => {
+  const reactId = useId().replace(/:/g, '');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const render = async () => {
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'base',
+          securityLevel: 'loose',
+          fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+          flowchart: { htmlLabels: true, curve: 'basis', padding: 12, nodeSpacing: 24, rankSpacing: 36, useMaxWidth: true },
+          themeVariables: {
+            darkMode: true,
+            background: '#020617',
+            fontSize: '14px',
+            lineColor: '#e2e8f0',
+            textColor: '#f8fafc',
+            actorBkg: '#1e3a8a',
+            actorTextColor: '#eff6ff',
+            actorBorder: '#93c5fd',
+            signalColor: '#e2e8f0',
+            signalTextColor: '#f8fafc',
+            labelBoxBkgColor: '#0f172a',
+            labelTextColor: '#f8fafc'
+          }
+        });
+        const result = await mermaid.render(`architecture-${reactId}-${label}`, chart);
+        if (!cancelled && containerRef.current) {
+          containerRef.current.innerHTML = result.svg;
+          const svg = containerRef.current.querySelector('svg');
+          if (svg) {
+            svg.removeAttribute('height');
+            svg.style.maxWidth = '100%';
+            svg.style.height = 'auto';
+          }
+          setError(null);
+        }
+      } catch (exception) {
+        if (!cancelled) {
+          setError(exception instanceof Error ? exception.message : 'The architecture graph could not be drawn.');
+        }
+      }
+    };
+
+    renderQueue = renderQueue.then(render, render);
+    return () => {
+      cancelled = true;
+    };
+  }, [chart, label, reactId]);
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950 p-3">
+      {error && (
+        <p className="p-4 text-sm text-rose-300">{error}</p>
+      )}
+      <div ref={containerRef} className="flex min-h-[280px] w-full justify-center [&_svg]:mx-auto" />
+    </div>
+  );
 };
 
-const NodeCard: React.FC<{
-  tone: Tone;
+const DiagramNode: React.FC<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   title: string;
-  detail: string;
-}> = ({ tone, title, detail }) => (
-  <div className={`rounded-xl border px-3 py-3 ${toneClass[tone].card}`}>
-    <p className="text-sm font-bold text-white">{title}</p>
-    <p className={`mt-1 text-xs leading-relaxed ${toneClass[tone].text}`}>{detail}</p>
-  </div>
+  detail?: string;
+  fill: string;
+  stroke: string;
+}> = ({ x, y, width, height, title, detail, fill, stroke }) => {
+  const left = Number(x);
+  const top = Number(y);
+  const boxWidth = Number(width);
+  const boxHeight = Number(height);
+  return (
+  <g>
+    <rect x={left} y={top} width={boxWidth} height={boxHeight} rx={10} fill={fill} stroke={stroke} strokeWidth={1.5} />
+    <text x={left + boxWidth / 2} y={top + (detail ? 36 : boxHeight / 2 + 6)} textAnchor="middle" fill="#f8fafc" fontSize={18} fontWeight={700}>
+      {title}
+    </text>
+    {detail && (
+      <text x={left + boxWidth / 2} y={top + 60} textAnchor="middle" fill="#e2e8f0" fontSize={14}>
+        {detail}
+      </text>
+    )}
+  </g>
+  );
+};
+
+const ArchitectureMap: React.FC = () => (
+  <svg viewBox="0 0 960 760" role="img" aria-label="FlowOS application architecture" className="h-auto w-full">
+    <defs>
+      <marker id="arch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 0 L10 5 L0 10 Z" fill="#e2e8f0" />
+      </marker>
+    </defs>
+    <rect x="8" y="8" width="944" height="150" rx="16" fill="#172554" stroke="#60a5fa" />
+    <text x="24" y="32" fill="#dbeafe" fontSize="16" fontWeight="700">APPLICATIONS ON FLOWOS</text>
+    <DiagramNode x="20" y="48" width="222" height="92" title="Designed App" detail="blueprint and AI context" fill="#1e3a8a" stroke="#93c5fd" />
+    <DiagramNode x="254" y="48" width="222" height="92" title="Business application" detail="screens and records" fill="#1e3a8a" stroke="#93c5fd" />
+    <DiagramNode x="488" y="48" width="222" height="92" title="Dashboard" detail="author and simulate" fill="#1e3a8a" stroke="#93c5fd" />
+    <DiagramNode x="722" y="48" width="214" height="92" title="MCP client" detail="design and operate" fill="#1e3a8a" stroke="#93c5fd" />
+
+    <path d="M480 158 L480 214" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
+    <text x="492" y="190" fill="#e2e8f0" fontSize="15">intent</text>
+
+    <rect x="8" y="196" width="680" height="360" rx="16" fill="#2e1065" stroke="#c084fc" />
+    <text x="24" y="222" fill="#f3e8ff" fontSize="16" fontWeight="700">FLOWOS</text>
+    <DiagramNode x="24" y="236" width="648" height="52" title="API and MCP · policy gate" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x="24" y="304" width="206" height="84" title="Law" detail="what is legal" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x="242" y="304" width="206" height="84" title="Work" detail="what happens next" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x="460" y="304" width="212" height="84" title="Truth" detail="event log" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x="24" y="404" width="206" height="84" title="Inbox" detail="human task" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x="242" y="404" width="206" height="84" title="Commit" detail="publish or park" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x="460" y="404" width="212" height="84" title="DecisionPacket" detail="prompt, data, tools" fill="#5b21b6" stroke="#d8b4fe" />
+
+    <rect x="704" y="196" width="248" height="292" rx="16" fill="#083344" stroke="#67e8f9" />
+    <text x="720" y="222" fill="#cffafe" fontSize="16" fontWeight="700">AGENT WORKER</text>
+    <DiagramNode x="720" y="238" width="216" height="92" title="Any machine" detail="runs the model" fill="#155e75" stroke="#67e8f9" />
+    <path d="M672 430 L704 430" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
+    <path d="M704 456 L672 456" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
+    <text x="828" y="360" textAnchor="middle" fill="#ecfeff" fontSize="15">context in</text>
+    <text x="828" y="384" textAnchor="middle" fill="#ecfeff" fontSize="15">suggestion out</text>
+
+    <rect x="8" y="590" width="944" height="150" rx="16" fill="#431407" stroke="#fdba74" />
+    <text x="24" y="616" fill="#ffedd5" fontSize="16" fontWeight="700">OUTSIDE SYSTEMS</text>
+    <DiagramNode x="24" y="632" width="280" height="88" title="PostgreSQL" detail="definitions, instances, audit" fill="#9a3412" stroke="#fdba74" />
+    <DiagramNode x="320" y="632" width="280" height="88" title="Tenant systems" detail="CRM, payments, documents" fill="#9a3412" stroke="#fdba74" />
+    <DiagramNode x="704" y="632" width="228" height="88" title="Models" detail="hosted, BYO, or local" fill="#9a3412" stroke="#fdba74" />
+    <path d="M127 488 L127 632" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
+    <text x="136" y="560" fill="#e2e8f0" fontSize="15">records</text>
+    <path d="M566 488 L566 632" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
+    <text x="574" y="560" fill="#e2e8f0" fontSize="15">reads</text>
+    <path d="M828 488 L828 632" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
+    <text x="836" y="530" fill="#e2e8f0" fontSize="15">calls</text>
+  </svg>
 );
 
-const BandLabel: React.FC<{ tone: Tone; children: React.ReactNode }> = ({ tone, children }) => (
-  <p className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-white">
-    <span className={`h-2.5 w-2.5 rounded-full ${toneClass[tone].chip}`} />
-    {children}
-  </p>
-);
-
-const FlowLabel: React.FC<{ label: string }> = ({ label }) => (
-  <div className="flex items-center justify-center gap-2 py-3 text-xs font-semibold text-slate-200">
-    <ArrowDown size={14} className="text-slate-400" />
-    <span className="rounded-full border border-slate-600 bg-slate-950 px-2.5 py-1">{label}</span>
-  </div>
-);
-
-const applications = [
-  { title: 'Designed App', detail: 'Blueprint, business context, and AI context.' },
-  { title: 'Business application', detail: 'Owns its screens and records, then sends an intent.' },
-  { title: 'Dashboard', detail: 'Authors, simulates, and observes through the API.' },
-  { title: 'MCP client', detail: 'Designs and operates through FlowOS tools.' }
-];
-
-const kernelTop = [
-  { title: 'Law', detail: 'State machine. What is legal.' },
-  { title: 'Work', detail: 'Workflow. What happens next.' },
-  { title: 'Truth', detail: 'Append-only event log.' }
-];
-
-const kernelBottom = [
-  { title: 'Inbox', detail: 'Human task and Smart Actions.' },
-  { title: 'Packet', detail: 'Prompt, data, tools, and legal events.' },
-  { title: 'Commit', detail: 'Auto-commit or park on the Law host.' }
-];
-
-const outside = [
-  { title: 'PostgreSQL', detail: 'Definitions, instances, jobs, and audit.', tag: 'records' },
-  { title: 'Tenant systems', detail: 'CRM, payments, and documents.', tag: 'reads' },
-  { title: 'Models', detail: 'Hosted, bring-your-own, or local.', tag: 'calls' }
-];
-
-const cycle = [
-  { tone: 'blue' as Tone, title: 'Application', detail: 'Publishes an event or completes a task.' },
-  { tone: 'purple' as Tone, title: 'FlowOS', detail: 'Checks policy, Law, and the step graph.' },
-  { tone: 'cyan' as Tone, title: 'Agent worker', detail: 'Reads the DecisionPacket and suggests one legal event.' },
-  { tone: 'purple' as Tone, title: 'Commit', detail: 'Publishes when confidence is in policy, or parks a Smart Action.' },
-  { tone: 'blue' as Tone, title: 'Application', detail: 'Reads the new state, step, and event history.' }
-];
-
-const roles = [
-  { name: 'Designed App', keeps: 'The process: WorkflowClass, business context, AI context', leaves: 'Live state' },
-  { name: 'Business application', keeps: 'Its own screens and records, then an intent', leaves: 'The next legal state' },
-  { name: 'Dashboard', keeps: 'Authoring, simulation, and tenant operations', leaves: 'Business decisions' },
-  { name: 'Agent worker', keeps: 'Model calls and context processing', leaves: 'publish_event authority' },
-  { name: 'FlowOS', keeps: 'Law, Work, Truth, policy, inbox, and commit', leaves: 'The tenant product UI' }
+const legend = [
+  { color: 'bg-blue-500', label: 'Applications' },
+  { color: 'bg-purple-500', label: 'FlowOS' },
+  { color: 'bg-cyan-500', label: 'Agent worker' },
+  { color: 'bg-orange-500', label: 'Outside systems' }
 ];
 
 export const SystemArchitecture: React.FC = () => (
@@ -106,143 +179,24 @@ export const SystemArchitecture: React.FC = () => (
     </div>
 
     <div className="flex flex-wrap gap-2" aria-label="Architecture legend">
-      {([
-        ['blue', 'Applications'],
-        ['purple', 'FlowOS'],
-        ['cyan', 'Agent worker'],
-        ['orange', 'Outside systems']
-      ] as Array<[Tone, string]>).map(([tone, label]) => (
-        <span key={label} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold text-white ${toneClass[tone].band}`}>
-          <span className={`h-2 w-2 rounded-full ${toneClass[tone].chip}`} />
-          {label}
+      {legend.map(item => (
+        <span key={item.label} className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+          <span className={`h-2.5 w-2.5 rounded-full ${item.color}`} />
+          {item.label}
         </span>
       ))}
     </div>
 
-    <section aria-label="FlowOS and the applications on it" className="space-y-0">
-      <div className={`rounded-2xl border p-4 ${toneClass.blue.band}`}>
-        <BandLabel tone="blue">Applications on FlowOS</BandLabel>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {applications.map(item => (
-            <NodeCard key={item.title} tone="blue" title={item.title} detail={item.detail} />
-          ))}
-        </div>
-      </div>
-
-      <FlowLabel label="intent" />
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-        <div className={`rounded-2xl border p-4 ${toneClass.purple.band}`}>
-          <BandLabel tone="purple">FlowOS</BandLabel>
-          <div className={`mb-3 rounded-xl border px-3 py-2 ${toneClass.purple.card}`}>
-            <p className="text-sm font-bold text-white">API and MCP</p>
-            <p className="mt-1 text-xs text-purple-200">Same engine. Tenant and capability checks. Policy gate.</p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            {kernelTop.map(item => (
-              <NodeCard key={item.title} tone="purple" title={item.title} detail={item.detail} />
-            ))}
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
-            {kernelBottom.map(item => (
-              <NodeCard key={item.title} tone="purple" title={item.title} detail={item.detail} />
-            ))}
-          </div>
-        </div>
-
-        <div className={`flex flex-col justify-between rounded-2xl border p-4 ${toneClass.cyan.band}`}>
-          <div>
-            <BandLabel tone="cyan">Agent worker</BandLabel>
-            <NodeCard tone="cyan" title="Server, tenant box, or client" detail="Runs the model. Receives context. Returns a suggestion." />
-          </div>
-          <div className="mt-4 space-y-2 text-xs font-semibold">
-            <p className="rounded-lg border border-cyan-400/40 bg-slate-950/70 px-3 py-2 text-cyan-100">context in</p>
-            <p className="rounded-lg border border-cyan-400/40 bg-slate-950/70 px-3 py-2 text-cyan-100">suggestion out</p>
-          </div>
-        </div>
-      </div>
-
-      <FlowLabel label="records, reads, and calls" />
-
-      <div className={`rounded-2xl border p-4 ${toneClass.orange.band}`}>
-        <BandLabel tone="orange">Outside systems</BandLabel>
-        <div className="grid gap-3 md:grid-cols-3">
-          {outside.map(item => (
-            <div key={item.title}>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-orange-200">{item.tag}</p>
-              <NodeCard tone="orange" title={item.title} detail={item.detail} />
-            </div>
-          ))}
-        </div>
+    <section className="space-y-3" aria-label="FlowOS and the applications on it">
+      <h3 className="text-base font-bold text-white">Full application architecture</h3>
+      <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950 p-3">
+        <ArchitectureMap />
       </div>
     </section>
 
-    <section aria-label="How one application action moves" className="space-y-3">
+    <section className="space-y-3" aria-label="How one application action moves">
       <h3 className="text-base font-bold text-white">How one action moves</h3>
-      <ol className="grid gap-3 lg:grid-cols-5">
-        {cycle.map((step, index) => (
-          <li key={`${step.title}-${index}`} className={`relative rounded-xl border p-3 ${toneClass[step.tone].band}`}>
-            <div className="mb-2 flex items-center justify-between">
-              <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-slate-950 ${toneClass[step.tone].chip}`}>
-                {index + 1}
-              </span>
-              {index < cycle.length - 1 && (
-                <ArrowRight size={14} className="hidden text-slate-400 lg:block" />
-              )}
-            </div>
-            <p className="text-sm font-bold text-white">{step.title}</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-300">{step.detail}</p>
-          </li>
-        ))}
-      </ol>
+      <MermaidGraph chart={actionChart} label="architecture-sequence" />
     </section>
-
-    <section aria-label="What each part keeps" className="overflow-hidden rounded-2xl border border-slate-700">
-      <div className="border-b border-slate-700 bg-slate-900/80 px-4 py-3">
-        <h3 className="text-base font-bold text-white">What each part keeps</h3>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-slate-950 text-xs uppercase tracking-wider text-slate-400">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Part</th>
-              <th className="px-4 py-3 font-semibold">Keeps</th>
-              <th className="px-4 py-3 font-semibold">FlowOS keeps instead</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map(role => (
-              <tr key={role.name} className="border-t border-slate-800">
-                <td className="px-4 py-3 font-semibold text-white">{role.name}</td>
-                <td className="px-4 py-3 text-slate-300">{role.keeps}</td>
-                <td className="px-4 py-3 text-slate-300">{role.leaves}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {[
-        { icon: Workflow, title: 'Designed App', detail: 'One process template pinned to a FlowOS release.' },
-        { icon: Building2, title: 'Business application', detail: 'ExpenseApp or a tenant UI. It reacts after FlowOS decides.' },
-        { icon: LayoutDashboard, title: 'This dashboard', detail: 'Governance and simulation. State still changes only through commands.' },
-        { icon: Bot, title: 'Agent path', detail: 'A worker can run on another machine. Only FlowOS commits.' }
-      ].map(item => (
-        <div key={item.title} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
-          <item.icon size={16} className="text-slate-300" />
-          <p className="mt-2 text-sm font-bold text-white">{item.title}</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">{item.detail}</p>
-        </div>
-      ))}
-    </section>
-
-    <p className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-      <span className="inline-flex items-center gap-1"><Server size={12} /> Law host</span>
-      <span className="inline-flex items-center gap-1"><Database size={12} /> PostgreSQL</span>
-      <span className="inline-flex items-center gap-1"><Scale size={12} /> Policy gate</span>
-      <span className="inline-flex items-center gap-1"><Sparkles size={12} /> DecisionPacket</span>
-    </p>
   </div>
 );

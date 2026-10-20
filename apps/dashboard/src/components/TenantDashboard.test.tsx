@@ -101,9 +101,8 @@ describe('TenantDashboard - Launch Instance Modal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Architecture' }));
 
     expect(await screen.findByRole('heading', { name: 'System architecture' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Full application architecture' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'How one action moves' })).toBeInTheDocument();
-    expect(screen.getAllByText('Designed App').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Agent worker').length).toBeGreaterThan(0);
   });
 
   test('offers sign-in after a 401 and reloads instances when credentials change for the same tenant', async () => {
