@@ -84,6 +84,28 @@ describe('TenantDashboard - Launch Instance Modal', () => {
     expect(screen.getAllByText('FlowOS Content Studio').length).toBeGreaterThan(0);
   });
 
+  test('opens the system architecture page from governance', async () => {
+    render(
+      <TenantDashboard
+        session={mockSession as any}
+        onSwitchWorkspace={vi.fn()}
+        onGoHome={vi.fn()}
+        onSwitchRole={vi.fn()}
+        onRegister={vi.fn()}
+        onSignOut={vi.fn()}
+        mcpUrl="http://localhost:5183/mcp"
+      />
+    );
+
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Architecture' }));
+
+    expect(await screen.findByRole('heading', { name: 'System architecture' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How one action moves' })).toBeInTheDocument();
+    expect(screen.getAllByText('Designed App').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Agent worker').length).toBeGreaterThan(0);
+  });
+
   test('offers sign-in after a 401 and reloads instances when credentials change for the same tenant', async () => {
     const onSwitchWorkspace = vi.fn();
     api.listInstances.mockRejectedValueOnce(new Error('Failed to list workflow instances (HTTP 401 )'));

@@ -10,6 +10,7 @@ import { DetailView } from './DetailView';
 import { DeadLetterQueueViewer } from './DeadLetterQueueViewer';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
+import { SystemArchitecture } from './SystemArchitecture';
 import { DashboardChrome, sidebarItemClass } from './DashboardChrome';
 import { McpAgentGuideline } from './McpAgentGuideline';
 import { usePlatformMetrics } from '../platformMetrics';
@@ -17,7 +18,7 @@ import { legalEntity, sellerIdentity } from '../legalEntity';
 import { LegalFooterLinks } from './LegalFooterLinks';
 import { 
   Shield, Building2, Plus, RefreshCw, Activity, 
-  Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale, Layers
+  Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale, Layers, Network
 } from 'lucide-react';
 
 interface Props {
@@ -38,7 +39,7 @@ export const AdminDashboard: React.FC<Props> = ({
   mcpUrl
 }) => {
   const { mcpTools, isLiveMcpCount, tests, verifiedOn } = usePlatformMetrics();
-  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities' | 'Comparison'>('Tenants');
+  const [activeTab, setActiveTab] = useState<'Tenants' | 'Catalog' | 'ReviewQueue' | 'Instances' | 'Events' | 'Kernel' | 'DeadLetters' | 'Capabilities' | 'Comparison' | 'Architecture'>('Tenants');
   const [catalogSubTab, setCatalogSubTab] = useState<'All' | 'Drafts' | 'Published' | 'Shared' | 'Public'>('All');
 
   const [tenants, setTenants] = useState<TenantDto[]>([]);
@@ -230,6 +231,10 @@ export const AdminDashboard: React.FC<Props> = ({
                 <Sparkles size={14} />
                 <span className="truncate">Capabilities</span>
               </button>
+              <button type="button" onClick={() => setActiveTab('Architecture')} className={sidebarItemClass(activeTab === 'Architecture', 'bg-purple-600 text-white')}>
+                <Network size={14} />
+                <span className="truncate">Architecture</span>
+              </button>
               <button type="button" onClick={() => setActiveTab('Comparison')} className={sidebarItemClass(activeTab === 'Comparison', 'bg-purple-600 text-white')}>
                 <Scale size={14} />
                 <span className="truncate">vs Competitors</span>
@@ -322,6 +327,9 @@ export const AdminDashboard: React.FC<Props> = ({
         <div className="p-6">
           {activeTab === 'Capabilities' && (
             <CapabilitiesShowcase />
+          )}
+          {activeTab === 'Architecture' && (
+            <SystemArchitecture />
           )}
           {activeTab === 'Comparison' && (
             <CompetitiveComparison />

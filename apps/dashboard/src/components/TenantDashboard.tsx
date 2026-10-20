@@ -20,6 +20,7 @@ import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
 import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
+import { SystemArchitecture } from './SystemArchitecture';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
 import { DemoVisualSimulator } from './DemoVisualSimulator';
 import { TenantMcpConfiguration } from './TenantMcpConfiguration';
@@ -35,7 +36,7 @@ import {
   Building2, Plus, RefreshCw, Key, Activity, 
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
   Bot, AlertTriangle, ShieldAlert,
-  UserCheck, Clock, Shield, SendHorizontal, X, ChevronDown
+  UserCheck, Clock, Shield, SendHorizontal, X, ChevronDown, Network
 } from 'lucide-react';
 
 interface Props {
@@ -52,7 +53,7 @@ interface Props {
 type HubId = 'design' | 'agents' | 'operations' | 'governance';
 type DesignTab = 'workflows' | 'simulator';
 type OpsTab = 'instances' | 'inbox' | 'events' | 'dlq';
-type GovTab = 'keys' | 'mcp' | 'capabilities' | 'comparison';
+type GovTab = 'keys' | 'mcp' | 'capabilities' | 'comparison' | 'architecture';
 
 const countFormatter = new Intl.NumberFormat();
 
@@ -461,6 +462,17 @@ export const TenantDashboard: React.FC<Props> = ({
         >
           <Sparkles size={14} />
           <span className="truncate">Capabilities</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('governance');
+            setGovTab('architecture');
+          }}
+          className={sidebarItemClass(activeHub === 'governance' && govTab === 'architecture', 'bg-indigo-600 text-white')}
+        >
+          <Network size={14} />
+          <span className="truncate">Architecture</span>
         </button>
         <button
           type="button"
@@ -1239,6 +1251,17 @@ export const TenantDashboard: React.FC<Props> = ({
                   </button>
 
                   <button
+                    onClick={() => setGovTab('architecture')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      govTab === 'architecture'
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Network size={13} />
+                    <span>System Architecture</span>
+                  </button>
+                  <button
                     onClick={() => setGovTab('comparison')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                       govTab === 'comparison'
@@ -1279,6 +1302,10 @@ export const TenantDashboard: React.FC<Props> = ({
 
               {govTab === 'capabilities' && (
                 <CapabilitiesShowcase />
+              )}
+
+              {govTab === 'architecture' && (
+                <SystemArchitecture />
               )}
 
               {govTab === 'comparison' && (
