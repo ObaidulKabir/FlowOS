@@ -122,27 +122,27 @@ const ArchitectureMap: React.FC = () => (
     </defs>
     <rect x="8" y="8" width="944" height="150" rx="16" fill="#172554" stroke="#60a5fa" />
     <text x="24" y="32" fill="#dbeafe" fontSize="16" fontWeight="700">APPLICATIONS ON FLOWOS</text>
-    <DiagramNode x="20" y="48" width="222" height="92" title="Designed App" detail="blueprint and AI context" fill="#1e3a8a" stroke="#93c5fd" />
-    <DiagramNode x="254" y="48" width="222" height="92" title="Business application" detail="screens and records" fill="#1e3a8a" stroke="#93c5fd" />
-    <DiagramNode x="488" y="48" width="222" height="92" title="Dashboard" detail="author and simulate" fill="#1e3a8a" stroke="#93c5fd" />
-    <DiagramNode x="722" y="48" width="214" height="92" title="MCP client" detail="design and operate" fill="#1e3a8a" stroke="#93c5fd" />
+    <DiagramNode x={20} y={48} width={222} height={92} title="Designed App" detail="blueprint and AI context" fill="#1e3a8a" stroke="#93c5fd" />
+    <DiagramNode x={254} y={48} width={222} height={92} title="Business application" detail="screens and records" fill="#1e3a8a" stroke="#93c5fd" />
+    <DiagramNode x={488} y={48} width={222} height={92} title="Dashboard" detail="author and simulate" fill="#1e3a8a" stroke="#93c5fd" />
+    <DiagramNode x={722} y={48} width={214} height={92} title="MCP client" detail="design and operate" fill="#1e3a8a" stroke="#93c5fd" />
 
     <path d="M480 158 L480 214" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
     <text x="492" y="190" fill="#e2e8f0" fontSize="15">intent</text>
 
     <rect x="8" y="196" width="680" height="360" rx="16" fill="#2e1065" stroke="#c084fc" />
     <text x="24" y="222" fill="#f3e8ff" fontSize="16" fontWeight="700">FLOWOS</text>
-    <DiagramNode x="24" y="236" width="648" height="52" title="API and MCP · policy gate" fill="#5b21b6" stroke="#d8b4fe" />
-    <DiagramNode x="24" y="304" width="206" height="84" title="Law" detail="what is legal" fill="#5b21b6" stroke="#d8b4fe" />
-    <DiagramNode x="242" y="304" width="206" height="84" title="Work" detail="what happens next" fill="#5b21b6" stroke="#d8b4fe" />
-    <DiagramNode x="460" y="304" width="212" height="84" title="Truth" detail="event log" fill="#5b21b6" stroke="#d8b4fe" />
-    <DiagramNode x="24" y="404" width="206" height="84" title="Inbox" detail="human task" fill="#5b21b6" stroke="#d8b4fe" />
-    <DiagramNode x="242" y="404" width="206" height="84" title="Commit" detail="publish or park" fill="#5b21b6" stroke="#d8b4fe" />
-    <DiagramNode x="460" y="404" width="212" height="84" title="DecisionPacket" detail="prompt, data, tools" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x={24} y={236} width={648} height={52} title="API and MCP · policy gate" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x={24} y={304} width={206} height={84} title="Law" detail="what is legal" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x={242} y={304} width={206} height={84} title="Work" detail="what happens next" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x={460} y={304} width={212} height={84} title="Truth" detail="event log" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x={24} y={404} width={206} height={84} title="Inbox" detail="human task" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x={242} y={404} width={206} height={84} title="Commit" detail="publish or park" fill="#5b21b6" stroke="#d8b4fe" />
+    <DiagramNode x={460} y={404} width={212} height={84} title="DecisionPacket" detail="prompt, data, tools" fill="#5b21b6" stroke="#d8b4fe" />
 
     <rect x="704" y="196" width="248" height="292" rx="16" fill="#083344" stroke="#67e8f9" />
     <text x="720" y="222" fill="#cffafe" fontSize="16" fontWeight="700">AGENT WORKER</text>
-    <DiagramNode x="720" y="238" width="216" height="92" title="Any machine" detail="runs the model" fill="#155e75" stroke="#67e8f9" />
+    <DiagramNode x={720} y={238} width={216} height={92} title="Any machine" detail="runs the model" fill="#155e75" stroke="#67e8f9" />
     <path d="M672 430 L704 430" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
     <path d="M704 456 L672 456" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
     <text x="828" y="360" textAnchor="middle" fill="#ecfeff" fontSize="15">context in</text>
@@ -150,9 +150,9 @@ const ArchitectureMap: React.FC = () => (
 
     <rect x="8" y="590" width="944" height="150" rx="16" fill="#431407" stroke="#fdba74" />
     <text x="24" y="616" fill="#ffedd5" fontSize="16" fontWeight="700">OUTSIDE SYSTEMS</text>
-    <DiagramNode x="24" y="632" width="280" height="88" title="PostgreSQL" detail="definitions, instances, audit" fill="#9a3412" stroke="#fdba74" />
-    <DiagramNode x="320" y="632" width="280" height="88" title="Tenant systems" detail="CRM, payments, documents" fill="#9a3412" stroke="#fdba74" />
-    <DiagramNode x="704" y="632" width="228" height="88" title="Models" detail="hosted, BYO, or local" fill="#9a3412" stroke="#fdba74" />
+    <DiagramNode x={24} y={632} width={280} height={88} title="PostgreSQL" detail="definitions, instances, audit" fill="#9a3412" stroke="#fdba74" />
+    <DiagramNode x={320} y={632} width={280} height={88} title="Tenant systems" detail="CRM, payments, documents" fill="#9a3412" stroke="#fdba74" />
+    <DiagramNode x={704} y={632} width={228} height={88} title="Models" detail="hosted, BYO, or local" fill="#9a3412" stroke="#fdba74" />
     <path d="M127 488 L127 632" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
     <text x="136" y="560" fill="#e2e8f0" fontSize="15">records</text>
     <path d="M566 488 L566 632" fill="none" stroke="#e2e8f0" strokeWidth="1.5" markerEnd="url(#arch-arrow)" />
