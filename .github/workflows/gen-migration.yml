@@ -24,12 +24,18 @@ jobs:
           global-json-file: global.json
       - name: Install dotnet-ef
         run: dotnet tool install --global dotnet-ef --version 10.0.13
+      - name: Restore
+        run: dotnet restore FlowOS.sln
       - name: Add migration
         run: |
+          set -o pipefail
           dotnet ef migrations add Net10ModelUpdate \
             --project src/FlowOS.Infrastructure \
             --startup-project src/FlowOS.Api \
-            --output-dir Migrations
+            --output-dir Migrations 2>&1 | tee ef.log || {
+              grep -iE "error|exception|fail" ef.log | head -8 | while read -r line; do echo "::error title=dotnet ef::$line"; done
+              exit 1
+            }
       - name: Show migration summary
         run: |
           f=$(ls src/FlowOS.Infrastructure/Migrations/*_Net10ModelUpdate.cs | grep -v Designer)
