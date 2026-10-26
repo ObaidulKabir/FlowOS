@@ -10,6 +10,12 @@ namespace FlowOS.Core.Security;
 public static class TenantIdentityRules
 {
     public const string AllowMockAuthKey = "FlowOS:Identity:AllowMockAuth";
+
+    /// <summary>
+    /// Configuration switch for the well-known demo API keys. Their values are public (repository,
+    /// dashboard bundle), so they are accepted only in Development unless this is explicitly <c>true</c>.
+    /// </summary>
+    public const string EnableDemoKeysKey = "FlowOS:Demo:EnableDemoKeys";
     public static readonly Guid PlatformTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid DemoTenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
@@ -20,6 +26,22 @@ public static class TenantIdentityRules
 
         return string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Whether the well-known demo API keys may authenticate. Explicit configuration wins;
+    /// otherwise only the Development environment allows them.
+    /// </summary>
+    public static bool DemoKeysAllowed(string? environmentName, string? configuredValue)
+    {
+        if (bool.TryParse(configuredValue, out var configured))
+            return configured;
+
+        return string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>True only for a well-known demo key in an environment that allows demo keys.</summary>
+    public static bool IsAcceptedDemoApiKey(string? suppliedApiKey, string? environmentName, string? configuredValue) =>
+        IsDemoApiKey(suppliedApiKey) && DemoKeysAllowed(environmentName, configuredValue);
 
     public static bool TryParseTenant(string? value, out Guid tenantId)
     {
@@ -42,7 +64,9 @@ public static class TenantIdentityRules
         if (roles == null || !roles.Any(IsPrivilegedRole))
             return false;
 
-        return tenantId == PlatformTenantId || tenantId == DemoTenantId;
+        // Only the platform tenant administers other tenants. The demo tenant is reachable with
+        // public demo keys, so it must never carry cross-tenant (platform) rights.
+        return tenantId == PlatformTenantId;
     }
 
     public static bool IsDemoApiKey(string? suppliedApiKey) =>

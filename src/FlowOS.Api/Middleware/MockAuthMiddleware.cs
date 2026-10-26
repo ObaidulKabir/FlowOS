@@ -78,7 +78,12 @@ public class MockAuthMiddleware
                 .Select(c => c.Value);
             var role = allowMock
                 ? ReadMockRole(context)
-                : TenantIdentityRules.ResolveApiKeyRole(scopes, TenantIdentityRules.IsDemoApiKey(suppliedApiKey));
+                : TenantIdentityRules.ResolveApiKeyRole(
+                    scopes,
+                    TenantIdentityRules.IsAcceptedDemoApiKey(
+                        suppliedApiKey,
+                        env.EnvironmentName,
+                        config[TenantIdentityRules.EnableDemoKeysKey]));
             var userId = allowMock ? ReadMockUserId(context) : "api-key";
             var claims = new List<Claim>
             {
@@ -192,7 +197,12 @@ public class MockAuthMiddleware
 
     private static async Task<Guid?> LookupApiKeyAsync(HttpContext context, string suppliedApiKey, List<Claim> extraClaims)
     {
-        if (TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
+        var hostEnvironment = context.RequestServices.GetService<IHostEnvironment>();
+        var configuration = context.RequestServices.GetService<IConfiguration>();
+        if (TenantIdentityRules.IsAcceptedDemoApiKey(
+                suppliedApiKey,
+                hostEnvironment?.EnvironmentName,
+                configuration?[TenantIdentityRules.EnableDemoKeysKey]))
         {
             extraClaims.Add(new Claim("scope", ApiKeyScopeCatalog.FullAccess));
             return TenantIdentityRules.DemoTenantId;
