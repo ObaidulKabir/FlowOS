@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,7 @@ public class WorkflowTimerProcessorService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<WorkflowTimerProcessorService> _logger;
     private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(1);
+    private static readonly ActivitySource ActivitySource = new ActivitySource("FlowOS.Infrastructure.Background");
 
     public WorkflowTimerProcessorService(IServiceProvider serviceProvider, ILogger<WorkflowTimerProcessorService> logger)
     {
@@ -59,6 +61,8 @@ public class WorkflowTimerProcessorService : BackgroundService
         var timerService = scope.ServiceProvider.GetService<IWorkflowTimerService>();
         if (timerService != null)
         {
+            using var activity = ActivitySource.StartActivity("workflow.timer.process", ActivityKind.Consumer);
+            activity?.SetTag("service", "WorkflowTimerProcessor");
             await timerService.ExecuteDueTimersAsync(cancellationToken);
         }
     }

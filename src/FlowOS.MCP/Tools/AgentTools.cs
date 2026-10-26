@@ -7,6 +7,8 @@ using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
+using FlowOS.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.Tools;
@@ -16,22 +18,30 @@ public class AgentTools
     private static readonly TimeSpan SynchronousWaitTimeout = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan SynchronousPollInterval = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan SynchronousClaimDuration = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan RemoteWorkerWaitTimeout = TimeSpan.FromSeconds(2);
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAgentTaskCoordinator _agentTaskCoordinator;
     private readonly IPluginBindingRegistryService? _pluginBindings;
     private readonly IFlowOsHostedLlmRuntime? _hosted;
+    private readonly bool _executeInRequests;
+    private readonly IAgentTaskQueue? _agentTaskQueue;
 
     public AgentTools(
         IUnitOfWork unitOfWork,
         IAgentTaskCoordinator agentTaskCoordinator,
         IPluginBindingRegistryService? pluginBindings = null,
-        IFlowOsHostedLlmRuntime? hosted = null)
+        IFlowOsHostedLlmRuntime? hosted = null,
+        IConfiguration? configuration = null,
+        IAgentTaskQueue? agentTaskQueue = null)
     {
         _unitOfWork = unitOfWork;
         _agentTaskCoordinator = agentTaskCoordinator;
         _pluginBindings = pluginBindings;
         _hosted = hosted;
+        _executeInRequests = configuration?.GetValue<bool?>(
+            $"{AgentTaskProcessorOptions.ConfigurationSection}:ExecuteInMcpRequests") ?? true;
+        _agentTaskQueue = agentTaskQueue;
     }
 
     public async Task<CallToolResult> ListAvailableAgents(JObject args)
@@ -122,14 +132,27 @@ public class AgentTools
                     tenantId,
                     instanceId,
                     instance.CurrentStepId));
-            var coordinated = await _agentTaskCoordinator.EnqueueAndExecuteAsync(
-                request,
-                $"mcp-suggest:{Guid.NewGuid():N}",
-                SynchronousWaitTimeout,
-                SynchronousPollInterval,
-                SynchronousClaimDuration,
-                CancellationToken.None);
+            var coordinated = _executeInRequests
+                ? await _agentTaskCoordinator.EnqueueAndExecuteAsync(
+                    request,
+                    $"mcp-suggest:{Guid.NewGuid():N}",
+                    SynchronousWaitTimeout,
+                    SynchronousPollInterval,
+                    SynchronousClaimDuration,
+                    CancellationToken.None)
+                : await _agentTaskCoordinator.EnqueueAndWaitAsync(
+                    request,
+                    RemoteWorkerWaitTimeout,
+                    SynchronousPollInterval,
+                    CancellationToken.None);
             var run = coordinated.RunResult;
+            if (coordinated.TimedOut)
+                return McpToolResults.Success(new
+                {
+                    jobId = coordinated.JobId,
+                    status = coordinated.Status.ToString(),
+                    pending = true
+                });
 
             if (run == null || !run.Ran)
             {
@@ -184,8 +207,7 @@ public class AgentTools
             if (instance == null)
                 return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowInstance not found.");
 
-            var coordinated = await _agentTaskCoordinator.EnqueueAndExecuteAsync(
-                new AgentTaskEnqueueRequest(
+            var request = new AgentTaskEnqueueRequest(
                     tenantId,
                     instanceId,
                     instance.CurrentStepId,
@@ -193,13 +215,28 @@ public class AgentTools
                     "Decide the next legal workflow event.",
                     AllowAutoCommit: true,
                     RequireAgentActor: true,
-                    AgentTaskSource.McpRequest),
-                $"mcp-run:{Guid.NewGuid():N}",
-                SynchronousWaitTimeout,
-                SynchronousPollInterval,
-                SynchronousClaimDuration,
-                CancellationToken.None);
+                    AgentTaskSource.McpRequest);
+            var coordinated = _executeInRequests
+                ? await _agentTaskCoordinator.EnqueueAndExecuteAsync(
+                    request,
+                    $"mcp-run:{Guid.NewGuid():N}",
+                    SynchronousWaitTimeout,
+                    SynchronousPollInterval,
+                    SynchronousClaimDuration,
+                    CancellationToken.None)
+                : await _agentTaskCoordinator.EnqueueAndWaitAsync(
+                    request,
+                    RemoteWorkerWaitTimeout,
+                    SynchronousPollInterval,
+                    CancellationToken.None);
             var run = coordinated.RunResult;
+            if (coordinated.TimedOut)
+                return McpToolResults.Success(new
+                {
+                    jobId = coordinated.JobId,
+                    status = coordinated.Status.ToString(),
+                    pending = true
+                });
 
             if (run == null || !run.Ran)
             {
@@ -231,6 +268,36 @@ public class AgentTools
         catch (Exception)
         {
             return McpToolResults.Fail("MCP-INTERNAL", "Agent task failed.");
+        }
+    }
+
+    public async Task<CallToolResult> GetAgentTaskJob(JObject args)
+    {
+        try
+        {
+            if (!Guid.TryParse(args["jobId"]?.ToString(), out var jobId) || jobId == Guid.Empty)
+                return McpToolResults.Fail("MCP-ARG-002", "jobId must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var snapshot = _agentTaskQueue == null
+                ? null
+                : await _agentTaskQueue.GetAsync(jobId);
+            if (snapshot == null || snapshot.TenantId != tenantId)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", "Agent task job not found.");
+
+            return McpToolResults.Success(new
+            {
+                jobId = snapshot.JobId,
+                workflowInstanceId = snapshot.WorkflowInstanceId,
+                status = snapshot.Status.ToString(),
+                terminal = snapshot.IsTerminal,
+                attempts = snapshot.Attempts,
+                completedAtUtc = snapshot.CompletedAtUtc
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
         }
     }
 

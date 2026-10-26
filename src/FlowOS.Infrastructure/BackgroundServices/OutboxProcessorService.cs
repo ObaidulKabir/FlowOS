@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace FlowOS.Infrastructure.BackgroundServices;
 
@@ -21,6 +22,7 @@ public class OutboxProcessorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<OutboxProcessorService> _logger;
+    private static readonly ActivitySource ActivitySource = new ActivitySource("FlowOS.Infrastructure.Background");
     private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(1);
 
     public OutboxProcessorService(IServiceProvider serviceProvider, ILogger<OutboxProcessorService> logger)
@@ -74,6 +76,10 @@ public class OutboxProcessorService : BackgroundService
 
         foreach (var message in pendingMessages)
         {
+            using var activity = ActivitySource.StartActivity("outbox.process", ActivityKind.Consumer);
+            activity?.SetTag("outbox.messageId", message.Id);
+            activity?.SetTag("outbox.type", message.Type);
+            activity?.SetTag("tenant.id", message.TenantId);
             try
             {
                 if (message.Type.StartsWith("WorkflowAction:", StringComparison.OrdinalIgnoreCase))

@@ -399,6 +399,149 @@ public sealed class AgentTaskRunnerProviderTests
         Assert.Equal(1, agent.Calls);
     }
 
+    [Fact]
+    public async Task CommitFence_SkipsPublish_WhenJobClaimIsNoLongerOwned()
+    {
+        var tenantId = Guid.NewGuid();
+        var definition = new WorkflowDefinition(
+            tenantId,
+            "ClaimFence",
+            1,
+            "AgentReview");
+        definition.AddStep(new WorkflowStepDefinition(
+            "AgentReview",
+            WorkflowStepType.HumanTask)
+        {
+            Actor = "Agent",
+            NextSteps = new Dictionary<string, string>
+            {
+                ["APPROVE"] = "END"
+            }
+        });
+        var instance = new WorkflowInstance(
+            tenantId,
+            definition.Id,
+            Guid.Empty,
+            definition.Version,
+            "AgentReview");
+        instance.Wait();
+        var packet = Packet(tenantId, instance.Id);
+
+        var packetBuilder = new Mock<IDecisionPacketBuilder>();
+        packetBuilder
+            .Setup(x => x.BuildAsync(
+                tenantId,
+                instance.Id,
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(packet);
+        var instances = new Mock<IWorkflowInstanceRepository>();
+        instances
+            .Setup(x => x.GetByIdAsNoTrackingAsync(
+                instance.Id,
+                tenantId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instance);
+        var definitions = new Mock<IWorkflowDefinitionRepository>();
+        definitions
+            .Setup(x => x.GetByIdAsNoTrackingAsync(
+                definition.Id,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(definition);
+        var events = new Mock<IDomainEventRepository>();
+        events
+            .Setup(x => x.ListByCorrelationIdAsync(
+                instance.Id,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<DomainEvent>());
+        var unitOfWork = new Mock<IUnitOfWork>();
+        unitOfWork.SetupGet(x => x.WorkflowInstances).Returns(instances.Object);
+        unitOfWork.SetupGet(x => x.WorkflowDefinitions).Returns(definitions.Object);
+        unitOfWork.SetupGet(x => x.Events).Returns(events.Object);
+
+        var factory = new Mock<IWorkflowAgentFactory>();
+        factory
+            .Setup(x => x.ResolveAsync(
+                packet,
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResolvedWorkflowAgent(
+                new StubAgent(AgentResult.WithActions(
+                    "Approved.",
+                    [new SuggestedAction("APPROVE", "Approved.", 1)])),
+                "quote-llm",
+                "TenantLlmWorkflowAgent",
+                "quote-llm",
+                "openai",
+                "gpt-test"));
+
+        var lease = new Mock<IDistributedLeaseService>();
+        lease
+            .Setup(x => x.TryAcquireAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DistributedLeaseHandle(
+                "claim-fence",
+                "worker-fence",
+                DateTime.UtcNow,
+                DateTime.UtcNow.AddMinutes(1)));
+        lease
+            .Setup(x => x.ReleaseAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var mediator = new Mock<IMediator>();
+        mediator
+            .Setup(x => x.Send(
+                It.IsAny<PublishAgentInsightCommand>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var jobId = Guid.NewGuid();
+        var queue = new Mock<IAgentTaskQueue>();
+        queue
+            .Setup(x => x.ExecuteWhileClaimOwnedAsync(
+                jobId,
+                "worker-fence",
+                1,
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentTaskClaimExecutionResult<bool>(false, default));
+
+        var runner = new AgentTaskRunner(
+            packetBuilder.Object,
+            mediator.Object,
+            unitOfWork.Object,
+            lease.Object,
+            agentFactory: factory.Object,
+            taskQueue: queue.Object);
+
+        var result = await runner.TryRunForCurrentStepAsync(
+            tenantId,
+            instance.Id,
+            cancellationToken: CancellationToken.None,
+            executionContext: new AgentTaskExecutionContext(
+                jobId,
+                "worker-fence",
+                1,
+                "AgentReview"));
+
+        Assert.True(result.Ran);
+        Assert.False(result.AutoCommitted);
+        Assert.Equal(
+            "Agent job claim expired or changed before commit.",
+            result.ParkReason);
+        mediator.Verify(
+            x => x.Send(
+                It.IsAny<PublishEventCommand>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static DecisionPacket Packet(Guid tenantId, Guid instanceId) =>
         new(
             tenantId,

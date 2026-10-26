@@ -115,6 +115,21 @@ public sealed class AgentTaskJob
         MarkTerminal(AgentTaskJobStatus.Completed, completedAtUtc, null);
     }
 
+    public bool RenewClaim(string claimant, DateTime nowUtc, DateTime expiresAtUtc)
+    {
+        var now = AsUtc(nowUtc);
+        var expiry = AsUtc(expiresAtUtc);
+        if (Status != AgentTaskJobStatus.Claimed ||
+            ClaimExpiresAtUtc == null ||
+            ClaimExpiresAtUtc <= now ||
+            !string.Equals(Claimant, claimant?.Trim(), StringComparison.Ordinal) ||
+            expiry <= now)
+            return false;
+
+        ClaimExpiresAtUtc = expiry;
+        return true;
+    }
+
     public void Retry(string claimant, string sanitizedError, DateTime dueAtUtc, DateTime changedAtUtc)
     {
         EnsureClaimedBy(claimant);

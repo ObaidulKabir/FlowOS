@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using FlowOS.API.Services;
+using FlowOS.Infrastructure.Services;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Domain.Enums;
@@ -48,6 +48,12 @@ public class AgentTaskProcessorServiceTests
 
         queueMock.Setup(q => q.ClaimBatchAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(claims);
+        var processed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinatorMock.Setup(c => c.ProcessClaimAsync(
+                claims[0], It.IsAny<CancellationToken>()))
+            .Callback(() => processed.TrySetResult(true))
+            .ReturnsAsync(new AgentTaskProcessingResult(
+                claims[0].JobId, AgentTaskJobStatus.Completed, null));
 
         var options = Options.Create(new AgentTaskProcessorOptions
         {
@@ -66,12 +72,12 @@ public class AgentTaskProcessorServiceTests
         
         var executeTask = service.StartAsync(cts.Token);
         
-        await Task.Delay(400, CancellationToken.None);
+        await processed.Task.WaitAsync(TimeSpan.FromSeconds(15));
         cts.Cancel();
         
         try { await service.StopAsync(CancellationToken.None); } catch (TaskCanceledException) { }
 
-        queueMock.Verify(q => q.ClaimBatchAsync(It.IsAny<string>(), 10, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        queueMock.Verify(q => q.ClaimBatchAsync(It.IsAny<string>(), 1, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         coordinatorMock.Verify(c => c.ProcessClaimAsync(claims[0], It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
     

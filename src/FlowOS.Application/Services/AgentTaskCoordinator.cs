@@ -239,6 +239,44 @@ public sealed class AgentTaskCoordinator : IAgentTaskCoordinator
             message);
     }
 
+    public async Task<AgentTaskSynchronousResult> EnqueueAndWaitAsync(
+        AgentTaskEnqueueRequest request,
+        TimeSpan waitTimeout,
+        TimeSpan pollInterval,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (waitTimeout < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(waitTimeout));
+        if (pollInterval <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(pollInterval));
+
+        var enqueue = await _queue.EnqueueAsync(request, cancellationToken);
+        var snapshot = await _queue.WaitForTerminalAsync(
+            enqueue.JobId,
+            waitTimeout,
+            pollInterval,
+            cancellationToken);
+
+        if (snapshot == null)
+            return new AgentTaskSynchronousResult(
+                enqueue.JobId,
+                AgentTaskJobStatus.Cancelled,
+                null,
+                Message: "Agent task job was not found.");
+
+        return new AgentTaskSynchronousResult(
+            enqueue.JobId,
+            snapshot.Status,
+            snapshot.IsTerminal
+                ? await ReconstructResultAsync(snapshot, cancellationToken)
+                : null,
+            TimedOut: !snapshot.IsTerminal,
+            Message: snapshot.IsTerminal
+                ? snapshot.LastError
+                : "Timed out waiting for the durable agent task.");
+    }
+
     public async Task<AgentTaskSynchronousResult> EnqueueAndExecuteAsync(
         AgentTaskEnqueueRequest request,
         string claimant,

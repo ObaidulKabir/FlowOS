@@ -25,6 +25,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
     private readonly IAgentExecutionRecorder? _executionRecorder;
     private readonly IAgentExecutionHistoryStore? _executionHistory;
     private readonly IConversationStore? _conversationStore;
+    private readonly IAgentTaskQueue? _taskQueue;
 
     public AgentTaskRunner(
         IDecisionPacketBuilder packetBuilder,
@@ -35,7 +36,8 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
         IWorkflowAgentFactory? agentFactory = null,
         IAgentExecutionRecorder? executionRecorder = null,
         IAgentExecutionHistoryStore? executionHistory = null,
-        IConversationStore? conversationStore = null)
+        IConversationStore? conversationStore = null,
+        IAgentTaskQueue? taskQueue = null)
     {
         _packetBuilder = packetBuilder;
         _mediator = mediator;
@@ -48,6 +50,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
         _executionRecorder = executionRecorder;
         _executionHistory = executionHistory;
         _conversationStore = conversationStore;
+        _taskQueue = taskQueue;
     }
 
     private sealed class ScopedToolInvoker : IAgentToolInvoker
@@ -460,19 +463,45 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                 var suggestion = eval.Candidate!;
                 try
                 {
-                    var published = await _mediator.Send(
-                        new PublishEventCommand(
-                            tenantId,
-                            workflowInstanceId,
-                            suggestion.EventType,
-                            workflowInstanceId,
-                            suggestion.Payload.Count == 0 ? packet.EventPayloads : suggestion.Payload,
-                            CreateCommitIdempotencyKey(
-                                executionContext,
-                                executionId,
-                                suggestion.EventType),
-                            $"Agent:{resolved.ActorId}"),
-                        cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var publishCommand = new PublishEventCommand(
+                        tenantId,
+                        workflowInstanceId,
+                        suggestion.EventType,
+                        workflowInstanceId,
+                        suggestion.Payload.Count == 0 ? packet.EventPayloads : suggestion.Payload,
+                        CreateCommitIdempotencyKey(
+                            executionContext,
+                            executionId,
+                            suggestion.EventType),
+                        $"Agent:{resolved.ActorId}");
+                    bool published;
+
+                    if (executionContext?.JobId is Guid jobId &&
+                        _taskQueue != null &&
+                        !string.IsNullOrWhiteSpace(executionContext.Claimant))
+                    {
+                        var commit = await _taskQueue.ExecuteWhileClaimOwnedAsync(
+                            jobId,
+                            executionContext.Claimant,
+                            Math.Max(1, executionContext.Attempt ?? 1),
+                            token => _mediator.Send(publishCommand, token),
+                            cancellationToken);
+                        if (!commit.Executed)
+                        {
+                            anyFailed = true;
+                            firstFailReason ??= "Agent job claim expired or changed before commit.";
+                            break;
+                        }
+
+                        published = commit.Result;
+                    }
+                    else
+                    {
+                        published = await _mediator.Send(
+                            publishCommand,
+                            cancellationToken);
+                    }
 
                     if (!published)
                     {

@@ -11,7 +11,8 @@ public class ApiKeyAndPlanGuidanceTests
         var instructions = FlowOsMcpGuidance.SystemInstructions;
         Assert.Contains("flw_live_", instructions);
         Assert.Contains("does not expire", instructions);
-        Assert.Contains("eyJ", instructions);
+        Assert.Contains("Authorization: Bearer", instructions);
+        Assert.Contains("JWTs use the caller's tenant, role, and identity", instructions);
         Assert.Contains("24 hours", instructions);
         Assert.Contains("MCP-PLAN-REQUIRED", instructions);
         Assert.Contains("That 402 is not key expiry", instructions);

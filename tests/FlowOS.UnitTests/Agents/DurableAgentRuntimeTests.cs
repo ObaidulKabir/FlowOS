@@ -314,6 +314,53 @@ public sealed class DurableAgentRuntimeTests
     }
 
     [Fact]
+    public async Task Coordinator_WaitOnly_EnqueuesWithoutExecutingOnCaller()
+    {
+        await using var db = CreateDb();
+        var clock = new MutableTimeProvider(UtcNow());
+        var tenantId = Guid.NewGuid();
+        var request = Request(tenantId, Guid.NewGuid(), "AgentReview");
+        var queue = new AgentTaskQueue(db, clock);
+        var runner = new Mock<IAgentTaskRunner>();
+        var coordinator = Coordinator(db, queue, runner.Object, clock);
+
+        var result = await coordinator.EnqueueAndWaitAsync(
+            request,
+            TimeSpan.Zero,
+            TimeSpan.FromMilliseconds(10));
+
+        Assert.Equal(AgentTaskJobStatus.Pending, result.Status);
+        Assert.True(result.TimedOut);
+        Assert.Null(result.RunResult);
+        Assert.Single(await db.AgentTaskJobs.ToListAsync());
+        runner.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ClaimRenewal_KeepsOwnerAndRejectsExpiredOrForeignClaims()
+    {
+        await using var db = CreateDb();
+        var clock = new MutableTimeProvider(UtcNow());
+        var queue = new AgentTaskQueue(db, clock);
+        var request = Request(Guid.NewGuid(), Guid.NewGuid(), "Review");
+        var job = await queue.EnqueueAsync(request);
+        Assert.NotNull(await queue.ClaimAsync(
+            job.JobId, "worker-a", TimeSpan.FromSeconds(10)));
+
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.False(await queue.RenewClaimAsync(
+            job.JobId, "worker-b", TimeSpan.FromSeconds(10)));
+        Assert.True(await queue.RenewClaimAsync(
+            job.JobId, "worker-a", TimeSpan.FromSeconds(10)));
+
+        clock.Advance(TimeSpan.FromSeconds(8));
+        Assert.Equal(AgentTaskJobStatus.Claimed, (await queue.GetAsync(job.JobId))?.Status);
+        clock.Advance(TimeSpan.FromSeconds(3));
+        Assert.False(await queue.RenewClaimAsync(
+            job.JobId, "worker-a", TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
     public async Task Coordinator_RetriesTransientFailure_AndDeadLettersInvalidOutput()
     {
         await using var db = CreateDb();

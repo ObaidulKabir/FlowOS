@@ -42,7 +42,7 @@ public static class McpToolDescriptions
                 "Factory follows step.agentProvider (TenantLlmWorkflowAgent when a key is stored). Omit agentId unless you want the flowos-risk fixture. " +
                 "Suggestions outside legal nextSteps are dropped. Does not auto-commit. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{jobId,executionId,autoCommitted:false,packet,result}}. " +
+                "Returns: a completed suggestion or {ok:true,data:{jobId,status,pending:true}} if the worker is still running. Use get_agent_task_job to poll. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"objective\":\"Decide the next legal event\"}",
 
@@ -51,9 +51,16 @@ public static class McpToolDescriptions
                 "Omit agentId so the factory uses step.agentProvider. If the suggested event is in autoCommit.allowedEvents and confidence is in bounds, FlowOS publishes it (actor Agent:{id}). " +
                 "Otherwise the instance stays a HumanTask and the insight is parked as a Smart Action. Do not invent transitions or paste API keys. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. Runtime plan required. " +
-                "Returns: {ok:true,data:{jobId,executionId,autoCommitted,parkReason,packet,result}}. " +
+                "Returns: a completed run or {ok:true,data:{jobId,status,pending:true}} if the worker is still running. Use get_agent_task_job to poll. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}",
+
+            ["get_agent_task_job"] =
+                "Reads the status of a tenant-owned durable agent task job. Use after run_agent_task or suggest_agent_action returns pending:true. " +
+                "Does not execute or claim work. HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{jobId,workflowInstanceId,status,terminal,attempts,completedAtUtc}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001. " +
+                "Input example: {\"jobId\":\"22222222-2222-2222-2222-222222222222\"}",
 
             ["get_agent_execution_history"] =
                 "Reads tenant-scoped durable agent execution history, optionally filtered to one workflow instance, UTC window, and status. " +
@@ -824,6 +831,7 @@ public static class McpToolDescriptions
             ["list_available_agents"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["suggest_agent_action"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["run_agent_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["get_agent_task_job"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_execution_history"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_evaluation_metrics"] = new("observability", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_context"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
