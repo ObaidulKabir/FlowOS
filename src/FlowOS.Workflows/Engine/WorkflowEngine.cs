@@ -7,13 +7,14 @@ using FlowOS.StateMachines.Engine;
 using FlowOS.StateMachines.Models; // Reusing ExecutionContext
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
-
+using System.Diagnostics;
 namespace FlowOS.Workflows.Engine;
 
 public class WorkflowEngine : IWorkflowEngine
 {
     private readonly StateMachineEngine _stateMachineEngine;
     private readonly IPolicyDecisionPluginRegistry? _decisionPluginRegistry;
+    private static readonly ActivitySource ActivitySource = new ActivitySource("FlowOS.Workflows.Engine");
 
     public WorkflowEngine(
         StateMachineEngine stateMachineEngine,
@@ -32,6 +33,12 @@ public class WorkflowEngine : IWorkflowEngine
         StateMachineDefinition? stateMachineDefinition = null,
         string? currentEntityState = null)
     {
+        using var activity = ActivitySource.StartActivity("workflow.advance", ActivityKind.Internal);
+        activity?.SetTag("workflow.instanceId", instance.Id);
+        activity?.SetTag("workflow.definitionId", instance.WorkflowDefinitionId);
+        activity?.SetTag("workflow.event", domainEvent.EventType);
+        activity?.SetTag("tenant.id", instance.TenantId);
+
         // 1. Validation
         if (instance.WorkflowDefinitionId != definition.Id)
             return WorkflowAdvanceResult.Failed("Definition mismatch.");
@@ -58,23 +65,34 @@ public class WorkflowEngine : IWorkflowEngine
         // 2. Check for Transition match (Workflow)
         if (!currentStep.NextSteps.TryGetValue(domainEvent.EventType, out var nextStepId))
         {
-            if (TrySynchronizeStateOnly(
-                    instance,
-                    domainEvent,
-                    context,
-                    stateMachineDefinition,
-                    currentEntityState,
-                    out var synchronized))
+            if (currentStep.Sla != null && string.Equals(domainEvent.EventType, currentStep.Sla.TimeoutEvent, StringComparison.OrdinalIgnoreCase))
             {
-                return synchronized;
+                nextStepId = currentStep.Sla.EscalationStepId;
+                if (string.IsNullOrWhiteSpace(nextStepId))
+                {
+                    return WorkflowAdvanceResult.Failed($"SLA Timeout fired for event '{domainEvent.EventType}' but no EscalationStepId is defined on step '{currentStep.StepId}'.");
+                }
             }
-
-            if (IsSlaReminderEvent(currentStep, domainEvent.EventType))
+            else
             {
-                return WorkflowAdvanceResult.SlaReminderFired(currentStep.StepId, domainEvent.EventType);
-            }
+                if (TrySynchronizeStateOnly(
+                        instance,
+                        domainEvent,
+                        context,
+                        stateMachineDefinition,
+                        currentEntityState,
+                        out var synchronized))
+                {
+                    return synchronized;
+                }
 
-            return WorkflowAdvanceResult.Failed($"No transition defined for event '{domainEvent.EventType}' from step '{currentStep.StepId}'.");
+                if (IsSlaReminderEvent(currentStep, domainEvent.EventType))
+                {
+                    return WorkflowAdvanceResult.SlaReminderFired(currentStep.StepId, domainEvent.EventType);
+                }
+
+                return WorkflowAdvanceResult.Failed($"No transition defined for event '{domainEvent.EventType}' from step '{currentStep.StepId}'.");
+            }
         }
 
         var travel = PathTravelGuard.Evaluate(instance, definition, currentStep, domainEvent.EventType, nextStepId);
