@@ -1,0 +1,45 @@
+name: Generate EF migration (temporary)
+
+on:
+  push:
+    branches:
+      - tmp/gen-net10-migration
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: "1"
+      ASPNETCORE_ENVIRONMENT: Development
+      # Migrations are generated from the model; no database connection is opened.
+      ConnectionStrings__DefaultConnection: Host=localhost;Database=flowos_design;Username=design;Password=design
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.13
+      - name: Add migration
+        run: |
+          dotnet ef migrations add Net10ModelUpdate \
+            --project src/FlowOS.Infrastructure \
+            --startup-project src/FlowOS.Api \
+            --output-dir Migrations
+      - name: Show migration summary
+        run: |
+          f=$(ls src/FlowOS.Infrastructure/Migrations/*_Net10ModelUpdate.cs | grep -v Designer)
+          echo "::notice title=Migration file::$f"
+          body=$(sed -n '/protected override void Up/,/protected override void Down/p' "$f" | tr '\n' ' ' | tr -s ' ' | cut -c1-3000)
+          echo "::notice title=Up()::$body"
+      - name: Commit generated migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/FlowOS.Infrastructure/Migrations
+          git commit -m "chore(db): generated EF Core migration Net10ModelUpdate"
+          git push origin HEAD:tmp/gen-net10-migration
