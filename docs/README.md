@@ -32,6 +32,7 @@ This guide is organized as a linear path — read it in order if you are new, or
 | 22 | [DesignedApp & FlowOS release](22-designed-app-flowos-version.md) | Blueprint, Business Context, and AI Context record the FlowOS release they depend on |
 | 23 | [Tenant backup & site restore](23-tenant-backup.md) | Download a point-in-time Designed App and running instances, restore on another site |
 | 24 | [Load Balancing & Multi-VPS](24-load-balancing-and-multi-vps.md) | High-availability multi-node cluster, virtual VPS network, and NGINX load balancer |
+| 28 | [Observability (OpenTelemetry)](28-observability.md) | Traces and metrics, turning export on, privacy rules |
 
 ## Reading paths
 
