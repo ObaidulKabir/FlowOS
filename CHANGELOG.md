@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **.NET 10 LTS (CR-01).** All projects target `net10.0`; the target framework is set once in `Directory.Build.props` and package versions centrally in `Directory.Packages.props` (Microsoft packages 10.0.13, Npgsql EF Core provider 10.0.3). Docker images use the .NET 10 SDK and ASP.NET Core runtime; `global.json` pins the SDK band. The unused `Microsoft.AspNetCore.OpenApi` package was removed (Swashbuckle remains).
+- The EF Core pending-model-changes warning is logged at startup instead of stopping `Migrate()`; a new unit test fails CI when the model and the migrations differ.
+
+---
+
 ## [1.0.0-MVP] - 2026-09-02
 
 ### 🚀 Initial Minimum Viable Product (MVP) Release
