@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FlowOS.Infrastructure.Migrations
 {
     [DbContext(typeof(FlowOSDbContext))]
-    [Migration("20261026131513_Net10ModelUpdate")]
-    partial class Net10ModelUpdate
+    [Migration("20261026131513_AddTeams")]
+    partial class AddTeams
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

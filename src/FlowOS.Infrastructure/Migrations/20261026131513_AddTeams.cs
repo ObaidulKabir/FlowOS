@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FlowOS.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class Net10ModelUpdate : Migration
+    public partial class AddTeams : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
