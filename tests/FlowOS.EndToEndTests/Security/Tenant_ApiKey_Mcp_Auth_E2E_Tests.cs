@@ -61,6 +61,21 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         });
         _api = _apiFactory.CreateClient();
 
+        // Platform administration needs a credential of the platform tenant. The public demo keys
+        // are tenant-scoped to the demo tenant and must not act across tenants.
+        using (var scope = _apiFactory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+            db.TenantApiKeys.Add(new TenantApiKey(
+                FlowOS.Core.Security.TenantIdentityRules.PlatformTenantId,
+                "E2E platform admin",
+                PlatformAdminKey,
+                "E2E",
+                "Development",
+                new[] { "*" }));
+            await db.SaveChangesAsync();
+        }
+
         _mcp = BuildMcp(_sharedDb, allowedOrigins: "");
         await _mcp.StartAsync();
         _mcpClient = _mcp.GetTestClient();
@@ -273,12 +288,13 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
         return request;
     }
 
+    private const string PlatformAdminKey = "flw_live_e2e_platform_admin_test_only_0123456789";
+
     private static HttpRequestMessage PlatformAdminApi(HttpMethod method, string path, object? body = null)
     {
         var request = new HttpRequestMessage(method, path);
-        request.Headers.Add("X-Mock-Role", "Admin");
-        request.Headers.Add("x-tenant-id", FlowOS.Core.Security.TenantIdentityRules.DemoTenantId.ToString());
-        request.Headers.Add("X-API-Key", "flowos_prod_secret_key_32_chars_min");
+        request.Headers.Add("x-tenant-id", FlowOS.Core.Security.TenantIdentityRules.PlatformTenantId.ToString());
+        request.Headers.Add("X-API-Key", PlatformAdminKey);
         if (body != null)
             request.Content = JsonContent.Create(body);
         return request;
