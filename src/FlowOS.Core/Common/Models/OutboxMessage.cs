@@ -17,6 +17,12 @@ public class OutboxMessage
     public bool IsDeadLetter { get; private set; }
     public int MaxRetries { get; private set; } = 5;
 
+    /// <summary>
+    /// W3C traceparent of the activity that wrote the message (CR-07), so the consumer span
+    /// continues the producer's trace. Null when no trace was active.
+    /// </summary>
+    public string? TraceParent { get; private set; }
+
     protected OutboxMessage() { }
 
     public OutboxMessage(Guid tenantId, string type, string payload, int maxRetries = 5)
@@ -32,6 +38,7 @@ public class OutboxMessage
         NextRetryUtc = null;
         IsDeadLetter = false;
         MaxRetries = maxRetries > 0 ? maxRetries : 5;
+        TraceParent = FlowOS.Core.Telemetry.FlowOsTelemetry.CurrentTraceParent();
     }
 
     public void MarkAsProcessed()

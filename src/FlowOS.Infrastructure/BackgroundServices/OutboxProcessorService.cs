@@ -15,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using FlowOS.Core.Telemetry;
 
 namespace FlowOS.Infrastructure.BackgroundServices;
 
@@ -22,7 +23,6 @@ public class OutboxProcessorService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<OutboxProcessorService> _logger;
-    private static readonly ActivitySource ActivitySource = new ActivitySource("FlowOS.Infrastructure.Background");
     private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(1);
 
     public OutboxProcessorService(IServiceProvider serviceProvider, ILogger<OutboxProcessorService> logger)
@@ -76,10 +76,16 @@ public class OutboxProcessorService : BackgroundService
 
         foreach (var message in pendingMessages)
         {
-            using var activity = ActivitySource.StartActivity("outbox.process", ActivityKind.Consumer);
+            // Continue the trace of the request that wrote the message (CR-07).
+            using var activity = FlowOsTelemetry.Background.StartActivity(
+                "outbox.process",
+                ActivityKind.Consumer,
+                FlowOsTelemetry.ParentFrom(message.TraceParent));
             activity?.SetTag("outbox.messageId", message.Id);
             activity?.SetTag("outbox.type", message.Type);
-            activity?.SetTag("tenant.id", message.TenantId);
+            activity?.SetTag("outbox.retryCount", message.RetryCount);
+            activity?.SetTag(FlowOsTelemetry.TenantHashAttribute, FlowOsTelemetry.TenantHash(message.TenantId));
+            FlowOsTelemetry.OutboxLag.Record(Math.Max(0, (DateTime.UtcNow - message.OccurredOnUtc).TotalMilliseconds));
             try
             {
                 if (message.Type.StartsWith("WorkflowAction:", StringComparison.OrdinalIgnoreCase))
@@ -107,10 +113,15 @@ public class OutboxProcessorService : BackgroundService
                     await publisher.Publish(new DomainEventNotification<DomainEvent>(domainEvent), cancellationToken);
                     message.MarkAsProcessed();
                 }
+
+                FlowOsTelemetry.OutboxMessages.Add(1, new KeyValuePair<string, object?>(FlowOsTelemetry.OutcomeAttribute, "processed"));
             }
             catch (Exception ex)
             {
                 message.RecordFailure(ex.Message);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                FlowOsTelemetry.OutboxMessages.Add(1, new KeyValuePair<string, object?>(
+                    FlowOsTelemetry.OutcomeAttribute, message.IsDeadLetter ? "dead_letter" : "failed"));
                 if (message.IsDeadLetter)
                 {
                     _logger.LogError(ex, "Outbox message {MessageId} of type {MessageType} reached max retries ({MaxRetries}) and moved to Dead Letter Queue (DLQ).",
