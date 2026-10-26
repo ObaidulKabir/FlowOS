@@ -8,13 +8,13 @@ using FlowOS.StateMachines.Models; // Reusing ExecutionContext
 using FlowOS.Workflows.Domain;
 using FlowOS.Workflows.Enums;
 using System.Diagnostics;
+using FlowOS.Core.Telemetry;
 namespace FlowOS.Workflows.Engine;
 
 public class WorkflowEngine : IWorkflowEngine
 {
     private readonly StateMachineEngine _stateMachineEngine;
     private readonly IPolicyDecisionPluginRegistry? _decisionPluginRegistry;
-    private static readonly ActivitySource ActivitySource = new ActivitySource("FlowOS.Workflows.Engine");
 
     public WorkflowEngine(
         StateMachineEngine stateMachineEngine,
@@ -33,12 +33,37 @@ public class WorkflowEngine : IWorkflowEngine
         StateMachineDefinition? stateMachineDefinition = null,
         string? currentEntityState = null)
     {
-        using var activity = ActivitySource.StartActivity("workflow.advance", ActivityKind.Internal);
+        using var activity = FlowOsTelemetry.Workflows.StartActivity("workflow.advance", ActivityKind.Internal);
         activity?.SetTag("workflow.instanceId", instance.Id);
         activity?.SetTag("workflow.definitionId", instance.WorkflowDefinitionId);
         activity?.SetTag("workflow.event", domainEvent.EventType);
-        activity?.SetTag("tenant.id", instance.TenantId);
+        activity?.SetTag(FlowOsTelemetry.TenantHashAttribute, FlowOsTelemetry.TenantHash(instance.TenantId));
+        var correlationId = domainEvent.CorrelationId ?? instance.CorrelationId;
+        if (correlationId.HasValue)
+            activity?.SetTag(FlowOsTelemetry.CorrelationIdAttribute, correlationId.Value);
+        activity?.SetTag(FlowOsTelemetry.CausationIdAttribute, domainEvent.EventId);
 
+        var startedAt = Stopwatch.GetTimestamp();
+        var result = AdvanceCore(instance, definition, domainEvent, context, stateMachineDefinition, currentEntityState);
+
+        var outcome = result.Success ? "succeeded" : "failed";
+        activity?.SetTag(FlowOsTelemetry.OutcomeAttribute, outcome);
+        if (!result.Success)
+            activity?.SetStatus(ActivityStatusCode.Error, result.Message);
+        var outcomeTag = new KeyValuePair<string, object?>(FlowOsTelemetry.OutcomeAttribute, outcome);
+        FlowOsTelemetry.TransitionDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, outcomeTag);
+        FlowOsTelemetry.Transitions.Add(1, outcomeTag);
+        return result;
+    }
+
+    private WorkflowAdvanceResult AdvanceCore(
+        WorkflowInstance instance,
+        WorkflowDefinition definition,
+        IEvent domainEvent,
+        FlowOS.StateMachines.Models.ExecutionContext context,
+        StateMachineDefinition? stateMachineDefinition,
+        string? currentEntityState)
+    {
         // 1. Validation
         if (instance.WorkflowDefinitionId != definition.Id)
             return WorkflowAdvanceResult.Failed("Definition mismatch.");

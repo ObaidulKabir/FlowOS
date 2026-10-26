@@ -42,7 +42,7 @@ export const PlatformComparison: React.FC = () => {
           </div>
           <h4 className="text-sm font-bold text-white">Lightweight footprint</h4>
           <p className="text-xs text-slate-400 leading-relaxed">
-            .NET 8 + PostgreSQL. No Zeebe, Cassandra, or Elasticsearch cluster required to run the OS kernels.
+            .NET 10 + PostgreSQL. No Zeebe, Cassandra, or Elasticsearch cluster required to run the OS kernels.
           </p>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-* .NET 8 SDK (the API/Domain/Workflows projects target `net8.0`; the MCP and E2E test projects target `net9.0` — install both SDKs, or the latest .NET SDK which can build both via multi-targeting)
+* .NET 10 SDK (10.0.100 or later). All projects target `net10.0`; the target framework and package versions are set once in `Directory.Build.props` and `Directory.Packages.props`.
 * Docker & Docker Compose (optional, for the full stack with PostgreSQL, the dashboard, and the Expense sample app)
 * Node.js 20+ (only needed for the dashboard, the Expense sample app, or the Node.js demo client)
 

@@ -15,7 +15,7 @@ Quick links: [Getting Started](docs/01-getting-started.md) · [Core Concepts](do
 
 ### Prerequisites
 *   Docker & Docker Compose (optional — see [Chapter 1](docs/01-getting-started.md))
-*   .NET 8 SDK
+*   .NET 10 SDK (10.0.100 or later; see `global.json`)
 *   Node.js 20+ (for the dashboard / sample apps)
 
 ### Running locally (fastest)
