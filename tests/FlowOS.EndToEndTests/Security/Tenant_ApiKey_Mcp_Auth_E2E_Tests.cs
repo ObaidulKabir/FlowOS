@@ -257,6 +257,10 @@ public sealed class Tenant_ApiKey_Mcp_Auth_E2E_Tests : IAsyncLifetime
             services.Remove(descriptor);
         foreach (var descriptor in services.Where(d => d.ServiceType == typeof(DbContextOptions<FlowOSDbContext>)).ToList())
             services.Remove(descriptor);
+        // EF Core 9+ keeps each AddDbContext configuration as IDbContextOptionsConfiguration<T>;
+        // remove it too, or the host's PostgreSQL configuration is applied alongside in-memory.
+        foreach (var descriptor in services.Where(d => d.ServiceType == typeof(Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<FlowOSDbContext>)).ToList())
+            services.Remove(descriptor);
 
         services.AddDbContext<FlowOSDbContext>(options => options.UseInMemoryDatabase(databaseName));
     }
