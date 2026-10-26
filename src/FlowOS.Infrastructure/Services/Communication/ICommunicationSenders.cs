@@ -101,10 +101,10 @@ public class DefaultEmailSender : IEmailSender
                        ?? Environment.GetEnvironmentVariable("SMTP_USER")
                        ?? Environment.GetEnvironmentVariable("SMTP_USERNAME")
                        ?? "admin@flowosbd.com";
-        var smtpPass = _configuration["FlowOS:Communications:Email:Smtp:Password"]
-                       ?? Environment.GetEnvironmentVariable("SMTP_PASSWORD")
-                       ?? Environment.GetEnvironmentVariable("SMTP_PASS")
-                       ?? "c#6uSkcs";
+        // No built-in default: the password must come from configuration or the environment.
+        var smtpPass = NonEmpty(_configuration["FlowOS:Communications:Email:Smtp:Password"])
+                       ?? NonEmpty(Environment.GetEnvironmentVariable("SMTP_PASSWORD"))
+                       ?? NonEmpty(Environment.GetEnvironmentVariable("SMTP_PASS"));
 
         if (!string.IsNullOrWhiteSpace(smtpHost) && !string.IsNullOrWhiteSpace(smtpPass))
         {
@@ -198,6 +198,8 @@ public class DefaultEmailSender : IEmailSender
 
         return await Task.FromResult(new EmailSendResult(true, generatedId, 200));
     }
+
+    private static string? NonEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }
 
 public record SlackSendRequest(

@@ -48,12 +48,15 @@ public class TenantIdentityTests
     }
 
     [Fact]
-    public void IsPlatformAdministrator_AllowsPlatformAndDemoPrivilegedRoles()
+    public void IsPlatformAdministrator_AllowsOnlyPlatformTenantPrivilegedRoles()
     {
         Assert.True(TenantIdentityRules.IsPlatformAdministrator(
             TenantIdentityRules.PlatformTenantId, new[] { "Admin" }));
-        Assert.True(TenantIdentityRules.IsPlatformAdministrator(
+        // The demo tenant is reachable with public demo keys and must never act across tenants.
+        Assert.False(TenantIdentityRules.IsPlatformAdministrator(
             TenantIdentityRules.DemoTenantId, new[] { "SuperAdmin" }));
+        Assert.False(TenantIdentityRules.IsPlatformAdministrator(
+            TenantIdentityRules.DemoTenantId, new[] { "Admin" }));
         Assert.False(TenantIdentityRules.IsPlatformAdministrator(
             Guid.NewGuid(), new[] { "Admin" }));
         Assert.False(TenantIdentityRules.IsPlatformAdministrator(
@@ -98,5 +101,32 @@ public class TenantIdentityTests
         public string ApplicationName { get; set; } = "FlowOS.Tests";
         public string ContentRootPath { get; set; } = ".";
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    [Theory]
+    [InlineData("Development", null, true)]
+    [InlineData("Production", null, false)]
+    [InlineData("Staging", null, false)]
+    [InlineData("Production", "true", true)]
+    [InlineData("Development", "false", false)]
+    public void DemoKeysAllowed_DefaultsToDevelopmentOnly(string environment, string? configured, bool expected)
+    {
+        Assert.Equal(expected, TenantIdentityRules.DemoKeysAllowed(environment, configured));
+    }
+
+    [Theory]
+    [InlineData("flowos_prod_secret_key_32_chars_min")]
+    [InlineData("local-development-key-change-me")]
+    [InlineData("YOUR_PRODUCTION_API_KEY")]
+    public void WellKnownDemoKeys_AreRejectedInProduction(string key)
+    {
+        Assert.False(TenantIdentityRules.IsAcceptedDemoApiKey(key, "Production", null));
+        Assert.True(TenantIdentityRules.IsAcceptedDemoApiKey(key, "Development", null));
+    }
+
+    [Fact]
+    public void OrdinaryKey_IsNeverADemoKey()
+    {
+        Assert.False(TenantIdentityRules.IsAcceptedDemoApiKey("a-random-tenant-key-0123456789", "Development", "true"));
     }
 }

@@ -61,8 +61,31 @@ public static class DataSeeder
             }
         }
 
-        // 1.2 Ensure Demo Tenant API Keys
-        if (!await context.TenantApiKeys.AnyAsync(k => k.TenantId == demoClientTenantId))
+        // 1.2 Demo tenant API keys and user. Their values are public, so they are created only where
+        // demo keys are allowed (Development, or FlowOS:Demo:EnableDemoKeys=true). Elsewhere any
+        // existing well-known demo key is revoked.
+        var seedConfiguration = serviceProvider.GetService<IConfiguration>();
+        var demoKeysAllowed = TenantIdentityRules.DemoKeysAllowed(
+            env.EnvironmentName,
+            seedConfiguration?[TenantIdentityRules.EnableDemoKeysKey]);
+
+        if (!demoKeysAllowed)
+        {
+            var wellKnownHashes = new[]
+            {
+                TenantApiKey.HashKey("flowos_prod_secret_key_32_chars_min"),
+                TenantApiKey.HashKey("local-development-key-change-me"),
+                TenantApiKey.HashKey("YOUR_PRODUCTION_API_KEY")
+            };
+            var exposedKeys = await context.TenantApiKeys
+                .Where(k => wellKnownHashes.Contains(k.KeyHash) && !k.IsRevoked)
+                .ToListAsync();
+            foreach (var exposedKey in exposedKeys)
+                exposedKey.Revoke();
+            if (exposedKeys.Count > 0)
+                await context.SaveChangesAsync();
+        }
+        else if (!await context.TenantApiKeys.AnyAsync(k => k.TenantId == demoClientTenantId))
         {
             var demoKey1 = new TenantApiKey(demoClientTenantId, "Production Key", "flowos_prod_secret_key_32_chars_min", "ERP Integration", "Production", new[] { "*" });
             var demoKey2 = new TenantApiKey(demoClientTenantId, "Local Dev Key", "local-development-key-change-me", "Developer Sandbox", "Development", new[] { "*" });
@@ -70,8 +93,8 @@ public static class DataSeeder
             await context.SaveChangesAsync();
         }
 
-        // 1.3 Ensure Demo Tenant User
-        if (!await context.TenantUsers.AnyAsync(u => u.TenantId == demoClientTenantId))
+        // 1.3 Ensure Demo Tenant User (known password; only where demo keys are allowed)
+        if (demoKeysAllowed && !await context.TenantUsers.AnyAsync(u => u.TenantId == demoClientTenantId))
         {
             var passwordHasher = serviceProvider.GetService<FlowOS.Security.Interfaces.IPasswordHasher>()
                 ?? new FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher();
