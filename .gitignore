@@ -32,3 +32,14 @@ yarn-error.log*
 # FlowOS Specific
 flowos-config/secrets/
 .trae/
+
+# Repository hygiene (CR-03): never commit logs, local databases, archives or scratch output
+*.log
+*.db
+*.sqlite
+*.zip
+build_*.txt
+test_output*.txt
+/tmp*
+/temp*
+/.dbg/
