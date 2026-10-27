@@ -266,7 +266,7 @@ When an actor attempts an action (e.g. `StartWorkflowCommand`), FlowOS evaluates
 
 ## What the current `Policy` model actually supports today — read before relying on `ConditionJson`
 
-The `CreatePolicyRequest.ConditionJson` field exists on the wire, and the guide above documents it faithfully — but see [Chapter 15 — Known Limitations](15-known-limitations-and-gaps.md#policy-conditionjson-is-ignored) for the verified, test-proven gap: **`DefaultPolicyEvaluator` currently only checks whether a policy's `Name` is literally `"DenyAll"`.** Any other `Name`, or any content inside `ConditionJson`, is silently ignored by the evaluator today. Don't design a production authorization scheme around arbitrary `ConditionJson` rules yet.
+`DefaultPolicyEvaluator` reads `ConditionJson` with a minimal contract: `{ "action": "Deny", "reason": "..." }` denies, a policy named `"DenyAll"` still denies, and malformed JSON fails closed (deny). It is not a full rules engine yet: there are no role or time expressions. See [Chapter 15](15-known-limitations-and-gaps.md#policy-conditionjson-evaluation-improved).
 
 ## Where to go next
 

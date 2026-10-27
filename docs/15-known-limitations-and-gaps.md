@@ -9,23 +9,12 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 * **Still limited**: this is a minimal JSON contract, not a full rules engine (no day-of-week / role expressions yet). Extend `DefaultPolicyEvaluator` as product needs grow.
 * **Proof**: `tests/FlowOS.UnitTests/Security/PolicyEvaluatorGapTests.cs` — now asserts ConditionJson is preserved and Deny actions are enforced.
 
-## The runtime event-publishing path does not enforce State Machine rules
+## Legacy instances without a workflow class are not checked against a State Machine
 
-* **What the docs imply**: [Chapter 3](03-state-machines.md) documents `POST /api/statemachines/validate` as the authoritative legality check, and [Chapter 2](02-core-concepts.md) states "a workflow can never bypass a state machine".
-* **What actually happens**: `WorkflowCommandHandlers.PublishEventCommand`'s handler calls `_engine.Advance()` **without** passing a `StateMachineDefinition` or the entity's current state. The `WorkflowEngine.Advance` method *supports* an optional state-machine-aware overload, but the live command handler doesn't use it — so publishing an event advances the *workflow* purely according to the workflow's own step transitions, even if a `StateMachineDefinition` exists for the entity type and would have denied the same transition.
-* **Proof**: `tests/FlowOS.UnitTests/Application/Handlers/WorkflowCommandHandlers_StateMachineGapTests.cs` (2 tests) — a workflow advances via `PublishEventCommand` on an event that a corresponding State Machine, if consulted, would deny.
-* **Practical implication**: the `/api/statemachines/validate` endpoint is currently a standalone advisory tool ([Chapter 3](03-state-machines.md#strategic-uses-of-the-validation-endpoint)) — call it explicitly from your client/agent before publishing an event if you need that legality guarantee today. Don't assume the engine consults it automatically during a normal `POST /api/events/publish` call.
-
-## `AdminController` authorization
-
-* `/api/admin/*` now requires `[Authorize(Roles = "Admin")]`. In development, send `X-Mock-Role: Admin`.
-* `/api/roles` and `/api/policies` also require the `Admin` role (tenant security config is admin-only).
-* Controllers that previously lacked `[Authorize]` (`Events`, `Agents`, `Tasks`, `StateMachines`, `Notifications`) now require authentication via the Mock (or real) scheme.
-* Admin `config/publish` goes through `PublishConfigurationCommand` + `IConfigurationPublisher` (no DbContext in the controller).
-
-## `WorkflowClassesController.ApproveAsPublic` has no admin-only check
-
-* The [Chapter 9](09-workflow-class-governance.md) lifecycle describes "Approve" as an admin action, but `ApproveAsPublic` (`POST /api/workflow-classes/{id}/approve`) has no role/capability check in code beyond the controller-level `[Authorize]` (any authenticated caller, any role). Any tenant that can authenticate can promote a `Shared` class to `Public`.
+* **Class-backed instances are enforced.** Publishing an event to an instance created from a `WorkflowClass` goes through its State Machine ("Law"). If no usable Law is found, the request fails closed and the instance does not move.
+* **Still open**: instances with an empty `WorkflowClassId` (created before class compilation existed) advance on the workflow graph alone, for backwards compatibility.
+* **Proof**: `tests/FlowOS.UnitTests/Application/Handlers/WorkflowCommandHandlers_StateMachineGapTests.cs`: `Handle_PublishEventCommand_FailsClosed_WhenClassBackedInstanceHasNoUsableLaw` and `Handle_PublishEventCommand_LegacyEmptyClassId_MayStillAdvanceOnWorkflowGraph`.
+* **Practical implication**: start new work from a published `WorkflowClass`. Migrate legacy definitions to classes if they must obey a State Machine.
 
 ## `WorkflowClassValidator` never actually checks "Law" (Workflow-vs-StateMachine legality)
 
@@ -48,16 +37,19 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 * Source business payloads are not retained by default; only the canonical snapshot and canonical audit deltas are durable.
 * Template publication does not auto-upgrade bindings. Each binding revision is explicitly validated and activated.
 
-## Docker Compose does not publish the API's host port by default
+## Resolved
 
-* `docker-compose.yml`'s `flowos-api` service has no `ports:` mapping. `README.md` previously claimed `http://localhost:5005` works out of the box with `docker-compose up` — it does not, unless you add a port mapping (e.g. via a `docker-compose.override.yml`). See [Chapter 1](01-getting-started.md#option-b--run-the-full-stack-with-docker-compose).
+Kept here so readers of older documents can see what changed.
 
-## Inconsistent legacy port references (fixed in this rewrite)
-
-* Older documentation in this repository referenced `http://localhost:5000`, `5001`, and `5005` inconsistently for local development. None of these match `src/FlowOS.Api/Properties/launchSettings.json`, which binds to **`5183`**. This entire guide has been standardized on `5183`, and it's also the port used by the working `clients/node-expense-client` demo (see [Chapter 16](16-sample-applications.md)).
+* **State Machine enforcement on the event-publishing path (class-backed instances).** Earlier versions advanced instances on the workflow graph without consulting the State Machine. Class-backed instances now fail closed. See the open item above for legacy instances.
+* **`AdminController` and security endpoints.** `/api/admin/*`, `/api/roles` and `/api/policies` require the `Admin` role. `Events`, `Agents`, `Tasks`, `StateMachines` and `Notifications` require authentication. Admin `config/publish` goes through `PublishConfigurationCommand`.
+* **Promote-to-Public is limited to platform administrators.** `POST /api/workflow-classes/{id}/approve` first had no role check, then accepted the Admin of any tenant. A Public class is visible to every tenant, so only an Admin of the platform tenant may approve one. Proof: `tests/FlowOS.EndToEndTests/Governance/WorkflowClass_PublicApproval_Tests.cs`.
+* **MCP schema examples.** Older MCP documents used `EventType`/`Label`/`Config` for step blueprints. The real fields are `EventId`, with no `Label` or `Config`. See [Chapter 9](09-workflow-class-governance.md).
+* **Docker Compose API port.** `docker-compose.yml` maps the API to `5183` on the host.
+* **Inconsistent local ports in older documents (`5000`, `5001`, `5005`).** All chapters use `5183`, the port in `src/FlowOS.Api/Properties/launchSettings.json`.
 
 ## How to keep this chapter honest
 
-If you fix one of the gaps above, please also delete (or move to a "Resolved" section) the corresponding entry here, and update the cross-references in the other chapters that mention it — search for the exception/gap name across `docs/`.
+If you fix one of the gaps above, move its entry to the "Resolved" section in the same pull request, and update the cross-references in the other chapters that mention it — search for the exception/gap name across `docs/`.
 
 The product-level scoreboard for "engine vs OS" is [Chapter 19 — OS-1 Honesty Gate](19-os-release-gate.md). Must-pass identity, dual-kernel fail-closed Law, admin-only promote-to-Public, role-filtered inbox, and hosted agent runtime are closed; remaining items here are later (`L-*`) polish, not GREEN blockers.
