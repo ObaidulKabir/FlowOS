@@ -1907,6 +1907,14 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ExternalSourceSystem")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ParentStepId")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -1951,6 +1959,8 @@ namespace FlowOS.Infrastructure.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("WorkflowDefinitionId");
+
+                    b.HasIndex("TenantId", "ExternalSourceSystem", "ExternalReference");
 
                     b.HasIndex("TenantId", "ParentWorkflowInstanceId", "ParentStepId");
 

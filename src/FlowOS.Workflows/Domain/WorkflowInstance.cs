@@ -9,6 +9,18 @@ public class WorkflowInstance : IWorkflowInstance
     public Guid TenantId { get; private set; }
     // Optional CorrelationId to link to external business entities or processes (e.g., OrderId, UserId)
     public Guid? CorrelationId { get; private set; }
+
+    /// <summary>System that owns <see cref="ExternalReference"/>, for example "learning-os" (CR-10).</summary>
+    public string? ExternalSourceSystem { get; private set; }
+
+    /// <summary>
+    /// The caller's own identifier for what this instance works on, for example a Learning OS
+    /// recovery case ID. Lets the caller find the instance without storing FlowOS IDs (CR-10).
+    /// </summary>
+    public string? ExternalReference { get; private set; }
+
+    public const int ExternalSourceSystemMaxLength = 100;
+    public const int ExternalReferenceMaxLength = 200;
     // Immutable properties captured at creation time
     public Guid WorkflowDefinitionId { get; private set; }
     public Guid WorkflowClassId { get; private set; } // Link to Governance Entity
@@ -83,6 +95,20 @@ public class WorkflowInstance : IWorkflowInstance
 
     public DateTime CreatedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
+
+    /// <summary>Records the caller's system and identifier. Values are trimmed; empty values clear them.</summary>
+    public void SetExternalReference(string? sourceSystem, string? externalReference)
+    {
+        var system = string.IsNullOrWhiteSpace(sourceSystem) ? null : sourceSystem.Trim();
+        var reference = string.IsNullOrWhiteSpace(externalReference) ? null : externalReference.Trim();
+        if (system?.Length > ExternalSourceSystemMaxLength)
+            throw new ArgumentException($"Source system must be at most {ExternalSourceSystemMaxLength} characters.", nameof(sourceSystem));
+        if (reference?.Length > ExternalReferenceMaxLength)
+            throw new ArgumentException($"External reference must be at most {ExternalReferenceMaxLength} characters.", nameof(externalReference));
+
+        ExternalSourceSystem = system;
+        ExternalReference = reference;
+    }
 
     public void AdvanceTo(string nextStepId)
     {

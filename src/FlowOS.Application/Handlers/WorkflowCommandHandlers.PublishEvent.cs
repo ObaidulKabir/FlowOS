@@ -201,6 +201,16 @@ public partial class WorkflowCommandHandlers
             domainEvent.SetCorrelationId(request.WorkflowInstanceId);
         }
 
+        // Integration contract (CR-10): consumers learn which pinned definition produced the event
+        // and what caused it, without querying FlowOS.
+        domainEvent.AddMetadata("WorkflowInstanceId", instance.Id.ToString());
+        domainEvent.AddMetadata("WorkflowDefinitionId", instance.WorkflowDefinitionId.ToString());
+        domainEvent.AddMetadata("WorkflowVersion", instance.WorkflowVersion.ToString());
+        if (request.CausationId.HasValue)
+            domainEvent.AddMetadata("CausationId", request.CausationId.Value.ToString());
+        if (!string.IsNullOrEmpty(instance.ExternalReference))
+            domainEvent.AddMetadata("ExternalEntityId", instance.ExternalReference);
+
         if (preparedContext != null)
         {
             AddContextAuditMetadata(domainEvent, preparedContext, request.EventType);

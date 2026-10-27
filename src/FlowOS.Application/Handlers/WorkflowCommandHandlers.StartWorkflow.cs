@@ -256,6 +256,12 @@ public partial class WorkflowCommandHandlers
             resolvedInitialState
         );
 
+        // Integration contract (CR-10): keep the caller's own reference on the instance so it can be
+        // found by that reference, whether or not a context binding is used.
+        instance.SetExternalReference(
+            request.BusinessReference?.SourceSystem,
+            request.BusinessReference?.ExternalEntityId);
+
         _unitOfWork.WorkflowInstances.Add(instance);
 
         var autoAdvanceContext = new FlowOS.StateMachines.Models.ExecutionContext();
@@ -316,6 +322,12 @@ public partial class WorkflowCommandHandlers
                     System.Text.Json.JsonSerializer.Serialize(request.BusinessReference.Metadata));
             }
         }
+        startEvent.AddMetadata("WorkflowInstanceId", instance.Id.ToString());
+        startEvent.AddMetadata("WorkflowDefinitionId", instance.WorkflowDefinitionId.ToString());
+        if (!string.IsNullOrEmpty(instance.ExternalSourceSystem))
+            startEvent.AddMetadata("SourceSystem", instance.ExternalSourceSystem);
+        if (!string.IsNullOrEmpty(instance.ExternalReference))
+            startEvent.AddMetadata("ExternalEntityId", instance.ExternalReference);
         _unitOfWork.Events.Add(startEvent);
 
         if (fullDefinition != null)

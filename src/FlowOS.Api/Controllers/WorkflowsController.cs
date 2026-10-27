@@ -41,19 +41,37 @@ public class WorkflowsController : ControllerBase
         command = command with { IdempotencyKey = idempotencyKey };
 
         var result = await _mediator.Send(command);
-        return Ok(new { WorkflowInstanceId = result });
+
+        // Integration contract (CR-10): return the pinned definition and the caller's references, so a
+        // client can store what it started without a second call. A replayed request returns the same.
+        var summary = await _mediator.Send(new GetWorkflowByIdQuery { Id = result, TenantId = command.TenantId });
+        return Ok(new
+        {
+            WorkflowInstanceId = result,
+            WorkflowDefinitionId = summary?.DefinitionId,
+            WorkflowVersion = summary?.Version,
+            CorrelationId = summary?.CorrelationId,
+            ExternalSourceSystem = summary?.ExternalSourceSystem,
+            ExternalReference = summary?.ExternalReference,
+            Status = summary?.Status
+        });
     }
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] FlowOS.Workflows.Enums.WorkflowInstanceStatus? status)
+    public async Task<IActionResult> List(
+        [FromQuery] FlowOS.Workflows.Enums.WorkflowInstanceStatus? status,
+        [FromQuery] string? sourceSystem = null,
+        [FromQuery] string? externalReference = null)
     {
         var tenantId = _currentUser.TenantId;
         if (tenantId == Guid.Empty) return Unauthorized();
 
-        var query = new GetWorkflowsQuery 
-        { 
+        var query = new GetWorkflowsQuery
+        {
             TenantId = tenantId,
-            Status = status
+            Status = status,
+            ExternalSourceSystem = sourceSystem,
+            ExternalReference = externalReference
         };
         
         var result = await _mediator.Send(query);
