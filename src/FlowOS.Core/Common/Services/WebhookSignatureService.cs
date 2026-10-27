@@ -8,6 +8,12 @@ namespace FlowOS.Core.Common.Services;
 public class WebhookSignatureService : IWebhookSignatureService
 {
     private static readonly TimeSpan DefaultTolerance = TimeSpan.FromMinutes(5);
+    private readonly TimeProvider _timeProvider;
+
+    public WebhookSignatureService(TimeProvider? timeProvider = null)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
 
     public string ComputeSignature(string secret, string payload, long timestamp)
     {
@@ -65,7 +71,7 @@ public class WebhookSignatureService : IWebhookSignatureService
             return false;
 
         // Anti-replay / timestamp tolerance check
-        var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var nowSeconds = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
         if (Math.Abs(nowSeconds - timestamp) > (long)allowedTolerance.TotalSeconds)
         {
             return false;

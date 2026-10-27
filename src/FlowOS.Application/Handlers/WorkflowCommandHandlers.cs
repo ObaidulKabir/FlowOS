@@ -61,7 +61,8 @@ public partial class WorkflowCommandHandlers :
         IAgentTaskQueue? agentTaskQueue = null,
         IActivityAuthorizationService? activityAuthorization = null,
         IBusinessRoleResolver? businessRoleResolver = null,
-        FlowOS.Application.Services.TeamEscalationService? teamEscalationService = null)
+        FlowOS.Application.Services.TeamEscalationService? teamEscalationService = null,
+        TimeProvider? timeProvider = null)
     {
         _unitOfWork = unitOfWork;
         _eventRegistry = eventRegistry;
@@ -77,7 +78,12 @@ public partial class WorkflowCommandHandlers :
         _agentTaskQueue = agentTaskQueue;
         _businessRoleResolver = businessRoleResolver;
         _teamEscalationService = teamEscalationService;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
+
+    // CR-08: SLA, reminder and timer due times come from an injectable clock so tests can control time.
+    private readonly TimeProvider _timeProvider;
+    private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
 
     private async Task<FlowOS.Domain.Entities.StateMachineDefinition?> ResolveStateMachineDefinitionAsync(
@@ -269,7 +275,7 @@ public partial class WorkflowCommandHandlers :
             {
                 var triggerEvent = currentStep.Sla.TimeoutEvent;
                 var slaDuration = ParseDuration(currentStep.Sla.Duration);
-                var slaDueTimeUtc = DateTime.UtcNow.Add(slaDuration);
+                var slaDueTimeUtc = UtcNow.Add(slaDuration);
 
                 await _timerService.ScheduleTimerAtAsync(tenantId, instance.Id, currentStep.StepId, slaDueTimeUtc, triggerEvent, cancellationToken);
 
@@ -294,12 +300,12 @@ public partial class WorkflowCommandHandlers :
                         {
                             // Positive offset relative to step start (e.g. "24h" into the task)
                             var offset = ParseDuration(remDurStr);
-                            remDueTimeUtc = DateTime.UtcNow.Add(offset);
+                            remDueTimeUtc = UtcNow.Add(offset);
                         }
 
-                        if (remDueTimeUtc <= DateTime.UtcNow)
+                        if (remDueTimeUtc <= UtcNow)
                         {
-                            remDueTimeUtc = DateTime.UtcNow.AddSeconds(1);
+                            remDueTimeUtc = UtcNow.AddSeconds(1);
                         }
 
                         await _timerService.ScheduleTimerAtAsync(
@@ -327,8 +333,8 @@ public partial class WorkflowCommandHandlers :
         if (!string.IsNullOrWhiteSpace(scheduledAtStr) &&
             DateTime.TryParse(scheduledAtStr, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var explicitDt))
         {
-            var dueUtc = explicitDt <= DateTime.UtcNow ? DateTime.UtcNow.AddSeconds(1) : explicitDt;
-            return (dueUtc, dueUtc - DateTime.UtcNow);
+            var dueUtc = explicitDt <= UtcNow ? UtcNow.AddSeconds(1) : explicitDt;
+            return (dueUtc, dueUtc - UtcNow);
         }
 
         // 2. Relative event-based timer (pre-event lead-time or post-event delay)
@@ -364,8 +370,8 @@ public partial class WorkflowCommandHandlers :
                     string? leadTimeStr = GetConditionValue(conditions, "leadTime", "offset", "delay");
                     var offset = !string.IsNullOrWhiteSpace(leadTimeStr) ? ParseDuration(leadTimeStr) : TimeSpan.Zero;
                     var scheduledUtc = targetDt.Add(offset);
-                    var dueUtc = scheduledUtc <= DateTime.UtcNow ? DateTime.UtcNow.AddSeconds(1) : scheduledUtc;
-                    return (dueUtc, dueUtc - DateTime.UtcNow);
+                    var dueUtc = scheduledUtc <= UtcNow ? UtcNow.AddSeconds(1) : scheduledUtc;
+                    return (dueUtc, dueUtc - UtcNow);
                 }
             }
         }

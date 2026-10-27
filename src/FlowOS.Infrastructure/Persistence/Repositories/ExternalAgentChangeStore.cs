@@ -9,7 +9,13 @@ internal sealed class ExternalAgentChangeStore : IExternalAgentChangeStore
 {
     private readonly FlowOSDbContext _db;
 
-    public ExternalAgentChangeStore(FlowOSDbContext db) => _db = db;
+    private readonly TimeProvider _timeProvider;
+
+    public ExternalAgentChangeStore(FlowOSDbContext db, TimeProvider? timeProvider = null)
+    {
+        _db = db;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
 
     public async Task<IReadOnlyList<ExternalAgentChangeRecord>> LeaseNextAsync(
         Guid tenantId,
@@ -18,7 +24,7 @@ internal sealed class ExternalAgentChangeStore : IExternalAgentChangeStore
         int limit,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var candidates = await _db.ExternalAgentChangeRecords
             .Where(c =>
                 c.TenantId == tenantId &&
@@ -63,7 +69,7 @@ internal sealed class ExternalAgentChangeStore : IExternalAgentChangeStore
                 return;
             if (change.Status != ExternalAgentChangeStatus.Leased)
                 return;
-            change.MarkFailed(error ?? "Unknown error", DateTime.UtcNow);
+            change.MarkFailed(error ?? "Unknown error", _timeProvider.GetUtcNow().UtcDateTime);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -125,7 +131,7 @@ internal sealed class ExternalAgentChangeStore : IExternalAgentChangeStore
 
     public async Task<int> ReclaimExpiredLeasesAsync(CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var expired = await _db.ExternalAgentChangeRecords
             .Where(c =>
                 c.Status == ExternalAgentChangeStatus.Leased &&

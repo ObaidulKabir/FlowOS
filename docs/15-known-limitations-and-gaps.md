@@ -5,8 +5,8 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 ## Policy `ConditionJson` evaluation (improved)
 
 * **Previously**: `DefaultPolicyEvaluator` only denied when the policy name was exactly `"DenyAll"`, and `EfCorePolicyProvider` dropped `ConditionJson` when mapping EF entities to the domain `Policy` DTO.
-* **Now**: domain `FlowOS.Security.Policies.Policy` carries `ConditionJson`; the provider maps it through; the evaluator denies when `ConditionJson` contains `{ "action": "Deny" }` (optional `reason`), and still supports the legacy `"DenyAll"` name. Malformed JSON fails closed (deny).
-* **Still limited**: this is a minimal JSON contract, not a full rules engine (no day-of-week / role expressions yet). Extend `DefaultPolicyEvaluator` as product needs grow.
+* **Now**: domain `FlowOS.Security.Policies.Policy` carries `ConditionJson` and the provider maps it through. The evaluator supports: `{"action":"Deny"}` denies; `deniedRoles` denies callers holding any listed role; `requiredRoles` denies callers holding none of them; `allowedDays` (day names, evaluated in **UTC**) denies on other days; `deniedCommandTypes` denies the listed commands. Each rule can carry a `reason`. A policy named `"DenyAll"` still denies, and malformed JSON fails closed (deny). `allowedDays` uses the injected clock (CR-08).
+* **Still limited**: no general expressions (amounts, payload fields, time-of-day windows). Extend `DefaultPolicyEvaluator` as product needs grow.
 * **Proof**: `tests/FlowOS.UnitTests/Security/PolicyEvaluatorGapTests.cs` — now asserts ConditionJson is preserved and Deny actions are enforced.
 
 ## Legacy instances without a workflow class are not checked against a State Machine

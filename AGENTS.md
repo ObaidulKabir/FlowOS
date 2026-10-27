@@ -38,7 +38,7 @@ HumanTask inbox, an MCP server for AI agents, and a React dashboard. Main projec
    `dotnet test tests/FlowOS.UnitTests && dotnet test tests/FlowOS.MCP.UnitTests && dotnet test tests/FlowOS.EndToEndTests`
 3. Keep PRs small (under about 400 changed lines, excluding generated migrations).
 4. Change the EF Core model only together with a migration: `dotnet ef migrations add <Name> -p src/FlowOS.Infrastructure -s src/FlowOS.Api`. `MigrationsUpToDateTests` fails on drift.
-5. Use `TimeProvider` (or a time parameter) instead of `DateTime.UtcNow`/`DateTime.Now` in new or changed code.
+5. Use `TimeProvider` (or a time parameter) instead of `DateTime.UtcNow`/`DateTime.Now` in new or changed code. CI fails if direct clock calls in `src/` exceed `scripts/clock-usage-baseline.txt`; lower that number when you remove some.
 6. Make retried writes idempotent (idempotency key) and keep every query tenant-scoped.
 7. Update the documentation chapter and the MCP guidance (`FlowOsMcpGuidance.cs`) in the same PR as the behaviour they describe.
 8. In C# raw string literals (`"""`), write real line breaks. `\n` is not an escape there and appears literally.

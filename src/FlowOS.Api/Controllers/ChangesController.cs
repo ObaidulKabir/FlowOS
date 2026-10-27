@@ -30,9 +30,11 @@ public class ChangesController : ControllerBase
     private readonly IChangeFeedReader _reader;
     private readonly ICurrentUser _currentUser;
     private readonly IConfiguration _configuration;
+    private readonly TimeProvider _timeProvider;
 
-    public ChangesController(IChangeFeedReader reader, ICurrentUser currentUser, IConfiguration configuration)
+    public ChangesController(IChangeFeedReader reader, ICurrentUser currentUser, IConfiguration configuration, TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _reader = reader;
         _currentUser = currentUser;
         _configuration = configuration;
@@ -49,7 +51,7 @@ public class ChangesController : ControllerBase
             return BadRequest(new ProblemDetails { Title = "Invalid limit", Detail = $"limit must be between 1 and {MaxLimit}.", Status = 400 });
 
         var settleSeconds = _configuration.GetValue("FlowOS:ChangeFeed:SettleSeconds", DefaultSettleSeconds);
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var page = await _reader.ReadAsync(_currentUser.TenantId, afterSequence, limit, now.UtcDateTime.AddSeconds(-Math.Max(0, settleSeconds)), cancellationToken);
 
         var body = Serialize(page);
