@@ -53,6 +53,9 @@ public static class ToolRegistration
         registry.Register("get_external_agent_settings", McpToolDescriptions.For("get_external_agent_settings"), McpToolSchemas.GetExternalAgentSettings(),
             async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.GetExternalAgentSettings(args)));
 
+        registry.Register("configure_agent_auto_commit", McpToolDescriptions.For("configure_agent_auto_commit"), McpToolSchemas.ConfigureAgentAutoCommit(),
+            async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.ConfigureAgentAutoCommit(args)));
+
         registry.Register("configure_external_agent_settings", McpToolDescriptions.For("configure_external_agent_settings"), McpToolSchemas.ConfigureExternalAgentSettings(),
             async (args) => await ExecuteScopedAsync<AgentAutomationMcpTools>(serviceProvider, t => t.ConfigureExternalAgentSettings(args)));
 

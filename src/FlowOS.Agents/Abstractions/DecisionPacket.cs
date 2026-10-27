@@ -70,8 +70,13 @@ public sealed record DecisionPacket(
     AgentProviderRef? Provider = null,
     IReadOnlyList<AgentToolDescriptor>? Tools = null,
     AgentPromptRef? PromptBinding = null,
-    IReadOnlyDictionary<string, object?>? ToolResults = null)
+    IReadOnlyDictionary<string, object?>? ToolResults = null,
+    // CR-11: when set, nothing on this packet may be auto-committed; the reason is recorded as the park reason.
+    string? AutoCommitBlockedReason = null)
 {
+    public const string ConsequentialStepReason = "Consequential step: an agent may suggest, a person decides (CR-11).";
+    public const string TenantDisabledReason = "Agent auto-commit is disabled for this tenant (CR-11).";
+
     public IReadOnlyList<string> LegalEvents => LegalNextStepEvents;
 
     public AgentPromptContext Prompt => new(

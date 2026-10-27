@@ -17,7 +17,7 @@ namespace FlowOS.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.13")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1129,6 +1129,11 @@ namespace FlowOS.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AgentAutoCommitEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("BillingStatus")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2209,6 +2214,8 @@ namespace FlowOS.Infrastructure.Migrations
 
                             b1.Property<string>("Conditions")
                                 .IsRequired();
+
+                            b1.Property<bool>("Consequential");
 
                             b1.Property<string>("DecisionGuideline");
 

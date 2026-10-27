@@ -46,6 +46,9 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .IsRequired(false)
             .HasMaxLength(200);
 
+        builder.Property(t => t.AgentAutoCommitEnabled)
+            .HasDefaultValue(true);
+
         builder.HasIndex(t => t.Name).IsUnique();
     }
 }

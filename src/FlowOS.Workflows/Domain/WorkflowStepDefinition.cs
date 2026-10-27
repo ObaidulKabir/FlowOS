@@ -41,6 +41,9 @@ public class WorkflowStepDefinition
     public string Actor { get; set; } = "Human";
     public string? DecisionGuideline { get; set; }
     public StepAutoCommitDefinition? AutoCommit { get; set; }
+
+    /// <summary>CR-11: never auto-committed by an agent; see StepBlueprint.Consequential.</summary>
+    public bool Consequential { get; set; }
     public string? AgentProvider { get; set; }
     public string? AgentPrompt { get; set; }
     public List<string> AgentTools { get; set; } = new();

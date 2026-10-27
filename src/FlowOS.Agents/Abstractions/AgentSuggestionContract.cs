@@ -190,6 +190,13 @@ public static class AutoCommitEvaluator
 {
     public static bool CanCommit(DecisionPacket packet, SuggestedAction action, out string reason)
     {
+        // CR-11: an absolute block, checked before anything that could allow a commit.
+        if (!string.IsNullOrWhiteSpace(packet.AutoCommitBlockedReason))
+        {
+            reason = packet.AutoCommitBlockedReason;
+            return false;
+        }
+
         if (packet.AutoCommit == null)
         {
             reason = "No autoCommit policy on the current step.";

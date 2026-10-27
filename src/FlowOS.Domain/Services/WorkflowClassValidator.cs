@@ -716,6 +716,16 @@ public class WorkflowClassValidator : IWorkflowClassValidator
 
         if (step.AutoCommit == null) return;
 
+        // CR-11: a consequential decision is never auto-committed; configuring autoCommit on it is a mistake.
+        if (step.Consequential)
+        {
+            result.AddError(
+                "WF-AGENT-006",
+                "AgentTask",
+                $"Step '{step.StepId}' is consequential but configures autoCommit. An agent may suggest on a consequential step, but a person must decide. Remove autoCommit or clear consequential.",
+                "Workflow");
+        }
+
         foreach (var allowedEvent in step.AutoCommit.AllowedEvents ?? Enumerable.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(allowedEvent)) continue;

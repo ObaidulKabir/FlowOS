@@ -17,12 +17,16 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
     public DecisionPacketBuilder(
         IUnitOfWork unitOfWork,
         IPluginBindingRegistryService? pluginBindings = null,
-        IFlowOsHostedLlmRuntime? hosted = null)
+        IFlowOsHostedLlmRuntime? hosted = null,
+        ITenantAgentAutoCommitPolicy? autoCommitPolicy = null)
     {
         _unitOfWork = unitOfWork;
         _pluginBindings = pluginBindings;
         _hosted = hosted;
+        _autoCommitPolicy = autoCommitPolicy;
     }
+
+    private readonly ITenantAgentAutoCommitPolicy? _autoCommitPolicy;
 
     public async Task<DecisionPacket?> BuildAsync(
         Guid tenantId,
@@ -297,7 +301,24 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
             actionBindings,
             registeredTools);
 
-        return packet with { Provider = provider, Tools = tools, PromptBinding = promptBinding, AutoCommit = autoCommit };
+        // CR-11: a consequential step or a tenant that turned auto-commit off blocks every commit, including
+        // one that an agent profile threshold would otherwise allow.
+        var blockedReason = packet.AutoCommitBlockedReason
+            ?? (step?.Consequential == true ? DecisionPacket.ConsequentialStepReason : null);
+        if (blockedReason == null && _autoCommitPolicy != null && tenantId != Guid.Empty &&
+            !await _autoCommitPolicy.IsAutoCommitEnabledAsync(tenantId, cancellationToken))
+        {
+            blockedReason = DecisionPacket.TenantDisabledReason;
+        }
+
+        return packet with
+        {
+            Provider = provider,
+            Tools = tools,
+            PromptBinding = promptBinding,
+            AutoCommit = blockedReason == null ? autoCommit : null,
+            AutoCommitBlockedReason = blockedReason
+        };
     }
 
     private bool ShouldAttachHostedProvider(string? agentProvider)

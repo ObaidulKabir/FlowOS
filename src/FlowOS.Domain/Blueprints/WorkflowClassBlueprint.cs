@@ -91,6 +91,12 @@ public record StepBlueprint
     public string Actor { get; set; } = "Human";
     public string? DecisionGuideline { get; set; }
     public StepAutoCommitBlueprint? AutoCommit { get; set; }
+
+    /// <summary>
+    /// CR-11: a consequential decision (for example certifying a learner). An agent may suggest, but the
+    /// step is never auto-committed, whatever the confidence, allowed events or agent profile say.
+    /// </summary>
+    public bool Consequential { get; set; }
     public string? AgentProvider { get; set; }
     public string? AgentPrompt { get; set; }
     public List<string> AgentTools { get; set; } = new();

@@ -181,6 +181,20 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject ConfigureAgentAutoCommit() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["enabled"],
+          "properties":{
+            "enabled":{"type":"boolean","description":"false parks every agent suggestion for a person. true allows auto-commit where a step's autoCommit policy permits it (never on consequential steps)."},
+            "confirmHumanApproval":{"type":"boolean","description":"Required true when enabling."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject ConfigureExternalAgentSettings() => JObject.Parse(
         """
         {
