@@ -270,6 +270,7 @@ Dashboard and tenant logins use JWTs signed with `FlowOS:Auth:JwtSecret` (enviro
 
 * Outside Development, the API and the MCP server **refuse to start** if the secret is missing, shorter than 32 characters, or a value that has appeared in the repository.
 * `docker-compose.prod.yml` reads it from `JWT_SECRET` in the server's `.env`. Compose stops before replacing the running containers if `JWT_SECRET` is not set.
+* The deploy workflow copies the GitHub Actions secret `JWT_SECRET` into that server `.env` before Compose runs. Add the secret under repository Settings, Secrets and variables, Actions. It is not stored in the git repository.
 * Generate one with `openssl rand -base64 48` and keep it in the server's secret store. The API and MCP must share the same value.
 * Changing the secret signs everyone out once; they log in again.
 * In Development, FlowOS uses a development-only value when none is configured.

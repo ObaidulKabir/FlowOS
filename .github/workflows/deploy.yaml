@@ -74,6 +74,39 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Install JWT_SECRET on the server
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          if [ -z "$JWT_SECRET" ]; then
+            echo "GitHub secret JWT_SECRET is empty."
+            echo "Add it under Settings, Secrets and variables, Actions, then rerun this workflow."
+            exit 1
+          fi
+          if [ "${#JWT_SECRET}" -lt 32 ]; then
+            echo "GitHub secret JWT_SECRET must be at least 32 characters."
+            exit 1
+          fi
+          b64=$(printf '%s' "$JWT_SECRET" | base64 -w0)
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=40 -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "APP_PATH='${{ secrets.APP_PATH }}' JWT_B64='$b64' bash -s" << 'EOF'
+          set -eu
+          cd "$APP_PATH"
+          touch .env
+          chmod 600 .env
+          tmp=$(mktemp)
+          grep -v '^JWT_SECRET=' .env > "$tmp" || true
+          secret=$(printf '%s' "$JWT_B64" | base64 -d)
+          printf 'JWT_SECRET=%s\n' "$secret" >> "$tmp"
+          mv "$tmp" .env
+          chmod 600 .env
+          unset JWT_B64 secret
+          len=$(grep '^JWT_SECRET=' .env | head -n 1 | cut -d= -f2- | tr -d '\r' | wc -c)
+          echo "Server JWT_SECRET length: $len"
+          test "$len" -ge 32
+          EOF
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Build and Deploy Containers 
         run: |
           cat << 'EOF' > build_deploy.sh
