@@ -114,6 +114,12 @@ public class AnalysisTools
                 designHint = $"Add event '{context?["event"]}' to Events, or fix the NextSteps key.";
                 break;
 
+            // Law (CR-16)
+            case "LAW-001":
+                humanExplanation = "A step advances on an event that the state machine never allows in any state the entity can be in at that step, so instances would get stuck there.";
+                designHint = "Add a state-machine transition for this event from one of the listed states, change the step's NextSteps to the event the state machine expects, or move the step so it is reached in a state that allows the event.";
+                break;
+
             // Step validation
             case "WF-VAL-001":
                 humanExplanation = "A Decision step must have at least one condition.";

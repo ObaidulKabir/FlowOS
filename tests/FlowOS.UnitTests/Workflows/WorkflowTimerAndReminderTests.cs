@@ -177,8 +177,11 @@ public class WorkflowTimerAndReminderTests
             }
         };
 
-        // Connect ApprovalStep to EventCountdownTimer so graph is reachable
-        blueprint.Workflow.Steps[0].NextSteps["EVT-TIMER-EXPIRED"] = "EventCountdownTimer";
+        // Connect ApprovalStep to EventCountdownTimer so graph is reachable. EVT-SUBMIT has no state-machine
+        // transition, so the state stays Submitted and the timer's EVT-TIMER-EXPIRED stays legal (CR-16).
+        // Connecting through EVT-TIMER-EXPIRED itself moved the state to Completed, where the timer step could
+        // never fire again.
+        blueprint.Workflow.Steps[0].NextSteps["EVT-SUBMIT"] = "EventCountdownTimer";
 
         // Add valid relative timer step
         blueprint.Workflow.Steps.Add(new StepBlueprint

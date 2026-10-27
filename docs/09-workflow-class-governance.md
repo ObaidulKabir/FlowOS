@@ -132,6 +132,7 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
 | `WF-COMP-002` | WorkflowCompleteness | Every non-`End` step needs at least one exit path (`nextSteps` or, for `Decision`, `conditions`). |
 | `WF-STRUCT-005` | WorkflowStructure | An `End`-type step must **not** declare `nextSteps`. |
 | `CON-004`, `CON-005` | Consistency | Every `nextSteps`/`conditions` target must resolve to a defined `StepId` (or `"END"`); every `nextSteps` key must be a declared event (or the literal `"Default"`). |
+| `LAW-001` | Law | A step exits on an event the state machine never allows in any state reachable at that step (the step would be stuck). |
 | `WF-VAL-001`, `WF-VAL-002` | StepValidation | `Decision` steps need ≥1 condition; `HumanTask` steps need ≥1 exit path. |
 | `GOV-001` | Governance | A role's `grantedCapabilities` must all appear in the top-level `capabilities` array. |
 | `GOV-002` | Governance | A HumanTask (with a human exit event) and each `category: Human` event must declare at least one `requiredCapabilities` entry. |
@@ -142,7 +143,7 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
 
 Validation runs on Draft creation/update (`_manager.CreateDraft` / `ValidateOnly`) and again on Publish (`_manager.Publish`), so a broken graph can never silently become non-executable configuration.
 
-> ⚠️ **"Law" is not statically enforced at Draft/Publish time.** There is no rule above that cross-checks Workflow step transitions against the StateMachine's state graph. The validator's `// 3. Law Validation` block is still a stub (it only re-confirms that referenced events exist, which `CON-001`/`CON-005` already do). At runtime, class-backed instances are enforced: `PublishEventCommand` consults the class's State Machine and fails closed when no usable Law is found. Legacy instances with no workflow class are not checked. See [Chapter 15](15-known-limitations-and-gaps.md#legacy-instances-without-a-workflow-class-are-not-checked-against-a-state-machine).
+> **Law check (`LAW-001`, CR-16).** At Draft/Publish time the validator walks every step together with the states the entity can be in there, using the runtime rules: an event the state machine does not mention is ignored, an allowed event that is not one of the step's exits changes only the state, a Decision routes without an event, and parallel branches after a `Fork` may see any reachable state. If a step exits on an event that is not allowed from **any** of those states, the step could never advance, and the class is rejected with `LAW-001`. The check deliberately assumes the most permissive runtime behaviour, so it never rejects a workflow that can actually run; it can still miss problems that depend on payload guards. At runtime, class-backed instances stay fail-closed. Legacy instances without a workflow class are not checked; see [Chapter 15](15-known-limitations-and-gaps.md#legacy-instances-without-a-workflow-class-are-not-checked-against-a-state-machine).
 
 ## Lifecycle
 
