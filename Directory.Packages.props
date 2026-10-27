@@ -5,7 +5,7 @@
   -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <MicrosoftPackagesVersion>10.0.13</MicrosoftPackagesVersion>
+    <MicrosoftPackagesVersion>10.0.14</MicrosoftPackagesVersion>
   </PropertyGroup>
   <ItemGroup>
     <!-- .NET 10 platform packages -->
@@ -30,21 +30,21 @@
 
     <!-- MediatR: stay on 12.x, the last openly licensed major version (CR-05; removal in CR-17).
          Do not upgrade to 13 or later. -->
-    <PackageVersion Include="MediatR" Version="12.2.0" />
+    <PackageVersion Include="MediatR" Version="12.5.0" />
 
     <!-- OpenTelemetry (CR-07) -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.20.1" />
 
     <!-- Third-party -->
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <PackageVersion Include="System.Linq.Dynamic.Core" Version="1.7.1" />
 
     <!-- Tests -->
-    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
