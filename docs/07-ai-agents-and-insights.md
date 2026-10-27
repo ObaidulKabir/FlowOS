@@ -16,6 +16,14 @@ Per waiting step:
 
 When an `Agent`/`Either` waiting step becomes current, FlowOS builds a **DecisionPacket** (Prompt + Data + Tools + redacted Provider), runs `IWorkflowAgent`, records `AgentInsightGenerated`, then either calls the same `PublishEventCommand` path humans use (`ActorId` = `Agent:{agentId}`) or parks the insight. TimeoutEvent stays SLA/timer-owned. External MCP chat agents must not free-form `publish_event`; they call `get_agent_context` / `preview_agent_context` (inspect), `suggest_agent_action` (run agent, no publish), or `run_agent_task` (hosted loop). Design-time prompt: `design_agent_handled_step`. Resource: `flowos://guides/bounded-autonomy-tasks`.
 
+## Consequential steps and the tenant switch (CR-11)
+
+Some decisions must always be made by a person, for example certifying a learner or changing a grade.
+
+* **`consequential: true` on a step.** An agent may still suggest an event there, but FlowOS never auto-commits it, whatever the step's `autoCommit`, the confidence or an agent profile's `autoCommitThreshold` say. The suggestion is parked for a person, and the execution record's `parkReason` says why. Configuring `autoCommit` on a consequential step fails validation with `WF-AGENT-006`. Simulation shows the same block.
+* **Tenant switch.** `configure_agent_auto_commit` (MCP, Admin only) turns agent auto-commit off for the whole tenant; every suggestion is then parked. Turning it back on needs `confirmHumanApproval: true`. `get_external_agent_settings` shows the current value (`agentAutoCommitEnabled`). Existing tenants keep it on.
+* The block is checked first in `AutoCommitEvaluator.CanCommit`, so nothing else can override it.
+
 ## Tenant-owned model and declarative tools
 
 Paid tenants default to **FlowOS hosted OpenAI** (`flowos-hosted`) — see [Chapter 20](20-hosted-llm-and-automation-policy.md). BYO is optional. Register a tenant model with MCP `register_plugin_binding` or `upsert_agent_provider`:

@@ -20,11 +20,57 @@ public sealed class AgentAutomationMcpTools
     public AgentAutomationMcpTools(
         IConversationStore conversationStore,
         IAgentTaskCoordinator taskCoordinator,
-        FlowOSDbContext dbContext)
+        FlowOSDbContext dbContext,
+        FlowOS.Core.Interfaces.ICurrentUser? currentUser = null,
+        TimeProvider? timeProvider = null)
     {
         _conversationStore = conversationStore;
         _taskCoordinator = taskCoordinator;
         _dbContext = dbContext;
+        _currentUser = currentUser;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
+    private readonly FlowOS.Core.Interfaces.ICurrentUser? _currentUser;
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// CR-11: tenant switch for agent auto-commit. Admin only; turning it on also needs
+    /// confirmHumanApproval:true because it lets agents decide without a person.
+    /// </summary>
+    public async Task<CallToolResult> ConfigureAgentAutoCommit(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            if (args["enabled"]?.Type != JTokenType.Boolean)
+                return McpToolResults.Fail("MCP-ARG-001", "enabled (true or false) is required.");
+            var enabled = args["enabled"]!.Value<bool>();
+
+            if (_currentUser == null || !_currentUser.Roles.Contains("Admin", StringComparer.OrdinalIgnoreCase))
+                return McpToolResults.Fail("MCP-AUTHZ-001", "Only a tenant Admin can change agent auto-commit.");
+            if (enabled && args["confirmHumanApproval"]?.Value<bool>() != true)
+                return McpToolResults.Fail(
+                    "MCP-APPROVAL-REQUIRED",
+                    "Turning agent auto-commit on lets agents decide without a person and requires confirmHumanApproval: true.");
+
+            var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(item => item.TenantId == tenantId);
+            if (tenant == null)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", "Tenant was not found.");
+
+            tenant.SetAgentAutoCommit(enabled, _timeProvider.GetUtcNow().UtcDateTime);
+            await _dbContext.SaveChangesAsync();
+
+            return McpToolResults.Success(new { tenantId, agentAutoCommitEnabled = tenant.AgentAutoCommitEnabled });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to update agent auto-commit: {ex.Message}");
+        }
     }
 
     public async Task<CallToolResult> AppendAgentChatMessage(JObject args)
@@ -308,7 +354,8 @@ public sealed class AgentAutomationMcpTools
         tenantId = tenant.TenantId,
         enabled = tenant.ExternalAIAgentEnabled ?? false,
         autoPilot = tenant.ExternalAIAgentAutoPilot ?? false,
-        agentProfileId = tenant.ExternalAIAgentProfileId
+        agentProfileId = tenant.ExternalAIAgentProfileId,
+        agentAutoCommitEnabled = tenant.AgentAutoCommitEnabled
     };
 
     private static Guid ParseGuid(JObject args, string propertyName)

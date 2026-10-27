@@ -108,9 +108,16 @@ public static class McpToolDescriptions
 
             ["get_external_agent_settings"] =
                 "Reads the tenant-level External AI Agent pipeline settings that control change-feed generation and autopilot processing. " +
-                "Returns: {ok:true,data:{tenantId,enabled,autoPilot,agentProfileId}}. " +
+                "Returns: {ok:true,data:{tenantId,enabled,autoPilot,agentProfileId,agentAutoCommitEnabled}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {}",
+
+            ["configure_agent_auto_commit"] =
+                "[Governance] Turns agent auto-commit on or off for the tenant (CR-11). Off: every agent suggestion is parked for a person, whatever the step's autoCommit or the agent profile threshold say. " +
+                "Consequential steps are never auto-committed either way. Admin only; turning it on requires confirmHumanApproval:true. " +
+                "Returns: {ok:true,data:{tenantId,agentAutoCommitEnabled}}. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, MCP-APPROVAL-REQUIRED, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"enabled\":false}",
 
             ["configure_external_agent_settings"] =
                 "Enables or disables the tenant-level External AI Agent pipeline and configures autopilot plus the default planning profile alias. " +
@@ -820,6 +827,7 @@ public static class McpToolDescriptions
             ["list_agent_prompt_audits"] = new("observability", "authenticated", true, true, false, "none", true, "medium"),
             ["get_external_agent_settings"] = new("external-agent", "authenticated", true, true, false, "none", true, "low"),
             ["configure_external_agent_settings"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["configure_agent_auto_commit"] = new("governance", "authenticated", true, true, true, "reversible", true, "high", true),
             ["poll_external_agent_changes"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
             ["ack_external_agent_change"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),
             ["renew_change_lease"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "medium"),

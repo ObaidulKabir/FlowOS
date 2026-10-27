@@ -73,7 +73,8 @@ public static class DecisionPacketFactory
             string.IsNullOrWhiteSpace(objective) ? "Decide the next legal workflow event" : objective,
             autoCommit,
             Provider: null,
-            Tools: tools ?? AgentToolCatalog.FromStep(legalNext, step?.AgentTools));
+            Tools: tools ?? AgentToolCatalog.FromStep(legalNext, step?.AgentTools),
+            AutoCommitBlockedReason: step?.Consequential == true ? DecisionPacket.ConsequentialStepReason : null);
     }
 
     public static DecisionPacket PreviewFromClass(
@@ -164,7 +165,8 @@ public static class DecisionPacketFactory
                 ? "Simulate bounded-autonomy auto-commit"
                 : objective,
             autoCommit,
-            Tools: AgentToolCatalog.FromStep(legalNext, step.AgentTools));
+            Tools: AgentToolCatalog.FromStep(legalNext, step.AgentTools),
+            AutoCommitBlockedReason: step.Consequential ? DecisionPacket.ConsequentialStepReason : null);
     }
 
     private static StateMachineDefinition? TryMapStateMachine(WorkflowClass workflowClass)

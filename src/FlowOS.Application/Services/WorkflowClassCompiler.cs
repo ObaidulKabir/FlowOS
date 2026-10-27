@@ -78,6 +78,7 @@ public static class WorkflowClassCompiler
                 Actor = FlowOS.Domain.Enums.StepActor.Normalize(stepBp.Actor),
                 DecisionGuideline = stepBp.DecisionGuideline,
                 AutoCommit = MapAutoCommit(stepBp.AutoCommit),
+                Consequential = stepBp.Consequential,
                 AgentProvider = string.IsNullOrWhiteSpace(stepBp.AgentProvider) ? null : stepBp.AgentProvider.Trim(),
                 AgentPrompt = string.IsNullOrWhiteSpace(stepBp.AgentPrompt) ? null : stepBp.AgentPrompt.Trim(),
                 AgentTools = stepBp.AgentTools != null ? new List<string>(stepBp.AgentTools) : new List<string>()
@@ -348,6 +349,7 @@ public static class WorkflowClassCompiler
                 Actor = FlowOS.Domain.Enums.StepActor.Normalize(step.Actor),
                 DecisionGuideline = step.DecisionGuideline,
                 AutoCommit = MapAutoCommit(step.AutoCommit, mapping.EventAliases),
+                Consequential = step.Consequential,
                 AgentProvider = string.IsNullOrWhiteSpace(step.AgentProvider) ? null : step.AgentProvider.Trim(),
                 AgentPrompt = string.IsNullOrWhiteSpace(step.AgentPrompt) ? null : step.AgentPrompt.Trim(),
                 AgentTools = step.AgentTools != null ? new List<string>(step.AgentTools) : new List<string>()

@@ -20,6 +20,12 @@ public class Tenant
     public bool? ExternalAIAgentAutoPilot { get; private set; }
     public string? ExternalAIAgentProfileId { get; private set; }
 
+    /// <summary>
+    /// CR-11: when false, no agent suggestion is auto-committed for this tenant, whatever the step or agent
+    /// profile allows; suggestions are parked for a person. Existing tenants keep true.
+    /// </summary>
+    public bool AgentAutoCommitEnabled { get; private set; } = true;
+
     public bool CanRunRuntime =>
         (Plan == TenantPlan.Managed || Plan == TenantPlan.Enterprise) &&
         BillingStatus == TenantBillingStatus.Active;
@@ -106,6 +112,12 @@ public class Tenant
         Plan = plan;
         BillingStatus = billingStatus;
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetAgentAutoCommit(bool enabled, DateTime changedAtUtc)
+    {
+        AgentAutoCommitEnabled = enabled;
+        UpdatedAt = changedAtUtc;
     }
 
     public void SetExternalAIAgent(bool enabled, bool auto, string? profileId)

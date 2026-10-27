@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<IConfigurationPublisher, ConfigurationPublisher>();
         services.AddScoped<IWorkflowTimerService, WorkflowTimerService>();
         services.AddScoped<IChangeFeedReader, ChangeFeedReader>();
+        services.AddScoped<ITenantAgentAutoCommitPolicy, TenantAgentAutoCommitPolicy>();
         services.AddScoped<IWorkflowActionPlugin, WebhookWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, NotificationWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, PublishEventWorkflowActionPlugin>();
