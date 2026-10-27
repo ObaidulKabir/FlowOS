@@ -264,6 +264,16 @@ When an actor attempts an action (e.g. `StartWorkflowCommand`), FlowOS evaluates
 3. **Policy evaluation** — is it allowed right now? (`IPolicyEvaluator`)
 4. **Workflow/State Machine legality** — is this action legal at all? ([Chapter 3](03-state-machines.md))
 
+## Login token signing secret (`JWT_SECRET`)
+
+Dashboard and tenant logins use JWTs signed with `FlowOS:Auth:JwtSecret` (environment variable `FlowOS__Auth__JwtSecret`). The FlowOS repository is public, so a secret that is committed anywhere would let anyone forge a login for any tenant.
+
+* Outside Development, the API and the MCP server **refuse to start** if the secret is missing, shorter than 32 characters, or a value that has appeared in the repository.
+* `docker-compose.prod.yml` reads it from `JWT_SECRET` in the server's `.env`. Compose stops before replacing the running containers if `JWT_SECRET` is not set.
+* Generate one with `openssl rand -base64 48` and keep it in the server's secret store. The API and MCP must share the same value.
+* Changing the secret signs everyone out once; they log in again.
+* In Development, FlowOS uses a development-only value when none is configured.
+
 ## What the current `Policy` model actually supports today — read before relying on `ConditionJson`
 
 `DefaultPolicyEvaluator` reads these `ConditionJson` rules: `{"action":"Deny"}` denies; `deniedRoles` denies callers holding any listed role; `requiredRoles` denies callers holding none of them; `allowedDays` (day names, evaluated in **UTC**) denies on other days; `deniedCommandTypes` denies the listed commands. Each rule can carry a `reason`. A policy named `"DenyAll"` still denies, and malformed JSON fails closed (deny). Rules are checked in that order and the first that denies wins. There are no general expressions (for example "amount > 1000") yet. See [Chapter 15](15-known-limitations-and-gaps.md#policy-conditionjson-evaluation-improved).

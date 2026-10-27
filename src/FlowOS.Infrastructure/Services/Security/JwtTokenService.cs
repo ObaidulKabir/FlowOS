@@ -25,8 +25,10 @@ public class JwtTokenService : IJwtTokenService
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
-        var secret = configuration["FlowOS:Auth:JwtSecret"] 
-                     ?? "FlowOS_Super_Secret_Key_For_Tenant_Auth_2026_Minimum_32_Chars!";
+        // The host also checks this at startup with its real environment (API and MCP Program.cs).
+        // Constructed directly without an environment (unit tests), it falls back to Development rules.
+        var environmentName = configuration["ASPNETCORE_ENVIRONMENT"] ?? configuration["DOTNET_ENVIRONMENT"] ?? "Development";
+        var secret = FlowOS.Core.Security.JwtSecretRules.Resolve(configuration[FlowOS.Core.Security.JwtSecretRules.ConfigKey], environmentName);
         _issuer = configuration["FlowOS:Auth:JwtIssuer"] ?? "FlowOS";
         _audience = configuration["FlowOS:Auth:JwtAudience"] ?? "FlowOS-Tenants";
         

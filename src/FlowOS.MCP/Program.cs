@@ -155,6 +155,12 @@ public partial class Program
             }
         }
 
+        // The MCP server validates tenant login tokens too: refuse to start with a missing or published
+        // signing secret outside Development (tokens could be forged).
+        FlowOS.Core.Security.JwtSecretRules.Resolve(
+            builder.Configuration[FlowOS.Core.Security.JwtSecretRules.ConfigKey],
+            builder.Environment.EnvironmentName);
+
         var configuredServiceRole = builder.Configuration["MCP_ROLE"];
         var serviceRole = string.IsNullOrWhiteSpace(configuredServiceRole)
             ? "Admin"

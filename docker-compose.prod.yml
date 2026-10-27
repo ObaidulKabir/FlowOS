@@ -17,6 +17,7 @@ services:
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-admin@flowosbd.com}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - FlowOS__Auth__JwtSecret=${JWT_SECRET:?Set JWT_SECRET in the server .env to a random value of 32+ characters}
       - SMTP_ENABLE_SSL=${SMTP_ENABLE_SSL:-true}
       - SMTP_FROM=${SMTP_FROM:-admin@flowosbd.com}
       - FLOWOS_HOSTED_LLM_API_KEY=${FLOWOS_HOSTED_LLM_API_KEY:-}
@@ -72,6 +73,7 @@ services:
       - MCP_TRANSPORT=http
       - FLOWOS_BUILD=${FLOWOS_BUILD:-0}
       - MCP_API_KEY=${MCP_API_KEY:-}
+      - FlowOS__Auth__JwtSecret=${JWT_SECRET:?Set JWT_SECRET in the server .env to a random value of 32+ characters}
       - MCP_ROLE=${MCP_ROLE:-}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-*}
       - FLOWOS_DOMAIN=${FLOWOS_DOMAIN}

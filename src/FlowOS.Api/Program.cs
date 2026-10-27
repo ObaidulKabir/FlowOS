@@ -115,6 +115,12 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Refuse to start with a missing or published JWT signing secret outside Development: the repository is
+// public, so a committed value would let anyone forge a tenant login.
+FlowOS.Core.Security.JwtSecretRules.Resolve(
+    app.Configuration[FlowOS.Core.Security.JwtSecretRules.ConfigKey],
+    app.Environment.EnvironmentName);
+
 app.UseCors("AllowAll");
 
 app.UseDefaultFiles();
