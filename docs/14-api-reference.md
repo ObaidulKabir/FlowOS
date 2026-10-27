@@ -13,6 +13,20 @@ There is currently no production identity provider wired in. `MockAuthMiddleware
 
 Header names are case-insensitive in ASP.NET Core, so `x-tenant-id` and `X-Tenant-ID` are equivalent.
 
+## Safe retries: `Idempotency-Key`
+
+`POST /api/workflows/start`, `POST /api/events/publish` and `POST /api/tasks/{id}/complete` accept an `Idempotency-Key` header (at most 200 characters, unique per tenant and operation). Send a new random value (for example a UUID) for each logical request, and send the same value again when you retry it:
+
+| Situation | Response |
+|---|---|
+| First request with the key | Processed normally |
+| Repeat after the first finished | The first result again (the same `workflowInstanceId` for start); nothing runs twice |
+| Repeat while the first is still running | `409 Conflict`, `code: IDEMPOTENCY-IN-PROGRESS`; retry shortly |
+| First request failed | A repeat with the same key is processed again |
+| Header and body `idempotencyKey` differ, two header values, or a key over 200 characters | `400 Bad Request` |
+
+The body field `idempotencyKey` still works; the header is preferred.
+
 ---
 
 ## 1. Workflows — `WorkflowsController` (`/api/workflows`, `[Authorize]`)
@@ -199,6 +213,7 @@ Most error responses use RFC 7807 Problem Details, produced by `ApiExceptionFilt
 |---|---|
 | `PolicyViolationException` | `403 Forbidden` |
 | `ArgumentException` | `400 Bad Request` |
+| `ConcurrencyConflictException` (another request changed the instance, or the same idempotency key is still running) | `409 Conflict`, with `code` = `CONCURRENT-UPDATE` or `IDEMPOTENCY-IN-PROGRESS` |
 | `InvalidOperationException` | `400 Bad Request` |
 | Unhandled | `500 Internal Server Error` |
 
