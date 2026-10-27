@@ -1158,6 +1158,10 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ExternalTenantRef")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1182,6 +1186,9 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.HasKey("TenantId");
+
+                    b.HasIndex("ExternalTenantRef")
+                        .IsUnique();
 
                     b.HasIndex("Name")
                         .IsUnique();
