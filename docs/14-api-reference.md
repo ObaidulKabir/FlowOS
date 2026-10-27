@@ -27,6 +27,14 @@ Header names are case-insensitive in ASP.NET Core, so `x-tenant-id` and `X-Tenan
 
 The body field `idempotencyKey` still works; the header is preferred.
 
+## Integration references (correlation, causation, external reference)
+
+For systems that drive FlowOS, such as Learning OS:
+
+* **Start** (`POST /api/workflows/start`): send `businessReference: { sourceSystem, externalEntityId }` to store your own identifier on the instance (at most 100 and 200 characters). The response contains `workflowInstanceId`, `workflowDefinitionId`, `workflowVersion` (the pinned definition), `correlationId`, `externalSourceSystem`, `externalReference` and `status`.
+* **Find by your reference**: `GET /api/workflows?sourceSystem=learning-os&externalReference=recovery-case-123`.
+* **Publish** (`POST /api/events/publish`): send `causationId` to record what caused the event. Every stored and outbox event carries the metadata `WorkflowInstanceId`, `WorkflowDefinitionId`, `WorkflowVersion`, and, when present, `CausationId` and `ExternalEntityId`.
+
 ---
 
 ## 1. Workflows — `WorkflowsController` (`/api/workflows`, `[Authorize]`)

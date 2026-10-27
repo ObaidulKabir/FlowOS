@@ -19,6 +19,8 @@ public class WorkflowSummaryDto
     public string? CurrentState { get; set; }
     public string Status { get; set; } = string.Empty;
     public Guid? CorrelationId { get; set; }
+    public string? ExternalSourceSystem { get; set; }
+    public string? ExternalReference { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public Guid? ParentWorkflowInstanceId { get; set; }

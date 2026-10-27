@@ -43,6 +43,14 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
         builder.Property(w => w.CorrelationId)
             .IsRequired(false);
 
+        builder.Property(w => w.ExternalSourceSystem)
+            .IsRequired(false)
+            .HasMaxLength(WorkflowInstance.ExternalSourceSystemMaxLength);
+
+        builder.Property(w => w.ExternalReference)
+            .IsRequired(false)
+            .HasMaxLength(WorkflowInstance.ExternalReferenceMaxLength);
+
         builder.Property(w => w.ActiveStepIds)
             .HasConversion(
                 v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
@@ -83,6 +91,7 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
 
         builder.HasIndex(w => w.TenantId);
         builder.HasIndex(w => w.CorrelationId);
+        builder.HasIndex(w => new { w.TenantId, w.ExternalSourceSystem, w.ExternalReference });
         builder.HasIndex(w => w.WorkflowDefinitionId);
         builder.HasIndex(w => new { w.TenantId, w.ParentWorkflowInstanceId, w.ParentStepId });
     }
