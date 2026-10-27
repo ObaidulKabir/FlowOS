@@ -2,10 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import { 
   Check,
+  ExternalLink,
   GitCommit, 
+  Maximize2,
   Shield, 
   Layers,
-  UserCheck
+  UserCheck,
+  X,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 
 export interface WorkflowGraphVisualizerProps {
@@ -17,7 +22,7 @@ export interface WorkflowGraphVisualizerProps {
   initialView?: 'flowchart' | 'statemachine' | 'both';
 }
 
-const MermaidViewer: React.FC<{ chart: string }> = ({ chart }) => {
+const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean }> = ({ chart, unconstrained = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -33,6 +38,13 @@ const MermaidViewer: React.FC<{ chart: string }> = ({ chart }) => {
       mermaid.render(id, chart).then((result) => {
         if (containerRef.current) {
           containerRef.current.innerHTML = result.svg;
+          if (unconstrained) {
+            const svg = containerRef.current.querySelector('svg');
+            if (svg) {
+              svg.style.maxWidth = 'none';
+              svg.style.height = 'auto';
+            }
+          }
         }
       }).catch(err => {
         console.error('Mermaid render error', err);
@@ -41,9 +53,135 @@ const MermaidViewer: React.FC<{ chart: string }> = ({ chart }) => {
         }
       });
     }
-  }, [chart]);
+  }, [chart, unconstrained]);
 
-  return <div ref={containerRef} className="flex justify-center p-4 overflow-auto min-h-[300px] w-full" />;
+  return (
+    <div
+      ref={containerRef}
+      data-diagram-canvas="true"
+      className={`flex justify-center p-4 w-full ${unconstrained ? 'min-h-0' : 'overflow-auto min-h-[300px]'}`}
+    />
+  );
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const openDiagramWindow = (title: string, svg: string) => {
+  const popup = window.open('', '_blank', 'popup=yes,width=1400,height=900');
+  if (!popup) {
+    window.alert('Allow pop-ups to open this diagram in its own window.');
+    return;
+  }
+
+  popup.document.open();
+  popup.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    html, body { margin: 0; background: #020617; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; background: #0f172a; border-bottom: 1px solid #1e293b; }
+    button { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+    main { overflow: auto; height: calc(100vh - 53px); }
+    .canvas { transform-origin: top center; padding: 32px; display: flex; justify-content: center; }
+    svg { max-width: none !important; height: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>${escapeHtml(title)}</strong>
+    <span>
+      <button type="button" onclick="zoom(0.8)">Smaller</button>
+      <button type="button" onclick="setZoom(1)">100%</button>
+      <button type="button" onclick="zoom(1.25)">Larger</button>
+    </span>
+  </header>
+  <main><div id="canvas" class="canvas">${svg}</div></main>
+  <script>
+    let scale = 1;
+    function setZoom(next) {
+      scale = Math.min(4, Math.max(0.25, next));
+      document.getElementById('canvas').style.zoom = String(scale);
+    }
+    function zoom(factor) { setZoom(scale * factor); }
+  </script>
+</body>
+</html>`);
+  popup.document.close();
+};
+
+const LargeDiagramWindow: React.FC<{
+  title: string;
+  subtitle: string;
+  chart: string;
+  onClose: () => void;
+}> = ({ title, subtitle, chart, onClose }) => {
+  const canvasHostRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  const changeZoom = (next: number) => setZoom(Math.min(3, Math.max(0.4, Number(next.toFixed(2)))));
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-slate-950/85 backdrop-blur-sm p-3 sm:p-5" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3">
+          <div>
+            <h2 className="text-sm font-bold text-white">{title}</h2>
+            <p className="text-[11px] text-slate-400">{subtitle}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button type="button" onClick={() => changeZoom(zoom / 1.25)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500" aria-label="Zoom out">
+              <ZoomOut size={14} /> Smaller
+            </button>
+            <button type="button" onClick={() => changeZoom(1)} className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs font-mono text-slate-200 hover:border-slate-500">
+              {Math.round(zoom * 100)}%
+            </button>
+            <button type="button" onClick={() => changeZoom(zoom * 1.25)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500" aria-label="Zoom in">
+              <ZoomIn size={14} /> Larger
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const svg = canvasHostRef.current?.querySelector('svg')?.outerHTML;
+                if (!svg) return;
+                openDiagramWindow(title, svg);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-blue-500/40 bg-blue-600/20 px-2.5 py-1.5 text-xs font-semibold text-blue-100 hover:bg-blue-600/30"
+            >
+              <ExternalLink size={14} /> Own window
+            </button>
+            <button type="button" onClick={onClose} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500" aria-label="Close large diagram">
+              <X size={14} /> Close
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-950">
+          <div ref={canvasHostRef} style={{ zoom }}>
+            <MermaidViewer chart={chart} unconstrained />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = ({
@@ -55,6 +193,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
   initialView = 'both'
 }) => {
   const [activeTab, setActiveTab] = useState<'both' | 'flowchart' | 'statemachine'>(initialView);
+  const [largeView, setLargeView] = useState<'flowchart' | 'statemachine' | null>(null);
 
   if (!definition) {
     return (
@@ -450,16 +589,28 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
         {/* SECTION 1: WORKFLOW STEPS FLOWCHART */}
         {(activeTab === 'both' || activeTab === 'flowchart') && (
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col items-center">
-            <div className="w-full flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div className="w-full flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
               <div className="flex items-center gap-2">
                 <GitCommit size={15} className="text-blue-400" />
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
                   Workflow Orchestration Steps
                 </h3>
               </div>
-              <span className="text-[11px] text-slate-400">
-                Start: <code className="text-blue-300 font-mono">{startStepId}</code>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400">
+                  Start: <code className="text-blue-300 font-mono">{startStepId}</code>
+                </span>
+                {orderedSteps.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setLargeView('flowchart')}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:border-blue-400 hover:text-white"
+                    aria-label="View workflow diagram large"
+                  >
+                    <Maximize2 size={12} /> View large
+                  </button>
+                )}
+              </div>
             </div>
             {orderedSteps.length > 0 ? (
               <MermaidViewer chart={buildWorkflowMermaid()} />
@@ -472,16 +623,28 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
         {/* SECTION 2: STATE MACHINE GRAPH */}
         {(activeTab === 'both' || activeTab === 'statemachine') && (
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col items-center">
-            <div className="w-full flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div className="w-full flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
               <div className="flex items-center gap-2">
                 <Shield size={15} className="text-emerald-400" />
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
                   State Machine Lifecycle
                 </h3>
               </div>
-              <span className="text-[11px] text-slate-400">
-                Entity: <code className="text-emerald-300 font-mono">{entityType}</code>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400">
+                  Entity: <code className="text-emerald-300 font-mono">{entityType}</code>
+                </span>
+                {smStates.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setLargeView('statemachine')}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:border-emerald-400 hover:text-white"
+                    aria-label="View state diagram large"
+                  >
+                    <Maximize2 size={12} /> View large
+                  </button>
+                )}
+              </div>
             </div>
             {smStates.length > 0 ? (
               <MermaidViewer chart={buildStateMachineMermaid()} />
@@ -492,6 +655,23 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
         )}
 
       </div>
+
+      {largeView === 'flowchart' && (
+        <LargeDiagramWindow
+          title="Workflow Orchestration Steps"
+          subtitle={`Start step ${startStepId}. Scroll and zoom this diagram on its own.`}
+          chart={buildWorkflowMermaid()}
+          onClose={() => setLargeView(null)}
+        />
+      )}
+      {largeView === 'statemachine' && (
+        <LargeDiagramWindow
+          title="State Machine Lifecycle"
+          subtitle={`${entityType}. Scroll and zoom this diagram on its own.`}
+          chart={buildStateMachineMermaid()}
+          onClose={() => setLargeView(null)}
+        />
+      )}
     </div>
   );
 };
