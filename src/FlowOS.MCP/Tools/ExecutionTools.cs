@@ -124,12 +124,20 @@ public class ExecutionTools
 
             var instanceId = await _mediator.Send(command);
 
+            // CR-10: return the pinned definition and the caller's reference, like the HTTP API, so the
+            // caller can store what it started without a second call.
+            var summary = await _mediator.Send(new GetWorkflowByIdQuery { Id = instanceId, TenantId = tenantId });
+
             return McpToolResults.Success(new
             {
                 workflowInstanceId = instanceId,
                 tenantId,
-                status = "Running",
-                correlationId = command.CorrelationId,
+                workflowDefinitionId = summary?.DefinitionId,
+                workflowVersion = summary?.Version,
+                externalSourceSystem = summary?.ExternalSourceSystem,
+                externalReference = summary?.ExternalReference,
+                status = string.IsNullOrEmpty(summary?.Status) ? "Running" : summary!.Status,
+                correlationId = summary?.CorrelationId ?? command.CorrelationId,
                 message = "Workflow instance started successfully."
             });
         }
@@ -152,6 +160,10 @@ public class ExecutionTools
         catch (PolicyViolationException ex)
         {
             return await MapAuthorizationAsync(ex, "start_workflow");
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(ex);
         }
         catch (Exception ex)
         {
@@ -197,7 +209,8 @@ public class ExecutionTools
                 CorrelationId: correlationId,
                 Payload: payload,
                 IdempotencyKey: args["idempotencyKey"]?.ToString(),
-                ActorId: ReadActorId(args)
+                ActorId: ReadActorId(args),
+                CausationId: ReadOptionalGuid(args, "causationId")
             );
 
             var result = await _mediator.Send(command);
@@ -230,6 +243,10 @@ public class ExecutionTools
         catch (PolicyViolationException ex)
         {
             return await MapAuthorizationAsync(ex, "publish_event");
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(ex);
         }
         catch (Exception ex)
         {
@@ -292,6 +309,10 @@ public class ExecutionTools
         catch (PolicyViolationException ex)
         {
             return await MapAuthorizationAsync(ex, "complete_task");
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(ex);
         }
         catch (Exception ex)
         {
@@ -417,7 +438,9 @@ public class ExecutionTools
             {
                 TenantId = tenantId,
                 Status = status,
-                ParentWorkflowInstanceId = parentWorkflowInstanceId
+                ParentWorkflowInstanceId = parentWorkflowInstanceId,
+                ExternalSourceSystem = NullIfBlank(args["sourceSystem"]?.ToString()),
+                ExternalReference = NullIfBlank(args["externalReference"]?.ToString())
             };
 
             var instances = await _mediator.Send(query);
@@ -888,4 +911,22 @@ public class ExecutionTools
             return Task.FromResult(McpToolResults.Fail("MCP-INTERNAL", $"Failed to preview retry policy: {ex.Message}"));
         }
     }
+
+    /// <summary>
+    /// CR-06/CR-10: a concurrent update, or a duplicate request that is still running. The caller should
+    /// read the instance again and retry; with the same idempotency key a retry is safe.
+    /// </summary>
+    private static CallToolResult Conflict(ConcurrencyConflictException ex) =>
+        McpToolResults.Fail("MCP-CONFLICT-001", ex.Message, new { conflictCode = ex.Code, retryable = true });
+
+    private static Guid? ReadOptionalGuid(JObject args, string name)
+    {
+        var raw = args[name]?.ToString();
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (!Guid.TryParse(raw, out var value))
+            throw new McpToolException("MCP-ARG-002", $"{name} must be a UUID.");
+        return value;
+    }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

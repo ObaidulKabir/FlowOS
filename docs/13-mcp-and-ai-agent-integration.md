@@ -166,15 +166,16 @@ operational execution, tenant IAM, and runtime advisory intelligence:
 | `get_workflow_instance_status` | `low` | `none` | No | `InfoTools.GetWorkflowInstanceStatus` | Queries runtime instance execution status, current step, state machine status, and timestamps. |
 | `fork_public_workflowclass` | `low` | `reversible` | No | `GovernanceTools.ForkPublic` | Clones a public template into the caller's private tenant drafts. |
 | `publish_workflowclass` | `high` | `irreversible` | **YES** | `GovernanceTools.Publish` | **Publishes draft to immutable versioned fleet status.** Mandates explicit `confirmHumanApproval: true`. |
-| `start_workflow` | `medium` | `irreversible` | No | `ExecutionTools.StartWorkflow` | Instantiates and executes a workflow instance. Requires tenant capability `workflow.start`. Missing authority returns `MCP-AUTHZ-001`. |
-| `publish_event` | `medium` | `irreversible` | No | `ExecutionTools.PublishEvent` | Emits an event to advance an active workflow instance and state machine. |
+| `start_workflow` | `medium` | `irreversible` | No | `ExecutionTools.StartWorkflow` | Instantiates and executes a workflow instance. Requires tenant capability `workflow.start`. Missing authority returns `MCP-AUTHZ-001`. Returns the pinned `workflowDefinitionId`/`workflowVersion` and the `businessReference` as `externalSourceSystem`/`externalReference`. |
+| `publish_event` | `medium` | `irreversible` | No | `ExecutionTools.PublishEvent` | Emits an event to advance an active workflow instance and state machine. Optional `causationId` records what caused it in the calling system. |
 | `complete_task` | `medium` | `irreversible` | No | `ExecutionTools.CompleteTask` | Completes an assigned human or service task step. |
 | `diagnose_caller_permissions` | `low` | `none` | No | `TenantIamMcpTools.DiagnoseCallerPermissions` | Reports caller roles, scopes, role capabilities, and the effective API-key intersection. |
 | `list_tenant_roles` | `low` | `none` | No | `TenantIamMcpTools.ListTenantRoles` | Lists tenant IAM roles and capabilities. Requires `iam.read`. This is not a WorkflowClass business-role catalog. |
 | `create_tenant_role` | `medium` | `reversible` | **YES** | `TenantIamMcpTools.CreateTenantRole` | Creates a tenant IAM role. Requires `iam.manage` and `confirmHumanApproval: true`. |
 | `grant_role_capability` | `medium` | `reversible` | **YES** | `TenantIamMcpTools.GrantRoleCapability` | Grants one runtime capability such as `workflow.start`. Requires `iam.manage` and `confirmHumanApproval: true`. |
 | `revoke_role_capability` | `medium` | `reversible` | **YES** | `TenantIamMcpTools.RevokeRoleCapability` | Revokes one runtime capability from a tenant IAM role. Requires `iam.manage` and `confirmHumanApproval: true`. |
-| `list_workflow_instances` | `low` | `none` | No | `ExecutionTools.ListWorkflowInstances` | Lists workflow instances filtered by status (`Active`, `Completed`, `Failed`) and workflow name. |
+| `list_workflow_instances` | `low` | `none` | No | `ExecutionTools.ListWorkflowInstances` | Lists workflow instances, filtered by `status`, `parentWorkflowInstanceId`, `sourceSystem` and `externalReference`. Instance fields are PascalCase. |
+| `read_change_feed` | `low` | `none` | No | `ChangeFeedMcpTools.ReadChangeFeed` | Reads the tenant's events after a cursor, in storage order: the same feed and v1 shape as `GET /api/changes`, without the HTTP signature. |
 | `get_workflow_history` | `low` | `none` | No | `ExecutionTools.GetWorkflowHistory` | Retrieves immutable audit trail and state machine transition history for a tenant's workflow instance. |
 | `generate_workflow_blueprint_from_nl` | `low` | `none` | No | `GovernanceTools.GenerateBlueprintFromNaturalLanguage` | Synthesizes or refines a valid `WorkflowClassBlueprint` from a natural-language prompt. |
 | `refine_workflow_blueprint_from_nl` | `low` | `none` | No | `GovernanceTools.RefineBlueprintFromNaturalLanguage` | Refines an existing `WorkflowClassBlueprint` incrementally using natural-language instructions and authoritative validation. |
@@ -191,6 +192,16 @@ operational execution, tenant IAM, and runtime advisory intelligence:
 For HTTP, the authenticated `x-tenant-id` header is authoritative. A `tenantId`
 tool argument may repeat that value but cannot override it. For stdio, every
 tenant-scoped tool requires an explicit `tenantId` argument.
+
+### Integration contract over MCP (Learning OS)
+
+The MCP tools expose the same integration contract as the HTTP API ([Chapter 14](14-api-reference.md)):
+
+* **References.** Start with `businessReference: {sourceSystem, externalEntityId}`. `start_workflow` returns `workflowDefinitionId`, `workflowVersion`, `externalSourceSystem` and `externalReference`. `list_workflow_instances` finds the instance again by `sourceSystem` and `externalReference`.
+* **Causation.** `publish_event` accepts `causationId` (a UUID from the calling system). It is stored in the event metadata and returned by the change feed.
+* **Safe retries.** Reuse the same `idempotencyKey` when retrying `start_workflow`, `publish_event` or `complete_task`.
+* **Conflicts.** `MCP-CONFLICT-001` with context `{conflictCode, retryable: true}` means another update won the race (`CONCURRENT-UPDATE`) or a request with the same key is still running (`IDEMPOTENCY-IN-PROGRESS`). Read the instance again, then retry. It is the MCP equivalent of HTTP `409`.
+* **Change feed.** `read_change_feed` takes `after` (the previous `nextCursor`) and `limit` (1–500, default 50). It is read-only and meant for agents checking what happened. Integrating systems should poll the signed `GET /api/changes`.
 
 ### Enforced Governance & Safety Policy
 

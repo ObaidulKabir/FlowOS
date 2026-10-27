@@ -788,6 +788,7 @@ public partial class Program
         services.AddScoped<ITeamRepository>(sp => sp.GetRequiredService<IUnitOfWork>().Teams);
         services.AddScoped<TenantIamMcpTools>();
         services.AddScoped<ExternalAgentChangeFeedMcpTools>();
+        services.AddScoped<ChangeFeedMcpTools>();
         services.AddScoped<ExternalAgentPlanMcpTools>();
         services.AddScoped<IExternalAIAgentPlanner, DefaultExternalAIAgentPlanner>();
         services.AddScoped<IExternalAIAgentExecutor, DefaultExternalAIAgentExecutor>();

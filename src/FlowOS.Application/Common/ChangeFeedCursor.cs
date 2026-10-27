@@ -2,10 +2,10 @@ using System;
 using System.Globalization;
 using System.Text;
 
-namespace FlowOS.Api.Http;
+namespace FlowOS.Application.Common;
 
 /// <summary>
-/// CR-10c: opaque change-feed cursor. Clients store it and send it back unchanged; the format may
+/// CR-10c: opaque change-feed cursor, shared by the HTTP API and the MCP server. Clients store it and send it back unchanged; the format may
 /// change in a later schema version.
 /// </summary>
 public static class ChangeFeedCursor

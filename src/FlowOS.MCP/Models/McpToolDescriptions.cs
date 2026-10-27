@@ -415,9 +415,11 @@ public static class McpToolDescriptions
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Authorization: requires effective capability workflow.start. For API keys, role permissions are restricted by workflow:start (or *). On MCP-AUTHZ-001 call diagnose_caller_permissions. " +
                 "payload.roleAssignments sets Assignment business roles only at start. After the instance exists, call assign_instance_role. (Note: For ResolutionType 'Team', the engine auto-assigns 'team:{id}:0'.) " +
-                "Returns: {ok:true,data:{workflowInstanceId,tenantId,status,correlationId,message}}. " +
+                "Returns: {ok:true,data:{workflowInstanceId,tenantId,workflowDefinitionId,workflowVersion,externalSourceSystem,externalReference,status,correlationId,message}}. " +
+                "Pass businessReference {sourceSystem,externalEntityId} to link the instance to a record in your system; find it later with list_workflow_instances. Reusing an idempotencyKey returns the same instance. " +
                 "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
+                "MCP-CONFLICT-001 (context {conflictCode,retryable:true}) means a concurrent update or a duplicate request still running; retry with the same idempotencyKey. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500},\"roleAssignments\":{\"Sales\":\"user-123\"}}}",
 
             ["assign_instance_role"] =
@@ -438,9 +440,11 @@ public static class McpToolDescriptions
                 "When the waiting step lists AllowedRoles, actorId must be the person stored for one of those roles (or a valid team member if the role is a Team). A different role that grants the same capability cannot publish. " +
                 "When the step lists no AllowedRoles, actorId must hold a business role that grants the event. " +
                 "A shared tenant API key's caller id is the literal api-key, so omitting actorId does not match an assigned person. Do not send roleAssignments on this call. Timers and Agent: commits are not this person check. " +
+                "causationId (optional UUID) records what caused the event in your system, for example a Learning OS decision ID. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,eventType,message}}. " +
+                "MCP-CONFLICT-001 (context {conflictCode,retryable:true}) means another update won the race or the same idempotencyKey is still running; read the instance again and retry. " +
                 "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
-                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-EXEC-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-EXEC-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["complete_task"] =
@@ -451,16 +455,26 @@ public static class McpToolDescriptions
                 "A shared tenant API key's caller id is the literal api-key. The history line records that person as ActorId. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,taskId,message}}. " +
                 "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
-                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"taskId\":\"66666666-6666-6666-6666-666666666666\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["list_workflow_instances"] =
                 "[Telemetry] Lists active and completed workflow instances for the tenant with their current execution status and step. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Each instance includes roleAssignments, the Assignment role to person map for that instance. " +
-                "Returns: {ok:true,data:{instances:[{id,workflowClassName,currentStep,status,createdAt,roleAssignments}]}}. " +
+                "Filter with status, parentWorkflowInstanceId, sourceSystem and externalReference (the businessReference given at start). " +
+                "Returns: {ok:true,data:{instances:[{Id,WorkflowClassName,CurrentStep,Status,CreatedAt,DefinitionId,Version,CorrelationId,ExternalSourceSystem,ExternalReference,RoleAssignments}]}} (instance fields are PascalCase). " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
-                "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+                "Input example: {\"sourceSystem\":\"learning-os\",\"externalReference\":\"recovery-case-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["read_change_feed"] =
+                "[Telemetry] Reads the tenant's events in storage order after a cursor, the same feed as GET /api/changes (schema flowos.change-feed/v1). " +
+                "Read-only. Use it to see what happened since a point, for example while supporting an integration such as Learning OS. Integrating systems should use the signed HTTP endpoint. " +
+                "Pass the returned nextCursor as after to continue. Events newer than the settle window (FlowOS:ChangeFeed:SettleSeconds, default 5) are held back, so hasMore can be true with no items; call again shortly. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{schema,items:[{sequence,eventId,eventType,eventVersion,occurredAt,correlationId,causationId,workflowInstanceId,workflowDefinitionId,workflowVersion,externalSourceSystem,externalReference,payload,metadata}],nextCursor,hasMore}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"after\":\"djE6NDE4Mg\",\"limit\":50,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["get_workflow_history"] =
                 "[Audit & Telemetry] Retrieves the complete chronological audit trail and timeline of events for a workflow instance, " +
@@ -869,6 +883,7 @@ public static class McpToolDescriptions
             ["list_public_workflowclasses"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_instance_status"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["read_change_feed"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_history"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_notifications"] = new("notification", "authenticated", true, true, false, "none", true, "low"),
             ["mark_notification_as_read"] = new("command", "authenticated", true, true, true, "reversible", true, "low"),
