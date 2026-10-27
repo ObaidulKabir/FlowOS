@@ -225,8 +225,10 @@ public class WorkflowClassCommandHandlers :
 
     public async Task<WorkflowClassResponseDto> Handle(ApproveWorkflowClassCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUser.Roles.Any(TenantIdentityRules.IsPrivilegedRole))
-            throw new UnauthorizedAccessException("Promote-to-Public is admin-only.");
+        // A Public class is visible to every tenant, so only platform administrators may approve it.
+        // Before, the Admin of any tenant could publish to all tenants.
+        if (!TenantIdentityRules.IsPlatformAdministrator(_currentUser.TenantId, _currentUser.Roles))
+            throw new UnauthorizedAccessException("Promote-to-Public is limited to platform administrators.");
 
         var wc = await _unitOfWork.WorkflowClasses.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new KeyNotFoundException($"WorkflowClass {request.Id} not found.");

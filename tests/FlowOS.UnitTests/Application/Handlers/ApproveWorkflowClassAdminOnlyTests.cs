@@ -63,6 +63,6 @@ public class ApproveWorkflowClassAdminOnlyTests
         var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             handler.Handle(new ApproveWorkflowClassCommand(wc.TenantId, wc.Id), CancellationToken.None));
 
-        Assert.Contains("admin-only", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("platform administrators", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
