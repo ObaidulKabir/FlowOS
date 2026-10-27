@@ -79,6 +79,7 @@ public static class WorkflowClassCompiler
                 DecisionGuideline = stepBp.DecisionGuideline,
                 AutoCommit = MapAutoCommit(stepBp.AutoCommit),
                 Consequential = stepBp.Consequential,
+                Priority = stepBp.Priority,
                 AgentProvider = string.IsNullOrWhiteSpace(stepBp.AgentProvider) ? null : stepBp.AgentProvider.Trim(),
                 AgentPrompt = string.IsNullOrWhiteSpace(stepBp.AgentPrompt) ? null : stepBp.AgentPrompt.Trim(),
                 AgentTools = stepBp.AgentTools != null ? new List<string>(stepBp.AgentTools) : new List<string>()
@@ -350,6 +351,7 @@ public static class WorkflowClassCompiler
                 DecisionGuideline = step.DecisionGuideline,
                 AutoCommit = MapAutoCommit(step.AutoCommit, mapping.EventAliases),
                 Consequential = step.Consequential,
+                Priority = step.Priority,
                 AgentProvider = string.IsNullOrWhiteSpace(step.AgentProvider) ? null : step.AgentProvider.Trim(),
                 AgentPrompt = string.IsNullOrWhiteSpace(step.AgentPrompt) ? null : step.AgentPrompt.Trim(),
                 AgentTools = step.AgentTools != null ? new List<string>(step.AgentTools) : new List<string>()

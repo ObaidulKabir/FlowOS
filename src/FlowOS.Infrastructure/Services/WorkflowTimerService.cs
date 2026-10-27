@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -79,6 +80,19 @@ public class WorkflowTimerService : IWorkflowTimerService
             _logger.LogInformation("Cancelled {Count} active timer jobs for instance {InstanceId}, step '{StepId}'",
                 activeJobs.Count, workflowInstanceId, stepId);
         }
+    }
+
+    public async Task<IReadOnlyList<PendingTimer>> ListPendingAsync(
+        IReadOnlyCollection<Guid> workflowInstanceIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (workflowInstanceIds.Count == 0) return Array.Empty<PendingTimer>();
+        var ids = workflowInstanceIds.Distinct().ToList();
+        return await _dbContext.WorkflowTimerJobs
+            .AsNoTracking()
+            .Where(t => !t.IsProcessed && ids.Contains(t.WorkflowInstanceId))
+            .Select(t => new PendingTimer(t.WorkflowInstanceId, t.StepId, t.TriggerEventType, t.DueTimeUtc))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<int> ExecuteDueTimersAsync(CancellationToken cancellationToken = default)

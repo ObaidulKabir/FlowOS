@@ -98,6 +98,26 @@ public class WorkflowsController : ControllerBase
         return Ok(result);
     }
 
+    public sealed record SetPriorityRequest(int? Priority);
+
+    /// <summary>CR-12: change or clear (null) the task priority of a running instance (0–100).</summary>
+    [HttpPut("{id}/priority")]
+    public async Task<IActionResult> SetPriority(Guid id, [FromBody] SetPriorityRequest request)
+    {
+        if (_currentUser.TenantId == Guid.Empty)
+            return Unauthorized("TenantId is missing.");
+
+        try
+        {
+            await _mediator.Send(new SetWorkflowPriorityCommand(_currentUser.TenantId, id, request.Priority));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        return Ok(new { workflowInstanceId = id, priority = request.Priority });
+    }
+
     [HttpGet("{id}/audit")]
     [HttpGet("{id}/history")]
     public async Task<IActionResult> GetAuditHistory(Guid id)

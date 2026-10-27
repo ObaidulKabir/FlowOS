@@ -346,6 +346,15 @@ public class WorkflowClassValidator : IWorkflowClassValidator
 
             ValidateAgentHandledStep(step, declaredEvents, result);
 
+            if (step.Priority is < 0 or > 100)
+            {
+                result.AddError(
+                    "WF-TASK-001",
+                    "Tasks",
+                    $"Step '{step.StepId}' has priority {step.Priority}; use 0–100 (higher is more urgent).",
+                    "Workflow");
+            }
+
             if (string.Equals(step.StepType, "SubWorkflow", StringComparison.OrdinalIgnoreCase))
             {
                 ValidateSubWorkflowReference(step, result);

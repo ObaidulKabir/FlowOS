@@ -119,7 +119,8 @@ public class ExecutionTools
                 Payload: payload,
                 ContextBindingId: contextBindingId,
                 ContextType: contextType,
-                BusinessReference: args["businessReference"]?.ToObject<WorkflowBusinessReference>()
+                BusinessReference: args["businessReference"]?.ToObject<WorkflowBusinessReference>(),
+                Priority: ReadOptionalPriority(args)
             );
 
             var instanceId = await _mediator.Send(command);
@@ -929,4 +930,50 @@ public class ExecutionTools
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>CR-12: change or clear the task priority of a running instance.</summary>
+    public async Task<CallToolResult> SetInstancePriority(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            if (!Guid.TryParse(args["workflowInstanceId"]?.ToString(), out var instanceId))
+                return McpToolResults.Fail("MCP-ARG-002", "workflowInstanceId must be a valid UUID.");
+            if (args["priority"] == null)
+                return McpToolResults.Fail("MCP-ARG-001", "priority is required (0–100, or null to clear).");
+
+            var priority = ReadOptionalPriority(args);
+            await _mediator.Send(new SetWorkflowPriorityCommand(tenantId, instanceId, priority));
+            return McpToolResults.Success(new { workflowInstanceId = instanceId, priority });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return McpToolResults.Fail("MCP-ARG-002", ex.Message);
+        }
+        catch (PolicyViolationException ex)
+        {
+            return await MapAuthorizationAsync(ex, "set_instance_priority");
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to set the priority: {ex.Message}");
+        }
+    }
+
+    private static int? ReadOptionalPriority(JObject args)
+    {
+        var token = args["priority"];
+        if (token == null || token.Type == JTokenType.Null) return null;
+        if (token.Type != JTokenType.Integer || token.Value<long>() is < 0 or > 100)
+            throw new McpToolException("MCP-ARG-002", "priority must be an integer from 0 to 100.");
+        return token.Value<int>();
+    }
 }

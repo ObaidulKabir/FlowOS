@@ -40,6 +40,13 @@ curl -X GET "http://localhost:5183/api/tasks/<id>" -H "x-tenant-id: 11111111-111
 
 Each `TaskDto` includes `taskId`, `workflowId`, `currentStep`, `requiredRole`, `status`, and any `agentInsights` recorded for that instance (see [Chapter 7](07-ai-agents-and-insights.md)).
 
+## Task priority and inbox order (CR-12)
+
+* A step can declare `"priority": 0–100` (higher is more urgent); the validator rejects other values (`WF-TASK-001`).
+* An instance can override it: pass `priority` when starting the workflow, or change it later with `PUT /api/workflows/{id}/priority` (MCP `set_instance_priority`). `null` clears the override. The start event's metadata carries `Priority`, and a change is recorded as a `PriorityChanged` event, so both reach the change feed.
+* `GET /api/tasks` orders the inbox by effective priority, then the step's SLA due time (`dueAtUtc`), then age, and supports `role`, `minPriority`, `dueBefore`, `skip` and `take`.
+* Daily caps per teacher or batching belong to the calling system (for example Learning OS), which reads this ordered inbox.
+
 ## Decisions via explicit events
 
 Sometimes the next step isn't just "next" — it's a choice. FlowOS handles branching via distinct events for each outcome.

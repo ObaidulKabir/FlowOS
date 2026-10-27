@@ -44,6 +44,8 @@ public class WorkflowStepDefinition
 
     /// <summary>CR-11: never auto-committed by an agent; see StepBlueprint.Consequential.</summary>
     public bool Consequential { get; set; }
+    /// <summary>CR-12: default task priority while instances wait here (0–100).</summary>
+    public int? Priority { get; set; }
     public string? AgentProvider { get; set; }
     public string? AgentPrompt { get; set; }
     public List<string> AgentTools { get; set; } = new();

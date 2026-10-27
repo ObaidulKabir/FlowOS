@@ -10,6 +10,11 @@ public class GetTasksQuery : IRequest<List<TaskDto>>
     public Guid? TenantId { get; set; }
     public string? Assignee { get; set; }
     public IReadOnlyList<string>? CallerRoles { get; set; }
+
+    // CR-12 filters
+    public string? Role { get; set; }
+    public int? MinPriority { get; set; }
+    public DateTime? DueBeforeUtc { get; set; }
 }
 
 public class GetTaskByIdQuery : IRequest<TaskDto?>
