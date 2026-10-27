@@ -1939,6 +1939,9 @@ namespace FlowOS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("Priority")
+                        .HasColumnType("integer");
+
                     b.Property<string>("RoleAssignments")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2244,6 +2247,8 @@ namespace FlowOS.Infrastructure.Migrations
 
                             b1.Property<string>("PathLimits")
                                 .IsRequired();
+
+                            b1.Property<int?>("Priority");
 
                             b1.Property<string>("RequiredCapabilities")
                                 .IsRequired();
