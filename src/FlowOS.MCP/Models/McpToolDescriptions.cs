@@ -510,9 +510,9 @@ public static class McpToolDescriptions
                 "Waiting steps with actor Agent/Either host AutoCommitEvaluator when no completing business event is queued (no live LLM): default suggestion is the first autoCommit.allowedEvents at confidence 1.0; override with simulatedAgent {event,confidence,agentId}; set autoAdvanceAgents=false to park. Agent auto-commit is attributed as actor Agent:{id} and does not consume the simulated role's capabilities. TimeoutEvent stays timer-owned. Explicit events still win. " +
                 "Evaluates dynamic payload mappings and Handlebars templates, and injects simulated step faults via `simulateFailureAtStep` to test OnFailure Saga rollback compensation actions. " +
                 "HTTP uses authenticated tenant; stdio accepts tenantId. " +
-                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,pendingHumanTask,pendingAgentTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload,eventsRemaining}}. " +
+                "Returns: {ok:true,data:{status,workflow,initialState,finalState,initialStepId,currentStepId,totalStepsExecuted,simulatedRole,roleMap,pendingHumanTask,pendingAgentTask,decisionsEvaluated,stateTransitions,actionsTriggered,executionTrace,payload,eventsRemaining}}. roleMap records the role used for each human step. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Director\",\"events\":[\"EVT-APPROVE\"],\"autoAdvanceTimers\":true,\"simulateFailureAtStep\":\"PaymentStep\"}",
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"payload\":{\"Amount\":7500},\"role\":\"Applicant\",\"roleMap\":{\"Submit\":\"Applicant\",\"Review\":\"Planner\"},\"events\":[\"EVT-SUBMIT\",\"EVT-REVIEW\"],\"autoAdvanceTimers\":true,\"simulateFailureAtStep\":\"PaymentStep\"}",
 
             ["simulate_subworkflow"] =
                 "[Simulator] Simulates end-to-end execution of a parent-child subworkflow relationship, including parent-to-child input parameter mapping, nested child workflow step execution, child-to-parent output mapping, and parent workflow resumption. " +

@@ -1131,7 +1131,12 @@ public static class McpToolSchemas
             },
             "role":{
               "type":"string",
-              "description":"Simulated business-context role (inbox label plus grant bag). HumanTask execution is gated by grantedCapabilities, not by matching requiredRoles. Defaults to 'User'."
+              "description":"Default simulated business-context role (inbox label plus grant bag). HumanTask execution is gated by grantedCapabilities, not by matching requiredRoles. Defaults to 'User'. A roleMap entry overrides this for that step or event."
+            },
+            "roleMap":{
+              "type":"object",
+              "additionalProperties":{"type":"string"},
+              "description":"Optional map of step id or event id to the business role that should attempt that human task. Each mapped role is still checked against that event's capabilities. Example: {\"Submit\":\"Applicant\",\"Review\":\"Planner\"}."
             },
             "events":{
               "type":"array",
@@ -1247,7 +1252,12 @@ public static class McpToolSchemas
             },
             "role":{
               "type":"string",
-              "description":"Simulated business-context role (inbox label plus grant bag). Execution is gated by grantedCapabilities. Defaults to 'User'."
+              "description":"Default simulated business-context role. Execution is gated by grantedCapabilities. Defaults to 'User'."
+            },
+            "roleMap":{
+              "type":"object",
+              "additionalProperties":{"type":"string"},
+              "description":"Optional map of step id or event id to the business role for that human task. Capabilities are still enforced."
             },
             "events":{
               "type":"array",

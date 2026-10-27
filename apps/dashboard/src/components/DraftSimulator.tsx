@@ -140,6 +140,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const [payload, setPayload] = useState<Record<string, any>>(PRESET_PAYLOADS.highExpense.data);
   const [payloadText, setPayloadText] = useState<string>(JSON.stringify(PRESET_PAYLOADS.highExpense.data, null, 2));
   const [payloadError, setPayloadError] = useState<string | null>(null);
+  const [useStepRoles, setUseStepRoles] = useState(false);
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, string>>({});
   const [simulatedRole, setSimulatedRole] = useState<string>(() => {
     const workflow = pack?.workflow || pack?.Workflow || {};
     const startId = String(workflow.startStepId || workflow.StartStepId || '').toLowerCase();
@@ -264,6 +266,15 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const firstInboxRole = (roles: string[]): string | undefined =>
     roles.find(role => !['anyone', 'unassigned', 'system'].includes(role.toLowerCase()))
     || roles.find(role => role.toLowerCase() === 'system');
+
+  const roleForStep = (step: any, eventId?: string): string => {
+    if (!useStepRoles || !step) return simulatedRole;
+    const stepId = String(getProp(step, 'stepId', 'StepId') || '');
+    return roleOverrides[stepId]
+      || (eventId ? roleOverrides[eventId] : '')
+      || firstInboxRole(getStepRoles(step))
+      || simulatedRole;
+  };
 
   const catalogRoles: any[] = getProp(pack, 'roles', 'Roles') || [];
 
@@ -895,7 +906,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     const workStepId = resolveCatchUpStep(targetStepId, nextState);
 
     // 2. Advance
-    const actingRole = simulatedRole || activeRoleDisplay;
+    const actingRole = roleForStep(currentStep, eventId) || activeRoleDisplay;
     const newLogs: string[] = [];
     const eventLabel = resolveEventLabel(eventId);
     const eventDisplay = eventLabel && eventLabel !== eventId ? `${eventId} (${eventLabel})` : eventId;
@@ -982,14 +993,15 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     if (!currentStep) return false;
     const type = String(getProp(currentStep, 'stepType', 'StepType') || '').toLowerCase();
     if (type.includes('decision') || type.includes('choice')) return true;
-    return roleCanActOnStep(currentStep, simulatedRole);
-  }, [currentStep, simulatedRole]);
+    return roleCanActOnStep(currentStep, roleForStep(currentStep));
+  }, [currentStep, simulatedRole, useStepRoles, roleOverrides]);
 
   const guardUnauthorizedAction = (actionLabel: string, eventId?: string): boolean => {
     if (!currentStep) return false;
+    const actingRole = roleForStep(currentStep, eventId);
     const isAuthorized = eventId 
-      ? isEventAuthorized(eventId, currentStep, simulatedRole) 
-      : isRoleAuthorized;
+      ? isEventAuthorized(eventId, currentStep, actingRole) 
+      : roleCanActOnStep(currentStep, actingRole);
     if (!isAuthorized) {
       const eventRoles = eventId ? getEventAllowedRoles(eventId) : [];
       const reqRolesDisplay = eventRoles.length > 0 ? eventRoles.join(', ') : activeRoleDisplay;
@@ -998,14 +1010,16 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
           ? getEventRequiredCapabilities(eventId)
           : getRequiredCapabilities(currentStep))
         : getRequiredCapabilities(currentStep);
-      const grantedCaps = getRoleGrantedCapabilities(simulatedRole);
+      const grantedCaps = getRoleGrantedCapabilities(actingRole);
       const missingCaps = requiredCaps.filter(cap =>
         !grantedCaps.some(granted => granted.toLowerCase() === cap.toLowerCase())
       );
       alert(
-        `Your current role "${simulatedRole}" cannot perform "${actionLabel}" at step [${currentStepId}].\n\nRequired role: ${reqRolesDisplay || 'Unassigned'}.${
+        `Role "${actingRole}" cannot perform "${actionLabel}" at step [${currentStepId}].\n\nRequired role: ${reqRolesDisplay || 'Unassigned'}.${
           missingCaps.length > 0 ? `\nMissing capability: ${missingCaps.join(', ')}.` : ''
-        }\n\nSwitch your role in the right panel to match the required role.`
+        }\n\n${useStepRoles
+          ? 'Change that step in the role map, or turn off step roles and switch the single role.'
+          : 'Switch your role in the right panel, or turn on step roles to give each human task its own role.'}`
       );
       return true;
     }
@@ -1060,7 +1074,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     const alternateRoutes = nextStepRoutes.filter(
       route => route.outcome.trim().toLowerCase() !== autoRoute.outcome.trim().toLowerCase()
     );
-    const canActAsSelectedRole = roleCanActOnStep(currentStep, simulatedRole);
+    const canActAsSelectedRole = roleCanActOnStep(currentStep, roleForStep(currentStep));
 
     if (eventViewMode === 'asRole' && !canActAsSelectedRole) {
       const ownedElsewhere = roleEventCatalog.filter(item => item.stepId !== currentStepId);
@@ -1225,7 +1239,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               </div>
               <button 
                 onClick={() => fireEventGuarded(autoRoute.outcome, autoRoute.target)}
-                disabled={!isEventAuthorized(autoRoute.outcome, currentStep, simulatedRole)}
+                disabled={!isEventAuthorized(autoRoute.outcome, currentStep, roleForStep(currentStep, autoRoute.outcome))}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                 title={`Fire "${autoRoute.outcome}" → ${autoRoute.target}`}
               >
@@ -1238,7 +1252,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             {(() => {
               const autoRoles = getEventAllowedRoles(autoRoute.outcome);
               const autoCaps = getEventRequiredCapabilities(autoRoute.outcome);
-              const autoAuth = isEventAuthorized(autoRoute.outcome, currentStep, simulatedRole);
+              const autoAuth = isEventAuthorized(autoRoute.outcome, currentStep, roleForStep(currentStep, autoRoute.outcome));
               const switchRole = firstInboxRole(autoRoles.length > 0 ? autoRoles : currentStepRoles);
               return (
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
@@ -1269,7 +1283,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                 <p className="text-[10px] text-slate-400 font-semibold">Alternate outcomes:</p>
                 <div className="flex flex-wrap gap-2">
                   {alternateRoutes.map(route => {
-                    const routeAuth = isEventAuthorized(route.outcome, currentStep, simulatedRole);
+                    const routeAuth = isEventAuthorized(route.outcome, currentStep, roleForStep(currentStep, route.outcome));
                     return (
                       <button
                         key={`${route.outcome}:${route.target}`}
@@ -1409,7 +1423,7 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
             </div>
             <div className="flex flex-col gap-2 pt-1">
               {Object.entries(nextSteps).map(([outcome, target]) => {
-                const eventAuth = isEventAuthorized(outcome, currentStep, simulatedRole);
+                const eventAuth = isEventAuthorized(outcome, currentStep, roleForStep(currentStep, outcome));
                 const eventReqRoles = getEventAllowedRoles(outcome);
                 const eventCaps = getEventRequiredCapabilities(outcome);
                 const reqRolesDisplay = eventReqRoles.length > 0 ? eventReqRoles.join(', ') : (activeRoleDisplay || 'Unassigned');
@@ -1656,12 +1670,51 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
                       </span>
                     </div>
                   </div>
+                  <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={useStepRoles}
+                        onChange={event => setUseStepRoles(event.target.checked)}
+                      />
+                      Use a role for each human step
+                    </label>
+                    {useStepRoles && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-slate-500">
+                          The dry run uses the mapped role at that step. A role without the required capability still cannot continue.
+                        </p>
+                        {rawSteps.flatMap((step: any) => {
+                          const type = String(getProp(step, 'stepType', 'StepType') || '').toLowerCase();
+                          if (!type.includes('human')) return [];
+                          const stepId = String(getProp(step, 'stepId', 'StepId') || '');
+                          if (!stepId) return [];
+                          const selected = roleOverrides[stepId] || firstInboxRole(getStepRoles(step)) || simulatedRole;
+                          return [(
+                            <div key={stepId} className="flex items-center justify-between gap-2">
+                              <span className="truncate font-mono text-[10px] text-slate-400">{stepId}</span>
+                              <select
+                                aria-label={`Role for ${stepId}`}
+                                value={selected}
+                                onChange={event => setRoleOverrides(current => ({ ...current, [stepId]: event.target.value }))}
+                                className="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200"
+                              >
+                                {allKnownRoles.map(roleName => (
+                                  <option key={roleName} value={roleName}>{roleName}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )];
+                        })}
+                      </div>
+                    )}
+                  </div>
                   {(() => {
                     const requiredCaps = Array.from(new Set([
                       ...getRequiredCapabilities(currentStep),
                       ...getNextStepRoutes(currentStep).flatMap(route => getEventRequiredCapabilities(route.outcome))
                     ]));
-                    const grantedCaps = getRoleGrantedCapabilities(simulatedRole);
+                    const grantedCaps = getRoleGrantedCapabilities(roleForStep(currentStep));
                     if (requiredCaps.length === 0 && grantedCaps.length === 0) return null;
                     return (
                       <div className="pt-2 border-t border-slate-800/80 space-y-1">

@@ -50,7 +50,8 @@ public class SimulationTools
         List<object> SubWorkflowsExecuted,
         object? PendingTimer = null,
         IReadOnlyList<string>? EventsRemaining = null,
-        object? PendingAgentTask = null
+        object? PendingAgentTask = null,
+        IReadOnlyDictionary<string, string>? RoleMap = null
     );
 
     public async Task<CallToolResult> SimulateWorkflowClass(JObject args)
@@ -125,6 +126,8 @@ public class SimulationTools
             var simulatedRole = args["role"]?.ToString()?.Trim();
             if (string.IsNullOrEmpty(simulatedRole))
                 simulatedRole = "User";
+            if (!TryParseRoleMap(args["roleMap"], out var roleMap, out var roleMapError))
+                return McpToolResults.Fail("MCP-ARG-001", roleMapError);
 
             var eventsQueue = ParseEventsQueue(args["events"]);
             var childEventsQueue = ParseEventsQueue(args["childEvents"]);
@@ -155,7 +158,8 @@ public class SimulationTools
                 childEventsQueue: childEventsQueue,
                 autoAdvanceTimers: autoAdvanceTimers,
                 autoAdvanceAgents: autoAdvanceAgents,
-                simulatedAgent: simulatedAgent
+                simulatedAgent: simulatedAgent,
+                roleMap: roleMap
             );
 
             return McpToolResults.Success(new
@@ -168,6 +172,7 @@ public class SimulationTools
                 currentStepId = runResult.CurrentStepId,
                 totalStepsExecuted = runResult.TotalStepsExecuted,
                 simulatedRole = runResult.SimulatedRole,
+                roleMap = runResult.RoleMap,
                 pendingHumanTask = runResult.PendingHumanTask,
                 pendingAgentTask = runResult.PendingAgentTask,
                 pendingSubWorkflow = runResult.PendingSubWorkflow,
@@ -299,6 +304,8 @@ public class SimulationTools
             var simulatedRole = args["role"]?.ToString()?.Trim();
             if (string.IsNullOrEmpty(simulatedRole))
                 simulatedRole = "User";
+            if (!TryParseRoleMap(args["roleMap"], out var roleMap, out var roleMapError))
+                return McpToolResults.Fail("MCP-ARG-001", roleMapError);
 
             var eventsQueue = ParseEventsQueue(args["events"]);
             var childEventsQueue = ParseEventsQueue(args["childEvents"]);
@@ -326,7 +333,8 @@ public class SimulationTools
                 childEventsQueue: childEventsQueue,
                 autoAdvanceTimers: autoAdvanceTimers,
                 autoAdvanceAgents: autoAdvanceAgents,
-                simulatedAgent: simulatedAgent
+                simulatedAgent: simulatedAgent,
+                roleMap: roleMap
             );
 
             return McpToolResults.Success(new
@@ -369,9 +377,12 @@ public class SimulationTools
         Queue<string>? childEventsQueue = null,
         bool autoAdvanceTimers = false,
         bool autoAdvanceAgents = true,
-        AgentSimulationSuggestion? simulatedAgent = null)
+        AgentSimulationSuggestion? simulatedAgent = null,
+        IReadOnlyDictionary<string, string>? roleMap = null)
     {
         WorkflowSimulationGovernance.Apply(blueprint);
+        roleMap ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var appliedRoles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var startStepId = !string.IsNullOrWhiteSpace(blueprint.Workflow?.StartStepId)
             ? blueprint.Workflow.StartStepId
@@ -732,6 +743,7 @@ public class SimulationTools
                 if (eventsQueue.Count > 0)
                 {
                     var evt = eventsQueue.Peek();
+                    var actingRole = ResolveSimulatedRole(roleMap, step.StepId, evt, simulatedRole);
                     var nextSteps = step.NextSteps ?? new Dictionary<string, string>();
 
                     var nextStepPair = nextSteps.FirstOrDefault(kvp =>
@@ -762,7 +774,7 @@ public class SimulationTools
 
                     if (!IsClockEvent(step, evt) &&
                         !agentAuthorizedEvents.Contains(evt) &&
-                        !IsEventAuthorized(blueprint, step, evt, simulatedRole))
+                        !IsEventAuthorized(blueprint, step, evt, actingRole))
                     {
                         var required = ResolveEventRequiredCapabilities(blueprint, step, evt);
                         status = "WaitingForHumanTask";
@@ -776,14 +788,14 @@ public class SimulationTools
                             reminders = remindersPreview,
                             unauthorizedAttempt = true,
                             deniedEvent = evt,
-                            simulatedRole
+                            simulatedRole = actingRole
                         };
                         executionTrace.Add(new
                         {
                             stepNumber = totalStepsExecuted + 1,
                             stepId = step.StepId,
                             stepType = "HumanTask",
-                            action = $"Capability denied for '{evt}': requires [{string.Join(", ", required)}], simulated role '{simulatedRole}' is not granted. Inbox remains [{string.Join(", ", inboxRoles)}].",
+                            action = $"Capability denied for '{evt}': requires [{string.Join(", ", required)}], simulated role '{actingRole}' is not granted. Inbox remains [{string.Join(", ", inboxRoles)}].",
                             state = currentState
                         });
                         break;
@@ -827,7 +839,8 @@ public class SimulationTools
                             ? $"[SLA Timeout Fired] Timeout event '{evt}' dispatched after simulated SLA elapsed. Advanced to '{targetStep}'. State is now '{currentState}'."
                             : isAgentCommit
                                 ? $"[Agent Auto-Commit] actor Agent:{agentActorId} published '{evt}' (confidence {agentCommitConfidence:0.00}). Advanced to '{targetStep}'. State is now '{currentState}'."
-                                : $"Fired event '{evt}' with role '{simulatedRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.";
+                                : $"Fired event '{evt}' with role '{actingRole}'. Advanced to '{targetStep}'. State is now '{currentState}'.";
+                    appliedRoles[step.StepId] = actingRole;
 
                     totalStepsExecuted++;
                     executionTrace.Add(new
@@ -966,7 +979,8 @@ public class SimulationTools
                         childEventsQueue: null,
                         autoAdvanceTimers: autoAdvanceTimers,
                         autoAdvanceAgents: autoAdvanceAgents,
-                        simulatedAgent: simulatedAgent
+                        simulatedAgent: simulatedAgent,
+                        roleMap: roleMap
                     );
 
                     subworkflowsExecuted.Add(new
@@ -1381,13 +1395,14 @@ public class SimulationTools
                 if (eventsQueue.Count > 0)
                 {
                     var peekEvt = eventsQueue.Peek();
+                    var actingRole = ResolveSimulatedRole(roleMap, step.StepId, peekEvt, simulatedRole);
                     var match = nextSteps.FirstOrDefault(kvp => string.Equals(kvp.Key, peekEvt, StringComparison.OrdinalIgnoreCase));
                     if (!string.IsNullOrEmpty(match.Value))
                     {
                         if (isWaitingCommand &&
                             !IsClockEvent(step, peekEvt) &&
                             !agentAuthorizedEvents.Contains(peekEvt) &&
-                            !IsEventAuthorized(blueprint, step, peekEvt, simulatedRole))
+                            !IsEventAuthorized(blueprint, step, peekEvt, actingRole))
                         {
                             var required = ResolveEventRequiredCapabilities(blueprint, step, peekEvt);
                             status = "WaitingForHumanTask";
@@ -1402,14 +1417,14 @@ public class SimulationTools
                                 allowedEvents = nextSteps.Keys.ToList(),
                                 unauthorizedAttempt = true,
                                 deniedEvent = peekEvt,
-                                simulatedRole
+                                simulatedRole = actingRole
                             };
                             executionTrace.Add(new
                             {
                                 stepNumber = totalStepsExecuted + 1,
                                 stepId = step.StepId,
                                 stepType,
-                                action = $"Capability denied for '{peekEvt}' on waiting Command '{step.StepId}'.",
+                                action = $"Capability denied for '{peekEvt}' on waiting Command '{step.StepId}': simulated role '{actingRole}' is not granted.",
                                 state = currentState
                             });
                             break;
@@ -1417,6 +1432,8 @@ public class SimulationTools
 
                         triggeredEvent = eventsQueue.Dequeue();
                         targetStep = match.Value;
+                        if (isWaitingCommand && !IsClockEvent(step, peekEvt) && !agentAuthorizedEvents.Contains(peekEvt))
+                            appliedRoles[step.StepId] = actingRole;
                     }
                     else if (SlaSimulationClock.IsReminderEvent(step.Sla, peekEvt))
                     {
@@ -1621,7 +1638,8 @@ public class SimulationTools
             subworkflowsExecuted,
             pendingTimer,
             eventsQueue.ToList(),
-            pendingAgentTask
+            pendingAgentTask,
+            appliedRoles
         );
     }
 
@@ -2095,6 +2113,46 @@ public class SimulationTools
 
         return grantedSet.Contains("event.publish") &&
                required.Any(cap => cap.StartsWith("event.publish.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryParseRoleMap(JToken? token, out Dictionary<string, string> roleMap, out string error)
+    {
+        roleMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        error = string.Empty;
+        if (token == null || token.Type == JTokenType.Null)
+            return true;
+        if (token is not JObject obj)
+        {
+            error = "roleMap must be an object whose keys are step ids or event ids and whose values are role names.";
+            return false;
+        }
+
+        foreach (var property in obj.Properties())
+        {
+            var role = property.Value.Type == JTokenType.String ? property.Value.ToString().Trim() : string.Empty;
+            if (string.IsNullOrWhiteSpace(property.Name) || string.IsNullOrWhiteSpace(role))
+            {
+                error = "roleMap entries need a step or event id and a role name.";
+                return false;
+            }
+
+            roleMap[property.Name.Trim()] = role;
+        }
+
+        return true;
+    }
+
+    private static string ResolveSimulatedRole(
+        IReadOnlyDictionary<string, string> roleMap,
+        string? stepId,
+        string? eventId,
+        string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(stepId) && roleMap.TryGetValue(stepId, out var stepRole))
+            return stepRole;
+        if (!string.IsNullOrWhiteSpace(eventId) && roleMap.TryGetValue(eventId, out var eventRole))
+            return eventRole;
+        return fallback;
     }
 
     private static bool IsRoleAuthorized(IReadOnlyList<string> stepRoles, string simulatedRole)
