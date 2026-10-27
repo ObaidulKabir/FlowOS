@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    ignore:
+      # CR-05: MediatR 13+ is commercially licensed. Stay on 12.x until it is removed (CR-17).
+      - dependency-name: "MediatR"
+        versions: [">= 13.0.0"]
+      - dependency-name: "MediatR.*"
+        versions: [">= 13.0.0"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
