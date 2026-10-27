@@ -6,6 +6,9 @@ namespace FlowOS.Infrastructure.Persistence.Configurations;
 
 public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowInstance>
 {
+    /// <summary>Shadow property mapped by Npgsql to the xmin system column.</summary>
+    public const string RowVersionProperty = "RowVersion";
+
     public void Configure(EntityTypeBuilder<WorkflowInstance> builder)
     {
         builder.ToTable("WorkflowInstances");
@@ -71,6 +74,12 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
                     : System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null)
                       ?? new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
             );
+
+        // Optimistic concurrency (CR-06): PostgreSQL's xmin system column changes on every update,
+        // so two transitions applied to the same instance at once cannot overwrite each other.
+        // The second save fails with DbUpdateConcurrencyException (409 at the API).
+        builder.Property<uint>(RowVersionProperty)
+            .IsRowVersion();
 
         builder.HasIndex(w => w.TenantId);
         builder.HasIndex(w => w.CorrelationId);
