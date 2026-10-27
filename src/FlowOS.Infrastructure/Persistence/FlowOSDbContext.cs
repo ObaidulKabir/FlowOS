@@ -52,5 +52,14 @@ public class FlowOSDbContext : DbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlowOSDbContext).Assembly);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlowOS.Notifications.Domain.Notification).Assembly); // Apply Notifications config
+
+        // The PostgreSQL identity column assigns the change-feed sequence. Other providers (the
+        // in-memory provider used in tests) do not generate values for non-key columns.
+        if (!Database.IsNpgsql())
+        {
+            modelBuilder.Entity<FlowOS.Events.Models.DomainEvent>()
+                .Property<long>(FlowOS.Infrastructure.Persistence.Configurations.EventConfiguration.SequenceProperty)
+                .HasValueGenerator<EventSequenceValueGenerator>();
+        }
     }
 }

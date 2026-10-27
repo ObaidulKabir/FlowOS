@@ -24,7 +24,7 @@ public record WorkflowClassBlueprint
 }
 ```
 
-> **Field naming note:** the real C# properties use `EventId` (not `EventType`) throughout, and `StepBlueprint` has **no** `Label` or `Config` field. A couple of older MCP-focused documents in this repository used `EventType`/`Label`/`Config` in examples — those were aspirational/incorrect and have been corrected in this guide and in [Chapter 15](15-known-limitations-and-gaps.md#the-mcp-schema-tool-describes-a-shape-that-doesnt-match-the-real-blueprint). The JSON below is the **verified, accurate** shape (property names are serialized camelCase by default).
+> **Field naming note:** the real C# properties use `EventId` (not `EventType`) throughout, and `StepBlueprint` has **no** `Label` or `Config` field. A couple of older MCP-focused documents in this repository used `EventType`/`Label`/`Config` in examples — those were aspirational/incorrect and have been corrected in this guide and in [Chapter 15](15-known-limitations-and-gaps.md#resolved). The JSON below is the **verified, accurate** shape (property names are serialized camelCase by default).
 
 ### 1. Events (vocabulary & data)
 
@@ -142,7 +142,7 @@ This blueprint is **validator-passing** — it was traced step-by-step through e
 
 Validation runs on Draft creation/update (`_manager.CreateDraft` / `ValidateOnly`) and again on Publish (`_manager.Publish`), so a broken graph can never silently become non-executable configuration.
 
-> ⚠️ **"Law" is not statically enforced at Draft/Publish time — nor, today, at runtime either.** You'll notice there's no rule above that cross-checks Workflow step transitions against the StateMachine's actual state graph — the validator source has a `// 3. Law Validation` block that is explicitly a stub/comment today, not an implemented check (it only re-confirms that referenced events exist, which `CON-001`/`CON-005` already do). This lines up with a deeper, separately-verified runtime gap: the live `PublishEventCommand` handler advances workflows via `WorkflowEngine.Advance()` without consulting the entity's `StateMachineDefinition` at all, so an illegal-per-the-State-Machine transition is not blocked automatically at either authoring time or execution time today. See [Chapter 15](15-known-limitations-and-gaps.md#the-runtime-event-publishing-path-does-not-enforce-state-machine-rules) for the full gap writeup and the regression tests that prove it.
+> ⚠️ **"Law" is not statically enforced at Draft/Publish time.** There is no rule above that cross-checks Workflow step transitions against the StateMachine's state graph. The validator's `// 3. Law Validation` block is still a stub (it only re-confirms that referenced events exist, which `CON-001`/`CON-005` already do). At runtime, class-backed instances are enforced: `PublishEventCommand` consults the class's State Machine and fails closed when no usable Law is found. Legacy instances with no workflow class are not checked. See [Chapter 15](15-known-limitations-and-gaps.md#legacy-instances-without-a-workflow-class-are-not-checked-against-a-state-machine).
 
 ## Lifecycle
 

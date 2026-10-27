@@ -49,13 +49,16 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> CompleteTask(Guid id)
     {
         var tenantId = _currentUser.TenantId;
-        
+
+        if (!FlowOS.Api.Http.IdempotencyKeyHeader.TryResolve(Request, null, out var idempotencyKey, out var keyError))
+            return BadRequest(new ProblemDetails { Title = "Invalid Idempotency-Key", Detail = keyError, Status = 400 });
+
         var command = new CompleteTaskCommand(
-            tenantId, 
+            tenantId,
             id, // WorkflowInstanceId
             id, // TaskId (using WorkflowInstanceId for now)
-            null // CorrelationId
-        );
+            null, // CorrelationId
+            idempotencyKey);
         
         var success = await _mediator.Send(command);
         if (!success) 

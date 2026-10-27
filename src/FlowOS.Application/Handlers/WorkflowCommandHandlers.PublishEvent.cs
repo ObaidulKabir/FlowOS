@@ -39,8 +39,9 @@ public partial class WorkflowCommandHandlers
                 request.TenantId, PublishEventOperation, request.IdempotencyKey, cancellationToken);
             if (!started)
             {
-                throw new InvalidOperationException(
-                    $"Duplicate idempotent request for '{PublishEventOperation}' is already pending or completed.");
+                throw new FlowOS.Application.Common.Exceptions.ConcurrencyConflictException(
+                    FlowOS.Application.Common.Exceptions.ConcurrencyConflictException.IdempotencyInProgress,
+                    $"A request with this idempotency key for '{PublishEventOperation}' is still being processed. Retry shortly to receive its result.");
             }
         }
 
@@ -199,6 +200,16 @@ public partial class WorkflowCommandHandlers
         {
             domainEvent.SetCorrelationId(request.WorkflowInstanceId);
         }
+
+        // Integration contract (CR-10): consumers learn which pinned definition produced the event
+        // and what caused it, without querying FlowOS.
+        domainEvent.AddMetadata("WorkflowInstanceId", instance.Id.ToString());
+        domainEvent.AddMetadata("WorkflowDefinitionId", instance.WorkflowDefinitionId.ToString());
+        domainEvent.AddMetadata("WorkflowVersion", instance.WorkflowVersion.ToString());
+        if (request.CausationId.HasValue)
+            domainEvent.AddMetadata("CausationId", request.CausationId.Value.ToString());
+        if (!string.IsNullOrEmpty(instance.ExternalReference))
+            domainEvent.AddMetadata("ExternalEntityId", instance.ExternalReference);
 
         if (preparedContext != null)
         {

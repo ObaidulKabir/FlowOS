@@ -12,7 +12,7 @@ npm install
 npm start
 ```
 
-It talks to `http://localhost:5183/api` (tenant `22222222-2222-2222-2222-222222222222`, role `Admin`) — this is the **verified, correct** local dev URL (see [Chapter 15](15-known-limitations-and-gaps.md#inconsistent-legacy-port-references-fixed-in-this-rewrite)). Good starting point if you want the smallest possible working example of [Chapter 5](05-workflows-and-versioning.md) and [Chapter 4](04-events-and-registry.md) in one file — read `index.js`, it's under 110 lines.
+It talks to `http://localhost:5183/api` (tenant `22222222-2222-2222-2222-222222222222`, role `Admin`) — this is the **verified, correct** local dev URL (see [Chapter 15](15-known-limitations-and-gaps.md#resolved)). Good starting point if you want the smallest possible working example of [Chapter 5](05-workflows-and-versioning.md) and [Chapter 4](04-events-and-registry.md) in one file — read `index.js`, it's under 110 lines.
 
 ## `ExpenseApp/` — full-stack demo (Express + SQLite backend, React + Vite frontend)
 

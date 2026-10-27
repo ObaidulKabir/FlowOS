@@ -30,7 +30,10 @@ public record PublishEventCommand(
     Guid? CorrelationId = null,
     object? Payload = null, // Added Payload support
     string? IdempotencyKey = null,
-    string? ActorId = null
+    string? ActorId = null,
+    // The caller's ID of whatever caused this event (for example a Learning OS decision ID),
+    // recorded in the event metadata as "CausationId" (CR-10).
+    Guid? CausationId = null
 ) : IRequest<bool>, IPolicySecuredCommand;
 
 public record CompleteTaskCommand(

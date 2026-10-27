@@ -1698,6 +1698,12 @@ namespace FlowOS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<long>("Sequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Sequence"));
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -1712,6 +1718,8 @@ namespace FlowOS.Infrastructure.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("Timestamp");
+
+                    b.HasIndex("TenantId", "Sequence");
 
                     b.ToTable("Events", (string)null);
 
@@ -1907,6 +1915,14 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ExternalSourceSystem")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ParentStepId")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -1921,6 +1937,12 @@ namespace FlowOS.Infrastructure.Migrations
                     b.Property<string>("RoleAssignments")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1945,6 +1967,8 @@ namespace FlowOS.Infrastructure.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("WorkflowDefinitionId");
+
+                    b.HasIndex("TenantId", "ExternalSourceSystem", "ExternalReference");
 
                     b.HasIndex("TenantId", "ParentWorkflowInstanceId", "ParentStepId");
 

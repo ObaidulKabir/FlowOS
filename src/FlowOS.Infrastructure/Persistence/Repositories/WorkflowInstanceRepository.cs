@@ -54,7 +54,13 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         return query.ToListAsync(cancellationToken);
     }
 
-    public async Task<List<WorkflowSummaryDto>> GetSummariesByTenantAsync(Guid tenantId, WorkflowInstanceStatus? status, Guid? parentWorkflowInstanceId = null, CancellationToken cancellationToken = default)
+    public async Task<List<WorkflowSummaryDto>> GetSummariesByTenantAsync(
+        Guid tenantId,
+        WorkflowInstanceStatus? status,
+        Guid? parentWorkflowInstanceId = null,
+        string? externalSourceSystem = null,
+        string? externalReference = null,
+        CancellationToken cancellationToken = default)
     {
         var query = from w in _context.WorkflowInstances.AsNoTracking()
                     join wc in _context.WorkflowClasses.AsNoTracking() on w.WorkflowClassId equals wc.Id into wcGroup
@@ -67,6 +73,16 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
 
         if (parentWorkflowInstanceId.HasValue)
             query = query.Where(x => x.w.ParentWorkflowInstanceId == parentWorkflowInstanceId.Value);
+        if (!string.IsNullOrWhiteSpace(externalSourceSystem))
+        {
+            var system = externalSourceSystem.Trim();
+            query = query.Where(x => x.w.ExternalSourceSystem == system);
+        }
+        if (!string.IsNullOrWhiteSpace(externalReference))
+        {
+            var reference = externalReference.Trim();
+            query = query.Where(x => x.w.ExternalReference == reference);
+        }
 
         var instances = await query
             .OrderByDescending(x => x.w.CreatedAt)
@@ -136,6 +152,8 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         CurrentState = w.CurrentState,
         Status = w.Status.ToString(),
         CorrelationId = w.CorrelationId,
+        ExternalSourceSystem = w.ExternalSourceSystem,
+        ExternalReference = w.ExternalReference,
         CreatedAt = w.CreatedAt,
         CompletedAt = w.CompletedAt,
         ParentWorkflowInstanceId = w.ParentWorkflowInstanceId,

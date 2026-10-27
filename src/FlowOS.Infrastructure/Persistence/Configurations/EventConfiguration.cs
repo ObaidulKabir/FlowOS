@@ -8,6 +8,12 @@ namespace FlowOS.Infrastructure.Persistence.Configurations;
 
 public class EventConfiguration : IEntityTypeConfiguration<DomainEvent>
 {
+    /// <summary>
+    /// CR-10c: database-assigned, strictly increasing position of the event in the change feed.
+    /// A shadow property so the domain model does not depend on storage.
+    /// </summary>
+    public const string SequenceProperty = "Sequence";
+
     public void Configure(EntityTypeBuilder<DomainEvent> builder)
     {
         builder.ToTable("Events");
@@ -34,7 +40,12 @@ public class EventConfiguration : IEntityTypeConfiguration<DomainEvent>
                 v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, string>()
             );
 
+        builder.Property<long>(SequenceProperty)
+            .ValueGeneratedOnAdd()
+            .UseIdentityByDefaultColumn();
+
         builder.HasIndex(e => e.TenantId);
         builder.HasIndex(e => e.Timestamp);
+        builder.HasIndex("TenantId", SequenceProperty);
     }
 }

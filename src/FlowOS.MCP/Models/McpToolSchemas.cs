@@ -1014,6 +1014,7 @@ public static class McpToolSchemas
             "correlationId":{"type":"string","format":"uuid"},
             "payload":{"type":"object"},
             "idempotencyKey":{"type":"string","minLength":8},
+            "causationId":{"type":"string","format":"uuid","description":"Optional ID of whatever caused this event in the calling system (for example a Learning OS decision ID). Stored in the event metadata as CausationId and returned by read_change_feed."},
             "actorId":{"type":"string","minLength":1,"description":"Person id for this event. When the waiting step lists AllowedRoles, this person must be stored for one of those roles. A different role that grants the same capability is refused. When the step lists no AllowedRoles, this person must hold a business role that grants the event. Required when the caller is a shared tenant API key (caller id is the literal api-key). Omit to use the authenticated caller id. Do not send roleAssignments here. Agent: commits and timers are not this check."},
             "tenantId":{"type":"string","format":"uuid"}
           },
@@ -1060,6 +1061,8 @@ public static class McpToolSchemas
           "properties":{
             "status":{"type":"string","description":"Optional status filter (e.g. Running, Completed, Failed)."},
             "parentWorkflowInstanceId":{"type":"string","format":"uuid","description":"Optional parent workflow instance UUID to filter child subworkflows."},
+            "sourceSystem":{"type":"string","maxLength":100,"description":"Optional. Only instances started with this businessReference.sourceSystem (for example learning-os)."},
+            "externalReference":{"type":"string","maxLength":200,"description":"Optional. Only instances started with this businessReference.externalEntityId."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -1826,6 +1829,19 @@ public static class McpToolSchemas
             "capabilityCode":{"type":"string","minLength":1,"description":"Runtime capability code, such as workflow.start."},
             "confirmHumanApproval":{"type":"boolean","const":true,"description":"Explicit approval required for tenant IAM mutation."},
             "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ReadChangeFeed() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "after":{"type":"string","description":"nextCursor from the previous call, unchanged. Omit to read from the start."},
+            "limit":{"type":"integer","minimum":1,"maximum":500,"default":50},
+            "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
         }

@@ -11,4 +11,6 @@ public class GetWorkflowsQuery : IRequest<List<WorkflowSummaryDto>>
     public Guid TenantId { get; set; }
     public WorkflowInstanceStatus? Status { get; set; }
     public Guid? ParentWorkflowInstanceId { get; set; }
+    public string? ExternalSourceSystem { get; set; }
+    public string? ExternalReference { get; set; }
 }
