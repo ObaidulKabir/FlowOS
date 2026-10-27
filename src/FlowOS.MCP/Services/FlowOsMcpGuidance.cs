@@ -25,7 +25,8 @@ public static class FlowOsMcpGuidance
         - Use the absolute `url` from GET discovery / GET /.well-known/mcp exactly.
         - On https://flowosbd.com the JSON-RPC path is `/mcp/` (trailing slash required). On https://flowos.prospectbdltd.com it is `/mcp`.
         - Never strip a trailing slash. Never follow HTTP 301/302 for POST; a slash redirect can switch to http:// and drop the body and API key.
-        - Accept: application/json, text/event-stream. Use X-MCP-API-Key for a tenant application key, or Authorization: Bearer for a dashboard login JWT. Never send credentials in tool arguments.
+        - Accept may be `application/json`, `text/event-stream`, or both. Use X-MCP-API-Key for a tenant application key, or Authorization: Bearer for a dashboard login JWT. Never send credentials in tool arguments.
+        - A client may send a newer protocolVersion, such as 2025-11-25. FlowOS negotiates to the newest version it implements (2025-03-26 or 2024-11-05) and returns that version from initialize. Later calls may omit MCP-Protocol-Version or repeat the client's newer dated version.
         - A tenant application key starts with `flw_live_`. Expires In (Days) 0 stores no expiry, so that key does not expire until it is revoked. A dashboard login JWT expires in 24 hours; sign in again when it expires. JWTs use the caller's tenant, role, and identity, not the MCP service role.
         - Login JWTs must be issued by this FlowOS host. The API and MCP must share the same JWT signing configuration; never send a token issued by another deployment.
         - Keys are issued per host. Production keys only work on flowosbd.com; staging keys only work on flowos.prospectbdltd.com. A key created on another host or an in-memory database returns HTTP 401 Invalid or unknown tenant API key.

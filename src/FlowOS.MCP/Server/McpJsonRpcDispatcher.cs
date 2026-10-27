@@ -16,6 +16,32 @@ public sealed class McpJsonRpcDispatcher : IMcpJsonRpcDispatcher
         !string.IsNullOrWhiteSpace(version) &&
         SupportedProtocolVersions.Contains(version, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Echo a version this server implements. A newer or unknown client version
+    /// (Trae sends 2025-11-25) negotiates down to <see cref="DefaultProtocolVersion"/>
+    /// instead of failing the handshake.
+    /// </summary>
+    public static string NegotiateProtocolVersion(string? requested) =>
+        IsSupportedProtocolVersion(requested) ? requested! : DefaultProtocolVersion;
+
+    /// <summary>
+    /// Later requests may omit MCP-Protocol-Version, repeat a negotiated version,
+    /// or keep sending the client's newer dated version.
+    /// </summary>
+    public static bool IsAcceptableProtocolHeader(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return true;
+
+        if (IsSupportedProtocolVersion(version))
+            return true;
+
+        return version.Length == 10
+            && version[4] == '-'
+            && version[7] == '-'
+            && version.All(static c => char.IsAsciiDigit(c) || c == '-');
+    }
+
     private readonly IToolRegistry _toolRegistry;
 
     public McpJsonRpcDispatcher(IToolRegistry toolRegistry)
@@ -92,18 +118,7 @@ public sealed class McpJsonRpcDispatcher : IMcpJsonRpcDispatcher
                     if (parameters == null)
                         return Response(Error(id, -32602, "Invalid params"));
 
-                    var requestedVersion = parameters["protocolVersion"]?.ToString();
-                    var negotiatedVersion = IsSupportedProtocolVersion(requestedVersion)
-                        ? requestedVersion!
-                        : null;
-
-                    if (negotiatedVersion == null)
-                    {
-                        return Response(Error(id, -32602, "Unsupported protocol version", new
-                        {
-                            supportedVersions = SupportedProtocolVersions
-                        }));
-                    }
+                    var negotiatedVersion = NegotiateProtocolVersion(parameters["protocolVersion"]?.ToString());
 
                     result = new
                     {

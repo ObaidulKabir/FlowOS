@@ -46,7 +46,7 @@ public static class FlowOsPublicUrls
     public const string AgentJsonRpcRule =
         "POST JSON-RPC to the advertised `url` exactly, including a trailing slash when present. " +
         "Do not normalize /mcp/ down to /mcp. Do not follow 301/302 redirects for POST — nginx on flowosbd.com currently redirects POST /mcp to http://flowosbd.com/mcp/, which drops the body and API key. " +
-        "Accept must include both application/json and text/event-stream. Send X-MCP-API-Key (or Authorization: Bearer) plus x-tenant-id. " +
+        "Accept may be application/json, text/event-stream, or both. A newer protocolVersion is negotiated down to the newest version this server implements. Send X-MCP-API-Key (or Authorization: Bearer). x-tenant-id is optional when the credential already selects a tenant. " +
         "Tenant keys are host-scoped: a key from flowosbd.com does not authenticate on flowos.prospectbdltd.com, and the reverse is also true.";
 
     public static string McpEndpoint(string origin)

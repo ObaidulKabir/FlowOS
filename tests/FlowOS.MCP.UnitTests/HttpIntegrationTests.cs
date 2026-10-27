@@ -313,9 +313,18 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         AddAccept(wrongContent);
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, (await _client.SendAsync(wrongContent)).StatusCode);
 
+        using var jsonOnly = Authorized(HttpMethod.Post, "/mcp");
+        jsonOnly.Content = JsonContent("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"trae","version":"1"},"capabilities":{}}}""");
+        jsonOnly.Headers.TryAddWithoutValidation("Accept", "application/json");
+        var jsonOnlyResponse = await _client.SendAsync(jsonOnly);
+        Assert.Equal(HttpStatusCode.OK, jsonOnlyResponse.StatusCode);
+        Assert.Equal(
+            McpJsonRpcDispatcher.DefaultProtocolVersion,
+            JObject.Parse(await jsonOnlyResponse.Content.ReadAsStringAsync())["result"]?["protocolVersion"]?.ToString());
+
         using var wrongAccept = Authorized(HttpMethod.Post, "/mcp");
         wrongAccept.Content = JsonContent("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""");
-        wrongAccept.Headers.TryAddWithoutValidation("Accept", "application/json");
+        wrongAccept.Headers.TryAddWithoutValidation("Accept", "text/html");
         Assert.Equal(HttpStatusCode.NotAcceptable, (await _client.SendAsync(wrongAccept)).StatusCode);
 
         using var wrongOrigin = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""");
@@ -333,7 +342,14 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
 
         using var missingVersion = JsonRequest("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""");
         Authorize(missingVersion);
-        Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(missingVersion)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(missingVersion)).StatusCode);
+
+        using var newerVersion = JsonRequest("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
+        Authorize(newerVersion);
+        newerVersion.Headers.Add("MCP-Protocol-Version", "2025-11-25");
+        var newerVersionResponse = await _client.SendAsync(newerVersion);
+        Assert.Equal(HttpStatusCode.OK, newerVersionResponse.StatusCode);
+        Assert.Null(JObject.Parse(await newerVersionResponse.Content.ReadAsStringAsync())["error"]);
     }
 
     [Fact]
