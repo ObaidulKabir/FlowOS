@@ -62,4 +62,4 @@ This guide replaces the following, previously scattered, documentation locations
 * `docs/governance/workflow-class.md`
 * `docs/sdk/01-mental-model.md` through `docs/sdk/11-workflow-class-authoring.md`
 
-`Workflow_API_Test_Report.md` (repo root) is left untouched — it is a point-in-time QA report, not user-facing documentation.
+`reports/Workflow_API_Test_Report.md` is kept as-is — it is a point-in-time QA report, not user-facing documentation.

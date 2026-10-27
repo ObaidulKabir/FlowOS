@@ -11,6 +11,11 @@ on:
         default: 'production'
         type: string
 
+# One deployment at a time: later merges wait instead of building on the same server in parallel.
+concurrency:
+  group: deploy-${{ inputs.ENVIRONMENT || 'production' }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to ${{ inputs.ENVIRONMENT || 'production' }}
@@ -41,7 +46,8 @@ jobs:
           set -ex
           
           # Clean up disk space before doing anything else
-          docker system prune -af --volumes || true
+          # Never prune volumes: a stopped PostgreSQL container's data volume would be deleted.
+          docker system prune -af || true
           sudo journalctl --vacuum-time=3d || true
           sudo apt-get clean || true
           
@@ -58,7 +64,7 @@ jobs:
           git clean -fd
           docker network create traefik-network || true
           EOF
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < deploy.sh > deploy_log.txt 2>&1 || (
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=40 -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < deploy.sh > deploy_log.txt 2>&1 || (
             echo "SSH COMMAND FAILED. LOG:" > error_body.txt
             cat deploy_log.txt >> error_body.txt
             gh issue create --title "Deploy Failure Log" --body-file error_body.txt --repo ObaidulKabir/FlowOS
@@ -78,7 +84,7 @@ jobs:
           docker builder prune --filter "until=12h" -f
           docker compose -f docker-compose.prod.yml up --build -d
           EOF
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < build_deploy.sh > build_deploy_log.txt 2>&1 || (
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=40 -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash -s" < build_deploy.sh > build_deploy_log.txt 2>&1 || (
             echo "BUILD AND DEPLOY FAILED. LOG:" > build_error_body.txt
             cat build_deploy_log.txt >> build_error_body.txt
             gh issue create --title "Build and Deploy Failure Log" --body-file build_error_body.txt --repo ObaidulKabir/FlowOS

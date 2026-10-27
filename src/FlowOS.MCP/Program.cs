@@ -134,6 +134,26 @@ public partial class Program
         var isAuthRequired = !string.IsNullOrWhiteSpace(apiKey) &&
                              !string.Equals(apiKey, "disabled", StringComparison.OrdinalIgnoreCase) &&
                              !string.Equals(apiKey, "none", StringComparison.OrdinalIgnoreCase);
+        var demoKeysAllowed = FlowOS.Core.Security.TenantIdentityRules.DemoKeysAllowed(
+            builder.Environment.EnvironmentName,
+            builder.Configuration[FlowOS.Core.Security.TenantIdentityRules.EnableDemoKeysKey]);
+
+        // Fail closed outside Development: an unset MCP_API_KEY used to switch authentication off
+        // silently, and a well-known demo value would act as a public platform service key.
+        if (!builder.Environment.IsDevelopment())
+        {
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                throw new InvalidOperationException(
+                    "MCP_API_KEY is not set. Set a long random secret, or set MCP_API_KEY=disabled to run without authentication on purpose (sandbox only).");
+            }
+
+            if (FlowOS.Core.Security.TenantIdentityRules.IsDemoApiKey(apiKey) && !demoKeysAllowed)
+            {
+                throw new InvalidOperationException(
+                    "MCP_API_KEY is set to a public demo value. Replace it with a long random secret.");
+            }
+        }
 
         var configuredServiceRole = builder.Configuration["MCP_ROLE"];
         var serviceRole = string.IsNullOrWhiteSpace(configuredServiceRole)
@@ -210,6 +230,7 @@ public partial class Program
             Guid? dbResolvedTenantId = null;
             IReadOnlyCollection<string> resolvedScopes = Array.Empty<string>();
             var isTenantApiKeyCredential = false;
+            var demoKeyAccepted = false;
             string? jwtRole = null;
             string? jwtCallerId = null;
             var attemptedJwt = false;
@@ -238,12 +259,12 @@ public partial class Program
                     suppliedApiKey = context.Request.Query["apiKey"].FirstOrDefault();
                 }
 
-                bool isValidKey = FixedTimeEquals(apiKey!, suppliedApiKey) ||
-                                  FixedTimeEquals("flowos_prod_secret_key_32_chars_min", suppliedApiKey) ||
-                                  FixedTimeEquals("local-development-key-change-me", suppliedApiKey) ||
-                                  FixedTimeEquals("YOUR_PRODUCTION_API_KEY", suppliedApiKey);
+                // Well-known demo keys are public; accept them only where demo keys are allowed.
+                demoKeyAccepted = demoKeysAllowed &&
+                                  FlowOS.Core.Security.TenantIdentityRules.IsDemoApiKey(suppliedApiKey);
+                bool isValidKey = FixedTimeEquals(apiKey!, suppliedApiKey) || demoKeyAccepted;
 
-                if (isValidKey && FlowOS.Core.Security.TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
+                if (demoKeyAccepted)
                 {
                     dbResolvedTenantId = FlowOS.Core.Security.TenantIdentityRules.DemoTenantId;
                     resolvedScopes = new[] { FlowOS.Core.Security.ApiKeyScopeCatalog.FullAccess };
@@ -358,11 +379,9 @@ public partial class Program
                 return;
             }
 
-            if (tenantId == Guid.Empty && (suppliedApiKey == "flowos_prod_secret_key_32_chars_min" ||
-                                           suppliedApiKey == "local-development-key-change-me" ||
-                                           suppliedApiKey == "YOUR_PRODUCTION_API_KEY"))
+            if (tenantId == Guid.Empty && demoKeyAccepted)
             {
-                tenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+                tenantId = FlowOS.Core.Security.TenantIdentityRules.DemoTenantId;
             }
 
             if (tenantId == Guid.Empty)
@@ -375,7 +394,7 @@ public partial class Program
             McpRequestContext.Role = isTenantApiKeyCredential
                 ? FlowOS.Core.Security.TenantIdentityRules.ResolveApiKeyRole(
                     resolvedScopes,
-                    FlowOS.Core.Security.TenantIdentityRules.IsDemoApiKey(suppliedApiKey))
+                    demoKeyAccepted)
                 : jwtRole ?? serviceRole;
             McpRequestContext.CallerId = jwtCallerId;
             McpRequestContext.Scopes = resolvedScopes;

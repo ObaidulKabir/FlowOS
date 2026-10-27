@@ -223,7 +223,7 @@ public class WorkflowClassesControllerTests : IClassFixture<CustomWebApplication
     [Fact]
     public async Task List_WhenPlatformAdminProvidesTenantQuery_UsesRequestedTenantScope()
     {
-        var currentAdminTenantId = TenantIdentityRules.DemoTenantId;
+        var currentAdminTenantId = TenantIdentityRules.PlatformTenantId;
         var requestedTenantId = Guid.NewGuid();
         var currentTenantWorkflow = CreateWorkflowClass(currentAdminTenantId, "CurrentTenantPrivate");
         var requestedTenantWorkflow = CreateWorkflowClass(requestedTenantId, "RequestedTenantPrivate");
