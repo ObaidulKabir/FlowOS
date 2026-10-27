@@ -415,18 +415,17 @@ public class WorkflowClassValidator : IWorkflowClassValidator
             }
         }
 
-        // 3. Law Validation (Workflow cannot bypass State Machine)
-        // This is complex static analysis. 
-        // Heuristic: If a step triggers an event, is that event valid for the current "State"?
-        // Since Workflow Step != Entity State (necessarily), this is hard to prove statically without a mapping.
-        // However, we can check that *if* the workflow claims to handle an event, that event exists in the SM.
-        // (Already checked in Consistency).
-        
-        // Check Terminal Events
-        foreach (var evt in bp.Events.Where(e => e.IsTerminal))
+        // 3. Law Validation (CR-16): a workflow exit the state machine can never allow would leave the
+        // step stuck at runtime, because class-backed instances fail closed on a state-machine violation.
+        foreach (var dead in WorkflowLawAnalyzer.FindDeadExits(bp))
         {
-            // Terminal events should not be used as triggers for non-terminal steps? 
-            // Or rather, if an event is terminal, it should lead to "END" or a state that is final.
+            result.AddError(
+                "LAW-001",
+                "Law",
+                $"Step '{dead.StepId}' advances on event '{dead.EventId}', but the state machine allows '{dead.EventId}' only from " +
+                $"[{string.Join(", ", dead.AllowedFromStates)}] and at this step the entity can only be in [{string.Join(", ", dead.StatesAtStep)}]. " +
+                "The step could never advance on this event.",
+                "Workflow");
         }
 
         // 4. Role & Capability Validation

@@ -16,11 +16,11 @@ This chapter exists so this documentation set never overstates what FlowOS actua
 * **Proof**: `tests/FlowOS.UnitTests/Application/Handlers/WorkflowCommandHandlers_StateMachineGapTests.cs`: `Handle_PublishEventCommand_FailsClosed_WhenClassBackedInstanceHasNoUsableLaw` and `Handle_PublishEventCommand_LegacyEmptyClassId_MayStillAdvanceOnWorkflowGraph`.
 * **Practical implication**: start new work from a published `WorkflowClass`. Migrate legacy definitions to classes if they must obey a State Machine.
 
-## `WorkflowClassValidator` never actually checks "Law" (Workflow-vs-StateMachine legality)
+## The Law check cannot see payload guards
 
-* [Chapter 9](09-workflow-class-governance.md) previously implied that WorkflowClass validation enforces "the workflow cannot declare transitions the state machine doesn't permit." In the real source, `WorkflowClassValidator.Validate` has a `// 3. Law Validation (Workflow cannot bypass State Machine)` block whose body is entirely comments — it performs no additional check beyond the Consistency rules (`CON-001`/`CON-005`) that already confirm referenced events exist.
-* This compounds the separate runtime gap above: a WorkflowClass can pass validation and even Publish successfully with a Workflow that is structurally fine but not a faithful projection of its own StateMachine, and that mismatch is also not caught when instances run.
-* **Practical implication**: manually cross-check your Workflow's step transitions against your StateMachine's transitions when authoring — don't rely on `validate`/`publish` to catch a Workflow that quietly diverges from the Law it's supposed to obey.
+* **Since CR-16** the validator reports `LAW-001` when a step exits on an event the state machine never allows in any state reachable at that step.
+* **Still limited**: to avoid false alarms it assumes every guarded transition can happen and that clients may move the state with events that are not step exits. A path that only fails for certain payloads is not detected.
+* **Proof**: `tests/FlowOS.UnitTests/Domain/WorkflowLawAnalyzerTests.cs`.
 
 ## Three different, non-overlapping validation "error code" vocabularies exist in the docs and code
 
