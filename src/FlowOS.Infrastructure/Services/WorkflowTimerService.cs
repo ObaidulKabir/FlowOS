@@ -15,15 +15,18 @@ public class WorkflowTimerService : IWorkflowTimerService
     private readonly FlowOSDbContext _dbContext;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<WorkflowTimerService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public WorkflowTimerService(
         FlowOSDbContext dbContext,
         IServiceProvider serviceProvider,
-        ILogger<WorkflowTimerService> logger)
+        ILogger<WorkflowTimerService> logger,
+        TimeProvider? timeProvider = null)
     {
         _dbContext = dbContext;
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task ScheduleTimerAsync(
@@ -34,7 +37,7 @@ public class WorkflowTimerService : IWorkflowTimerService
         string triggerEventType,
         CancellationToken cancellationToken = default)
     {
-        var dueTimeUtc = DateTime.UtcNow.Add(duration);
+        var dueTimeUtc = _timeProvider.GetUtcNow().UtcDateTime.Add(duration);
         await ScheduleTimerAtAsync(tenantId, workflowInstanceId, stepId, dueTimeUtc, triggerEventType, cancellationToken);
     }
 
@@ -80,7 +83,7 @@ public class WorkflowTimerService : IWorkflowTimerService
 
     public async Task<int> ExecuteDueTimersAsync(CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var dueJobs = await _dbContext.WorkflowTimerJobs
             .Where(t => !t.IsProcessed && t.DueTimeUtc <= now)
             .OrderBy(t => t.DueTimeUtc)

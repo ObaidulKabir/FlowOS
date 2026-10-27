@@ -215,9 +215,10 @@ public class MockAuthMiddleware
                 return null;
 
             var keyHash = FlowOS.Domain.Entities.TenantApiKey.HashKey(suppliedApiKey);
+            var now = (context.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System).GetUtcNow().UtcDateTime;
             var apiKeyRecord = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
                 db.TenantApiKeys,
-                k => k.KeyHash == keyHash && !k.IsRevoked && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow));
+                k => k.KeyHash == keyHash && !k.IsRevoked && (k.ExpiresAt == null || k.ExpiresAt > now));
 
             if (apiKeyRecord == null)
                 return null;

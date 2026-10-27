@@ -28,8 +28,18 @@ while IFS= read -r line; do
   fi
 done < <(git ls-files -z -- '*.props' '*.csproj' | xargs -0 grep -hE 'Include="MediatR[^"]*"[^>]*Version=' || true)
 
+# CR-08: time-based code should take an injected TimeProvider. Direct clock calls in src/ may only
+# go down; lower scripts/clock-usage-baseline.txt when you remove some.
+clock_baseline=$(tr -dc '0-9' < scripts/clock-usage-baseline.txt)
+clock_count=$(git grep -nE 'DateTime(Offset)?\.(UtcNow|Now)\b' -- 'src/*.cs' ':!src/**/Migrations/**' | wc -l | tr -d ' ')
+if [ "$clock_count" -gt "$clock_baseline" ]; then
+  report "Direct clock calls in src/ rose from $clock_baseline to $clock_count (CR-08). Inject TimeProvider instead."
+elif [ "$clock_count" -lt "$clock_baseline" ]; then
+  echo "Direct clock calls fell to $clock_count; you can lower scripts/clock-usage-baseline.txt."
+fi
+
 if [ "$fail" -ne 0 ]; then
-  echo "Repository hygiene check failed. See CR-03 and CR-05 in the FlowOS Modification Proposal."
+  echo "Repository hygiene check failed. See CR-03, CR-05 and CR-08 in the FlowOS Modification Proposal."
   exit 1
 fi
 echo "Repository hygiene check passed."

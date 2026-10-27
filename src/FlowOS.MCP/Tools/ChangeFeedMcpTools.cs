@@ -23,9 +23,11 @@ public sealed class ChangeFeedMcpTools
 
     private readonly IChangeFeedReader _reader;
     private readonly IConfiguration? _configuration;
+    private readonly TimeProvider _timeProvider;
 
-    public ChangeFeedMcpTools(IChangeFeedReader reader, IConfiguration? configuration = null)
+    public ChangeFeedMcpTools(IChangeFeedReader reader, IConfiguration? configuration = null, TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _reader = reader;
         _configuration = configuration;
     }
@@ -51,7 +53,7 @@ public sealed class ChangeFeedMcpTools
             var settleSeconds = DefaultSettleSeconds;
             if (int.TryParse(_configuration?["FlowOS:ChangeFeed:SettleSeconds"], out var configured)) settleSeconds = Math.Max(0, configured);
 
-            var page = await _reader.ReadAsync(tenantId, afterSequence, limit, DateTime.UtcNow.AddSeconds(-settleSeconds));
+            var page = await _reader.ReadAsync(tenantId, afterSequence, limit, _timeProvider.GetUtcNow().UtcDateTime.AddSeconds(-settleSeconds));
 
             return McpToolResults.Success(new
             {

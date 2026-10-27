@@ -19,8 +19,11 @@ public class JwtTokenService : IJwtTokenService
     private readonly int _defaultExpirationHours;
     private readonly ILogger<JwtTokenService> _logger;
 
-    public JwtTokenService(IConfiguration configuration, ILogger<JwtTokenService> logger)
+    private readonly TimeProvider _timeProvider;
+
+    public JwtTokenService(IConfiguration configuration, ILogger<JwtTokenService> logger, TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         var secret = configuration["FlowOS:Auth:JwtSecret"] 
                      ?? "FlowOS_Super_Secret_Key_For_Tenant_Auth_2026_Minimum_32_Chars!";
@@ -45,7 +48,7 @@ public class JwtTokenService : IJwtTokenService
         IEnumerable<string>? additionalRoles = null,
         TimeSpan? lifetime = null)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var expires = now.Add(lifetime ?? TimeSpan.FromHours(_defaultExpirationHours));
 
         var header = new Dictionary<string, object>
@@ -137,7 +140,7 @@ public class JwtTokenService : IJwtTokenService
             if (root.TryGetProperty("exp", out var expProp))
             {
                 var expSeconds = expProp.GetInt64();
-                var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var nowSeconds = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
                 if (expSeconds < nowSeconds)
                 {
                     _logger.LogWarning("JWT token has expired.");

@@ -25,8 +25,12 @@ public class OutboxProcessorService : BackgroundService
     private readonly ILogger<OutboxProcessorService> _logger;
     private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(1);
 
+    // CR-08: retry scheduling, lag and webhook timestamps use the registered clock.
+    private readonly TimeProvider _timeProvider;
+
     public OutboxProcessorService(IServiceProvider serviceProvider, ILogger<OutboxProcessorService> logger)
     {
+        _timeProvider = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<TimeProvider>(serviceProvider) ?? TimeProvider.System;
         _serviceProvider = serviceProvider;
         _logger = logger;
     }
@@ -65,7 +69,7 @@ public class OutboxProcessorService : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
         var publisher = scope.ServiceProvider.GetRequiredService<IPublisher>();
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var pendingMessages = await dbContext.OutboxMessages
             .Where(m => m.ProcessedOnUtc == null && !m.IsDeadLetter && (m.NextRetryUtc == null || m.NextRetryUtc <= now))
             .OrderBy(m => m.OccurredOnUtc)
@@ -85,7 +89,7 @@ public class OutboxProcessorService : BackgroundService
             activity?.SetTag("outbox.type", message.Type);
             activity?.SetTag("outbox.retryCount", message.RetryCount);
             activity?.SetTag(FlowOsTelemetry.TenantHashAttribute, FlowOsTelemetry.TenantHash(message.TenantId));
-            FlowOsTelemetry.OutboxLag.Record(Math.Max(0, (DateTime.UtcNow - message.OccurredOnUtc).TotalMilliseconds));
+            FlowOsTelemetry.OutboxLag.Record(Math.Max(0, (_timeProvider.GetUtcNow().UtcDateTime - message.OccurredOnUtc).TotalMilliseconds));
             try
             {
                 if (message.Type.StartsWith("WorkflowAction:", StringComparison.OrdinalIgnoreCase))
@@ -186,7 +190,7 @@ public class OutboxProcessorService : BackgroundService
                     var httpMethod = new System.Net.Http.HttpMethod(method ?? "POST");
                     using var request = new System.Net.Http.HttpRequestMessage(httpMethod, uri);
 
-                    var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    var nowSeconds = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
                     request.Headers.Add("x-tenant-id", message.TenantId.ToString());
                     request.Headers.Add("x-flowos-action", "webhook");
                     request.Headers.Add("X-FlowOS-Timestamp", nowSeconds.ToString());

@@ -27,6 +27,8 @@ public class TenantAuthService : ITenantAuthService
 
     public const string OfficialFlowOsEmail = "admin@flowosbd.com";
 
+    private readonly TimeProvider _timeProvider;
+
     public TenantAuthService(
         FlowOSDbContext context,
         IPasswordHasher passwordHasher,
@@ -34,8 +36,10 @@ public class TenantAuthService : ITenantAuthService
         IEmailSender emailSender,
         IConfiguration configuration,
         ILogger<TenantAuthService> logger,
-        TenantSecurityProvisioningService securityProvisioning)
+        TenantSecurityProvisioningService securityProvisioning,
+        TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _context = context;
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
@@ -132,7 +136,7 @@ public class TenantAuthService : ITenantAuthService
         var verified = user.VerifyEmail(token);
         if (!verified)
         {
-            if (user.EmailVerificationTokenExpiresAt.HasValue && user.EmailVerificationTokenExpiresAt.Value < DateTime.UtcNow)
+            if (user.EmailVerificationTokenExpiresAt.HasValue && user.EmailVerificationTokenExpiresAt.Value < _timeProvider.GetUtcNow().UtcDateTime)
             {
                 return new VerifyEmailResult(false, "Verification token has expired. Please request a new verification email.");
             }

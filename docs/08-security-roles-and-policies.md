@@ -266,7 +266,7 @@ When an actor attempts an action (e.g. `StartWorkflowCommand`), FlowOS evaluates
 
 ## What the current `Policy` model actually supports today — read before relying on `ConditionJson`
 
-`DefaultPolicyEvaluator` reads `ConditionJson` with a minimal contract: `{ "action": "Deny", "reason": "..." }` denies, a policy named `"DenyAll"` still denies, and malformed JSON fails closed (deny). It is not a full rules engine yet: there are no role or time expressions. See [Chapter 15](15-known-limitations-and-gaps.md#policy-conditionjson-evaluation-improved).
+`DefaultPolicyEvaluator` reads these `ConditionJson` rules: `{"action":"Deny"}` denies; `deniedRoles` denies callers holding any listed role; `requiredRoles` denies callers holding none of them; `allowedDays` (day names, evaluated in **UTC**) denies on other days; `deniedCommandTypes` denies the listed commands. Each rule can carry a `reason`. A policy named `"DenyAll"` still denies, and malformed JSON fails closed (deny). Rules are checked in that order and the first that denies wins. There are no general expressions (for example "amount > 1000") yet. See [Chapter 15](15-known-limitations-and-gaps.md#policy-conditionjson-evaluation-improved).
 
 ## Where to go next
 

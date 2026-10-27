@@ -30,7 +30,10 @@ public class InMemoryDataCleanupService : BackgroundService
         _serviceProvider = serviceProvider;
         _configuration = configuration;
         _logger = logger;
+        _timeProvider = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<TimeProvider>(serviceProvider) ?? TimeProvider.System;
     }
+
+    private readonly TimeProvider _timeProvider;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -73,7 +76,7 @@ public class InMemoryDataCleanupService : BackgroundService
         int ttlHours = _configuration.GetValue<int>("Sandbox:DataTtlHours", 4);
         if (ttlHours < 1) ttlHours = 4; // fallback safety default
 
-        var cutoffTime = DateTime.UtcNow.AddHours(-ttlHours);
+        var cutoffTime = _timeProvider.GetUtcNow().UtcDateTime.AddHours(-ttlHours);
 
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();

@@ -7,6 +7,14 @@ namespace FlowOS.Security.Policies;
 
 public class DefaultPolicyEvaluator : IPolicyEvaluator
 {
+    private readonly TimeProvider _timeProvider;
+
+    // CR-08: allowedDays is evaluated against an injectable clock (UTC).
+    public DefaultPolicyEvaluator(TimeProvider? timeProvider = null)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
     public PolicyResult Evaluate(Policy policy, PolicyContext context)
     {
         // Legacy: literal DenyAll name always denies.
@@ -66,7 +74,7 @@ public class DefaultPolicyEvaluator : IPolicyEvaluator
                 // 4. Allowed Days Check
                 if (root.TryGetProperty("allowedDays", out var allowedDaysProp) && allowedDaysProp.ValueKind == JsonValueKind.Array)
                 {
-                    var currentDay = DateTime.UtcNow.DayOfWeek.ToString();
+                    var currentDay = _timeProvider.GetUtcNow().UtcDateTime.DayOfWeek.ToString();
                     var allowedDays = allowedDaysProp.EnumerateArray().Select(e => e.GetString()).Where(s => !string.IsNullOrEmpty(s)).ToList();
                     if (allowedDays.Any() && !allowedDays.Contains(currentDay, StringComparer.OrdinalIgnoreCase))
                     {
