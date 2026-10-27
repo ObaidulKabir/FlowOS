@@ -20,8 +20,16 @@ while IFS= read -r -d '' f; do
   fi
 done < <(git ls-files -z)
 
+# CR-05: MediatR 13 and later need a commercial licence. Every MediatR package must stay below 13.
+while IFS= read -r line; do
+  ver=$(echo "$line" | sed -nE 's/.*Version="([0-9]+)\..*/\1/p')
+  if [ -n "$ver" ] && [ "$ver" -ge 13 ]; then
+    report "MediatR 13+ is commercially licensed (CR-05): $line"
+  fi
+done < <(git ls-files -z -- '*.props' '*.csproj' | xargs -0 grep -hE 'Include="MediatR[^"]*"[^>]*Version=' || true)
+
 if [ "$fail" -ne 0 ]; then
-  echo "Repository hygiene check failed. See CR-03 in the FlowOS Modification Proposal."
+  echo "Repository hygiene check failed. See CR-03 and CR-05 in the FlowOS Modification Proposal."
   exit 1
 fi
 echo "Repository hygiene check passed."
