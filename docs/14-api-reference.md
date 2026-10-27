@@ -124,6 +124,53 @@ You can start by `workflowName` **or** `workflowDefinitionId` — omit `version`
 
 ---
 
+## 3a. Change feed — `ChangesController` (`/api/changes`, `[Authorize]`)
+
+An integrating system (for example Learning OS) pulls the events of its own tenant in the order the database stored them, instead of receiving pushes.
+
+```
+GET /api/changes?after=<cursor>&limit=100
+```
+
+* `after`: the `nextCursor` from the previous page, sent back unchanged. Leave it out to start from the beginning. A malformed cursor returns `400`.
+* `limit`: 1–500, default 100.
+* The response matches [`docs/schemas/change-feed.v1.schema.json`](schemas/change-feed.v1.schema.json). Version 1 only gains fields; removing or renaming one needs `v2`.
+
+```json
+{
+  "schema": "flowos.change-feed/v1",
+  "items": [
+    {
+      "sequence": 4182,
+      "eventId": "…", "eventType": "EVT-ASSESSMENT-SUBMITTED", "eventVersion": 1,
+      "occurredAt": "2026-10-27T09:12:44.512Z",
+      "correlationId": "…", "causationId": "…",
+      "workflowInstanceId": "…", "workflowDefinitionId": "…", "workflowVersion": 3,
+      "externalSourceSystem": "learning-os", "externalReference": "recovery-case-123",
+      "payload": { "score": 7 },
+      "metadata": { "FromStep": "Review", "ToStep": "END" }
+    }
+  ],
+  "nextCursor": "djE6NDE4Mg",
+  "hasMore": false
+}
+```
+
+**Guarantees and how to consume it**
+
+* `sequence` strictly increases within a tenant's feed, so events of one workflow instance arrive in the order they were stored.
+* **At-least-once.** Save `nextCursor` only after you have processed the page. If you crash first, you get the same page again; use `eventId` to ignore duplicates.
+* **Settle window.** Events newer than `FlowOS:ChangeFeed:SettleSeconds` (default 5) are held back, together with everything after them, so a transaction that commits late is never skipped. `hasMore` can be `true` with an empty page; poll again shortly.
+* `workflowInstanceId`, `workflowDefinitionId`, `workflowVersion` and the external reference are filled in for events that belong to a workflow instance (through `WorkflowInstanceId` metadata or the correlation ID).
+
+**Signature.** When `FlowOS:ChangeFeed:SigningKey` is configured, every response has
+
+```
+X-FlowOS-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>." + raw body>
+```
+
+Verify it over the raw response bytes before parsing, with a constant-time comparison, and reject a `t` older than a few minutes. Keep the key in a secret store, never in code or prompts. `FlowOS.Api.Http.ChangeFeedSignature.Verify` is a reference implementation.
+
 ## 4. State Machines — `StateMachinesController` (`/api/StateMachines`)
 
 `POST /api/statemachines/validate` — body: `ValidateTransitionRequest { entityType, currentState, eventType }`; requires `x-tenant-id` (else `400`). Response: `ValidateTransitionResult { isAllowed, reason, newState, resultType }` where `resultType` is one of `Allowed`, `Denied`, `Ignored`. Full walkthrough with all four response scenarios: [Chapter 3](03-state-machines.md).
