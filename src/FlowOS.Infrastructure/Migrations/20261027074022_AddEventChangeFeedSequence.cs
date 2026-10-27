@@ -15,8 +15,7 @@ namespace FlowOS.Infrastructure.Migrations
                 name: "Sequence",
                 table: "Events",
                 type: "bigint",
-                nullable: false,
-                defaultValue: 0L)
+                nullable: false)
                 .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn);
 
             migrationBuilder.CreateIndex(
