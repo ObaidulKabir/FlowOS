@@ -75,8 +75,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install JWT_SECRET on the server
-        env:
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           if [ -z "$JWT_SECRET" ]; then
             echo "GitHub secret JWT_SECRET is empty."
@@ -106,6 +104,7 @@ jobs:
           EOF
         env:
           GH_TOKEN: ${{ github.token }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
       - name: Build and Deploy Containers 
         run: |
