@@ -25,6 +25,23 @@ public class ApiExceptionFilterAttribute : ExceptionFilterAttribute
 
             context.ExceptionHandled = true;
         }
+        else if (context.Exception is ConcurrencyConflictException conflictEx)
+        {
+            var details = new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflict",
+                Detail = conflictEx.Message
+            };
+            details.Extensions["code"] = conflictEx.Code;
+
+            context.Result = new ObjectResult(details)
+            {
+                StatusCode = StatusCodes.Status409Conflict
+            };
+
+            context.ExceptionHandled = true;
+        }
         else if (context.Exception is ArgumentException argEx)
         {
             var details = new ProblemDetails

@@ -112,7 +112,20 @@ public class WorkflowTimerService : IWorkflowTimerService
                 }
 
                 job.MarkAsProcessed();
+                // Save per job, so a later concurrency conflict cannot undo timers already applied.
+                await _dbContext.SaveChangesAsync(cancellationToken);
                 executedCount++;
+            }
+            catch (Exception ex) when (ex is FlowOS.Application.Common.Exceptions.ConcurrencyConflictException
+                                       || ex is DbUpdateConcurrencyException)
+            {
+                // Another request changed the instance at the same moment (CR-06). Discard this pass's
+                // unsaved changes and stop; the job stays due and the next pass (about a second later)
+                // applies the timer to the instance's current state.
+                _logger.LogInformation(ex, "Timer {JobId} for workflow {WorkflowId} raced with another update; retrying on the next pass",
+                    job.Id, job.WorkflowInstanceId);
+                _dbContext.ChangeTracker.Clear();
+                return executedCount;
             }
             catch (Exception ex)
             {

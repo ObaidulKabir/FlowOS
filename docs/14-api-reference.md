@@ -13,6 +13,28 @@ There is currently no production identity provider wired in. `MockAuthMiddleware
 
 Header names are case-insensitive in ASP.NET Core, so `x-tenant-id` and `X-Tenant-ID` are equivalent.
 
+## Safe retries: `Idempotency-Key`
+
+`POST /api/workflows/start`, `POST /api/events/publish` and `POST /api/tasks/{id}/complete` accept an `Idempotency-Key` header (at most 200 characters, unique per tenant and operation). Send a new random value (for example a UUID) for each logical request, and send the same value again when you retry it:
+
+| Situation | Response |
+|---|---|
+| First request with the key | Processed normally |
+| Repeat after the first finished | The first result again (the same `workflowInstanceId` for start); nothing runs twice |
+| Repeat while the first is still running | `409 Conflict`, `code: IDEMPOTENCY-IN-PROGRESS`; retry shortly |
+| First request failed | A repeat with the same key is processed again |
+| Header and body `idempotencyKey` differ, two header values, or a key over 200 characters | `400 Bad Request` |
+
+The body field `idempotencyKey` still works; the header is preferred.
+
+## Integration references (correlation, causation, external reference)
+
+For systems that drive FlowOS, such as Learning OS:
+
+* **Start** (`POST /api/workflows/start`): send `businessReference: { sourceSystem, externalEntityId }` to store your own identifier on the instance (at most 100 and 200 characters). The response contains `workflowInstanceId`, `workflowDefinitionId`, `workflowVersion` (the pinned definition), `correlationId`, `externalSourceSystem`, `externalReference` and `status`.
+* **Find by your reference**: `GET /api/workflows?sourceSystem=learning-os&externalReference=recovery-case-123`.
+* **Publish** (`POST /api/events/publish`): send `causationId` to record what caused the event. Every stored and outbox event carries the metadata `WorkflowInstanceId`, `WorkflowDefinitionId`, `WorkflowVersion`, and, when present, `CausationId` and `ExternalEntityId`.
+
 ---
 
 ## 1. Workflows — `WorkflowsController` (`/api/workflows`, `[Authorize]`)
@@ -101,6 +123,53 @@ You can start by `workflowName` **or** `workflowDefinitionId` — omit `version`
 `tenantId` is actually resolved from the `x-tenant-id` header first, falling back to the body's `tenantId` only if the header is absent — see [Chapter 4](04-events-and-registry.md).
 
 ---
+
+## 3a. Change feed — `ChangesController` (`/api/changes`, `[Authorize]`)
+
+An integrating system (for example Learning OS) pulls the events of its own tenant in the order the database stored them, instead of receiving pushes.
+
+```
+GET /api/changes?after=<cursor>&limit=100
+```
+
+* `after`: the `nextCursor` from the previous page, sent back unchanged. Leave it out to start from the beginning. A malformed cursor returns `400`.
+* `limit`: 1–500, default 100.
+* The response matches [`docs/schemas/change-feed.v1.schema.json`](schemas/change-feed.v1.schema.json). Version 1 only gains fields; removing or renaming one needs `v2`.
+
+```json
+{
+  "schema": "flowos.change-feed/v1",
+  "items": [
+    {
+      "sequence": 4182,
+      "eventId": "…", "eventType": "EVT-ASSESSMENT-SUBMITTED", "eventVersion": 1,
+      "occurredAt": "2026-10-27T09:12:44.512Z",
+      "correlationId": "…", "causationId": "…",
+      "workflowInstanceId": "…", "workflowDefinitionId": "…", "workflowVersion": 3,
+      "externalSourceSystem": "learning-os", "externalReference": "recovery-case-123",
+      "payload": { "score": 7 },
+      "metadata": { "FromStep": "Review", "ToStep": "END" }
+    }
+  ],
+  "nextCursor": "djE6NDE4Mg",
+  "hasMore": false
+}
+```
+
+**Guarantees and how to consume it**
+
+* `sequence` strictly increases within a tenant's feed, so events of one workflow instance arrive in the order they were stored.
+* **At-least-once.** Save `nextCursor` only after you have processed the page. If you crash first, you get the same page again; use `eventId` to ignore duplicates.
+* **Settle window.** Events newer than `FlowOS:ChangeFeed:SettleSeconds` (default 5) are held back, together with everything after them, so a transaction that commits late is never skipped. `hasMore` can be `true` with an empty page; poll again shortly.
+* `workflowInstanceId`, `workflowDefinitionId`, `workflowVersion` and the external reference are filled in for events that belong to a workflow instance (through `WorkflowInstanceId` metadata or the correlation ID).
+
+**Signature.** When `FlowOS:ChangeFeed:SigningKey` is configured, every response has
+
+```
+X-FlowOS-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>." + raw body>
+```
+
+Verify it over the raw response bytes before parsing, with a constant-time comparison, and reject a `t` older than a few minutes. Keep the key in a secret store, never in code or prompts. `FlowOS.Api.Http.ChangeFeedSignature.Verify` is a reference implementation.
 
 ## 4. State Machines — `StateMachinesController` (`/api/StateMachines`)
 
@@ -199,6 +268,7 @@ Most error responses use RFC 7807 Problem Details, produced by `ApiExceptionFilt
 |---|---|
 | `PolicyViolationException` | `403 Forbidden` |
 | `ArgumentException` | `400 Bad Request` |
+| `ConcurrencyConflictException` (another request changed the instance, or the same idempotency key is still running) | `409 Conflict`, with `code` = `CONCURRENT-UPDATE` or `IDEMPOTENCY-IN-PROGRESS` |
 | `InvalidOperationException` | `400 Bad Request` |
 | Unhandled | `500 Internal Server Error` |
 

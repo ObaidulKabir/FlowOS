@@ -306,6 +306,9 @@ public static class ToolRegistration
         registry.Register("refine_workflow_blueprint_from_nl", McpToolDescriptions.For("refine_workflow_blueprint_from_nl"), McpToolSchemas.RefineBlueprintFromNaturalLanguage(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.RefineBlueprintFromNaturalLanguage(args)));
 
+        registry.Register("read_change_feed", McpToolDescriptions.For("read_change_feed"), McpToolSchemas.ReadChangeFeed(),
+            async (args) => await ExecuteScopedAsync<ChangeFeedMcpTools>(serviceProvider, t => t.ReadChangeFeed(args)));
+
         registry.Register("poll_external_agent_changes", McpToolDescriptions.For("poll_external_agent_changes"), McpToolSchemas.PollExternalAgentChanges(),
             async (args) => await ExecuteScopedAsync<ExternalAgentChangeFeedMcpTools>(serviceProvider, t => t.PollExternalAgentChanges(args)));
 

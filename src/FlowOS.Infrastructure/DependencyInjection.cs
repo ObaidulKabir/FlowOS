@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IConfigurationPublisher, ConfigurationPublisher>();
         services.AddScoped<IWorkflowTimerService, WorkflowTimerService>();
+        services.AddScoped<IChangeFeedReader, ChangeFeedReader>();
         services.AddScoped<IWorkflowActionPlugin, WebhookWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, NotificationWorkflowActionPlugin>();
         services.AddScoped<IWorkflowActionPlugin, PublishEventWorkflowActionPlugin>();

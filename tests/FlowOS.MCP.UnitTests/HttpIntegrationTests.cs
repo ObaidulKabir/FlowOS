@@ -38,7 +38,8 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
                 ["MCP_API_KEY"] = ApiKey,
                 ["MCP_ROLE"] = "Admin",
                 ["MCP_ALLOWED_ORIGINS"] = "https://allowed.example",
-                ["FLOWOS_BILLING_ENFORCE"] = "false"
+                ["FLOWOS_BILLING_ENFORCE"] = "false",
+                ["FlowOS:ChangeFeed:SettleSeconds"] = "0"
             });
         });
         await _app.StartAsync();
@@ -1341,11 +1342,44 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
         var instanceId = Guid.Parse(
             (started["workflowInstanceId"] ?? started["WorkflowInstanceId"])!.ToString());
 
+        // CR-10: the start result carries the pinned definition and the caller's reference.
+        Assert.Equal("MCP-ERP", started["externalSourceSystem"]?.ToString());
+        Assert.Equal($"EXP-{suffix}", started["externalReference"]?.ToString());
+        Assert.NotEqual(JTokenType.Null, started["workflowDefinitionId"]?.Type ?? JTokenType.Null);
+        Assert.True(started["workflowVersion"]?.Value<int>() >= 1);
+
+        var causationId = Guid.NewGuid();
         _ = Data(await CallTool("publish_event", new
         {
             workflowInstanceId = instanceId,
-            eventType = $"EVT-MCP-APPROVE-{suffix}"
+            eventType = $"EVT-MCP-APPROVE-{suffix}",
+            causationId
         }));
+
+        // CR-10: find the instance by the caller's reference.
+        var listed = Data(await CallTool("list_workflow_instances", new { sourceSystem = "MCP-ERP", externalReference = $"EXP-{suffix}" }));
+        var listedInstance = Assert.Single(listed["instances"]!.Children());
+        Assert.Equal(instanceId, Guid.Parse(listedInstance["Id"]!.ToString()));
+        Assert.Equal($"EXP-{suffix}", listedInstance["ExternalReference"]!.ToString());
+
+        // CR-10c: the change feed shows the published event with its causation and reference.
+        JToken? fedEvent = null;
+        string? cursor = null;
+        for (var page = 0; page < 50 && fedEvent == null; page++)
+        {
+            var feed = Data(await CallTool("read_change_feed", cursor == null ? new { limit = 500 } : (object)new { after = cursor, limit = 500 }));
+            Assert.Equal("flowos.change-feed/v1", feed["schema"]!.ToString());
+            fedEvent = feed["items"]!.Children().FirstOrDefault(i => i["causationId"]?.ToString() == causationId.ToString());
+            cursor = feed["nextCursor"]!.ToString();
+            if (!feed["hasMore"]!.Value<bool>()) break;
+        }
+        Assert.NotNull(fedEvent);
+        Assert.Equal(instanceId.ToString(), fedEvent!["workflowInstanceId"]!.ToString());
+        Assert.Equal($"EXP-{suffix}", fedEvent["externalReference"]!.ToString());
+
+        var badCursor = await CallTool("read_change_feed", new { after = "not-a-cursor" });
+        Assert.True(badCursor["result"]?["isError"]?.Value<bool>());
+        Assert.Contains("MCP-ARG-002", badCursor.ToString());
 
         var archiveWithoutApproval = await CallTool(
             "archive_context_binding",

@@ -32,7 +32,10 @@ public class EventsController : ControllerBase
         if (_currentUser.TenantId == Guid.Empty)
             return Unauthorized("TenantId is missing.");
 
-        var commandWithTenant = command with { TenantId = _currentUser.TenantId };
+        if (!FlowOS.Api.Http.IdempotencyKeyHeader.TryResolve(Request, command.IdempotencyKey, out var idempotencyKey, out var keyError))
+            return BadRequest(new ProblemDetails { Title = "Invalid Idempotency-Key", Detail = keyError, Status = 400 });
+
+        var commandWithTenant = command with { TenantId = _currentUser.TenantId, IdempotencyKey = idempotencyKey };
 
         try
         {

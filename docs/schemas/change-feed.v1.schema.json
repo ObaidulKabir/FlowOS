@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowos.dev/schemas/change-feed.v1.schema.json",
+  "title": "FlowOS change feed page, version 1",
+  "description": "Response of GET /api/changes. Fields are only added in v1; removing or renaming a field needs a new schema version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "items", "nextCursor", "hasMore"],
+  "properties": {
+    "schema": { "const": "flowos.change-feed/v1" },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+    "nextCursor": { "type": "string", "description": "Opaque. Send it back unchanged as ?after=." },
+    "hasMore": { "type": "boolean", "description": "True when more items are available now or after the settle window." }
+  },
+  "$defs": {
+    "nullableUuid": { "type": ["string", "null"], "format": "uuid" },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence", "eventId", "eventType", "eventVersion", "occurredAt",
+        "correlationId", "causationId", "workflowInstanceId", "workflowDefinitionId", "workflowVersion",
+        "externalSourceSystem", "externalReference", "payload", "metadata"
+      ],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1, "description": "Strictly increasing within a tenant's feed." },
+        "eventId": { "type": "string", "format": "uuid", "description": "Use it to ignore duplicates." },
+        "eventType": { "type": "string" },
+        "eventVersion": { "type": "integer", "minimum": 1 },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "correlationId": { "$ref": "#/$defs/nullableUuid" },
+        "causationId": { "$ref": "#/$defs/nullableUuid" },
+        "workflowInstanceId": { "$ref": "#/$defs/nullableUuid" },
+        "workflowDefinitionId": { "$ref": "#/$defs/nullableUuid" },
+        "workflowVersion": { "type": ["integer", "null"] },
+        "externalSourceSystem": { "type": ["string", "null"] },
+        "externalReference": { "type": ["string", "null"] },
+        "payload": { "description": "The event payload as JSON, or null." },
+        "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  }
+}
