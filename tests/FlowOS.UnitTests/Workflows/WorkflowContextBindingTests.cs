@@ -511,6 +511,65 @@ public class WorkflowContextBindingTests
     }
 
     [Fact]
+    public async Task ContextSimulation_FinishedOnNamedEndStep_ReportsCompleted()
+    {
+        var source = CreateSource();
+        var review = source.Definition.Workflow.Steps.Single();
+        review.OnEntry.Clear();
+        review.Sla = null;
+        review.NextSteps["EVT-APPROVE"] = "End";
+        source.Definition.Workflow.Steps.Add(new StepBlueprint
+        {
+            StepId = "End",
+            StepType = "Command",
+            NextSteps = new Dictionary<string, string> { ["Default"] = "END" }
+        });
+        source.Definition.StateMachine.States.Add("Completed");
+        source.Definition.StateMachine.Transitions[0] = source.Definition.StateMachine.Transitions[0] with
+        {
+            ToState = "Completed"
+        };
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var result = await new WorkflowContextSimulationService(
+                unitOfWork,
+                new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object),
+                new WorkflowExecutionContextService(unitOfWork),
+                new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()))
+            .SimulateAsync(source.TenantId, new WorkflowContextSimulationRequest(
+                ContextBindingId: binding.Id,
+                Revision: "draft",
+                InitialPayload: new { expense = new { amount = 500 } },
+                Roles: ["FinanceManager"],
+                Events:
+                [
+                    new WorkflowContextSimulationEventRequest(
+                        "EVT-EXP-APPROVE",
+                        new { decision = new { amount = 500 } })
+                ]));
+
+        Assert.Equal("End", result.CurrentStepId);
+        Assert.Equal("Completed", result.CurrentState);
+        Assert.Empty(result.PendingWork);
+        Assert.Equal("Completed", result.Status);
+    }
+
+    [Fact]
     public async Task ContextSimulation_DecisionAutoRoute_AppliesQuoteApprovedAsStateOnlyThenContinues()
     {
         var source = CreateRepairSource();
