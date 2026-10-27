@@ -308,11 +308,15 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         var stepLimitReached =
             eventQueue.Count > 0 &&
             processedEvents >= request.MaxSteps;
-        var status = denied
-            ? "Denied"
-            : stepLimitReached
-                ? "StepLimitReached"
-                : instance.Status.ToString();
+        var pendingWork = PendingWork(runtime.WorkflowDefinition, instance);
+        var status = ResolveReportedStatus(
+            denied,
+            stepLimitReached,
+            instance,
+            runtime.WorkflowDefinition,
+            pendingWork,
+            eventQueue.Count,
+            pendingAgentTask);
 
         return new WorkflowContextSimulationResultDto(
             runtime.Binding.Id,
@@ -339,7 +343,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             initialCanonicalContext,
             CloneDictionary(canonicalContext),
             trace,
-            PendingWork(runtime.WorkflowDefinition, instance),
+            pendingWork,
             new WorkflowContextSimulationGraphDto(
                 new WorkflowContextSimulationWorkflowGraphDto(
                     runtime.WorkflowDefinition.Name,
@@ -805,6 +809,63 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             action.Target,
             action.Capability,
             action.Condition)).ToList();
+    }
+
+    private static string ResolveReportedStatus(
+        bool denied,
+        bool stepLimitReached,
+        WorkflowInstance instance,
+        WorkflowDefinition definition,
+        IReadOnlyList<WorkflowContextSimulationPendingWorkDto> pendingWork,
+        int eventsRemaining,
+        WorkflowContextSimulationPendingAgentTaskDto? pendingAgentTask)
+    {
+        if (denied)
+            return "Denied";
+        if (stepLimitReached)
+            return "StepLimitReached";
+        if (instance.Status is WorkflowInstanceStatus.Completed or WorkflowInstanceStatus.Failed)
+            return instance.Status.ToString();
+
+        // A blueprint may finish on a step named End rather than the sentinel END.
+        // The engine leaves that instance Running. The dry run has no work left, so report Completed.
+        if (eventsRemaining == 0 &&
+            pendingWork.Count == 0 &&
+            pendingAgentTask == null &&
+            IsFinishedPosition(definition, instance))
+            return "Completed";
+
+        return instance.Status.ToString();
+    }
+
+    private static bool IsFinishedPosition(WorkflowDefinition definition, WorkflowInstance instance)
+    {
+        var ids = instance.ActiveStepIds.Count > 0
+            ? instance.ActiveStepIds
+            : new List<string> { instance.CurrentStepId };
+        return ids.Count > 0 && ids.All(id => IsFinishedStep(definition, id));
+    }
+
+    private static bool IsFinishedStep(WorkflowDefinition definition, string stepId)
+    {
+        if (string.Equals(stepId?.Trim(), "END", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var step = FindStep(definition, stepId);
+        if (step == null)
+            return false;
+        if (step.StepType is WorkflowStepType.HumanTask
+            or WorkflowStepType.Timer
+            or WorkflowStepType.SubWorkflow
+            or WorkflowStepType.Fork
+            or WorkflowStepType.Join)
+            return false;
+        if (DecisionPacketFactory.IsWaitingStep(step))
+            return false;
+
+        var hasNext = step.NextSteps is { Count: > 0 };
+        var hasConditions = step.Conditions is { Count: > 0 };
+        return !hasNext && !hasConditions;
     }
 
     private static IReadOnlyList<WorkflowContextSimulationPendingWorkDto> PendingWork(
