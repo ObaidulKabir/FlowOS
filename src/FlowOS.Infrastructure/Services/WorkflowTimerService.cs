@@ -92,6 +92,7 @@ public class WorkflowTimerService : IWorkflowTimerService
         var executedCount = 0;
         foreach (var job in dueJobs)
         {
+            FlowOS.Core.Telemetry.FlowOsTelemetry.TimerLag.Record(Math.Max(0, (now - job.DueTimeUtc).TotalMilliseconds));
             try
             {
                 _logger.LogInformation("Triggering due timer {JobId} for workflow {WorkflowId} with event {EventType}",

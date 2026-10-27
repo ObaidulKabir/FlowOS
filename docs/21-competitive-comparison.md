@@ -84,7 +84,7 @@ The buyer needs tenant SaaS where AI agents author, simulate, and run **legal** 
 
 ### FlowOS — business automation OS
 
-**Wins:** Declarative JSON, broad built-in MCP lifecycle, fail-closed dual-kernel Law, hosted/BYO DecisionPacket loop, deterministic simulation, HumanTask fallback, and a compact .NET 8 + PostgreSQL footprint.
+**Wins:** Declarative JSON, broad built-in MCP lifecycle, fail-closed dual-kernel Law, hosted/BYO DecisionPacket loop, deterministic simulation, HumanTask fallback, and a compact .NET 10 + PostgreSQL footprint.
 
 **Loses:** Not BPMN. Not Temporal/Zeebe scale. No AWS-sized connector catalog. Dynamic workflow-as-tool publication, OIDC, Stripe checkout, OTEL, and SCIM are later.
 

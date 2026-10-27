@@ -29,6 +29,10 @@ public static class FlowOsDatabase
         if (hasPostgres)
         {
             options.UseNpgsql(connectionString);
+            // EF Core 9+ throws from Migrate() when the model and the migrations differ. Log it instead,
+            // so a deployment cannot stop at startup; the MigrationsTests suite fails CI on any drift.
+            options.ConfigureWarnings(warnings =>
+                warnings.Log(RelationalEventId.PendingModelChangesWarning));
             if (interceptors.Length > 0)
                 options.AddInterceptors(interceptors);
             return;

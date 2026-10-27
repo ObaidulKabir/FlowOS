@@ -1,13 +1,16 @@
 # Use ASP.NET Core Runtime for the final image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 8080
 EXPOSE 8081
 
 # Use SDK for building
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+
+# Shared build settings and central package versions must be present before restore
+COPY ["global.json", "Directory.Build.props", "Directory.Packages.props", "./"]
 
 # Copy CSPROJ files first to optimize cache
 COPY ["src/FlowOS.Api/FlowOS.Api.csproj", "src/FlowOS.Api/"]

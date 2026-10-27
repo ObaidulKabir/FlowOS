@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **.NET 10 LTS (CR-01).** All projects target `net10.0`; the target framework is set once in `Directory.Build.props` and package versions centrally in `Directory.Packages.props` (Microsoft packages 10.0.13, Npgsql EF Core provider 10.0.3). Docker images use the .NET 10 SDK and ASP.NET Core runtime; `global.json` pins the SDK band. The unused `Microsoft.AspNetCore.OpenApi` package was removed (Swashbuckle remains).
+- **OpenTelemetry (CR-07).** The OpenTelemetry SDK is registered in the API and MCP hosts and exports traces and metrics over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Spans `workflow.advance`, `outbox.process` and `workflow.timer.process` use one shared definition, identify tenants only by a one-way hash, and carry correlation and causation IDs. Outbox messages store the producer's `traceparent` (new nullable column `OutboxMessages.TraceParent`), so one trace runs from request to consumer. New metrics: transition duration and count, outbox messages and lag, timer lag. See docs/28-observability.md.
+- Fixed the MCP observability guidance, which contained literal `\n` sequences and described a console exporter and a guide resource that did not exist.
+- The EF Core pending-model-changes warning is logged at startup instead of stopping `Migrate()`; a new unit test fails CI when the model and the migrations differ.
+
+---
+
 ## [1.0.0-MVP] - 2026-09-02
 
 ### 🚀 Initial Minimum Viable Product (MVP) Release

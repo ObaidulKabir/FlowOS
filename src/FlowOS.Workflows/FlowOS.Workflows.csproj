@@ -9,11 +9,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Linq.Dynamic.Core" Version="1.7.1" />
+    <PackageReference Include="System.Linq.Dynamic.Core" />
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

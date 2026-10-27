@@ -720,6 +720,8 @@ public partial class Program
 
     static void AddFlowOsMcpServices(IServiceCollection services, bool includeAutoPilot = true)
     {
+        // OpenTelemetry traces and metrics, exported only when OTEL_EXPORTER_OTLP_ENDPOINT is set (CR-07).
+        FlowOS.Infrastructure.Telemetry.TelemetryServiceCollectionExtensions.AddFlowOsTelemetry(services, "flowos-mcp");
         services.AddScoped<EventPublishingInterceptor>();
         services.AddScoped<ExternalAgentChangeInterceptor>();
         services.AddDbContext<FlowOSDbContext>((serviceProvider, options) =>

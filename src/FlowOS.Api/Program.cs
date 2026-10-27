@@ -27,6 +27,8 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<ApiExceptionFilterAttribute>());
 
 builder.Services.AddEndpointsApiExplorer();
+// OpenTelemetry traces and metrics, exported only when OTEL_EXPORTER_OTLP_ENDPOINT is set (CR-07).
+FlowOS.Infrastructure.Telemetry.TelemetryServiceCollectionExtensions.AddFlowOsTelemetry(builder.Services, "flowos-api");
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<FlowOSDbContext>("Database");

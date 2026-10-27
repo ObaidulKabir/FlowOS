@@ -33,7 +33,7 @@ export const COMPARISON_PLATFORMS: ComparisonPlatform[] = [
     pickWhen:
       "Tenant SaaS where AI agents must author, simulate, and run legal work under dual-kernel Law plus a HumanTask inbox, over MCP.",
     theyWin:
-      "Declarative JSON blueprints, native MCP, fail-closed Law, hosted DecisionPacket / autoCommit, paid-plan FlowOS OpenAI (flowos-hosted, daily cap) plus optional BYO, side-effect-free simulation, .NET 8 + Postgres footprint.",
+      "Declarative JSON blueprints, native MCP, fail-closed Law, hosted DecisionPacket / autoCommit, paid-plan FlowOS OpenAI (flowos-hosted, daily cap) plus optional BYO, side-effect-free simulation, .NET 10 + Postgres footprint.",
     theyLose:
       "Not BPMN. Not polyglot durable-execution at Temporal/Zeebe scale. No 200+ AWS-native service catalog. OIDC, Stripe checkout, OTEL, and SCIM are later.",
   },
