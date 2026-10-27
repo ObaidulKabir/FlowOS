@@ -97,6 +97,8 @@ public record StepBlueprint
     /// step is never auto-committed, whatever the confidence, allowed events or agent profile say.
     /// </summary>
     public bool Consequential { get; set; }
+    /// <summary>CR-12: default task priority while instances wait here (0–100, higher is more urgent).</summary>
+    public int? Priority { get; set; }
     public string? AgentProvider { get; set; }
     public string? AgentPrompt { get; set; }
     public List<string> AgentTools { get; set; } = new();

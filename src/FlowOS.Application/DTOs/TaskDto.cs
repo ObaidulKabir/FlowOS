@@ -13,6 +13,11 @@ public class TaskDto
     public string? AssigneeId { get; set; }
     public Dictionary<string, string> RoleAssignments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string Status { get; set; } = string.Empty;
+    /// <summary>CR-12: effective priority (instance override, else step, else 0); higher is more urgent.</summary>
+    public int Priority { get; set; }
+    /// <summary>CR-12: when the waiting step's SLA times out, if it has one.</summary>
+    public DateTime? DueAtUtc { get; set; }
+    public DateTime CreatedAt { get; set; }
     public object? RelatedEntity { get; set; }
     public List<AgentInsightDto> AgentInsights { get; set; } = new();
 }

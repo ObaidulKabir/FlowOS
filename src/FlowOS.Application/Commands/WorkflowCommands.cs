@@ -19,7 +19,9 @@ public record StartWorkflowCommand(
     object? Payload = null,
     Guid? ContextBindingId = null,
     string? ContextType = null,
-    WorkflowBusinessReference? BusinessReference = null
+    WorkflowBusinessReference? BusinessReference = null,
+    // CR-12: task priority for this instance (0–100, higher is more urgent); null uses the step's.
+    int? Priority = null
 ) : IRequest<Guid>, IPolicySecuredCommand;
 
 // [RequiresCapability("event.publish")] // Moved to Handler for dynamic check
@@ -49,6 +51,14 @@ public record CompleteTaskCommand(
 /// Names the one person who holds a declared Assignment business role on a live instance.
 /// A later call for the same role replaces that person. Does not write tenant IAM roles.
 /// </summary>
+/// <summary>CR-12: change (or clear, with null) the task priority of a running instance.</summary>
+[RequiresCapability("workflow.start")]
+public record SetWorkflowPriorityCommand(
+    Guid TenantId,
+    Guid WorkflowInstanceId,
+    int? Priority
+) : IRequest<bool>, IPolicySecuredCommand;
+
 [RequiresCapability("workflow.start")]
 public record AssignInstanceRoleCommand(
     Guid TenantId,

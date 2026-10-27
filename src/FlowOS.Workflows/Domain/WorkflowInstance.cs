@@ -22,6 +22,22 @@ public class WorkflowInstance : IWorkflowInstance
     public const int ExternalSourceSystemMaxLength = 100;
     public const int ExternalReferenceMaxLength = 200;
     // Immutable properties captured at creation time
+    /// <summary>
+    /// CR-12: task priority for this instance (0–100, higher is more urgent). Null uses the waiting
+    /// step's priority.
+    /// </summary>
+    public int? Priority { get; private set; }
+
+    public const int MinPriority = 0;
+    public const int MaxPriority = 100;
+
+    public void SetPriority(int? priority)
+    {
+        if (priority is < MinPriority or > MaxPriority)
+            throw new ArgumentOutOfRangeException(nameof(priority), $"Priority must be between {MinPriority} and {MaxPriority}.");
+        Priority = priority;
+    }
+
     public Guid WorkflowDefinitionId { get; private set; }
     public Guid WorkflowClassId { get; private set; } // Link to Governance Entity
     public int WorkflowVersion { get; private set; }

@@ -85,9 +85,10 @@ You can start by `workflowName` **or** `workflowDefinitionId` — omit `version`
 
 | Method & Route | Description |
 |---|---|
-| `GET /api/tasks` | List pending tasks (`TaskDto[]`) for the current tenant. |
+| `GET /api/tasks` | The caller's inbox (`TaskDto[]`), ordered by `priority` (highest first), then `dueAtUtc` (earliest first; tasks without an SLA last), then `createdAt` (oldest first). Filters: `role`, `minPriority`, `dueBefore`. Paging: `skip`, `take` (1–500); the `X-Total-Count` header has the filtered total. |
 | `GET /api/tasks/{id}` | Get a task by id (the id is the `WorkflowInstanceId`); `404` if missing. |
 | `POST /api/tasks/{id}/complete` | Emits a generic `TaskCompleted` event; `400 Bad Request` if it can't be completed. |
+| `PUT /api/workflows/{id}/priority` | Body `{"priority": 0–100 or null}`. Sets or clears the instance's priority (requires `workflow.start`). `400` outside 0–100, `404` for an unknown instance. |
 
 `TaskDto`:
 
@@ -95,6 +96,7 @@ You can start by `workflowName` **or** `workflowDefinitionId` — omit `version`
 {
   "taskId": "uuid", "workflowId": "uuid", "currentStep": "string",
   "requiredRole": "string", "status": "string", "relatedEntity": {},
+  "priority": 0, "dueAtUtc": "timestamp or null", "createdAt": "timestamp",
   "agentInsights": [
     { "agentId": "string", "insight": "string", "contextObjective": "string", "createdAt": "timestamp" }
   ]

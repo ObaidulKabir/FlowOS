@@ -26,7 +26,8 @@ public partial class WorkflowCommandHandlers :
     IRequestHandler<StartWorkflowCommand, Guid>,
     IRequestHandler<PublishEventCommand, bool>,
     IRequestHandler<CompleteTaskCommand, bool>,
-    IRequestHandler<AssignInstanceRoleCommand, bool>
+    IRequestHandler<AssignInstanceRoleCommand, bool>,
+    IRequestHandler<SetWorkflowPriorityCommand, bool>
 {
     private const string StartWorkflowOperation = "start_workflow";
     private const string PublishEventOperation = "publish_event";

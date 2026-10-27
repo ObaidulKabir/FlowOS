@@ -761,6 +761,7 @@ public static class McpToolSchemas
             "contextType":{"type":"string","minLength":1},
             "version":{"type":"integer"},
             "initialStepId":{"type":"string"},
+            "priority":{"type":"integer","minimum":0,"maximum":100,"description":"Optional task priority for this instance (higher is more urgent). Omit to use the waiting step's priority."},
             "correlationId":{"type":"string","format":"uuid"},
             "idempotencyKey":{"type":"string","minLength":8},
             "tenantId":{"type":"string","format":"uuid"},
@@ -1030,6 +1031,20 @@ public static class McpToolSchemas
             "idempotencyKey":{"type":"string","minLength":8},
             "causationId":{"type":"string","format":"uuid","description":"Optional ID of whatever caused this event in the calling system (for example a Learning OS decision ID). Stored in the event metadata as CausationId and returned by read_change_feed."},
             "actorId":{"type":"string","minLength":1,"description":"Person id for this event. When the waiting step lists AllowedRoles, this person must be stored for one of those roles. A different role that grants the same capability is refused. When the step lists no AllowedRoles, this person must hold a business role that grants the event. Required when the caller is a shared tenant API key (caller id is the literal api-key). Omit to use the authenticated caller id. Do not send roleAssignments here. Agent: commits and timers are not this check."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject SetInstancePriority() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId","priority"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid"},
+            "priority":{"type":["integer","null"],"minimum":0,"maximum":100,"description":"0–100, higher is more urgent. null clears the override so the step's priority applies."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false

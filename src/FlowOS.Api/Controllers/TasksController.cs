@@ -26,13 +26,39 @@ public class TasksController : ControllerBase
         _logger = logger;
     }
 
+    public const int MaxPageSize = 500;
+
+    /// <summary>
+    /// CR-12: the caller's inbox, highest priority first, then earliest SLA due time, then oldest.
+    /// Filters: role, minPriority, dueBefore. Paging: skip and take; X-Total-Count has the filtered total.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetTasks()
+    public async Task<IActionResult> GetTasks(
+        [FromQuery] string? role = null,
+        [FromQuery] int? minPriority = null,
+        [FromQuery] DateTimeOffset? dueBefore = null,
+        [FromQuery] int skip = 0,
+        [FromQuery] int? take = null)
     {
-        var tenantId = _currentUser.TenantId;
-        var query = new GetTasksQuery { TenantId = tenantId, CallerRoles = _currentUser.Roles };
+        if (skip < 0)
+            return BadRequest(new ProblemDetails { Title = "Invalid skip", Detail = "skip must be 0 or more.", Status = 400 });
+        if (take is < 1 or > MaxPageSize)
+            return BadRequest(new ProblemDetails { Title = "Invalid take", Detail = $"take must be between 1 and {MaxPageSize}.", Status = 400 });
+
+        var query = new GetTasksQuery
+        {
+            TenantId = _currentUser.TenantId,
+            CallerRoles = _currentUser.Roles,
+            Role = role,
+            MinPriority = minPriority,
+            DueBeforeUtc = dueBefore?.UtcDateTime
+        };
         var result = await _mediator.Send(query);
-        return Ok(result);
+
+        Response.Headers["X-Total-Count"] = result.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        IEnumerable<FlowOS.Application.DTOs.TaskDto> page = result.Skip(skip);
+        if (take.HasValue) page = page.Take(take.Value);
+        return Ok(page.ToList());
     }
 
     [HttpGet("{id}")]

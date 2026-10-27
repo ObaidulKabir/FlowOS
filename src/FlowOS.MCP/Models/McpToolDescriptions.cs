@@ -423,11 +423,20 @@ public static class McpToolDescriptions
                 "Authorization: requires effective capability workflow.start. For API keys, role permissions are restricted by workflow:start (or *). On MCP-AUTHZ-001 call diagnose_caller_permissions. " +
                 "payload.roleAssignments sets Assignment business roles only at start. After the instance exists, call assign_instance_role. (Note: For ResolutionType 'Team', the engine auto-assigns 'team:{id}:0'.) " +
                 "Returns: {ok:true,data:{workflowInstanceId,tenantId,workflowDefinitionId,workflowVersion,externalSourceSystem,externalReference,status,correlationId,message}}. " +
+                "Optional priority (0–100, higher is more urgent) orders the task inbox; change it later with set_instance_priority. " +
                 "Pass businessReference {sourceSystem,externalEntityId} to link the instance to a record in your system; find it later with list_workflow_instances. Reusing an idempotencyKey returns the same instance. " +
                 "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
                 "MCP-CONFLICT-001 (context {conflictCode,retryable:true}) means a concurrent update or a duplicate request still running; retry with the same idempotencyKey. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500},\"roleAssignments\":{\"Sales\":\"user-123\"}}}",
+
+            ["set_instance_priority"] =
+                "[Lifecycle Step 4: Prioritise] Sets or clears (null) the task priority of a running workflow instance, 0–100, higher is more urgent (CR-12). " +
+                "The task inbox (GET /api/tasks) is ordered by priority, then SLA due time, then age. Without an override the waiting step's priority applies. " +
+                "Authorization: requires effective capability workflow.start. " +
+                "Returns: {ok:true,data:{workflowInstanceId,priority}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"priority\":80}",
 
             ["assign_instance_role"] =
                 "[Lifecycle Step 4: Assign Person] Names the one person who holds a declared Assignment business role on a live workflow instance. " +
@@ -922,6 +931,7 @@ public static class McpToolDescriptions
             ["grant_role_capability"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
             ["revoke_role_capability"] = new("security", "authenticated", true, true, true, "reversible", true, "high", true),
             ["start_workflow"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
+            ["set_instance_priority"] = new("command", "authenticated", true, true, true, "reversible", true, "low"),
             ["assign_instance_role"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["publish_event"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium"),
             ["complete_task"] = new("command", "authenticated", true, true, true, "irreversible", true, "medium")
@@ -939,6 +949,7 @@ public static class McpToolDescriptions
             ["revoke_role_capability"] = new[] { "iam.manage" },
             ["start_workflow"] = new[] { "workflow.start" },
             ["assign_instance_role"] = new[] { "workflow.start" },
+            ["set_instance_priority"] = new[] { "workflow.start" },
             ["publish_event"] = new[] { "event.publish or event.publish.<eventId>" },
             ["complete_task"] = new[] { "task/step required capability" }
         };

@@ -261,6 +261,7 @@ public partial class WorkflowCommandHandlers
         instance.SetExternalReference(
             request.BusinessReference?.SourceSystem,
             request.BusinessReference?.ExternalEntityId);
+        instance.SetPriority(request.Priority); // CR-12
 
         _unitOfWork.WorkflowInstances.Add(instance);
 
@@ -291,6 +292,8 @@ public partial class WorkflowCommandHandlers
         startEvent.AddMetadata("WorkflowName", fullDefinition?.Name ?? request.WorkflowName ?? "Workflow");
         startEvent.AddMetadata("Version", instance.WorkflowVersion.ToString());
         startEvent.AddMetadata("StartStep", startStep);
+        if (instance.Priority.HasValue)
+            startEvent.AddMetadata("Priority", instance.Priority.Value.ToString());
         startEvent.AddMetadata("InitialState", instance.CurrentState ?? "Draft");
         if (!string.IsNullOrEmpty(_currentUser.Id))
         {

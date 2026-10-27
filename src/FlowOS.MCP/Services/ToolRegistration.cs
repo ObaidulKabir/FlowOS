@@ -249,6 +249,9 @@ public static class ToolRegistration
         registry.Register("assign_instance_role", McpToolDescriptions.For("assign_instance_role"), McpToolSchemas.AssignInstanceRole(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.AssignInstanceRole(args)));
 
+        registry.Register("set_instance_priority", McpToolDescriptions.For("set_instance_priority"), McpToolSchemas.SetInstancePriority(),
+            async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.SetInstancePriority(args)));
+
         registry.Register("publish_event", McpToolDescriptions.For("publish_event"), McpToolSchemas.PublishEvent(),
             async (args) => await ExecuteScopedAsync<ExecutionTools>(serviceProvider, t => t.PublishEvent(args)));
 
