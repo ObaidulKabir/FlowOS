@@ -71,13 +71,18 @@ public static class FlowOsMcpGuidance
         [Step 4: Instantiate Runtime Workflow]
           • Call `start_workflow` with exactly one selector: `workflowClassId`, `workflowName`,
             `workflowDefinitionId`, `contextBindingId`, or `contextType`.
-          • The response contains `workflowInstanceId`, starting step, and active state.
+          • The response contains `workflowInstanceId`, `workflowDefinitionId`, `workflowVersion`, `status`, `correlationId`, and the caller's reference (`externalSourceSystem`, `externalReference`).
+          • To link the instance to a record in another system (for example Learning OS), pass `businessReference` with `sourceSystem` and `externalEntityId`. Find it again with `list_workflow_instances` (`sourceSystem`, `externalReference`).
+          • When you may retry, send the same `idempotencyKey` each time. A retry then returns the same instance instead of starting a second one.
 
         [Step 5: Drive Workflow Transitions & Inspect Telemetry]
           • Call `publish_event` with `workflowInstanceId` and `eventType` to trigger state transitions (e.g. EVT-SUBMIT).
           • A business role with resolutionType Assignment holds one person on the instance. Set known people at start with `payload.roleAssignments`. When the person is chosen after start, call `assign_instance_role` with `workflowInstanceId`, `roleName`, and `assigneeId`. Calling it again replaces that person. Expression and Static roles are not written this way. Do not send `roleAssignments` on `publish_event`.
           • A shared tenant API key's caller id is the literal `api-key`. Pass `actorId` (the person id) on `publish_event` and `complete_task`. When the waiting step lists `AllowedRoles`, that person must be the one stored for one of those roles. A different role that merely grants the same capability cannot act. Omit `actorId` only when the authenticated caller id is already that person. Read the current map from `get_workflow_instance_status` (`roleAssignments`) and from the task inbox (`assigneeId`).
           • Call `complete_task` with `workflowInstanceId` and `taskId` to complete human/manual tasks.
+          • Pass `causationId` on `publish_event` when another system's decision caused the event, so it can be traced later.
+          • `MCP-CONFLICT-001` (context `retryable: true`) means another update changed the instance first, or the same `idempotencyKey` is still running. Read the instance again with `get_workflow_instance_status`, check the event still applies, then retry with the same key. Do not retry with a new key.
+          • Call `read_change_feed` with the previous `nextCursor` as `after` to see what happened since then. It is read-only; integrating systems poll the signed `GET /api/changes` themselves.
           • When the waiting step is actor `Agent`/`Either`, do not invent the next event in chat. Inspect with `get_agent_context`, then call `run_agent_task` so FlowOS hosts DecisionPacket → tenant LLM (or `flowos-risk`) → AutoCommitPolicy.
           • Call `suggest_agent_action` to run the same agent without publishing (advisory only).
           • Call `get_workflow_instance_status` or `list_workflow_instances` to inspect runtime status, current step, and `roleAssignments`. Call `get_workflow_history` for the same map plus the person in a TaskCompleted `keyData.ActorId`.
