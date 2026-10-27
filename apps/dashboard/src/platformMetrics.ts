@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { mcpRpcPath } from './mcpUrl';
 
 export const VERIFIED_PLATFORM_METRICS = {
-  mcpTools: 79,
+  mcpTools: 109,
   tests: {
-    total: 648,
-    unit: 556,
-    endToEnd: 30,
-    mcp: 62
+    total: 938,
+    unit: 764,
+    endToEnd: 70,
+    mcp: 104
   },
-  verifiedOn: '2026-09-23'
+  verifiedOn: '2026-10-27'
 } as const;
 
 let discoveredMcpToolCount: number | undefined;
