@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using FlowOS.Api.Http;
+using FlowOS.Application.Common;
 using Xunit;
 
 namespace FlowOS.UnitTests.Api;
