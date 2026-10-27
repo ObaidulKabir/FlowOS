@@ -258,8 +258,11 @@ public class SandboxSampleSimulationTests
         };
         WorkflowSimulationGovernance.Apply(broken);
         var workflowClass = new WorkflowClass(tenantId, "ExpenseApprovalV2", "1.0.0", broken);
+        // CR-16: this is the old broken graph the repair exists for. CheckAmount exits on EVT-SUBMIT after the
+        // state has already left Draft, so instances got stuck there. The Law check now rejects it at publish
+        // time; rows stored before the rule still need the repair, so the test keeps it as stored data.
         var published = new WorkflowClassManager().Publish(workflowClass);
-        Assert.True(published.IsValid, string.Join("; ", published.Errors.Select(error => $"{error.Code}: {error.Message}")));
+        Assert.Contains(published.Errors, error => error.Code == "LAW-001" && error.Message.Contains("'CheckAmount'"));
         db.WorkflowClasses.Add(workflowClass);
         var compiled = WorkflowClassCompiler.MapToRuntimeDefinition(workflowClass);
         db.WorkflowDefinitions.Add(compiled);
@@ -270,6 +273,7 @@ public class SandboxSampleSimulationTests
         var repaired = await db.WorkflowClasses.SingleAsync(item => item.Name == "ExpenseApprovalV2");
         var checkAmount = repaired.Definition.Workflow.Steps.Single(step => step.StepId == "CheckAmount");
         Assert.Equal("Decision", checkAmount.StepType);
+        Assert.DoesNotContain(new WorkflowClassValidator().Validate(repaired.Definition).Errors, error => error.Code == "LAW-001");
         Assert.Equal("PendingDirector", checkAmount.Conditions["Amount > 5000"]);
         Assert.Equal("CheckAmount", repaired.Definition.Workflow.Steps.Single(step => step.StepId == "Draft").NextSteps["EVT-SUBMIT"]);
         Assert.Contains(
