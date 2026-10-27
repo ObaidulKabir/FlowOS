@@ -61,8 +61,8 @@ public class IntegrationContractMcpToolsTests : IDisposable
 
         var data = Payload(result)["data"]!;
         Assert.False(result.IsError);
-        Assert.Equal(instanceId, data["workflowInstanceId"]!.Value<Guid>());
-        Assert.Equal(definitionId, data["workflowDefinitionId"]!.Value<Guid>());
+        Assert.Equal(instanceId, Guid.Parse(data["workflowInstanceId"]!.ToString()));
+        Assert.Equal(definitionId, Guid.Parse(data["workflowDefinitionId"]!.ToString()));
         Assert.Equal(3, data["workflowVersion"]!.Value<int>());
         Assert.Equal("learning-os", data["externalSourceSystem"]!.Value<string>());
         Assert.Equal("recovery-case-123", data["externalReference"]!.Value<string>());
@@ -229,7 +229,7 @@ public class IntegrationContractMcpToolsTests : IDisposable
         Assert.True(data["hasMore"]!.Value<bool>());
         var item = Assert.Single(data["items"]!.Children());
         Assert.Equal(43, item["sequence"]!.Value<long>());
-        Assert.Equal(causationId, item["causationId"]!.Value<Guid>());
+        Assert.Equal(causationId, Guid.Parse(item["causationId"]!.ToString()));
         Assert.Equal("recovery-case-123", item["externalReference"]!.Value<string>());
         Assert.Equal(7, item["payload"]!["score"]!.Value<int>());
         Assert.Equal("END", item["metadata"]!["ToStep"]!.Value<string>());
