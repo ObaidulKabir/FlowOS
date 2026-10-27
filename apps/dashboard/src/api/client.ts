@@ -924,9 +924,10 @@ export const api = {
     return handleResponse(response, 'Failed to save plugin binding');
   },
 
-  downloadTenantBackup: async (tenantId: string): Promise<void> => {
+  downloadTenantBackup: async (tenantId: string, passphrase: string): Promise<void> => {
+    // CR-15: the server encrypts the file with this passphrase; it is sent in a header, never in the URL.
     const response = await authorizedFetch(`/api/tenants/${tenantId}/backup`, {
-      headers: { 'X-FlowOS-Backup-Confirm': 'download' }
+      headers: { 'X-FlowOS-Backup-Confirm': 'download', 'X-FlowOS-Backup-Passphrase': passphrase }
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({} as Record<string, string>));
@@ -953,7 +954,7 @@ export const api = {
     window.setTimeout(() => URL.revokeObjectURL(url), 2000);
   },
 
-  restoreTenantBackup: async (tenantId: string, json: string): Promise<{
+  restoreTenantBackup: async (tenantId: string, json: string, passphrase?: string): Promise<{
     destinationTenantId: string;
     sourceTenantId: string;
     takenAtUtc: string;
@@ -966,7 +967,8 @@ export const api = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-FlowOS-Backup-Confirm': 'restore'
+        'X-FlowOS-Backup-Confirm': 'restore',
+        ...(passphrase ? { 'X-FlowOS-Backup-Passphrase': passphrase } : {})
       },
       body: json
     });

@@ -17,6 +17,15 @@ The file format is `flowos-tenant-backup`, format version 1. It records `flowOsV
 
 Restore keeps the original record ids and rewrites `tenantId` to the destination. Restore onto a site that already has any of those workflow classes, business contexts, instances, or events is refused (`BACKUP-CONFLICT`). Use another site, or an empty tenant.
 
+## Encryption (CR-15)
+
+A backup holds the tenant's AI provider settings, running-instance data and the event log, so it is encrypted with a passphrase you choose.
+
+* **Download.** Send the passphrase (at least 12 characters) in the `X-FlowOS-Backup-Passphrase` header; the dashboard asks for it twice. The file (`…encrypted.json`, format `flowos-tenant-backup-encrypted`) is AES-256-GCM encrypted with a key derived from the passphrase (PBKDF2-SHA256, 600,000 iterations, random salt and nonce). Only the FlowOS version and the time it was taken stay readable, and they are tamper-proof.
+* **Restore.** Send the same passphrase in the same header. A wrong passphrase or a changed file returns `BACKUP-DECRYPT-FAILED`; a missing one returns `BACKUP-PASSPHRASE-REQUIRED`. Older unencrypted backups can still be restored.
+* **Required outside Development.** `FlowOS:Backup:RequireEncryption` defaults to `true` outside Development: a download without a passphrase returns `BACKUP-PASSPHRASE-REQUIRED`. Set it to `false` only on a sandbox.
+* **Keep the passphrase separately.** FlowOS never stores it. Without it the file cannot be restored.
+
 ## FlowOS version
 
 The destination must be the same major release and must not be older than the backup's `flowOsVersion` or any `flowOsVersion` stamped on a blueprint, business-context revision, or AI Context binding. A newer or different-major backup returns `BACKUP-VERSION`. See [Chapter 22](22-designed-app-flowos-version.md).

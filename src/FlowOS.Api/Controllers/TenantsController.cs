@@ -351,8 +351,22 @@ public class TenantsController : ControllerBase
 
         try
         {
+            // CR-15: encrypt with the caller's passphrase. Outside Development a passphrase is required.
+            var passphrase = Request.Headers[TenantBackupEncryption.PassphraseHeader].ToString();
+            if (string.IsNullOrEmpty(passphrase) && BackupEncryptionRequired())
+            {
+                return BadRequest(new
+                {
+                    code = "BACKUP-PASSPHRASE-REQUIRED",
+                    message = $"Backups are encrypted on this site. Send a passphrase of at least {TenantBackupEncryption.MinimumPassphraseLength} characters in the {TenantBackupEncryption.PassphraseHeader} header."
+                });
+            }
+
             var json = await _backups.ExportJsonAsync(id, cancellationToken);
-            var fileName = $"flowos-tenant-backup-{id:N}-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
+            var encrypted = !string.IsNullOrEmpty(passphrase);
+            if (encrypted)
+                json = TenantBackupEncryption.Encrypt(json, passphrase);
+            var fileName = $"flowos-tenant-backup-{id:N}-{DateTime.UtcNow:yyyyMMddHHmmss}{(encrypted ? ".encrypted" : string.Empty)}.json";
             return File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", fileName);
         }
         catch (TenantBackupException ex)
@@ -377,6 +391,9 @@ public class TenantsController : ControllerBase
 
         try
         {
+            if (TenantBackupEncryption.IsEncrypted(json))
+                json = TenantBackupEncryption.Decrypt(json, Request.Headers[TenantBackupEncryption.PassphraseHeader].ToString());
+
             var result = await _backups.RestoreJsonAsync(id, json, cancellationToken);
             return Ok(result);
         }
@@ -384,6 +401,14 @@ public class TenantsController : ControllerBase
         {
             return StatusCode(ex.StatusCode, new { code = ex.Code, message = ex.Message });
         }
+    }
+
+    /// <summary>CR-15: FlowOS:Backup:RequireEncryption; defaults to true outside Development.</summary>
+    private bool BackupEncryptionRequired()
+    {
+        var configured = HttpContext.RequestServices.GetService<IConfiguration>()?["FlowOS:Backup:RequireEncryption"];
+        if (bool.TryParse(configured, out var required)) return required;
+        return !HttpContext.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment();
     }
 
     private IActionResult? RequireBackupConfirmation(string expected)
