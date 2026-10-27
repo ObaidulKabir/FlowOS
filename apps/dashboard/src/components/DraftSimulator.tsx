@@ -133,6 +133,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
   const [currentStepId, setCurrentStepId] = useState<string>(initialStartStepId);
   const [currentState, setCurrentState] = useState<string>(initialLegalState);
   const [completedStepIds, setCompletedStepIds] = useState<string[]>([]);
+  const [pendingBranches, setPendingBranches] = useState<string[]>([]);
+  const [joinArrivals, setJoinArrivals] = useState<Record<string, string[]>>({});
   const [history, setHistory] = useState<string[]>([]);
   const [activeSideTab, setActiveSideTab] = useState<'controls' | 'context'>('controls');
 
@@ -198,6 +200,12 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     if (routes.length === 0) return { outcome: 'Default', target: 'END' };
     const defaultRoute = routes.find(route => route.outcome.trim().toLowerCase() === 'default');
     return defaultRoute || routes[0];
+  };
+
+  const stringList = (raw: unknown): string[] => {
+    if (Array.isArray(raw)) return raw.map(item => String(item).trim()).filter(Boolean);
+    if (typeof raw === 'string') return raw.split(',').map(item => item.trim()).filter(Boolean);
+    return [];
   };
 
   const wfObj = getProp(pack, 'workflow', 'Workflow') || pack;
@@ -415,7 +423,14 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
 
   const isTerminalId = (stepId?: string) => {
     const key = String(stepId || '').trim().toLowerCase();
-    return !key || key === 'end' || key === 'none';
+    if (!key || key === 'end' || key === 'none') return true;
+    const step = rawSteps.find((item: any) =>
+      String(getProp(item, 'stepId', 'StepId') || '').trim().toLowerCase() === key
+    );
+    const type = String(getProp(step, 'stepType', 'StepType') || '').trim().toLowerCase();
+    if (type !== 'end') return false;
+    return getNextStepRoutes(step).length === 0
+      && stringList(getProp(step, 'branches', 'Branches')).length === 0;
   };
 
   const rememberCompletedSteps = (stepIds: string[]) => {
@@ -635,6 +650,8 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     setCurrentStepId(startStepId);
     setCurrentState(initialState);
     setCompletedStepIds([]);
+    setPendingBranches([]);
+    setJoinArrivals({});
     const startStep = rawSteps.find((s: any) => 
       (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (startStepId || '').toLowerCase()
     );
@@ -749,6 +766,95 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
     return { evaluated: items, winningTarget: winnerTarget, winningExpr: winnerExpr };
   }, [currentStep, rawConditions, payload]);
 
+  const landAfterEvent = (
+    entryId: string,
+    logs: string[],
+    cursor: { pending: string[]; arrivals: Record<string, string[]> },
+    departedFrom: string
+  ) => {
+    let hopId = entryId;
+    let pending = [...cursor.pending];
+    const arrivals: Record<string, string[]> = Object.fromEntries(
+      Object.entries(cursor.arrivals).map(([key, ids]) => [key, [...ids]])
+    );
+    const departed = [departedFrom];
+    let hops = 0;
+    const same = (left?: string, right?: string) =>
+      String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase();
+    const findHop = (id?: string) => rawSteps.find((step: any) =>
+      same(getProp(step, 'stepId', 'StepId'), id)
+    );
+
+    while (hops < 100 && !isTerminalId(hopId)) {
+      const hopStep = findHop(hopId);
+      const type = String(getProp(hopStep, 'stepType', 'StepType') || '').toLowerCase();
+
+      if (type.includes('fork')) {
+        const branches = stringList(getProp(hopStep, 'branches', 'Branches'));
+        if (branches.length >= 2) {
+          logs.push(`[Fork ${hopId}] Opened parallel branches: ${branches.join(', ')}. Active: ${branches[0]}.`);
+          pending = branches.slice(1);
+          departed.push(hopId);
+          hopId = branches[0];
+          break;
+        }
+      }
+
+      if (type.includes('join')) {
+        const inbounds = stringList(getProp(hopStep, 'inboundSteps', 'InboundSteps'));
+        const arrived = new Set((arrivals[hopId] || []).map(id => id.toLowerCase()));
+        departed.forEach(id => {
+          if (!same(id, hopId)) arrived.add(String(id).toLowerCase());
+        });
+        arrivals[hopId] = [...arrived];
+        const waiting = inbounds.filter(id => !arrived.has(id.toLowerCase()));
+        departed.push(hopId);
+        if (waiting.length > 0) {
+          const nextBranch = pending[0];
+          if (!nextBranch) {
+            logs.push(`[Join ${hopId}] Waiting for ${waiting.join(', ')}.`);
+            hopId = departedFrom;
+            break;
+          }
+          logs.push(`[Join ${hopId}] Branch arrived. Waiting for ${waiting.join(', ')}. Continue ${nextBranch}.`);
+          pending = pending.slice(1);
+          hopId = nextBranch;
+          break;
+        }
+        const next = pickAutoStepRoute(getNextStepRoutes(hopStep)).target;
+        logs.push(`[Join ${hopId}] All inbound branches arrived. Continue ${next}.`);
+        delete arrivals[hopId];
+        pending = [];
+        hopId = next;
+        hops += 1;
+        continue;
+      }
+
+      const decisionTarget = resolveDecisionTarget(hopStep);
+      if (decisionTarget) {
+        logs.push(`[Role: System] Auto-advanced Decision -> ${decisionTarget} (from ${hopId})`);
+        departed.push(hopId);
+        hopId = decisionTarget;
+        hops += 1;
+        continue;
+      }
+      if (!isAutoCloseStep(hopStep)) break;
+      const route = pickAutoStepRoute(getNextStepRoutes(hopStep));
+      logs.push(
+        `[Role: System] Auto-advanced "${route.outcome}" -> Step: ${route.target} (close-out from ${hopId})`
+      );
+      departed.push(hopId);
+      hopId = route.target;
+      hops += 1;
+    }
+
+    if (isTerminalId(hopId)) {
+      hopId = hopId?.trim() ? hopId : 'END';
+      logs.push('[SYSTEM] Reached End of Workflow.');
+    }
+    return { hopId, pending, arrivals, departed };
+  };
+
   // Execute a decision route
   const handleDecisionAdvance = (targetStepId: string, winningExpr: string) => {
     const logMsg = `[Decision: ${currentStepId}] Condition "${winningExpr}" -> TRUE => Advanced to [${targetStepId}]`;
@@ -776,38 +882,17 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
-    const departed = [currentStepId];
-    let hopId = targetStepId;
-    let hops = 0;
-    while (hops < 100 && !isTerminalId(hopId)) {
-      const hopStep = rawSteps.find((s: any) =>
-        (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
-      );
-      const decisionTarget = resolveDecisionTarget(hopStep);
-      if (decisionTarget) {
-        newLogs.push(`[Role: System] Auto-advanced Decision -> ${decisionTarget} (from ${hopId})`);
-        departed.push(hopId);
-        hopId = decisionTarget;
-        hops += 1;
-        continue;
-      }
-      if (!isAutoCloseStep(hopStep)) break;
-      const route = pickAutoStepRoute(getNextStepRoutes(hopStep));
-      newLogs.push(
-        `[Role: System] Auto-advanced "${route.outcome}" -> Step: ${route.target} (close-out from ${hopId})`
-      );
-      departed.push(hopId);
-      hopId = route.target;
-      hops += 1;
-    }
-    if (isTerminalId(hopId)) {
-      hopId = hopId?.trim() ? hopId : 'END';
-      newLogs.push('[SYSTEM] Reached End of Workflow.');
-    }
-
-    rememberCompletedSteps(departed);
+    const landed = landAfterEvent(
+      targetStepId,
+      newLogs,
+      { pending: pendingBranches, arrivals: joinArrivals },
+      currentStepId
+    );
+    rememberCompletedSteps(landed.departed);
+    setPendingBranches(landed.pending);
+    setJoinArrivals(landed.arrivals);
     setHistory(prev => [...prev, ...newLogs]);
-    setCurrentStepId(hopId);
+    setCurrentStepId(landed.hopId);
   };
 
   const fireEvent = (eventId: string, targetStepId: string) => {
@@ -946,41 +1031,21 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
       }
     }
 
-    const departed = [currentStepId];
-    let hopId = workStepId;
-    let hops = 0;
-    while (hops < 100 && !isTerminalId(hopId)) {
-      const hopStep = rawSteps.find((s: any) =>
-        (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
-      );
-      const decisionTarget = resolveDecisionTarget(hopStep);
-      if (decisionTarget) {
-        newLogs.push(`[Role: System] Auto-advanced Decision -> ${decisionTarget} (from ${hopId})`);
-        departed.push(hopId);
-        hopId = decisionTarget;
-        hops += 1;
-        continue;
-      }
-      if (!isAutoCloseStep(hopStep)) break;
-      const route = pickAutoStepRoute(getNextStepRoutes(hopStep));
-      newLogs.push(
-        `[Role: System] Auto-advanced "${route.outcome}" -> Step: ${route.target} (close-out from ${hopId})`
-      );
-      departed.push(hopId);
-      hopId = route.target;
-      hops += 1;
-    }
-    if (isTerminalId(hopId)) {
-      hopId = hopId?.trim() ? hopId : 'END';
-      newLogs.push('[SYSTEM] Reached End of Workflow.');
-    }
-    rememberCompletedSteps(departed);
+    const landed = landAfterEvent(
+      workStepId,
+      newLogs,
+      { pending: pendingBranches, arrivals: joinArrivals },
+      currentStepId
+    );
+    rememberCompletedSteps(landed.departed);
+    setPendingBranches(landed.pending);
+    setJoinArrivals(landed.arrivals);
 
     const landedStep = rawSteps.find((s: any) =>
-      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (hopId || '').toLowerCase()
+      (getProp(s, 'stepId', 'StepId') || '').toLowerCase() === (landed.hopId || '').toLowerCase()
     );
     setHistory(prev => [...prev, ...newLogs]);
-    setCurrentStepId(hopId);
+    setCurrentStepId(landed.hopId);
     setCurrentState(nextState);
     const nextInbox = firstInboxRole(getStepRoles(landedStep));
     if (nextInbox && nextInbox.toLowerCase() !== simulatedRole.toLowerCase()) {
@@ -1224,6 +1289,65 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
               </div>
             )}
           </div>
+        ) : stepTypeLower.includes('fork') ? (
+          <div className="bg-sky-500/10 border border-sky-500/30 p-3.5 rounded-xl space-y-2">
+            <p className="text-xs text-sky-300 font-semibold">Parallel fork</p>
+            <p className="text-[11px] text-slate-400">
+              Opens {stringList(getProp(currentStep, 'branches', 'Branches')).join(', ') || 'no branches'}. An empty route list does not end the workflow.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const branches = stringList(getProp(currentStep, 'branches', 'Branches'));
+                if (branches.length === 0) return;
+                setHistory(prev => [...prev, `[Fork ${currentStepId}] Opened parallel branches: ${branches.join(', ')}. Active: ${branches[0]}.`]);
+                setPendingBranches(branches.slice(1));
+                setCompletedStepIds(prev => prev.some(id => id.toLowerCase() === currentStepId.toLowerCase()) ? prev : [...prev, currentStepId]);
+                setCurrentStepId(branches[0]);
+              }}
+              className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg"
+            >
+              Open parallel branches
+            </button>
+          </div>
+        ) : stepTypeLower.includes('join') ? (
+          <div className="bg-sky-500/10 border border-sky-500/30 p-3.5 rounded-xl space-y-2">
+            <p className="text-xs text-sky-300 font-semibold">Join ({getProp(currentStep, 'joinPolicy', 'JoinPolicy') || 'WaitAll'})</p>
+            {(() => {
+              const inbounds = stringList(getProp(currentStep, 'inboundSteps', 'InboundSteps'));
+              const arrived = new Set((joinArrivals[currentStepId] || []).map(id => id.toLowerCase()));
+              const waiting = inbounds.filter(id => !arrived.has(id.toLowerCase()));
+              const nextBranch = pendingBranches[0];
+              if (waiting.length > 0) {
+                return (
+                  <>
+                    <p className="text-[11px] text-slate-400">Still waiting for {waiting.join(', ')}.</p>
+                    {nextBranch && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPendingBranches(pendingBranches.slice(1));
+                          setCurrentStepId(nextBranch);
+                        }}
+                        className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg"
+                      >
+                        Continue {nextBranch}
+                      </button>
+                    )}
+                  </>
+                );
+              }
+              return (
+                <button
+                  type="button"
+                  onClick={() => fireEventGuarded(autoRoute.outcome, autoRoute.target)}
+                  className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg"
+                >
+                  Continue to {autoRoute.target}
+                </button>
+              );
+            })()}
+          </div>
         ) : !isHumanTask && !stepTypeLower.includes('timer') ? (
           /* CASE 2: Command / Automated Action Step */
           <div className="bg-blue-500/10 border border-blue-500/30 p-3.5 rounded-xl space-y-2.5">
@@ -1395,6 +1519,9 @@ export const DraftSimulator: React.FC<Props> = ({ definition }) => {
         ) : (
           /* CASE 4: Human Task Step */
           <div className="bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-xl space-y-3">
+            {pendingBranches.length > 0 && (
+              <p className="text-[11px] text-sky-300">Parallel branch still open: {pendingBranches.join(', ')}</p>
+            )}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-amber-300 font-semibold flex items-center gap-1.5">
