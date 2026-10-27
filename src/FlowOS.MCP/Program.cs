@@ -459,7 +459,7 @@ public partial class Program
                     jsonrpcUrl = mcpUrl,
                     jsonrpcPath = mcpPath,
                     rule = FlowOsPublicUrls.AgentJsonRpcRule,
-                    accept = "application/json, text/event-stream",
+                    accept = "application/json or text/event-stream",
                     apiKeyHeader = "X-MCP-API-Key",
                     tenantHeader = "x-tenant-id",
                     followRedirectsOnPost = false
@@ -542,7 +542,7 @@ public partial class Program
                     jsonrpcUrl = mcpUrl,
                     jsonrpcPath = mcpPath,
                     rule = FlowOsPublicUrls.AgentJsonRpcRule,
-                    accept = "application/json, text/event-stream",
+                    accept = "application/json or text/event-stream",
                     followRedirectsOnPost = false
                 },
                 methodsSupported = new[] { "GET", "POST", "OPTIONS" },
@@ -598,18 +598,15 @@ public partial class Program
                     description = "Connect your AI agent to FlowOS via MCP streamable HTTP transport. POST to jsonrpcUrl exactly; do not strip a trailing slash or follow POST redirects.",
                     quickstart = new
                     {
-                        mcpServers = new
+                        mcpServers = new Dictionary<string, object>
                         {
-                            flowos = new
+                            ["flowos"] = new Dictionary<string, object>
                             {
-                                command = "npx",
-                                args = new[]
+                                ["url"] = mcpUrl,
+                                ["headers"] = new Dictionary<string, string>
                                 {
-                                    "-y",
-                                    "mcp-remote-client",
-                                    mcpUrl,
-                                    "--header", "X-MCP-API-Key: YOUR_TENANT_API_KEY",
-                                    "--header", "x-tenant-id: YOUR_TENANT_ID"
+                                    ["X-MCP-API-Key"] = "YOUR_TENANT_API_KEY",
+                                    ["x-tenant-id"] = "YOUR_TENANT_ID"
                                 }
                             }
                         }
@@ -627,13 +624,10 @@ public partial class Program
             if (!request.HasJsonContentType())
                 return JsonRpcHttpError(StatusCodes.Status415UnsupportedMediaType, -32600, "Content-Type must be application/json.");
 
-            var accepts = request.GetTypedHeaders().Accept;
-            if (accepts == null
-                || !accepts.Any(value => value.MediaType.Value == "application/json")
-                || !accepts.Any(value => value.MediaType.Value == "text/event-stream"))
+            if (!AcceptsJsonRpc(request))
             {
                 return JsonRpcHttpError(StatusCodes.Status406NotAcceptable, -32600,
-                    "Accept must include application/json and text/event-stream.");
+                    "Accept must allow application/json or text/event-stream.");
             }
 
             using var reader = new StreamReader(request.Body);
@@ -644,10 +638,10 @@ public partial class Program
             if (IsInitializeRequest(body) == false)
             {
                 var protocolVersion = request.Headers["MCP-Protocol-Version"].FirstOrDefault();
-                if (!McpJsonRpcDispatcher.IsSupportedProtocolVersion(protocolVersion))
+                if (!McpJsonRpcDispatcher.IsAcceptableProtocolHeader(protocolVersion))
                 {
                     return JsonRpcHttpError(StatusCodes.Status400BadRequest, -32602,
-                        $"MCP-Protocol-Version must be one of: {string.Join(", ", McpJsonRpcDispatcher.SupportedProtocolVersions)}.");
+                        $"MCP-Protocol-Version must be one of: {string.Join(", ", McpJsonRpcDispatcher.SupportedProtocolVersions)}, or a newer YYYY-MM-DD protocol date.");
                 }
             }
 
@@ -675,6 +669,19 @@ public partial class Program
         var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
         var suppliedHash = SHA256.HashData(Encoding.UTF8.GetBytes(supplied));
         return CryptographicOperations.FixedTimeEquals(expectedHash, suppliedHash);
+    }
+
+    private static bool AcceptsJsonRpc(HttpRequest request)
+    {
+        var accepts = request.GetTypedHeaders().Accept;
+        if (accepts == null || accepts.Count == 0)
+            return true;
+
+        return accepts.Any(value =>
+        {
+            var media = value.MediaType.Value;
+            return media is "application/json" or "text/event-stream" or "*/*" or "application/*";
+        });
     }
 
     private static bool? IsInitializeRequest(string body)

@@ -21,6 +21,24 @@ Agents must POST JSON-RPC to the **advertised `url` exactly**. Do not strip a tr
 
 On production, nginx currently 301s `POST /mcp` to `http://flowosbd.com/mcp/`, which drops the body and API key. Discovery JSON (`GET /mcp`, `GET /.well-known/mcp`) therefore publishes `url` / `connection.jsonrpcUrl` / `connection.jsonrpcPath` for the current host. `initialize` instructions repeat the same contract. Tenant API keys are host-scoped.
 
+A current MCP client (Trae, Cursor, Claude) can use that URL directly:
+
+```json
+{
+  "mcpServers": {
+    "flowos": {
+      "url": "https://flowosbd.com/mcp/",
+      "headers": {
+        "X-MCP-API-Key": "YOUR_TENANT_API_KEY",
+        "x-tenant-id": "YOUR_TENANT_ID"
+      }
+    }
+  }
+}
+```
+
+`initialize` may send a newer `protocolVersion` such as `2025-11-25`. FlowOS answers with the newest version it implements (`2025-03-26`, or `2024-11-05` when the client asked for that version). It does not fail the handshake. Later requests may omit `MCP-Protocol-Version` or repeat the client's newer dated version. `Accept` may be `application/json`, `text/event-stream`, or both. `x-tenant-id` may be omitted when the API key or login JWT already belongs to one tenant.
+
 ## Running the MCP server
 
 ### Stdio (local IDE / Cursor agent)

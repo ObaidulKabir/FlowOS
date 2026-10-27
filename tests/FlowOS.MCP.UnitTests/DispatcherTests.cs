@@ -39,6 +39,46 @@ public sealed class DispatcherTests
     }
 
     [Theory]
+    [InlineData("2025-11-25")]
+    [InlineData("2025-06-18")]
+    [InlineData("2024-10-07")]
+    [InlineData(null)]
+    public async Task Initialize_negotiates_a_version_the_server_does_not_implement(string? requested)
+    {
+        var parameters = new JObject
+        {
+            ["clientInfo"] = new JObject { ["name"] = "trae", ["version"] = "1" },
+            ["capabilities"] = new JObject()
+        };
+        if (requested != null)
+            parameters["protocolVersion"] = requested;
+
+        var response = Assert.IsType<JsonRpcResponse>(
+            (await new McpJsonRpcDispatcher(_registry).DispatchAsync(Request(1, "initialize", parameters))).Response);
+
+        Assert.Null(response.Error);
+        Assert.Equal(
+            McpJsonRpcDispatcher.DefaultProtocolVersion,
+            JObject.FromObject(response.Result!)["protocolVersion"]?.ToString());
+        Assert.Contains("negotiates", JObject.FromObject(response.Result!)["instructions"]!.ToString());
+    }
+
+    [Fact]
+    public async Task Initialize_keeps_an_older_supported_version()
+    {
+        var response = Assert.IsType<JsonRpcResponse>(
+            (await new McpJsonRpcDispatcher(_registry).DispatchAsync(Request(1, "initialize", new
+            {
+                protocolVersion = "2024-11-05",
+                clientInfo = new { name = "tests", version = "1" },
+                capabilities = new { }
+            }))).Response);
+
+        Assert.Null(response.Error);
+        Assert.Equal("2024-11-05", JObject.FromObject(response.Result!)["protocolVersion"]?.ToString());
+    }
+
+    [Theory]
     [InlineData("{", -32700)]
     [InlineData("{}", -32600)]
     [InlineData("""{"jsonrpc":"1.0","id":1,"method":"ping"}""", -32600)]
