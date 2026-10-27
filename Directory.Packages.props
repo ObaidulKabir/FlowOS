@@ -30,7 +30,7 @@
 
     <!-- MediatR: stay on 12.x, the last openly licensed major version (CR-05; removal in CR-17).
          Do not upgrade to 13 or later. -->
-    <PackageVersion Include="MediatR" Version="12.2.0" />
+    <PackageVersion Include="MediatR" Version="12.5.0" />
 
     <!-- OpenTelemetry (CR-07) -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
