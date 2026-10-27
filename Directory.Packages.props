@@ -5,7 +5,7 @@
   -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <MicrosoftPackagesVersion>10.0.13</MicrosoftPackagesVersion>
+    <MicrosoftPackagesVersion>10.0.14</MicrosoftPackagesVersion>
   </PropertyGroup>
   <ItemGroup>
     <!-- .NET 10 platform packages -->
