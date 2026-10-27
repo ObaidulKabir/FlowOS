@@ -11,6 +11,7 @@ interface Props {
 }
 
 type BackupPreview = {
+  encrypted: boolean;
   format: string;
   flowOsVersion: string;
   takenAtUtc: string;
@@ -27,10 +28,27 @@ const countOf = (value: unknown) => Array.isArray(value) ? value.length : 0;
 
 const readPreview = (json: string): BackupPreview => {
   const parsed = JSON.parse(json) as Record<string, unknown>;
+  if (parsed.format === 'flowos-tenant-backup-encrypted' && parsed.formatVersion === 1) {
+    // CR-15: contents are encrypted; only the version and time are readable before restore.
+    return {
+      encrypted: true,
+      format: String(parsed.format),
+      flowOsVersion: String(parsed.flowOsVersion ?? ''),
+      takenAtUtc: String(parsed.takenAtUtc ?? ''),
+      sourceTenantId: '',
+      sourceTenantName: '',
+      workflowClasses: 0,
+      contextBindings: 0,
+      pluginBindings: 0,
+      workflowInstances: 0,
+      events: 0
+    };
+  }
   if (parsed.format !== 'flowos-tenant-backup' || parsed.formatVersion !== 1) {
     throw new Error('This file is not a FlowOS tenant backup.');
   }
   return {
+    encrypted: false,
     format: String(parsed.format),
     flowOsVersion: String(parsed.flowOsVersion ?? ''),
     takenAtUtc: String(parsed.takenAtUtc ?? ''),
@@ -48,6 +66,8 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
   const [mode, setMode] = useState<'download' | 'restore'>('download');
   const [acknowledged, setAcknowledged] = useState(false);
   const [phrase, setPhrase] = useState('');
+  const [passphrase, setPassphrase] = useState('');
+  const [passphraseRepeat, setPassphraseRepeat] = useState('');
   const [fileName, setFileName] = useState('');
   const [fileJson, setFileJson] = useState('');
   const [preview, setPreview] = useState<BackupPreview | null>(null);
@@ -56,7 +76,12 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
   const [notice, setNotice] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
-  const canRestore = acknowledged && phrase === 'RESTORE' && !!preview && !busy;
+  const MIN_PASSPHRASE = 12;
+  const passphraseOk = passphrase.length >= MIN_PASSPHRASE;
+  const canDownload = acknowledged && passphraseOk && passphrase === passphraseRepeat && !busy;
+  const canRestore = acknowledged && phrase === 'RESTORE' && !!preview && (!preview.encrypted || passphrase.length > 0) && !busy;
+
+  const resetSecrets = () => { setPassphrase(''); setPassphraseRepeat(''); };
 
   const chooseFile = async (file: File | undefined) => {
     setNotice(null);
@@ -65,6 +90,7 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
     setFileJson('');
     setFileName('');
     setPhrase('');
+    resetSecrets();
     setAcknowledged(false);
     if (!file) return;
     setFileName(file.name);
@@ -83,12 +109,21 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
       setFailure('Check the confidential-file box before downloading.');
       return;
     }
+    if (!passphraseOk) {
+      setFailure(`Choose a passphrase of at least ${MIN_PASSPHRASE} characters.`);
+      return;
+    }
+    if (passphrase !== passphraseRepeat) {
+      setFailure('The two passphrases do not match.');
+      return;
+    }
     setBusy(true);
     setFailure(null);
     setNotice(null);
     try {
-      await api.downloadTenantBackup(tenantId);
-      setNotice('Download started. Check your browser downloads folder. Store the file outside git and outside chat. It contains this tenant’s AI provider keys.');
+      await api.downloadTenantBackup(tenantId, passphrase);
+      resetSecrets();
+      setNotice('Download started. The file is encrypted with your passphrase. Keep the passphrase separately: without it the file cannot be restored, and FlowOS does not store it.');
     } catch (err: any) {
       setFailure(err.message || 'Failed to download backup');
     } finally {
@@ -105,11 +140,12 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
     setFailure(null);
     setNotice(null);
     try {
-      const result = await api.restoreTenantBackup(tenantId, fileJson);
+      const result = await api.restoreTenantBackup(tenantId, fileJson, preview?.encrypted ? passphrase : undefined);
       setNotice(`Restored ${result.workflowClasses} workflows and ${result.workflowInstances} instances from FlowOS ${result.flowOsVersion} into ${tenantName}.`);
       setFileJson('');
       setPreview(null);
       setPhrase('');
+      resetSecrets();
       setAcknowledged(false);
       await onRestored();
     } catch (err: any) {
@@ -145,14 +181,14 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => { setMode('download'); setAcknowledged(false); setPhrase(''); setFailure(null); setNotice(null); }}
+            onClick={() => { setMode('download'); setAcknowledged(false); setPhrase(''); resetSecrets(); setFailure(null); setNotice(null); }}
             className={`px-3 py-2 rounded-xl text-xs font-semibold border ${mode === 'download' ? 'bg-emerald-900/40 border-emerald-500 text-emerald-200' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
           >
             Download
           </button>
           <button
             type="button"
-            onClick={() => { setMode('restore'); setAcknowledged(false); setPhrase(''); setFailure(null); setNotice(null); }}
+            onClick={() => { setMode('restore'); setAcknowledged(false); setPhrase(''); resetSecrets(); setFailure(null); setNotice(null); }}
             className={`px-3 py-2 rounded-xl text-xs font-semibold border ${mode === 'restore' ? 'bg-sky-900/40 border-sky-500 text-sky-200' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
           >
             Restore
@@ -162,8 +198,28 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
         {mode === 'download' ? (
           <div className="space-y-3 text-xs">
             <div className="p-3 bg-amber-950/40 border border-amber-700/50 rounded-xl text-amber-100 leading-relaxed">
-              This file includes the tenant’s own AI provider keys. Treat it as a secret. Pending timers are saved but will not fire again after restore.
+              This file includes the tenant’s own AI provider keys and running-instance data. It is encrypted with the passphrase you choose below. Pending timers are saved but will not fire again after restore.
             </div>
+            <label className="block text-slate-300">
+              Backup passphrase (at least {MIN_PASSPHRASE} characters)
+              <input
+                type="password"
+                value={passphrase}
+                onChange={event => setPassphrase(event.target.value)}
+                className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                autoComplete="new-password"
+              />
+            </label>
+            <label className="block text-slate-300">
+              Repeat passphrase
+              <input
+                type="password"
+                value={passphraseRepeat}
+                onChange={event => setPassphraseRepeat(event.target.value)}
+                className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                autoComplete="new-password"
+              />
+            </label>
             <label className="flex items-start gap-2 text-slate-300">
               <input
                 type="checkbox"
@@ -176,14 +232,14 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
             <button
               type="button"
               onClick={() => void download()}
-              disabled={busy}
+              disabled={!canDownload}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-xl font-semibold flex items-center gap-1.5"
             >
               <Download size={14} />
               {busy ? 'Preparing…' : 'Download backup'}
             </button>
-            {!acknowledged && (
-              <p className="text-slate-500">Check the box above to confirm, then download.</p>
+            {!canDownload && !busy && (
+              <p className="text-slate-500">Choose and repeat a passphrase, check the box above, then download.</p>
             )}
           </div>
         ) : (
@@ -207,7 +263,23 @@ export const TenantBackupDialog: React.FC<Props> = ({ tenantId, tenantName, onCl
             </label>
             {fileName && <div className="text-slate-500">{fileName}</div>}
             {fileError && <div className="text-rose-300">{fileError}</div>}
-            {preview && (
+            {preview?.encrypted && (
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 space-y-2">
+                <div>Encrypted backup · taken {preview.takenAtUtc || 'unknown time'} · FlowOS {preview.flowOsVersion || 'unknown'}</div>
+                <label className="block text-slate-300">
+                  Backup passphrase
+                  <input
+                    type="password"
+                    value={passphrase}
+                    onChange={event => setPassphrase(event.target.value)}
+                    className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-500"
+                    autoComplete="off"
+                  />
+                </label>
+                <div className="text-amber-200">Destination is {tenantName}. Record ids are kept. This does not roll this site back. Timers will not fire again.</div>
+              </div>
+            )}
+            {preview && !preview.encrypted && (
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 space-y-1">
                 <div>Source: {preview.sourceTenantName || 'unknown tenant'} <span className="font-mono text-slate-500">{preview.sourceTenantId}</span></div>
                 <div>Taken: {preview.takenAtUtc || 'unknown time'} · FlowOS {preview.flowOsVersion || 'unknown'}</div>
