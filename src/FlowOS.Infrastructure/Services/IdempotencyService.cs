@@ -44,8 +44,19 @@ public class IdempotencyService : IIdempotencyService
             return false;
         }
 
-        _dbContext.IdempotencyRecords.Add(new IdempotencyRecord(tenantId, operationName, idempotencyKey));
-        await _dbContext.SaveChangesAsync(ct);
+        var record = new IdempotencyRecord(tenantId, operationName, idempotencyKey);
+        _dbContext.IdempotencyRecords.Add(record);
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Another request with the same key inserted first (unique index on tenant, operation, key).
+            // Treat it as a duplicate that is already in progress instead of failing with a 500.
+            _dbContext.Entry(record).State = EntityState.Detached;
+            return false;
+        }
         return true;
     }
 

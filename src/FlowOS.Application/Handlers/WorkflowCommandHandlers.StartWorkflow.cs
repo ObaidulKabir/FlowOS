@@ -38,8 +38,9 @@ public partial class WorkflowCommandHandlers
                 request.TenantId, StartWorkflowOperation, request.IdempotencyKey, cancellationToken);
             if (!started)
             {
-                throw new InvalidOperationException(
-                    $"Duplicate idempotent request for '{StartWorkflowOperation}' is already pending or completed.");
+                throw new FlowOS.Application.Common.Exceptions.ConcurrencyConflictException(
+                    FlowOS.Application.Common.Exceptions.ConcurrencyConflictException.IdempotencyInProgress,
+                    $"A request with this idempotency key for '{StartWorkflowOperation}' is still being processed. Retry shortly to receive its result.");
             }
         }
 

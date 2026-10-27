@@ -36,6 +36,10 @@ public class WorkflowsController : ControllerBase
              command = command with { TenantId = _currentUser.TenantId };
         }
 
+        if (!FlowOS.Api.Http.IdempotencyKeyHeader.TryResolve(Request, command.IdempotencyKey, out var idempotencyKey, out var keyError))
+            return BadRequest(new ProblemDetails { Title = "Invalid Idempotency-Key", Detail = keyError, Status = 400 });
+        command = command with { IdempotencyKey = idempotencyKey };
+
         var result = await _mediator.Send(command);
         return Ok(new { WorkflowInstanceId = result });
     }
