@@ -25,6 +25,20 @@ public class Tenant
     /// profile allows; suggestions are parked for a person. Existing tenants keep true.
     /// </summary>
     public bool AgentAutoCommitEnabled { get; private set; } = true;
+    /// CR-14: the calling system's own reference for this tenant (for example a Learning OS institution
+    /// path), so it can find or provision its tenant without storing FlowOS ids. Unique when set.
+    /// </summary>
+    public string? ExternalTenantRef { get; private set; }
+
+    public const int ExternalTenantRefMaxLength = 200;
+
+    public void SetExternalTenantRef(string? reference)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(reference) ? null : reference.Trim();
+        if (trimmed?.Length > ExternalTenantRefMaxLength)
+            throw new ArgumentException($"External tenant reference must be at most {ExternalTenantRefMaxLength} characters.", nameof(reference));
+        ExternalTenantRef = trimmed;
+    }
 
     public bool CanRunRuntime =>
         (Plan == TenantPlan.Managed || Plan == TenantPlan.Enterprise) &&

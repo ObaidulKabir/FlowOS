@@ -262,6 +262,21 @@ Full detail: [Chapter 10 — Notifications](10-notifications.md).
 
 ---
 
+## 11. Tenants and institution provisioning — `TenantsController` (`/api/tenants`)
+
+Platform administration endpoints (an Admin of the platform tenant). An integrating system such as Learning OS uses a platform credential as its **service principal** to provision **one FlowOS tenant per institution** and keeps its own hierarchy (board → institution → campus) on its side (CR-14).
+
+| Method & Route | Description |
+|---|---|
+| `POST /api/tenants` | Body `{name, externalTenantRef?, keyName?, scopes?, expiresInDays?}`. Creates the tenant and its first API key (returned once as `apiKey`). With `externalTenantRef`, a retry finds the existing tenant instead: `409 {code:"TENANT-EXISTS", tenantId}`. |
+| `GET /api/tenants?externalRef=` | Finds the tenant mapped to the caller's reference (empty array if none). |
+| `PUT /api/tenants/{id}/external-ref` | Body `{externalTenantRef}`; set or clear (`null`) the reference of an existing tenant. `409` if another tenant uses it. |
+| `POST /api/tenants/{id}/keys` | A scoped key for acting inside that tenant (`scopes`, `expiresInDays`). Store it in a secret store. |
+
+`externalTenantRef` is an opaque string (up to 200 characters, unique), for example `learning-os:board-dhaka/school-123`. A tenant key only works inside its own tenant; sending another tenant's id returns `403`.
+
+To share one workflow template with many institutions, publish it as a **Public** workflow class (approved by a platform administrator) and start or bind it in each tenant.
+
 ## Error format
 
 Most error responses use RFC 7807 Problem Details, produced by `ApiExceptionFilterAttribute`:

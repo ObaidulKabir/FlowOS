@@ -44,13 +44,19 @@ public class TenantsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> ListTenants()
+    public async Task<IActionResult> ListTenants([FromQuery] string? externalRef = null)
     {
         if (!IsPlatformAdmin())
             return Forbid();
 
-        var tenants = await _context.Tenants
-            .AsNoTracking()
+        var query = _context.Tenants.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(externalRef))
+        {
+            var reference = externalRef.Trim();
+            query = query.Where(t => t.ExternalTenantRef == reference); // CR-14
+        }
+
+        var tenants = await query
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 
@@ -67,6 +73,7 @@ public class TenantsController : ControllerBase
         {
             TenantId = t.TenantId,
             Name = t.Name,
+            ExternalTenantRef = t.ExternalTenantRef,
             Status = t.Status.ToString(),
             Plan = t.Plan.ToString(),
             BillingStatus = t.BillingStatus.ToString(),
@@ -104,12 +111,32 @@ public class TenantsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("Tenant name is required.");
 
+        // CR-14: provisioning by the caller's reference is idempotent: a retry finds the tenant it already made.
+        var externalRef = string.IsNullOrWhiteSpace(request.ExternalTenantRef) ? null : request.ExternalTenantRef.Trim();
+        if (externalRef?.Length > Tenant.ExternalTenantRefMaxLength)
+            return BadRequest($"externalTenantRef must be at most {Tenant.ExternalTenantRefMaxLength} characters.");
+        if (externalRef != null)
+        {
+            var mapped = await _context.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.ExternalTenantRef == externalRef);
+            if (mapped != null)
+            {
+                return Conflict(new
+                {
+                    code = "TENANT-EXISTS",
+                    tenantId = mapped.TenantId,
+                    externalTenantRef = externalRef,
+                    message = "A tenant with this externalTenantRef already exists. Generate a key for it with POST /api/tenants/{id}/keys if you need one."
+                });
+            }
+        }
+
         var existing = await _context.Tenants
             .AnyAsync(t => t.Name.ToLower() == request.Name.Trim().ToLower());
         if (existing)
             return Conflict($"A tenant with name '{request.Name}' already exists.");
 
         var tenant = new Tenant(request.Name.Trim());
+        tenant.SetExternalTenantRef(externalRef);
         tenant.ProtectWebhookSigningSecret(_secretProtector);
         _context.Tenants.Add(tenant);
 
@@ -134,6 +161,7 @@ public class TenantsController : ControllerBase
             {
                 TenantId = tenant.TenantId,
                 Name = tenant.Name,
+                ExternalTenantRef = tenant.ExternalTenantRef,
                 Status = tenant.Status.ToString(),
                 Plan = tenant.Plan.ToString(),
                 BillingStatus = tenant.BillingStatus.ToString(),
@@ -198,6 +226,7 @@ public class TenantsController : ControllerBase
         {
             TenantId = tenant.TenantId,
             Name = tenant.Name,
+            ExternalTenantRef = tenant.ExternalTenantRef,
             Status = tenant.Status.ToString(),
             Plan = tenant.Plan.ToString(),
             BillingStatus = tenant.BillingStatus.ToString(),
@@ -207,6 +236,38 @@ public class TenantsController : ControllerBase
             KeyCount = keys.Count,
             Keys = keys
         });
+    }
+
+    public sealed record SetExternalTenantRefRequest(string? ExternalTenantRef);
+
+    /// <summary>CR-14: set or clear (null) the calling system's reference for an existing tenant.</summary>
+    [HttpPut("{id}/external-ref")]
+    public async Task<IActionResult> SetExternalTenantRef(Guid id, [FromBody] SetExternalTenantRefRequest request)
+    {
+        if (!IsPlatformAdmin())
+            return Forbid();
+
+        var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantId == id);
+        if (tenant == null)
+            return NotFound();
+
+        var reference = string.IsNullOrWhiteSpace(request.ExternalTenantRef) ? null : request.ExternalTenantRef.Trim();
+        if (reference != null &&
+            await _context.Tenants.AnyAsync(t => t.ExternalTenantRef == reference && t.TenantId != id))
+        {
+            return Conflict(new { code = "TENANT-EXISTS", message = "Another tenant already uses this externalTenantRef." });
+        }
+
+        try
+        {
+            tenant.SetExternalTenantRef(reference);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        await _context.SaveChangesAsync();
+        return Ok(new { tenantId = id, externalTenantRef = tenant.ExternalTenantRef });
     }
 
     [HttpGet("{id}/keys")]
@@ -410,6 +471,8 @@ public class RegisterTenantRequest
 {
     [Required]
     public string Name { get; set; } = string.Empty;
+    /// <summary>CR-14: the calling system's reference for this tenant; makes registration idempotent.</summary>
+    public string? ExternalTenantRef { get; set; }
     public string? KeyName { get; set; }
     public string? ApplicationName { get; set; }
     public string? Environment { get; set; }
@@ -431,6 +494,7 @@ public class TenantDto
 {
     public Guid TenantId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? ExternalTenantRef { get; set; }
     public string Status { get; set; } = string.Empty;
     public string Plan { get; set; } = string.Empty;
     public string BillingStatus { get; set; } = string.Empty;

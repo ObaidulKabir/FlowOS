@@ -1,0 +1,44 @@
+name: Generate EF migration (temporary)
+
+# Temporary: generates an EF Core migration on this branch and commits it back.
+# Removed again in the next commit of the PR.
+on:
+  push:
+    branches:
+      - feat/cr-14-tenant-mapping
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: "!contains(github.event.head_commit.message, '[skip-gen]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_NOLOGO: "1"
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=localhost;Database=flowos_design;Username=design;Password=design
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet tool install --global dotnet-ef --version 10.0.13
+      - run: dotnet restore FlowOS.sln
+      - name: Add migration
+        run: |
+          set -o pipefail
+          dotnet ef migrations add AddExternalTenantRef --project src/FlowOS.Infrastructure --startup-project src/FlowOS.Api --output-dir Migrations 2>&1 | tee ef.log || {
+            grep -iE "error|exception" ef.log | head -8 | while read -r l; do echo "::error title=dotnet ef::$l"; done; exit 1; }
+      - name: Summary
+        run: |
+          f=$(ls src/FlowOS.Infrastructure/Migrations/*_AddExternalTenantRef.cs | grep -v Designer)
+          echo "::notice title=Up()::$(sed -n '/protected override void Up/,/protected override void Down/p' "$f" | tr '\n' ' ' | tr -s ' ' | cut -c1-3000)"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/FlowOS.Infrastructure/Migrations
+          git commit -m "chore(db): generated EF Core migration AddExternalTenantRef [skip-gen]"
+          git push origin HEAD:${{ github.ref_name }}

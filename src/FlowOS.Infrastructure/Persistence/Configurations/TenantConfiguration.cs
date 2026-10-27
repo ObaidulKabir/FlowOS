@@ -48,6 +48,9 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 
         builder.Property(t => t.AgentAutoCommitEnabled)
             .HasDefaultValue(true);
+        builder.Property(t => t.ExternalTenantRef)
+            .HasMaxLength(Tenant.ExternalTenantRefMaxLength);
+        builder.HasIndex(t => t.ExternalTenantRef).IsUnique();
 
         builder.HasIndex(t => t.Name).IsUnique();
     }
