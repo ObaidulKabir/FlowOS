@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { 
   Check,
@@ -22,7 +22,33 @@ export interface WorkflowGraphVisualizerProps {
   initialView?: 'flowchart' | 'statemachine' | 'both';
 }
 
-const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean }> = ({ chart, unconstrained = false }) => {
+const MIN_DIAGRAM_ZOOM = 0.5;
+const MAX_DIAGRAM_ZOOM = 3;
+const DIAGRAM_ZOOM_STEP = 0.25;
+
+export function clampDiagramZoom(value: number) {
+  const rounded = Math.round(value * 100) / 100;
+  return Math.min(MAX_DIAGRAM_ZOOM, Math.max(MIN_DIAGRAM_ZOOM, rounded));
+}
+
+export function panForZoom(
+  pan: { x: number; y: number },
+  zoom: number,
+  nextZoom: number,
+  originX: number,
+  originY: number
+) {
+  if (!zoom) return pan;
+  const ratio = nextZoom / zoom;
+  return {
+    x: originX - (originX - pan.x) * ratio,
+    y: originY - (originY - pan.y) * ratio
+  };
+}
+
+const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRendered?: () => void }> = ({ chart, unconstrained = false, onRendered }) => {
+  const onRenderedRef = useRef(onRendered);
+  onRenderedRef.current = onRendered;
   const containerRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -42,9 +68,19 @@ const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean }> = ({ c
             const svg = containerRef.current.querySelector('svg');
             if (svg) {
               svg.style.maxWidth = 'none';
-              svg.style.height = 'auto';
+              const box = svg.viewBox?.baseVal;
+              if (box && box.width > 0 && box.height > 0) {
+                svg.setAttribute('width', String(box.width));
+                svg.setAttribute('height', String(box.height));
+                svg.style.width = `${box.width}px`;
+                svg.style.height = `${box.height}px`;
+              } else {
+                svg.style.width = 'auto';
+                svg.style.height = 'auto';
+              }
             }
           }
+          onRenderedRef.current?.();
         }
       }).catch(err => {
         console.error('Mermaid render error', err);
@@ -136,11 +172,13 @@ const openDiagramWindow = (title: string, svg: string, legend: { role: string; s
   <meta charset="utf-8" />
   <title>${escapeHtml(title)}</title>
   <style>
-    html, body { margin: 0; background: #020617; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
-    header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; background: #0f172a; border-bottom: 1px solid #1e293b; }
+    html, body { margin: 0; height: 100%; background: #020617; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; background: #0f172a; border-bottom: 1px solid #1e293b; }
     button { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-    main { overflow: auto; height: calc(100vh - 53px); }
-    .canvas { transform-origin: top center; padding: 32px; display: flex; justify-content: center; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    #viewport { position: relative; overflow: hidden; height: calc(100vh - 57px); cursor: grab; touch-action: none; }
+    #viewport.panning { cursor: grabbing; }
+    #canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
     svg { max-width: none !important; height: auto; }
   </style>
 </head>
@@ -148,22 +186,84 @@ const openDiagramWindow = (title: string, svg: string, legend: { role: string; s
   <header>
     <div>
       <strong>${escapeHtml(title)}</strong>
-      <div>${legend.map(entry => `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:10px;font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;border-radius:999px;background:${entry.stroke};display:inline-block;"></span>${escapeHtml(entry.role)}</span>`).join('')}</div>
+      <div style="font-size: 11px; color: #94a3b8;">Scroll up to zoom in. Drag to pan. 50% to 300%.</div>
     </div>
     <span>
-      <button type="button" onclick="zoom(0.8)">Smaller</button>
-      <button type="button" onclick="setZoom(1)">100%</button>
-      <button type="button" onclick="zoom(1.25)">Larger</button>
+      <button type="button" id="zoom-in">Zoom in</button>
+      <button type="button" id="zoom-reset">100%</button>
+      <button type="button" id="zoom-out">Zoom out</button>
     </span>
   </header>
-  <main><div id="canvas" class="canvas">${svg}</div></main>
+  <main id="viewport"><div id="canvas">${svg}</div></main>
   <script>
-    let scale = 1;
-    function setZoom(next) {
-      scale = Math.min(4, Math.max(0.25, next));
-      document.getElementById('canvas').style.zoom = String(scale);
+    var scale = 1;
+    var panX = 0;
+    var panY = 0;
+    var drag = null;
+    var viewport = document.getElementById('viewport');
+    var canvas = document.getElementById('canvas');
+    var zoomOut = document.getElementById('zoom-out');
+    var zoomIn = document.getElementById('zoom-in');
+    var zoomReset = document.getElementById('zoom-reset');
+    function clamp(value) {
+      var rounded = Math.round(value * 100) / 100;
+      if (rounded < 0.5) return 0.5;
+      if (rounded > 3) return 3;
+      return rounded;
     }
-    function zoom(factor) { setZoom(scale * factor); }
+    function apply() {
+      canvas.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
+      zoomReset.textContent = Math.round(scale * 100) + '%';
+      zoomOut.disabled = scale <= 0.5;
+      zoomIn.disabled = scale >= 3;
+    }
+    function zoomAt(next, originX, originY) {
+      var clamped = clamp(next);
+      var ratio = clamped / scale;
+      panX = originX - (originX - panX) * ratio;
+      panY = originY - (originY - panY) * ratio;
+      scale = clamped;
+      apply();
+    }
+    function center(next) {
+      scale = clamp(next);
+      panX = (viewport.clientWidth - canvas.offsetWidth * scale) / 2;
+      panY = (viewport.clientHeight - canvas.offsetHeight * scale) / 2;
+      apply();
+    }
+    zoomOut.addEventListener('click', function () {
+      zoomAt(scale - 0.25, viewport.clientWidth / 2, viewport.clientHeight / 2);
+    });
+    zoomIn.addEventListener('click', function () {
+      zoomAt(scale + 0.25, viewport.clientWidth / 2, viewport.clientHeight / 2);
+    });
+    zoomReset.addEventListener('click', function () { center(1); });
+    viewport.addEventListener('wheel', function (event) {
+      event.preventDefault();
+      var rect = viewport.getBoundingClientRect();
+      var step = event.deltaY < 0 ? 0.1 : -0.1;
+      zoomAt(scale + step, event.clientX - rect.left, event.clientY - rect.top);
+    }, { passive: false });
+    viewport.addEventListener('pointerdown', function (event) {
+      if (event.button !== 0) return;
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, panX: panX, panY: panY };
+      viewport.classList.add('panning');
+      if (viewport.setPointerCapture) viewport.setPointerCapture(event.pointerId);
+    });
+    viewport.addEventListener('pointermove', function (event) {
+      if (!drag || drag.id !== event.pointerId) return;
+      panX = drag.panX + (event.clientX - drag.x);
+      panY = drag.panY + (event.clientY - drag.y);
+      apply();
+    });
+    function endDrag(event) {
+      if (!drag || drag.id !== event.pointerId) return;
+      drag = null;
+      viewport.classList.remove('panning');
+    }
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+    center(1);
   </script>
 </body>
 </html>`);
@@ -178,7 +278,43 @@ const LargeDiagramWindow: React.FC<{
   onClose: () => void;
 }> = ({ title, subtitle, chart, legendEntries, onClose }) => {
   const canvasHostRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  const commit = useCallback((nextZoom: number, nextPan: { x: number; y: number }) => {
+    zoomRef.current = nextZoom;
+    panRef.current = nextPan;
+    setZoom(nextZoom);
+    setPan(nextPan);
+  }, []);
+
+  const centerDiagram = useCallback((nextZoom = 1) => {
+    const viewport = viewportRef.current;
+    const canvas = canvasHostRef.current;
+    const clamped = clampDiagramZoom(nextZoom);
+    if (!viewport || !canvas) {
+      commit(clamped, { x: 0, y: 0 });
+      return;
+    }
+    commit(clamped, {
+      x: (viewport.clientWidth - canvas.offsetWidth * clamped) / 2,
+      y: (viewport.clientHeight - canvas.offsetHeight * clamped) / 2
+    });
+  }, [commit]);
+
+  const zoomAt = useCallback((nextZoom: number, originX: number, originY: number) => {
+    const current = zoomRef.current;
+    const clamped = clampDiagramZoom(nextZoom);
+    commit(clamped, panForZoom(panRef.current, current, clamped, originX, originY));
+  }, [commit]);
+
+  const zoomBy = (delta: number) => {
+    const viewport = viewportRef.current;
+    zoomAt(zoomRef.current + delta, (viewport?.clientWidth ?? 0) / 2, (viewport?.clientHeight ?? 0) / 2);
+  };
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -193,7 +329,47 @@ const LargeDiagramWindow: React.FC<{
     };
   }, [onClose]);
 
-  const changeZoom = (next: number) => setZoom(Math.min(3, Math.max(0.4, Number(next.toFixed(2)))));
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const step = event.deltaY < 0 ? 0.1 : -0.1;
+      zoomAt(zoomRef.current + step, event.clientX - rect.left, event.clientY - rect.top);
+    };
+    viewport.addEventListener('wheel', onWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', onWheel);
+  }, [zoomAt]);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      panX: panRef.current.x,
+      panY: panRef.current.y
+    };
+    const target = event.currentTarget;
+    if (typeof target.setPointerCapture === 'function') {
+      try { target.setPointerCapture(event.pointerId); } catch { /* jsdom */ }
+    }
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    commit(zoomRef.current, {
+      x: drag.panX + (event.clientX - drag.x),
+      y: drag.panY + (event.clientY - drag.y)
+    });
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+  };
 
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/85 backdrop-blur-sm p-3 sm:p-5" role="dialog" aria-modal="true" aria-label={title}>
@@ -205,14 +381,14 @@ const LargeDiagramWindow: React.FC<{
             <div className="mt-2"><RoleLegend entries={legendEntries} /></div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <button type="button" onClick={() => changeZoom(zoom / 1.25)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500" aria-label="Zoom out">
-              <ZoomOut size={14} /> Smaller
+            <button type="button" onClick={() => zoomBy(DIAGRAM_ZOOM_STEP)} disabled={zoom >= MAX_DIAGRAM_ZOOM} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Zoom in" title="Zoom in. Makes the diagram larger.">
+              <ZoomIn size={14} /> Zoom in
             </button>
-            <button type="button" onClick={() => changeZoom(1)} className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs font-mono text-slate-200 hover:border-slate-500">
+            <button type="button" onClick={() => centerDiagram(1)} className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs font-mono text-slate-200 hover:border-slate-500" aria-label="Reset zoom">
               {Math.round(zoom * 100)}%
             </button>
-            <button type="button" onClick={() => changeZoom(zoom * 1.25)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500" aria-label="Zoom in">
-              <ZoomIn size={14} /> Larger
+            <button type="button" onClick={() => zoomBy(-DIAGRAM_ZOOM_STEP)} disabled={zoom <= MIN_DIAGRAM_ZOOM} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Zoom out" title="Zoom out. Makes the diagram smaller.">
+              <ZoomOut size={14} /> Zoom out
             </button>
             <button
               type="button"
@@ -230,9 +406,23 @@ const LargeDiagramWindow: React.FC<{
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto bg-slate-950">
-          <div ref={canvasHostRef} style={{ zoom }}>
-            <MermaidViewer chart={chart} unconstrained />
+        <div
+          ref={viewportRef}
+          data-testid="diagram-viewport"
+          className="relative min-h-0 flex-1 overflow-hidden bg-slate-950 cursor-grab active:cursor-grabbing"
+          style={{ touchAction: 'none' }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          <div
+            ref={canvasHostRef}
+            data-testid="diagram-canvas"
+            className="absolute left-0 top-0"
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}
+          >
+            <MermaidViewer chart={chart} unconstrained onRendered={() => centerDiagram(zoomRef.current)} />
           </div>
         </div>
       </div>
