@@ -159,6 +159,9 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;');
 
 const openDiagramWindow = (title: string, svg: string, legend: { role: string; stroke: string }[] = []) => {
+  const legendHtml = legend.map(entry =>
+    `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:10px;font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;border-radius:999px;background:${entry.stroke};display:inline-block;"></span>${escapeHtml(entry.role)}</span>`
+  ).join('');
   const popup = window.open('', '_blank', 'popup=yes,width=1400,height=900');
   if (!popup) {
     window.alert('Allow pop-ups to open this diagram in its own window.');
@@ -187,6 +190,7 @@ const openDiagramWindow = (title: string, svg: string, legend: { role: string; s
     <div>
       <strong>${escapeHtml(title)}</strong>
       <div style="font-size: 11px; color: #94a3b8;">Scroll up to zoom in. Drag to pan. 50% to 300%.</div>
+      <div>${legendHtml}</div>
     </div>
     <span>
       <button type="button" id="zoom-in">Zoom in</button>
@@ -277,6 +281,7 @@ const LargeDiagramWindow: React.FC<{
   legendEntries: { role: string; stroke: string }[];
   onClose: () => void;
 }> = ({ title, subtitle, chart, legendEntries, onClose }) => {
+  const viewportRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
