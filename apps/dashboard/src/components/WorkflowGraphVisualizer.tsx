@@ -64,6 +64,57 @@ const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean }> = ({ c
   );
 };
 
+const ROLE_EVENT_COLORS = ['#38bdf8', '#f472b6', '#a78bfa', '#fbbf24', '#34d399', '#fb7185', '#22d3ee', '#e879f9'];
+const SYSTEM_EVENT_COLOR = '#94a3b8';
+
+const isSystemRoleName = (role: string) => ['system', 'anyone', 'unassigned'].includes(role.trim().toLowerCase());
+
+const mermaidEdgeText = (value: string) =>
+  String(value || '').replace(/"/g, "'").replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
+
+export function eventRolesForDiagram(eventRoles: string[], stepRoles: string[] = []): string[] {
+  const listed = (roles: string[]) => roles.map(role => role.trim()).filter(Boolean);
+  const business = (roles: string[]) => listed(roles).filter(role => !isSystemRoleName(role));
+  const fromEvent = business(eventRoles);
+  if (fromEvent.length > 0) return fromEvent;
+  const fromStep = business(stepRoles);
+  if (fromStep.length > 0) return fromStep;
+  if (listed(eventRoles).some(role => role.toLowerCase() === 'system') || listed(stepRoles).some(role => role.toLowerCase() === 'system')) {
+    return ['System'];
+  }
+  return [];
+}
+
+export function roleEventStroke(role: string, roleOrder: string[]) {
+  if (!role || isSystemRoleName(role)) return SYSTEM_EVENT_COLOR;
+  const index = roleOrder.findIndex(existing => existing.toLowerCase() === role.toLowerCase());
+  if (index < 0) return SYSTEM_EVENT_COLOR;
+  return ROLE_EVENT_COLORS[index % ROLE_EVENT_COLORS.length];
+}
+
+const eventEdgeLabel = (eventId: string, roles: string[]) => {
+  const business = roles.filter(role => !isSystemRoleName(role));
+  const text = mermaidEdgeText(eventId);
+  if (business.length > 0) return `${text} · ${business.map(mermaidEdgeText).join(', ')}`;
+  if (roles.some(role => role.toLowerCase() === 'system')) return `${text} · System`;
+  return text;
+};
+
+const RoleLegend: React.FC<{ entries: { role: string; stroke: string }[] }> = ({ entries }) => {
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2" aria-label="Event roles">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Event by role</span>
+      {entries.map(entry => (
+        <span key={entry.role} className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950 px-2 py-0.5 text-[11px] text-slate-200">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: entry.stroke }} />
+          {entry.role}
+        </span>
+      ))}
+    </div>
+  );
+};
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, '&amp;')
@@ -71,7 +122,7 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-const openDiagramWindow = (title: string, svg: string) => {
+const openDiagramWindow = (title: string, svg: string, legend: { role: string; stroke: string }[] = []) => {
   const popup = window.open('', '_blank', 'popup=yes,width=1400,height=900');
   if (!popup) {
     window.alert('Allow pop-ups to open this diagram in its own window.');
@@ -95,7 +146,10 @@ const openDiagramWindow = (title: string, svg: string) => {
 </head>
 <body>
   <header>
-    <strong>${escapeHtml(title)}</strong>
+    <div>
+      <strong>${escapeHtml(title)}</strong>
+      <div>${legend.map(entry => `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:10px;font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;border-radius:999px;background:${entry.stroke};display:inline-block;"></span>${escapeHtml(entry.role)}</span>`).join('')}</div>
+    </div>
     <span>
       <button type="button" onclick="zoom(0.8)">Smaller</button>
       <button type="button" onclick="setZoom(1)">100%</button>
@@ -120,8 +174,9 @@ const LargeDiagramWindow: React.FC<{
   title: string;
   subtitle: string;
   chart: string;
+  legendEntries: { role: string; stroke: string }[];
   onClose: () => void;
-}> = ({ title, subtitle, chart, onClose }) => {
+}> = ({ title, subtitle, chart, legendEntries, onClose }) => {
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
 
@@ -147,6 +202,7 @@ const LargeDiagramWindow: React.FC<{
           <div>
             <h2 className="text-sm font-bold text-white">{title}</h2>
             <p className="text-[11px] text-slate-400">{subtitle}</p>
+            <div className="mt-2"><RoleLegend entries={legendEntries} /></div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <button type="button" onClick={() => changeZoom(zoom / 1.25)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500" aria-label="Zoom out">
@@ -163,7 +219,7 @@ const LargeDiagramWindow: React.FC<{
               onClick={() => {
                 const svg = canvasHostRef.current?.querySelector('svg')?.outerHTML;
                 if (!svg) return;
-                openDiagramWindow(title, svg);
+                openDiagramWindow(title, svg, legendEntries);
               }}
               className="inline-flex items-center gap-1 rounded-lg border border-blue-500/40 bg-blue-600/20 px-2.5 py-1.5 text-xs font-semibold text-blue-100 hover:bg-blue-600/30"
             >
@@ -336,6 +392,53 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     ['end', 'none'].includes(String(currentStepId || '').trim().toLowerCase());
 
   const safeId = (id: string) => (id || '').toString().replace(/[^a-zA-Z0-9_]/g, '_');
+  const catalogEvents: any[] = getProp(definition, 'events', 'Events') || [];
+  const roleList = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.map(role => String(role).trim()).filter(Boolean);
+    if (typeof value === 'string') return value.split(',').map(role => role.trim()).filter(Boolean);
+    return [];
+  };
+  const rolesForEvent = (eventId: string, stepRoles: string[] = []) => {
+    const found = catalogEvents.find((event: any) => {
+      const id = String(getProp(event, 'eventId', 'EventId', 'name', 'Name') || '').trim().toLowerCase();
+      return id === eventId.trim().toLowerCase();
+    });
+    const declared = roleList(getProp(found, 'allowedRoles', 'AllowedRoles', 'requiredRoles', 'RequiredRoles', 'roles', 'Roles'));
+    return eventRolesForDiagram(declared, stepRoles);
+  };
+  const stepById = (stepId: string) => steps.find(step => step.stepId.toLowerCase() === String(stepId || '').trim().toLowerCase());
+  const roleOrder: string[] = [];
+  let diagramUsesSystem = Boolean(initialState);
+  const rememberRoles = (roles: string[]) => {
+    if (!roles.some(role => role && !isSystemRoleName(role))) diagramUsesSystem = true;
+    roles.forEach(role => {
+      if (!role || isSystemRoleName(role)) return;
+      if (roleOrder.some(existing => existing.toLowerCase() === role.toLowerCase())) return;
+      roleOrder.push(role);
+    });
+  };
+  orderedSteps.forEach(step => {
+    Object.keys(step.nextSteps).forEach(eventId => rememberRoles(rolesForEvent(eventId, step.roles)));
+    Object.keys(step.conditions).forEach(() => rememberRoles(eventRolesForDiagram([], step.roles)));
+    (step.branches || []).forEach(target => rememberRoles(eventRolesForDiagram([], stepById(target)?.roles || [])));
+    if (step.sla?.escalationStepId) rememberRoles(rolesForEvent(step.sla.timeoutEvent || 'TIMEOUT', step.roles));
+  });
+  smTransitions.forEach(transition => {
+    const eventId = String(getProp(transition, 'eventId', 'EventId', 'eventName', 'EventName', 'triggerEvent', 'TriggerEvent') || '');
+    if (eventId) rememberRoles(rolesForEvent(eventId));
+  });
+  const strokeFor = (roles: string[]) => roleEventStroke(roles.find(role => !isSystemRoleName(role)) || 'System', roleOrder);
+  const styledEdges = (lines: { statement: string; roles: string[] }[]) => {
+    const body = lines.map(line => line.statement).join('');
+    const styles = lines.map((line, index) =>
+      `linkStyle ${index} stroke:${strokeFor(line.roles)},stroke-width:2px,color:${strokeFor(line.roles)}`
+    );
+    return `${body}${styles.length > 0 ? `\n${styles.join('\n')}\n` : ''}`;
+  };
+  const legendEntries = [
+    ...roleOrder.map(role => ({ role, stroke: roleEventStroke(role, roleOrder) })),
+    ...(diagramUsesSystem ? [{ role: 'System', stroke: SYSTEM_EVENT_COLOR }] : [])
+  ];
 
   const buildWorkflowMermaid = () => {
     let chart = 'flowchart TD\n';
@@ -387,6 +490,12 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
          displayLabel += `<br/>⚡ ${step.totalHooks} Hook${step.totalHooks > 1 ? 's' : ''}`;
       }
       chart += `  ${safeId(step.stepId)}${shapeStart}"${displayLabel}"${shapeEnd}${className}\n`;
+      const outgoingRoles = Object.keys(step.nextSteps).flatMap(eventId => rolesForEvent(eventId, step.roles));
+      const owner = outgoingRoles.find(role => !isSystemRoleName(role))
+        || step.roles.find(role => !isSystemRoleName(role));
+      if (!isCurrent && !isCompleted && owner) {
+        chart += `  style ${safeId(step.stepId)} stroke:${roleEventStroke(owner, roleOrder)},stroke-width:2px\n`;
+      }
     });
 
     const knownIds = new Set(orderedSteps.map(step => step.stepId.toLowerCase()));
@@ -412,72 +521,83 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     });
 
     chart += '\n';
-
+    const edges: { statement: string; roles: string[] }[] = [];
     orderedSteps.forEach(step => {
       if (step.branches && Array.isArray(step.branches) && step.branches.length > 0) {
         step.branches.forEach((branchTarget, bIdx) => {
-          chart += `  ${safeId(step.stepId)} ==>|"Branch ${bIdx + 1}"| ${safeId(branchTarget)}\n`;
+          const roles = eventRolesForDiagram([], stepById(branchTarget)?.roles || []);
+          edges.push({
+            statement: `  ${safeId(step.stepId)} ==>|"${eventEdgeLabel(`Branch ${bIdx + 1}`, roles)}"| ${safeId(branchTarget)}\n`,
+            roles
+          });
         });
       }
       Object.entries(step.nextSteps).forEach(([evt, target]) => {
-        chart += `  ${safeId(step.stepId)} -->|"${evt}"| ${safeId(target)}\n`;
+        const roles = rolesForEvent(evt, step.roles);
+        edges.push({
+          statement: `  ${safeId(step.stepId)} -->|"${eventEdgeLabel(evt, roles)}"| ${safeId(target)}\n`,
+          roles
+        });
       });
       Object.entries(step.conditions).forEach(([expr, target]) => {
-        chart += `  ${safeId(step.stepId)} -->|"${expr}"| ${safeId(target)}\n`;
+        const roles = eventRolesForDiagram([], step.roles);
+        edges.push({
+          statement: `  ${safeId(step.stepId)} -->|"${eventEdgeLabel(expr, roles)}"| ${safeId(target)}\n`,
+          roles
+        });
       });
       if (step.sla?.escalationStepId) {
         const timeoutEvt = step.sla.timeoutEvent || 'TIMEOUT';
-        chart += `  ${safeId(step.stepId)} -.->|"${timeoutEvt}"| ${safeId(step.sla.escalationStepId)}\n`;
+        const roles = rolesForEvent(timeoutEvt, step.roles);
+        edges.push({
+          statement: `  ${safeId(step.stepId)} -.->|"${eventEdgeLabel(timeoutEvt, roles)}"| ${safeId(step.sla.escalationStepId)}\n`,
+          roles
+        });
       }
     });
 
-    return chart;
+    return chart + styledEdges(edges);
   };
 
   const buildStateMachineMermaid = () => {
-    let chart = 'stateDiagram-v2\n';
-    chart += 'classDef current fill:#10b981,stroke:#047857,color:#000,font-weight:bold\n';
-    chart += 'classDef normal fill:#1e293b,stroke:#334155,color:#cbd5e1\n\n';
+    let chart = 'flowchart LR\n';
+    chart += 'classDef current fill:#10b981,stroke:#047857,color:#111827,stroke-width:3px\n';
+    chart += 'classDef normal fill:#1e293b,stroke:#334155,color:#e2e8f0\n\n';
 
+    const stateNames = [...smStates];
+    if (initialState && !stateNames.some(state => state.toLowerCase() === initialState.toLowerCase())) {
+      stateNames.unshift(initialState);
+    }
+    stateNames.forEach(state => {
+      const isCurrent = currentState && currentState.toLowerCase() === state.toLowerCase();
+      chart += `  ${safeId(state)}(["${mermaidEdgeText(state)}"])${isCurrent ? ':::current' : ':::normal'}\n`;
+    });
+
+    const edges: { statement: string; roles: string[] }[] = [];
     if (initialState) {
-      chart += `  [*] --> ${safeId(initialState)}\n`;
+      chart += '  __start__((start)):::normal\n';
+      edges.push({ statement: `  __start__ --> ${safeId(initialState)}\n`, roles: [] });
     }
-
-    smTransitions.forEach((t) => {
-      const from = getProp(t, 'fromState', 'FromState') || '*';
-      const to = getProp(t, 'toState', 'ToState') || '';
-      const evt = getProp(t, 'eventId', 'EventId', 'eventName', 'EventName') || 'Event';
-      
-      if (from === '*') {
-        smStates.forEach(s => {
-           if (s !== to) {
-              chart += `  ${safeId(s)} --> ${safeId(to)} : ${evt}\n`;
-           }
+    smTransitions.forEach((transition) => {
+      const from = String(getProp(transition, 'fromState', 'FromState') || '*');
+      const to = String(getProp(transition, 'toState', 'ToState') || '');
+      const eventId = String(getProp(transition, 'eventId', 'EventId', 'eventName', 'EventName', 'triggerEvent', 'TriggerEvent') || 'Event');
+      if (!to) return;
+      const roles = rolesForEvent(eventId);
+      const sources = from === '*' ? stateNames.filter(state => state !== to) : [from];
+      sources.forEach(source => {
+        edges.push({
+          statement: `  ${safeId(source)} -->|"${eventEdgeLabel(eventId, roles)}"| ${safeId(to)}\n`,
+          roles
         });
-      } else {
-        chart += `  ${safeId(from)} --> ${safeId(to)} : ${evt}\n`;
-      }
+      });
     });
-
-    chart += '\n';
-    smStates.forEach(st => {
-       const isCurrent = currentState && currentState.toLowerCase() === st.toLowerCase();
-       const sId = safeId(st);
-       if (sId !== st) {
-          chart += `  state "${st}" as ${sId}\n`;
-       }
-       if (isCurrent) {
-          chart += `  class ${sId} current\n`;
-       } else {
-          chart += `  class ${sId} normal\n`;
-       }
-    });
-
     if (instanceStatus && String(instanceStatus).toLowerCase() === 'completed' && currentState) {
-      chart += `  ${safeId(currentState)} --> [*]\n`;
+      chart += '  __done__((done)):::current\n';
+      edges.push({ statement: `  ${safeId(currentState)} --> __done__\n`, roles: [] });
     }
 
-    return chart;
+    return chart + styledEdges(edges);
   };
 
   return (
@@ -516,6 +636,8 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
           </button>
         </div>
       </div>
+
+      <RoleLegend entries={legendEntries} />
 
       {/* Live Instance Status Banner */}
       {currentStepId && (
@@ -661,6 +783,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
           title="Workflow Orchestration Steps"
           subtitle={`Start step ${startStepId}. Scroll and zoom this diagram on its own.`}
           chart={buildWorkflowMermaid()}
+          legendEntries={legendEntries}
           onClose={() => setLargeView(null)}
         />
       )}
@@ -669,6 +792,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
           title="State Machine Lifecycle"
           subtitle={`${entityType}. Scroll and zoom this diagram on its own.`}
           chart={buildStateMachineMermaid()}
+          legendEntries={legendEntries}
           onClose={() => setLargeView(null)}
         />
       )}
