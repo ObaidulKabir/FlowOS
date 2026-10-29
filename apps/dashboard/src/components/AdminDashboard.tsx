@@ -21,6 +21,12 @@ import {
   Cpu, Clock, Terminal, AlertTriangle, Sparkles, Scale, Layers, Network
 } from 'lucide-react';
 
+/** A rejected request keeps its HTTP status; 401 and 403 get a hint because the admin sign-in may have expired. */
+const describeFailure = (fallback: string, err: unknown): string => {
+  const message = (err as { message?: string } | null)?.message || fallback;
+  return /HTTP 40[13]\b/.test(message) ? `${message} Sign in again if this keeps happening.` : message;
+};
+
 interface Props {
   session: AuthSession;
   onGoHome: () => void;
@@ -48,7 +54,7 @@ export const AdminDashboard: React.FC<Props> = ({
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
   const [auditFocus, setAuditFocus] = useState<{ instanceId: string; requestId: number } | null>(null);
 
   // Register Modal Trigger for TenantManager
@@ -83,7 +89,7 @@ export const AdminDashboard: React.FC<Props> = ({
 
   const loadData = async (tenantIdOverride?: string) => {
     setLoading(true);
-    setError(null);
+    setErrors([]);
     const notices: string[] = [];
     const targetTenantId = tenantIdOverride ?? effectiveTenantScope;
 
@@ -91,29 +97,27 @@ export const AdminDashboard: React.FC<Props> = ({
       const tList = await api.listTenants();
       setTenants(tList);
       setTenantsCount(tList.length);
-    } catch (err: any) {
-      notices.push(err.message || 'Failed to load tenants');
+    } catch (err: unknown) {
+      notices.push(describeFailure('Failed to load tenants', err));
     }
 
     try {
       const bpList = await api.list(undefined, undefined, 'Admin', targetTenantId);
       setBlueprints(bpList);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setBlueprints([]);
-      const message = err.message || 'Failed to list workflow classes';
-      if (!/HTTP 401|HTTP 403/.test(message)) notices.push(message);
+      notices.push(describeFailure('Failed to list workflow classes', err));
     }
 
     try {
       const instList = await api.listInstances('Admin');
       setInstances(instList);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setInstances([]);
-      const message = err.message || 'Failed to list workflow instances';
-      if (!/HTTP 401|HTTP 403/.test(message)) notices.push(message);
+      notices.push(describeFailure('Failed to list workflow instances', err));
     }
 
-    setError(notices[0] || null);
+    setErrors(notices);
     setLoading(false);
   };
 
@@ -155,6 +159,36 @@ export const AdminDashboard: React.FC<Props> = ({
       await loadData(effectiveTenantScope);
     } catch (err: any) {
       alert(`Abandon failed: ${err.message}`);
+    }
+  };
+
+  const handleViewBlueprint = async (id: string) => {
+    const blueprint = blueprints.find(b => b.id === id);
+    try {
+      const item = await api.get(id, 'Admin', resolveBlueprintTenantScope(blueprint));
+      setValidationResult(null);
+      setSelectedBlueprint(item);
+    } catch (err: unknown) {
+      alert(describeFailure('Failed to open the workflow', err));
+    }
+  };
+
+  const handleCloseBlueprint = () => {
+    setSelectedBlueprint(null);
+    setValidationResult(null);
+  };
+
+  const handleValidateBlueprint = async () => {
+    if (!selectedBlueprint) return;
+    try {
+      const result = await api.validate(
+        selectedBlueprint.id,
+        'Admin',
+        resolveBlueprintTenantScope(selectedBlueprint)
+      );
+      setValidationResult(result);
+    } catch (err: unknown) {
+      alert(describeFailure('Validation failed', err));
     }
   };
 
@@ -316,9 +350,11 @@ export const AdminDashboard: React.FC<Props> = ({
         </div>
       </div>
 
-      {error && (
-        <div className="p-4 bg-rose-900/30 border border-rose-700 rounded-xl text-xs text-rose-300">
-          {error}
+      {errors.length > 0 && (
+        <div role="alert" className="p-4 bg-rose-900/30 border border-rose-700 rounded-xl text-xs text-rose-300 space-y-1">
+          {errors.map((message, index) => (
+            <div key={index}>{message}</div>
+          ))}
         </div>
       )}
 
@@ -356,11 +392,7 @@ export const AdminDashboard: React.FC<Props> = ({
                 items={pendingApprovals}
                 currentTab="Shared"
                 isAdmin={true}
-                onView={async (id) => {
-                  const bp = blueprints.find(b => b.id === id);
-                  const item = await api.get(id, 'Admin', resolveBlueprintTenantScope(bp));
-                  setSelectedBlueprint(item);
-                }}
+                onView={handleViewBlueprint}
                 onApprove={handleApprove}
                 onDeprecate={handleDeprecate}
               />
@@ -419,11 +451,7 @@ export const AdminDashboard: React.FC<Props> = ({
                 items={blueprints.filter(matchesCatalogSubTab)}
                 currentTab={catalogSubTab}
                 isAdmin={true}
-                onView={async (id) => {
-                  const bp = blueprints.find(b => b.id === id);
-                  const item = await api.get(id, 'Admin', resolveBlueprintTenantScope(bp));
-                  setSelectedBlueprint(item);
-                }}
+                onView={handleViewBlueprint}
                 onApprove={handleApprove}
                 onDeprecate={handleDeprecate}
               />
@@ -556,17 +584,8 @@ export const AdminDashboard: React.FC<Props> = ({
         <DetailView 
           item={selectedBlueprint} 
           validation={validationResult}
-          onClose={() => setSelectedBlueprint(null)}
-          onValidate={async () => {
-            if (selectedBlueprint) {
-              const res = await api.validate(
-                selectedBlueprint.id,
-                'Admin',
-                resolveBlueprintTenantScope(selectedBlueprint)
-              );
-              setValidationResult(res);
-            }
-          }}
+          onClose={handleCloseBlueprint}
+          onValidate={handleValidateBlueprint}
           onApprove={activeTab === 'ReviewQueue' ? handleApprove : undefined}
           onReject={activeTab === 'ReviewQueue' ? handleAbandon : undefined}
         />

@@ -26,7 +26,15 @@ vi.mock('./TenantManager', () => ({
 }));
 
 vi.mock('./WorkflowTable', () => ({
-  WorkflowTable: () => <div>Workflow Table</div>
+  WorkflowTable: ({ items, onView }: { items: { id: string; name: string }[]; onView: (id: string) => void }) => (
+    <div>
+      {items.map(item => (
+        <button key={item.id} type="button" onClick={() => void onView(item.id)}>
+          {`View ${item.name}`}
+        </button>
+      ))}
+    </div>
+  )
 }));
 
 vi.mock('./WorkflowInstanceTable', () => ({
@@ -38,7 +46,19 @@ vi.mock('./EventAuditViewer', () => ({
 }));
 
 vi.mock('./DetailView', () => ({
-  DetailView: () => null
+  DetailView: ({ item, validation, onClose, onValidate }: {
+    item: { name: string };
+    validation?: { isValid: boolean } | null;
+    onClose: () => void;
+    onValidate: () => void;
+  }) => (
+    <div data-testid="detail">
+      <span>{item.name}</span>
+      <span data-testid="validation">{validation ? 'validated' : 'no-validation'}</span>
+      <button type="button" onClick={() => void onValidate()}>Validate</button>
+      <button type="button" onClick={onClose}>Close</button>
+    </div>
+  )
 }));
 
 vi.mock('./DeadLetterQueueViewer', () => ({
@@ -158,6 +178,96 @@ describe('AdminDashboard tenant selection', () => {
         'Admin',
         'd3e8e2fd-1a8d-416a-987e-0585937090fd'
       );
+    });
+  });
+
+  const renderDashboard = () => render(
+    <AdminDashboard
+      session={session}
+      onGoHome={vi.fn()}
+      onSwitchRole={vi.fn()}
+      onRegister={vi.fn()}
+      onSignOut={vi.fn()}
+      mcpUrl="https://example.test/mcp"
+    />
+  );
+
+  test('shows a rejected workflow or instance list instead of an empty dashboard', async () => {
+    apiMock.list.mockRejectedValue(new Error('Failed to list workflow classes (HTTP 403 Forbidden)'));
+    apiMock.listInstances.mockRejectedValue(new Error('Failed to list workflow instances (HTTP 401 )'));
+
+    renderDashboard();
+
+    const alertBox = await screen.findByRole('alert');
+    expect(alertBox).toHaveTextContent('Failed to list workflow classes (HTTP 403 Forbidden)');
+    expect(alertBox).toHaveTextContent('Failed to list workflow instances (HTTP 401 )');
+    expect(alertBox).toHaveTextContent('Sign in again if this keeps happening.');
+  });
+
+  test('shows every failed load, not only the first', async () => {
+    apiMock.listTenants.mockRejectedValue(new Error('Failed to load tenants (HTTP 500 )'));
+    apiMock.list.mockRejectedValue(new Error('Failed to list workflow classes (HTTP 500 )'));
+
+    renderDashboard();
+
+    const alertBox = await screen.findByRole('alert');
+    expect(alertBox).toHaveTextContent('Failed to load tenants (HTTP 500 )');
+    expect(alertBox).toHaveTextContent('Failed to list workflow classes (HTTP 500 )');
+    expect(alertBox).not.toHaveTextContent('Sign in again');
+  });
+
+  describe('workflow detail', () => {
+    const blueprints = [
+      { id: 'bp-a', name: 'Alpha', tenantId: 'tenant-a' },
+      { id: 'bp-b', name: 'Beta', tenantId: 'tenant-b' }
+    ];
+
+    beforeEach(() => {
+      apiMock.list.mockResolvedValue(blueprints);
+      apiMock.get.mockImplementation(async (id: string) => blueprints.find(b => b.id === id));
+      apiMock.validate.mockResolvedValue({ isValid: true, errors: [] });
+    });
+
+    test('does not carry one workflow\'s validation result over to the next one opened', async () => {
+      renderDashboard();
+      fireEvent.click(screen.getByRole('button', { name: /workflows/i }));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View Alpha' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Validate' }));
+      await waitFor(() => expect(screen.getByTestId('validation')).toHaveTextContent('validated'));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'View Beta' }));
+
+      expect(await screen.findByText('Beta')).toBeInTheDocument();
+      expect(screen.getByTestId('validation')).toHaveTextContent('no-validation');
+    });
+
+    test('tells the administrator when a workflow cannot be opened', async () => {
+      apiMock.get.mockRejectedValue(new Error('Failed to get workflow class (HTTP 404 )'));
+      renderDashboard();
+      fireEvent.click(screen.getByRole('button', { name: /workflows/i }));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View Alpha' }));
+
+      await waitFor(() => expect(globalThis.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to get workflow class (HTTP 404 )')
+      ));
+      expect(screen.queryByTestId('detail')).not.toBeInTheDocument();
+    });
+
+    test('tells the administrator when validation fails', async () => {
+      apiMock.validate.mockRejectedValue(new Error('Failed to validate (HTTP 500 )'));
+      renderDashboard();
+      fireEvent.click(screen.getByRole('button', { name: /workflows/i }));
+      fireEvent.click(await screen.findByRole('button', { name: 'View Alpha' }));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Validate' }));
+
+      await waitFor(() => expect(globalThis.alert).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to validate (HTTP 500 )')
+      ));
+      expect(screen.getByTestId('validation')).toHaveTextContent('no-validation');
     });
   });
 });
