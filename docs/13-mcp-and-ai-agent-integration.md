@@ -164,6 +164,8 @@ operational execution, tenant IAM, and runtime advisory intelligence:
 |---|---|---|---|---|---|
 | `describe_workflowclass_schema` | `low` | `none` | No | `InfoTools.DescribeSchema` | Returns JSON schema aligned with `WorkflowClassBlueprint` (`eventId`, roles/capabilities, real `stepTypes`). |
 | `list_public_workflowclasses` | `low` | `none` | No | `InfoTools.ListPublic` | Lists `{ id, name, version }` for every `Public`-scope WorkflowClass blueprint. |
+| `get_plan_status` | `low` | `none` | No | `PlanActivationMcpTools.GetPlanStatus` | Shows plan, billing status, runtime eligibility and the state of the activation request. Works while the plan is blocked. |
+| `request_plan_activation` | `low` | `reversible` | No | `PlanActivationMcpTools.RequestPlanActivation` | Files a plan activation request for admin approval; idempotent; never activates the plan. Works while the plan is blocked. |
 | `list_notifications` | `low` | `none` | No | `NotificationTools.ListNotifications` | Lists recent tenant and user notifications with severity levels. |
 | `mark_notification_as_read` | `low` | `reversible` | No | `NotificationTools.MarkNotificationAsRead` | Marks a specific notification as read. |
 | `list_available_agents` | `low` | `none` | No | `AgentTools.ListAvailableAgents` | Lists registered runtime agents (e.g. `RiskAnalysisAgent`) and their capabilities. |

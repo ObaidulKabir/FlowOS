@@ -20,6 +20,12 @@ public static class ToolRegistration
         registry.Register("mark_notification_as_read", McpToolDescriptions.For("mark_notification_as_read"), McpToolSchemas.MarkNotificationAsRead(),
             async (args) => await ExecuteScopedAsync<NotificationTools>(serviceProvider, t => t.MarkNotificationAsRead(args)));
 
+        registry.Register("get_plan_status", McpToolDescriptions.For("get_plan_status"), McpToolSchemas.TenantOptional(),
+            async (args) => await ExecuteScopedAsync<PlanActivationMcpTools>(serviceProvider, t => t.GetPlanStatus(args)));
+
+        registry.Register("request_plan_activation", McpToolDescriptions.For("request_plan_activation"), McpToolSchemas.RequestPlanActivation(),
+            async (args) => await ExecuteScopedAsync<PlanActivationMcpTools>(serviceProvider, t => t.RequestPlanActivation(args)));
+
         registry.Register("list_available_agents", McpToolDescriptions.For("list_available_agents"), McpToolSchemas.NoArguments(),
             async (args) => await ExecuteScopedAsync<AgentTools>(serviceProvider, t => t.ListAvailableAgents(args)));
 
