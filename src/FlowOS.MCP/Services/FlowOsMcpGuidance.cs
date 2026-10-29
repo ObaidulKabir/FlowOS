@@ -1142,7 +1142,7 @@ public static class FlowOsMcpGuidance
 
         ## Failure troubleshooting
 
-        - `MCP-PLAN-REQUIRED` / persisted `ENTITLEMENT_DENIED`: the tenant plan is not active. This is not an expired `flw_live_` key. An admin approves Starter, Builder, Team, Growth, Scale, or Enterprise; no provider call was made.
+        - `MCP-PLAN-REQUIRED` / persisted `ENTITLEMENT_DENIED`: the tenant plan is not active. This is not an expired `flw_live_` key. The tenant asks for activation with **Request Plan Activation** in the dashboard (with a payment reference), and an admin approves Starter, Builder, Team, Growth, Scale, or Enterprise; no provider call was made.
         - `MCP-HOSTED-LLM-QUOTA` / persisted `HOSTED_QUOTA_DENIED`: the durable UTC-day tenant cap is exhausted. Wait for UTC reset, raise the operator cap, or bind BYO. BYO usage is not charged to hosted quota.
         - `MCP-HOSTED-LLM-UNAVAILABLE` / persisted `PROVIDER_CONFIGURATION`: configure the platform key on the process that executes the job.
         - `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`: inspect provider/BYO configuration and retry policy. Failed provider runs never generate a successful AgentInsight.

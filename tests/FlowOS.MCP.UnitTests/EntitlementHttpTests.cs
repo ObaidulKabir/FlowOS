@@ -56,6 +56,8 @@ public sealed class EntitlementHttpTests
         Assert.Equal(HttpStatusCode.PaymentRequired, startStatus);
         Assert.Contains(TenantEntitlementPolicy.PlanRequiredCode, startBody);
         Assert.Contains("MCP is included on every package", startBody);
+        Assert.Contains("not an expired key", startBody);
+        Assert.Contains("Request Plan Activation", startBody);
 
         using (var scope = app.Services.CreateScope())
         {

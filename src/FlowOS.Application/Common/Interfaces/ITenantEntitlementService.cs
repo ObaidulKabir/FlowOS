@@ -19,7 +19,11 @@ public static class TenantEntitlementPolicy
 {
     public const string PlanRequiredCode = "MCP-PLAN-REQUIRED";
     public const string PlanRequiredMessage =
-        "Runtime execution requires an active paid plan (Starter through Scale, or Enterprise). MCP is included on every package.";
+        "Runtime execution requires an active paid plan (Starter through Scale, or Enterprise). " +
+        "MCP is included on every package. " +
+        "Your API key is valid; this is an unpaid plan, not an expired key. " +
+        "To activate, open your tenant workspace in the FlowOS dashboard and choose Request Plan Activation with your payment reference. " +
+        "A platform administrator then reviews and activates the plan.";
 
     public static bool McpToolRequiresPaidPlan(string toolName, bool mutating, string sideEffect)
     {
