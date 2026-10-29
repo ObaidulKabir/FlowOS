@@ -55,7 +55,12 @@ describe('workflow instance authentication', () => {
   });
 
   test('keeps a platform administrator JWT instead of replacing it with the sandbox key', () => {
-    const payload = btoa(JSON.stringify({ exp: 4_000_000_000, role: 'Admin' }));
+    const payload = btoa(JSON.stringify({
+      exp: 4_000_000_000,
+      role: 'Admin',
+      tenant_id: PLATFORM_TENANT_ID,
+      tenant_name: 'Default Tenant'
+    }));
     const token = `header.${payload}.signature`;
     const stored = setAuthSession({
       role: 'Admin',
@@ -84,8 +89,31 @@ describe('workflow instance authentication', () => {
       isEmailVerified: true
     });
 
+    expect(stored.role).toBe('Tenant');
     expect(stored.tenantId).toBe('22222222-2222-2222-2222-222222222222');
     expect(stored.apiKey).toBe('flowos_prod_secret_key_32_chars_min');
     expect(stored.token).toBeUndefined();
+    expect(stored.isSandbox).toBe(true);
+  });
+
+  test('keeps a platform administrator on a tenant workspace until they return', () => {
+    const payload = btoa(JSON.stringify({
+      exp: 4_000_000_000,
+      tenant_id: PLATFORM_TENANT_ID,
+      role: 'Admin',
+      tenant_name: 'Default Tenant'
+    }));
+    const token = `header.${payload}.signature`;
+    const stored = setAuthSession({
+      role: 'Tenant',
+      tenantId,
+      tenantName: 'Acme',
+      token,
+      isSandbox: false
+    });
+
+    expect(stored.role).toBe('Tenant');
+    expect(stored.tenantId).toBe(tenantId);
+    expect(stored.token).toBe(token);
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import App from './App';
@@ -42,10 +42,10 @@ describe('App tenant context switching', () => {
     window.scrollTo = vi.fn();
   });
 
-  test('keeps sandbox admin on the demo tenant when switching to tenant view', () => {
+  test('does not open the admin panel for a demo key labeled as admin', () => {
     setAuthSession({
       role: 'Admin',
-      tenantId: '22222222-2222-2222-2222-222222222222',
+      tenantId: '11111111-1111-1111-1111-111111111111',
       tenantName: 'Platform Administrator',
       apiKey: 'flowos_prod_secret_key_32_chars_min',
       username: 'superadmin@flowos.internal',
@@ -55,9 +55,7 @@ describe('App tenant context switching', () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /switch to tenant/i }));
-
-    expect(screen.getByTestId('tenant-id')).toHaveTextContent('22222222-2222-2222-2222-222222222222');
-    expect(screen.getByTestId('tenant-name')).toHaveTextContent('Demo Client Tenant');
+    expect(screen.getByText('Landing')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /switch to tenant/i })).not.toBeInTheDocument();
   });
 });

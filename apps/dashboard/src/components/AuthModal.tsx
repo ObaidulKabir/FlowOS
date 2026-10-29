@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { AuthSession, RegisterTenantUserRequest } from '../types';
 import { api, applyTenantEntitlement, PLATFORM_TENANT_ID, setAuthSession } from '../api/client';
 import { 
-  Building2, Shield, Mail, Lock, User, Key, ArrowRight, 
+  Building2, Mail, Lock, User, Key, ArrowRight, 
   Sparkles, CheckCircle2, AlertCircle, X, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 
-export type AuthModalMode = 'login' | 'register' | 'verify' | 'admin';
+export type AuthModalMode = 'login' | 'register' | 'verify';
 
 const dashboardRoleForLogin = (role?: string, tenantId?: string): 'Tenant' | 'Admin' =>
   role?.trim().toLowerCase() === 'admin' && tenantId?.trim().toLowerCase() === PLATFORM_TENANT_ID
@@ -58,10 +58,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showVerifyPassword, setShowVerifyPassword] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [devToken, setDevToken] = useState<string | null>(null);
-
-  // Admin form state
-  const [adminUsername, setAdminUsername] = useState('superadmin@flowos.internal');
-  const [adminPassword, setAdminPassword] = useState('flowos-admin-root');
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -315,25 +311,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleAdminSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    resetMessages();
-
-    onSuccess(setAuthSession({
-      role: 'Admin',
-      tenantId: '22222222-2222-2222-2222-222222222222',
-      tenantName: 'Platform Administrator',
-      username: adminUsername || 'admin@flowos.internal',
-      apiKey: 'flowos_prod_secret_key_32_chars_min',
-      isSandbox: false,
-      isEmailVerified: true,
-      plan: 'Enterprise',
-      billingStatus: 'Active',
-      canRunRuntime: true
-    }));
-    onClose();
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
       {/* Background glow */}
@@ -373,19 +350,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {mode === 'login' && 'Sign In to FlowOS'}
               {mode === 'register' && 'Register New Tenant'}
               {mode === 'verify' && 'Verify Email Address'}
-              {mode === 'admin' && 'Platform Governance Login'}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              {mode === 'login' && 'Access your isolated enterprise workspace and live workflow pipelines.'}
+              {mode === 'login' && 'Use your tenant account. A platform administrator signs in here too; the admin panel opens only for that account.'}
               {mode === 'register' && 'Provision an isolated multi-tenant environment with private API keys.'}
               {mode === 'verify' && 'Verification dispatched from official address: admin@flowosbd.com'}
-              {mode === 'admin' && 'Root platform administrator access for fleet management and audits.'}
             </p>
           </div>
         </div>
 
         {/* Top Mode Tabs */}
-        <div className="grid grid-cols-4 p-1 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-semibold gap-1">
+        <div className="grid grid-cols-3 p-1 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-semibold gap-1">
           <button
             onClick={() => { setMode('login'); resetMessages(); }}
             className={`py-2 px-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
@@ -416,15 +391,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           >
             <Mail size={13} />
             <span>Verify</span>
-          </button>
-          <button
-            onClick={() => { setMode('admin'); resetMessages(); }}
-            className={`py-2 px-1.5 rounded-lg flex items-center justify-center gap-1 transition-all ${
-              mode === 'admin' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Shield size={13} />
-            <span>Admin</span>
           </button>
         </div>
 
@@ -947,48 +913,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
           </div>
-        )}
-
-        {/* MODE 4: PLATFORM ADMIN */}
-        {mode === 'admin' && (
-          <form onSubmit={handleAdminSubmit} className="space-y-4">
-            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-xs text-purple-300 flex items-start gap-2">
-              <Shield size={16} className="text-purple-400 mt-0.5 shrink-0" />
-              <span>
-                Platform governance console for cluster administrators, multi-tenant fleet health, and immutable audit logs.
-              </span>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Admin Account</label>
-              <input
-                type="text"
-                required
-                value={adminUsername}
-                onChange={(e) => setAdminUsername(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Root Password</label>
-              <input
-                type="password"
-                required
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-purple-500/25 transition-all flex items-center justify-center gap-2 text-sm mt-2"
-            >
-              <Shield size={16} />
-              <span>Enter Platform Governance Console</span>
-            </button>
-          </form>
         )}
 
       </div>
