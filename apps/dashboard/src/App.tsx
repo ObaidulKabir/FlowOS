@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AuthSession } from './types';
-import { getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession, getAuthSession } from './api/client';
+import { getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession, getAuthSession, PLATFORM_TENANT_ID } from './api/client';
 import { LandingPage } from './components/LandingPage';
 import { AuthModal, AuthModalMode } from './components/AuthModal';
 import { TenantDashboard } from './components/TenantDashboard';
@@ -55,19 +55,31 @@ function App() {
   const handleSwitchToAdmin = () => {
     const sandbox = getDefaultSandboxSession();
     const apiKey = session.apiKey?.trim();
-    const adminSession: AuthSession = {
-      role: 'Admin',
-      tenantId: apiKey ? session.tenantId : sandbox.tenantId,
-      tenantName: 'Platform Administrator',
-      username: 'superadmin@flowos.internal',
-      apiKey: apiKey || sandbox.apiKey,
-      token: apiKey ? session.token : undefined,
-      isSandbox: apiKey ? session.isSandbox : true,
-      isEmailVerified: true,
-      plan: 'Enterprise',
-      billingStatus: 'Active',
-      canRunRuntime: true
-    };
+    const keepPlatformLogin =
+      Boolean(session.token?.trim()) &&
+      session.isSandbox !== true &&
+      session.tenantId?.trim().toLowerCase() === PLATFORM_TENANT_ID;
+    const adminSession: AuthSession = keepPlatformLogin
+      ? {
+          ...session,
+          role: 'Admin',
+          tenantId: PLATFORM_TENANT_ID,
+          tenantName: session.tenantName || 'Platform Administrator',
+          isEmailVerified: true
+        }
+      : {
+          role: 'Admin',
+          tenantId: apiKey ? session.tenantId : sandbox.tenantId,
+          tenantName: 'Platform Administrator',
+          username: 'superadmin@flowos.internal',
+          apiKey: apiKey || sandbox.apiKey,
+          token: apiKey ? session.token : undefined,
+          isSandbox: apiKey ? session.isSandbox : true,
+          isEmailVerified: true,
+          plan: 'Enterprise',
+          billingStatus: 'Active',
+          canRunRuntime: true
+        };
     setSession(setAuthSession(adminSession));
     setCurrentView('dashboard');
   };

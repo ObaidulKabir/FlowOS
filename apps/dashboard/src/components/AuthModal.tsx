@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { AuthSession, RegisterTenantUserRequest } from '../types';
-import { api, applyTenantEntitlement, setAuthSession } from '../api/client';
+import { api, applyTenantEntitlement, PLATFORM_TENANT_ID, setAuthSession } from '../api/client';
 import { 
   Building2, Shield, Mail, Lock, User, Key, ArrowRight, 
   Sparkles, CheckCircle2, AlertCircle, X, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 
 export type AuthModalMode = 'login' | 'register' | 'verify' | 'admin';
+
+const dashboardRoleForLogin = (role?: string, tenantId?: string): 'Tenant' | 'Admin' =>
+  role?.trim().toLowerCase() === 'admin' && tenantId?.trim().toLowerCase() === PLATFORM_TENANT_ID
+    ? 'Admin'
+    : 'Tenant';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -124,7 +129,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (res.user && res.token) {
         const session = applyTenantEntitlement({
-          role: 'Tenant',
+          role: dashboardRoleForLogin(res.user.role, res.user.tenantId),
           tenantId: res.user.tenantId,
           tenantName: res.user.tenantName,
           token: res.token,
@@ -285,7 +290,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (loginRes.ok && loginRes.user && loginRes.token) {
         const session = applyTenantEntitlement({
-          role: 'Tenant',
+          role: dashboardRoleForLogin(loginRes.user.role, loginRes.user.tenantId),
           tenantId: loginRes.user.tenantId,
           tenantName: loginRes.user.tenantName,
           token: loginRes.token,

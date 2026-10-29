@@ -13,6 +13,9 @@ services:
       - FLOWOS_PUBLIC_ORIGIN=${FLOWOS_PUBLIC_ORIGIN:-}
       - UseInMemoryDatabase=false
       - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-flowos};Username=${POSTGRES_USER:-root};Password=${POSTGRES_PASSWORD:-toor};
+      - FLOWOS_PLATFORM_ADMIN_EMAIL=${FLOWOS_PLATFORM_ADMIN_EMAIL:-}
+      - FLOWOS_PLATFORM_ADMIN_PASSWORD=${FLOWOS_PLATFORM_ADMIN_PASSWORD:-}
+      - FLOWOS_PLATFORM_ADMIN_API_KEY=${FLOWOS_PLATFORM_ADMIN_API_KEY:-}
       - SMTP_HOST=${SMTP_HOST:-smtp.zoho.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-admin@flowosbd.com}
