@@ -22,5 +22,8 @@ public class ApiKeyAndPlanGuidanceTests
         Assert.Contains("MCP-PLAN-REQUIRED", McpToolDescriptions.For("start_workflow"));
         Assert.Contains("not an expired flw_live_ key", McpToolDescriptions.For("publish_event"));
         Assert.Contains("MCP-PLAN-REQUIRED", McpToolDescriptions.For("complete_task"));
+        Assert.Contains("request_plan_activation", instructions);
+        Assert.Contains("request_plan_activation", McpToolDescriptions.For("start_workflow"));
+        Assert.Contains("never activates", McpToolDescriptions.For("request_plan_activation"));
     }
 }
