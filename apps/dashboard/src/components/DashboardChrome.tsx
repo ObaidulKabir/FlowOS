@@ -1,5 +1,6 @@
 import React from 'react';
 import { AuthSession } from '../types';
+import { isPlatformAdminToken } from '../auth/platformAdminSession';
 import {
   Shield, Building2, LogOut, Bot, Home,
   Sparkles, CheckCircle2, FileCode
@@ -31,6 +32,9 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
   nav
 }) => {
   const flowOsVersion = useFlowOsVersion();
+  const returnToPlatformAdmin = session.role === 'Tenant'
+    && session.isSandbox !== true
+    && isPlatformAdminToken(session.token);
   return (
   <aside
     className="flowos-rail border-r border-slate-800 bg-slate-950 overflow-hidden"
@@ -101,23 +105,24 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
         <Home size={14} />
         Homepage
       </button>
-      {session.role === 'Tenant' ? (
+      {returnToPlatformAdmin && (
         <button
           onClick={onSwitchRole}
           className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-purple-300 hover:bg-purple-500/15 flex items-center gap-2"
-          title="Switch to Platform Administrator control plane"
+          title="Return to the platform admin panel for this sign-in"
         >
           <Shield size={14} />
-          Admin View
+          Platform admin
         </button>
-      ) : (
+      )}
+      {session.role === 'Admin' && (
         <button
           onClick={onSwitchRole}
           className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-blue-300 hover:bg-blue-500/15 flex items-center gap-2"
-          title="Switch to Tenant Workspace view"
+          title="Open a tenant workspace with this platform admin sign-in"
         >
           <Building2 size={14} />
-          Tenant View
+          Tenant workspace
         </button>
       )}
       {session.isSandbox && (

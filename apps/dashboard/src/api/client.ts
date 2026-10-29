@@ -1,3 +1,4 @@
+import { isPlatformAdminToken, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
 import { 
   WorkflowClass, CreateDraftRequest, CopyRequest, ValidationResult, 
   WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession, DeadLetterDto,
@@ -12,11 +13,12 @@ import {
   PlanRequestDto, TenantPlanRequestItem
 } from '../types';
 
+export { isPlatformAdminToken, platformAdminHomeSession, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
+
 const API_BASE = '/api/workflow-classes';
 const AUTH_STORAGE_KEY = 'flowos_auth_session';
 
 export const DEMO_TENANT_ID = '22222222-2222-2222-2222-222222222222';
-export const PLATFORM_TENANT_ID = '11111111-1111-1111-1111-111111111111';
 export const DEMO_API_KEY = 'flowos_prod_secret_key_32_chars_min';
 
 export const getDefaultSandboxSession = (): AuthSession => ({
@@ -76,32 +78,38 @@ const isPlaygroundSession = (session: AuthSession, apiKey?: string, tenantId?: s
   );
 };
 
-/** Playground/admin leftover JWTs skip the demo key and production then 401s GET /api/workflows. */
+/** Playground sessions and a role label of Admin are not a platform administrator. */
 export const withSessionCredentials = (session: AuthSession): AuthSession => {
   let token = session.token?.trim() || undefined;
   let apiKey = session.apiKey?.trim() || undefined;
   let tenantId = session.tenantId;
+  let isSandbox = session.isSandbox;
 
   if (token && tokenIsUnusable(token)) {
     token = undefined;
   }
 
-  if (token && session.isSandbox !== true) {
+  if (token && isSandbox !== true) {
     if (isDemoApiKey(apiKey))
       apiKey = undefined;
-    return { ...session, token, apiKey, tenantId };
-  }
-
-  if (isPlaygroundSession({ ...session, token }, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
+  } else if (isPlaygroundSession({ ...session, token }, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
     apiKey = apiKey || DEMO_API_KEY;
     tenantId = DEMO_TENANT_ID;
     token = undefined;
+    isSandbox = true;
   } else if (isDemoApiKey(apiKey)) {
     tenantId = DEMO_TENANT_ID;
     token = undefined;
+    isSandbox = true;
   }
 
-  return { ...session, token, apiKey, tenantId };
+  const role = session.role === 'Admin' && token && isSandbox !== true && isPlatformAdminToken(token)
+    ? 'Admin'
+    : session.role === 'Admin'
+      ? 'Tenant'
+      : session.role;
+
+  return { ...session, token, apiKey, tenantId, isSandbox, role };
 };
 
 export const applyTenantEntitlement = (
