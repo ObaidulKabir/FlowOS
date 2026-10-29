@@ -106,6 +106,47 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
+      - name: Install platform admin credentials on the server
+        run: |
+          if [ -z "$FLOWOS_PLATFORM_ADMIN_EMAIL" ] || [ -z "$FLOWOS_PLATFORM_ADMIN_PASSWORD" ] || [ -z "$FLOWOS_PLATFORM_ADMIN_API_KEY" ]; then
+            echo "Platform admin credentials are not set. The API will not create a platform administrator."
+            exit 0
+          fi
+          if [ "${#FLOWOS_PLATFORM_ADMIN_PASSWORD}" -lt 12 ]; then
+            echo "FLOWOS_PLATFORM_ADMIN_PASSWORD must be at least 12 characters."
+            exit 1
+          fi
+          if [ "${#FLOWOS_PLATFORM_ADMIN_API_KEY}" -lt 32 ]; then
+            echo "FLOWOS_PLATFORM_ADMIN_API_KEY must be at least 32 characters."
+            exit 1
+          fi
+          email_b64=$(printf '%s' "$FLOWOS_PLATFORM_ADMIN_EMAIL" | base64 -w0)
+          password_b64=$(printf '%s' "$FLOWOS_PLATFORM_ADMIN_PASSWORD" | base64 -w0)
+          key_b64=$(printf '%s' "$FLOWOS_PLATFORM_ADMIN_API_KEY" | base64 -w0)
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=40 -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "APP_PATH='${{ secrets.APP_PATH }}' EMAIL_B64='$email_b64' PASSWORD_B64='$password_b64' KEY_B64='$key_b64' bash -s" << 'EOF'
+          set -eu
+          cd "$APP_PATH"
+          touch .env
+          chmod 600 .env
+          tmp=$(mktemp)
+          grep -v -e '^FLOWOS_PLATFORM_ADMIN_EMAIL=' -e '^FLOWOS_PLATFORM_ADMIN_PASSWORD=' -e '^FLOWOS_PLATFORM_ADMIN_API_KEY=' .env > "$tmp" || true
+          email=$(printf '%s' "$EMAIL_B64" | base64 -d)
+          password=$(printf '%s' "$PASSWORD_B64" | base64 -d)
+          key=$(printf '%s' "$KEY_B64" | base64 -d)
+          printf 'FLOWOS_PLATFORM_ADMIN_EMAIL=%s\n' "$email" >> "$tmp"
+          printf 'FLOWOS_PLATFORM_ADMIN_PASSWORD=%s\n' "$password" >> "$tmp"
+          printf 'FLOWOS_PLATFORM_ADMIN_API_KEY=%s\n' "$key" >> "$tmp"
+          mv "$tmp" .env
+          chmod 600 .env
+          unset EMAIL_B64 PASSWORD_B64 KEY_B64 email password key
+          echo "Platform admin credentials installed."
+          EOF
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLOWOS_PLATFORM_ADMIN_EMAIL: ${{ secrets.FLOWOS_PLATFORM_ADMIN_EMAIL }}
+          FLOWOS_PLATFORM_ADMIN_PASSWORD: ${{ secrets.FLOWOS_PLATFORM_ADMIN_PASSWORD }}
+          FLOWOS_PLATFORM_ADMIN_API_KEY: ${{ secrets.FLOWOS_PLATFORM_ADMIN_API_KEY }}
+
       - name: Build and Deploy Containers 
         run: |
           cat << 'EOF' > build_deploy.sh

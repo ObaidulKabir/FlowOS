@@ -60,13 +60,21 @@ const tokenIsUnusable = (token?: string): boolean => {
   return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
 };
 
-const isPlaygroundSession = (session: AuthSession, apiKey?: string, tenantId?: string) =>
-  Boolean(
+const hasUsableLogin = (session: AuthSession, apiKey?: string) => {
+  const token = session.token?.trim();
+  return Boolean(token) && !tokenIsUnusable(token) && session.isSandbox !== true && !isDemoApiKey(apiKey);
+};
+
+const isPlaygroundSession = (session: AuthSession, apiKey?: string, tenantId?: string) => {
+  if (hasUsableLogin(session, apiKey))
+    return false;
+  return Boolean(
     session.isSandbox ||
     isDemoApiKey(apiKey) ||
     isPlaygroundTenant(tenantId) ||
     (session.role === 'Admin' && !apiKey)
   );
+};
 
 /** Playground/admin leftover JWTs skip the demo key and production then 401s GET /api/workflows. */
 export const withSessionCredentials = (session: AuthSession): AuthSession => {
@@ -78,15 +86,13 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
     token = undefined;
   }
 
-  const realTenantJwt =
-    Boolean(token) &&
-    session.isSandbox !== true &&
-    !isPlaygroundTenant(tenantId);
-  if (realTenantJwt && isDemoApiKey(apiKey)) {
-    apiKey = undefined;
+  if (token && session.isSandbox !== true) {
+    if (isDemoApiKey(apiKey))
+      apiKey = undefined;
+    return { ...session, token, apiKey, tenantId };
   }
 
-  if (isPlaygroundSession(session, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
+  if (isPlaygroundSession({ ...session, token }, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
     apiKey = apiKey || DEMO_API_KEY;
     tenantId = DEMO_TENANT_ID;
     token = undefined;

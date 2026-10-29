@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { api, clearAuthSession, setAuthSession } from './client';
+import { api, clearAuthSession, PLATFORM_TENANT_ID, setAuthSession } from './client';
 
 const tenantId = 'd3e8e2fd-1a8d-416a-987e-0585937090fd';
 
@@ -52,5 +52,40 @@ describe('workflow instance authentication', () => {
     const [, options] = fetchMock.mock.calls[0];
     expect(options?.headers).not.toHaveProperty('Authorization');
     expect(options?.headers).not.toHaveProperty('X-API-Key');
+  });
+
+  test('keeps a platform administrator JWT instead of replacing it with the sandbox key', () => {
+    const payload = btoa(JSON.stringify({ exp: 4_000_000_000, role: 'Admin' }));
+    const token = `header.${payload}.signature`;
+    const stored = setAuthSession({
+      role: 'Admin',
+      tenantId: PLATFORM_TENANT_ID,
+      tenantName: 'Default Tenant',
+      token,
+      email: 'platform-admin@flowosbd.com',
+      username: 'Platform Administrator',
+      isSandbox: false,
+      isEmailVerified: true
+    });
+
+    expect(stored.role).toBe('Admin');
+    expect(stored.tenantId).toBe(PLATFORM_TENANT_ID);
+    expect(stored.token).toBe(token);
+    expect(stored.apiKey).toBeUndefined();
+  });
+
+  test('still sends the sandbox demo key for the local admin button', () => {
+    const stored = setAuthSession({
+      role: 'Admin',
+      tenantId: PLATFORM_TENANT_ID,
+      tenantName: 'Platform Administrator',
+      apiKey: 'flowos_prod_secret_key_32_chars_min',
+      isSandbox: false,
+      isEmailVerified: true
+    });
+
+    expect(stored.tenantId).toBe('22222222-2222-2222-2222-222222222222');
+    expect(stored.apiKey).toBe('flowos_prod_secret_key_32_chars_min');
+    expect(stored.token).toBeUndefined();
   });
 });

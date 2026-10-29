@@ -109,6 +109,14 @@ public static class DataSeeder
             await context.SaveChangesAsync();
         }
 
+        await EnsurePlatformAdministratorAsync(
+            context,
+            serviceProvider.GetService<FlowOS.Security.Interfaces.IPasswordHasher>()
+                ?? new FlowOS.Infrastructure.Services.Security.Pbkdf2PasswordHasher(),
+            FirstConfigured(seedConfiguration, "FLOWOS_PLATFORM_ADMIN_EMAIL", "FlowOS:PlatformAdmin:Email"),
+            FirstConfigured(seedConfiguration, "FLOWOS_PLATFORM_ADMIN_PASSWORD", "FlowOS:PlatformAdmin:Password"),
+            FirstConfigured(seedConfiguration, "FLOWOS_PLATFORM_ADMIN_API_KEY", "FlowOS:PlatformAdmin:ApiKey"));
+
 
         // 1.5 Ensure Admin Role
         if (!await context.Roles.AnyAsync(r => r.Name == "Admin" && r.TenantId == DefaultTenantId))
@@ -2222,6 +2230,85 @@ public static class DataSeeder
 
         WorkflowSimulationGovernance.Apply(blueprint);
         return blueprint;
+    }
+
+    private static string? FirstConfigured(IConfiguration? configuration, string environmentVariable, string configurationKey)
+    {
+        var fromEnvironment = Environment.GetEnvironmentVariable(environmentVariable);
+        if (!string.IsNullOrWhiteSpace(fromEnvironment))
+            return fromEnvironment.Trim();
+        var fromConfiguration = configuration?[configurationKey];
+        return string.IsNullOrWhiteSpace(fromConfiguration) ? null : fromConfiguration.Trim();
+    }
+
+    /// <summary>
+    /// Creates the platform-tenant administrator from environment configuration.
+    /// The raw password and API key are never written to the database or logs.
+    /// </summary>
+    public static async Task EnsurePlatformAdministratorAsync(
+        FlowOSDbContext context,
+        FlowOS.Security.Interfaces.IPasswordHasher passwordHasher,
+        string? email,
+        string? password,
+        string? apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(apiKey))
+            return;
+
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        if (!normalizedEmail.Contains('@') || normalizedEmail.StartsWith('@') || normalizedEmail.EndsWith('@'))
+            return;
+        if (password.Length < 12 || apiKey.Length < 32 || TenantIdentityRules.IsDemoApiKey(apiKey))
+            return;
+
+        var keyHash = TenantApiKey.HashKey(apiKey);
+        var existingKey = await context.TenantApiKeys.FirstOrDefaultAsync(k => k.KeyHash == keyHash);
+        if (existingKey != null && (existingKey.TenantId != DefaultTenantId || existingKey.IsRevoked))
+            return;
+
+        if (!await context.Tenants.AnyAsync(t => t.TenantId == DefaultTenantId))
+        {
+            var tenant = new Tenant("Default Tenant");
+            SetPrivateProperty(tenant, "TenantId", DefaultTenantId);
+            tenant.AssignPlan(TenantPlan.Managed, TenantBillingStatus.Active);
+            context.Tenants.Add(tenant);
+            await context.SaveChangesAsync();
+        }
+
+        var user = await context.TenantUsers.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+        if (user != null && user.TenantId != DefaultTenantId)
+            return;
+
+        if (user == null)
+        {
+            context.TenantUsers.Add(new TenantUser(
+                DefaultTenantId,
+                normalizedEmail,
+                passwordHasher.HashPassword(password),
+                "Platform Administrator",
+                "Admin",
+                isEmailVerified: true));
+        }
+        else
+        {
+            if (!passwordHasher.VerifyPassword(password, user.PasswordHash))
+                user.UpdatePassword(passwordHasher.HashPassword(password));
+            if (!user.IsEmailVerified)
+                user.MarkEmailAsVerified();
+        }
+
+        if (existingKey == null)
+        {
+            context.TenantApiKeys.Add(new TenantApiKey(
+                DefaultTenantId,
+                "Platform Admin",
+                apiKey,
+                "FlowOS Platform",
+                "Production",
+                new[] { "*" }));
+        }
+
+        await context.SaveChangesAsync();
     }
 
     private static void SetPrivateProperty(object obj, string propName, object value)
