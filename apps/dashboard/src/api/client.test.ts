@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { api, clearAuthSession, PLATFORM_TENANT_ID, setAuthSession } from './client';
+import {
+  api,
+  clearAuthSession,
+  getAuthSession,
+  onSessionExpired,
+  PLATFORM_TENANT_ID,
+  setAuthSession,
+  takeSessionExpiredNotice
+} from './client';
 
 const tenantId = 'd3e8e2fd-1a8d-416a-987e-0585937090fd';
 
@@ -115,5 +123,75 @@ describe('workflow instance authentication', () => {
     expect(stored.role).toBe('Tenant');
     expect(stored.tenantId).toBe(tenantId);
     expect(stored.token).toBe(token);
+  });
+});
+
+describe('expired platform administrator sign-in', () => {
+  const storeRaw = (session: Record<string, unknown>) =>
+    localStorage.setItem('flowos_auth_session', JSON.stringify(session));
+  const adminToken = (exp: number) =>
+    `header.${btoa(JSON.stringify({ exp, role: 'Admin', tenant_id: PLATFORM_TENANT_ID, tenant_name: 'Default Tenant' }))}.signature`;
+  const adminSession = (exp: number) => ({
+    role: 'Admin',
+    tenantId: PLATFORM_TENANT_ID,
+    tenantName: 'Default Tenant',
+    token: adminToken(exp),
+    isSandbox: false
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    clearAuthSession();
+    takeSessionExpiredNotice();
+  });
+
+  test('falls back to a sandbox session that carries the sandbox name, not the admin tenant name', () => {
+    storeRaw(adminSession(1));
+
+    const session = getAuthSession();
+
+    expect(session.isSandbox).toBe(true);
+    expect(session.role).toBe('Tenant');
+    expect(session.tenantId).toBe('22222222-2222-2222-2222-222222222222');
+    expect(session.tenantName).toBe('Demo Client Tenant (Sandbox)');
+    expect(session.token).toBeUndefined();
+  });
+
+  test('reports the lost admin sign-in once to a listener', () => {
+    storeRaw(adminSession(1));
+    const listener = vi.fn();
+    const stop = onSessionExpired(listener);
+
+    getAuthSession();
+    getAuthSession();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  test('remembers the lost admin sign-in when nobody is listening yet', () => {
+    storeRaw(adminSession(1));
+
+    getAuthSession();
+
+    expect(takeSessionExpiredNotice()).toBe(true);
+    expect(takeSessionExpiredNotice()).toBe(false);
+  });
+
+  test('stays quiet for a valid admin sign-in and for an expired tenant sign-in', () => {
+    storeRaw(adminSession(4_000_000_000));
+    getAuthSession();
+    expect(takeSessionExpiredNotice()).toBe(false);
+
+    localStorage.clear();
+    storeRaw({
+      role: 'Tenant',
+      tenantId,
+      tenantName: 'Acme',
+      token: `header.${btoa(JSON.stringify({ exp: 1, tenant_id: tenantId, role: 'Admin' }))}.signature`,
+      isSandbox: false
+    });
+    getAuthSession();
+    expect(takeSessionExpiredNotice()).toBe(false);
   });
 });

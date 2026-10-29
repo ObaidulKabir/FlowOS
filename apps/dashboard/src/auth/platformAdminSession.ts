@@ -23,18 +23,30 @@ const tokenIsUnusable = (token?: string): boolean => {
   return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
 };
 
-const isPrivilegedRole = (value: unknown) =>
+/** Same roles as TenantIdentityRules.IsPrivilegedRole. */
+export const isPrivilegedRole = (value: unknown) =>
   typeof value === 'string' && ['admin', 'superadmin'].includes(value.trim().toLowerCase());
+
+const carriesPlatformAdminRole = (payload: Record<string, unknown>): boolean => {
+  const tenant = String(payload.tenant_id ?? '').trim().toLowerCase();
+  if (tenant !== PLATFORM_TENANT_ID) return false;
+  if (isPrivilegedRole(payload.role)) return true;
+  return Array.isArray(payload.roles) && payload.roles.some(isPrivilegedRole);
+};
 
 /** True only for a usable sign-in token of an Admin on the platform tenant. */
 export const isPlatformAdminToken = (token?: string): boolean => {
   if (!token || tokenIsUnusable(token)) return false;
   const payload = decodeJwtPayload(token);
-  if (!payload) return false;
-  const tenant = String(payload.tenant_id ?? '').trim().toLowerCase();
-  if (tenant !== PLATFORM_TENANT_ID) return false;
-  if (isPrivilegedRole(payload.role)) return true;
-  return Array.isArray(payload.roles) && payload.roles.some(isPrivilegedRole);
+  return payload ? carriesPlatformAdminRole(payload) : false;
+};
+
+/** True for a platform administrator token whose expiry time has passed. */
+export const isExpiredPlatformAdminToken = (token?: string): boolean => {
+  if (!token) return false;
+  const payload = decodeJwtPayload(token);
+  if (!payload || !carriesPlatformAdminRole(payload)) return false;
+  return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
 };
 
 /** Restores the admin panel for the signed-in platform administrator. */

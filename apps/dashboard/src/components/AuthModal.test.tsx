@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { AuthModal } from './AuthModal';
-import { clearAuthSession, getStoredSession } from '../api/client';
+import { AuthModal, dashboardRoleForLogin } from './AuthModal';
+import { clearAuthSession, getStoredSession, PLATFORM_TENANT_ID } from '../api/client';
 
 describe('API key sign-in', () => {
   beforeEach(() => {
@@ -33,5 +33,28 @@ describe('API key sign-in', () => {
     expect(screen.getByText('Tenant API key is required.')).toBeInTheDocument();
     expect(onSuccess).not.toHaveBeenCalled();
     expect(getStoredSession()).toBeNull();
+  });
+});
+
+describe('sign-in notice and dashboard routing', () => {
+  test('shows the notice it is given on the sign-in form', () => {
+    render(
+      <AuthModal
+        isOpen
+        notice="Your platform admin session expired. Sign in again to continue."
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        onLaunchSandbox={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Your platform admin session expired');
+  });
+
+  test('opens the admin panel for Admin and SuperAdmin on the platform tenant only', () => {
+    expect(dashboardRoleForLogin('Admin', PLATFORM_TENANT_ID)).toBe('Admin');
+    expect(dashboardRoleForLogin('SuperAdmin', PLATFORM_TENANT_ID.toUpperCase())).toBe('Admin');
+    expect(dashboardRoleForLogin('Admin', 'd3e8e2fd-1a8d-416a-987e-0585937090fd')).toBe('Tenant');
+    expect(dashboardRoleForLogin('Member', PLATFORM_TENANT_ID)).toBe('Tenant');
   });
 });

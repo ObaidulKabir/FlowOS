@@ -160,4 +160,20 @@ describe('AdminDashboard tenant selection', () => {
       );
     });
   });
+
+  test('labels the signed-in account as the signed-in user, not as SuperAdmin', async () => {
+    render(
+      <AdminDashboard
+        session={session}
+        onGoHome={vi.fn()}
+        onSwitchRole={vi.fn()}
+        onRegister={vi.fn()}
+        onSignOut={vi.fn()}
+        mcpUrl="https://example.test/mcp"
+      />
+    );
+
+    expect(await screen.findByText('Signed in as: superadmin@flowos.internal')).toBeInTheDocument();
+    expect(screen.queryByText(/SuperAdmin:/)).not.toBeInTheDocument();
+  });
 });
