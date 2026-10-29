@@ -494,7 +494,7 @@ export const TenantDashboard: React.FC<Props> = ({
       <DashboardChrome
         session={session}
         onGoHome={onGoHome}
-        onSwitchRole={onSwitchRole}
+        onOpenPlatformAdmin={onSwitchRole}
         onRegister={onRegister}
         onSignOut={onSignOut}
         mcpUrl={mcpUrl}

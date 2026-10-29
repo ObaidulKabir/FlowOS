@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import { AuthSession } from './types';
-import { getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession, getAuthSession, platformAdminHomeSession } from './api/client';
+import {
+  getStoredSession, setAuthSession, clearAuthSession, getDefaultSandboxSession, getAuthSession,
+  platformAdminHomeSession, onSessionExpired, takeSessionExpiredNotice
+} from './api/client';
 import { LandingPage } from './components/LandingPage';
 import { AuthModal, AuthModalMode } from './components/AuthModal';
 import { TenantDashboard } from './components/TenantDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { mcpRpcUrl } from './mcpUrl';
+
+const ADMIN_SESSION_EXPIRED_NOTICE = 'Your platform admin session expired. Sign in again to continue.';
+const ADMIN_SIGN_IN_NEEDED_NOTICE = 'The platform admin panel needs a current administrator sign-in. Sign in again to continue.';
 
 function App() {
   const mcpUrl = mcpRpcUrl();
@@ -18,6 +24,7 @@ function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
+  const [authNotice, setAuthNotice] = useState<string | undefined>();
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -30,10 +37,23 @@ function App() {
     }
   }, [currentView, session.role, session.tenantName]);
 
-  const openAuth = (mode: AuthModalMode) => {
+  const openAuth = (mode: AuthModalMode, notice?: string) => {
     setAuthModalMode(mode);
+    setAuthNotice(notice);
     setIsAuthModalOpen(true);
   };
+
+  useEffect(() => {
+    const handleAdminSessionExpired = () => {
+      setSession(getAuthSession());
+      setCurrentView('landing');
+      setAuthModalMode('login');
+      setAuthNotice(ADMIN_SESSION_EXPIRED_NOTICE);
+      setIsAuthModalOpen(true);
+    };
+    if (takeSessionExpiredNotice()) handleAdminSessionExpired();
+    return onSessionExpired(handleAdminSessionExpired);
+  }, []);
 
   const handleLaunchSandbox = () => {
     setSession(setAuthSession(getDefaultSandboxSession()));
@@ -55,7 +75,7 @@ function App() {
   const handleSwitchToAdmin = () => {
     const adminSession = platformAdminHomeSession(session);
     if (!adminSession) {
-      openAuth('login');
+      openAuth('login', ADMIN_SIGN_IN_NEEDED_NOTICE);
       return;
     }
     setSession(setAuthSession(adminSession));
@@ -66,11 +86,14 @@ function App() {
     const current = getAuthSession();
     const sandbox = getDefaultSandboxSession();
     const hasPortableTenantContext = Boolean(current.token?.trim()) && current.isSandbox !== true;
+    const hasNamedTenant = Boolean(current.tenantName) && current.tenantName !== 'Platform Administrator';
     const tenantName =
       tenantContext?.tenantName ||
-      (current.tenantName && current.tenantName !== 'Platform Administrator'
+      (hasNamedTenant
         ? current.tenantName
-        : sandbox.tenantName);
+        : hasPortableTenantContext
+          ? 'Platform tenant'
+          : sandbox.tenantName);
     const tenantSession: AuthSession = {
       role: 'Tenant',
       tenantId: hasPortableTenantContext
@@ -136,7 +159,8 @@ function App() {
       <AuthModal
         isOpen={isAuthModalOpen}
         initialMode={authModalMode}
-        onClose={() => setIsAuthModalOpen(false)}
+        notice={authNotice}
+        onClose={() => { setIsAuthModalOpen(false); setAuthNotice(undefined); }}
         onSuccess={handleAuthSuccess}
         onLaunchSandbox={handleLaunchSandbox}
       />
