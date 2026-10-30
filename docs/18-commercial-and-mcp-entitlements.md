@@ -74,6 +74,8 @@ Local Development and `MCP_API_KEY=disabled` do not enforce billing. Staging and
 
 Activate with `POST /api/admin/tenants/{id}/plan` (`plan`: Managed or Enterprise, `billingStatus`: Active). Existing production tenants remain Managed + Active.
 
+Before the payment gateway is connected, a tenant asks for activation with **Request Plan Activation** in the dashboard banner (the payment reference is optional). The request waits under **Tenants → Plan requests** until an admin approves or rejects it. The `MCP-PLAN-REQUIRED` message says this, and says the API key itself is still valid.
+
 Before locking the numbers, instrument: MCP calls per active developer, events per workflow, publications per month, concurrency, retention cost, and infrastructure cost per 10K/100K events. Aim for most customers to sit comfortably inside a package, a minority to approach the next tier, and the highest-usage tenants to create expansion revenue.
 
 ## FlowOS hosted OpenAI
