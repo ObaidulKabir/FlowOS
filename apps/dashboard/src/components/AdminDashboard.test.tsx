@@ -324,7 +324,7 @@ describe('AdminDashboard plan request inbox', () => {
     apiMock.listPlanRequests
       .mockResolvedValueOnce([pending('t-1', 'Acme Ltd', 'Team')])
       .mockResolvedValue([]);
-    apiMock.setTenantPlan.mockResolvedValue({ canRunRuntime: true });
+    apiMock.setTenantPlan.mockResolvedValue({ canRunRuntime: true, keysExtended: 2 });
 
     renderDashboard();
 
@@ -335,6 +335,7 @@ describe('AdminDashboard plan request inbox', () => {
 
     await waitFor(() => expect(apiMock.setTenantPlan).toHaveBeenCalledWith('t-1', 'Team', 'Active'));
     await waitFor(() => expect(screen.queryByText('Acme Ltd')).not.toBeInTheDocument());
+    expect(await screen.findByRole('status')).toHaveTextContent('Acme Ltd is active on Team. 2 lapsed API keys were renewed.');
   });
 
   test('rejects with a reason only after confirmation', async () => {

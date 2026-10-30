@@ -6,6 +6,7 @@ interface PlanRequestInboxProps {
   requests: TenantPlanRequestItem[];
   busyTenantId: string | null;
   error: string | null;
+  notice?: string | null;
   onApprove: (item: TenantPlanRequestItem) => void;
   onReject: (item: TenantPlanRequestItem, reason: string) => void;
 }
@@ -15,13 +16,14 @@ export const PlanRequestInbox: React.FC<PlanRequestInboxProps> = ({
   requests,
   busyTenantId,
   error,
+  notice,
   onApprove,
   onReject
 }) => {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
-  if (requests.length === 0 && !error) return null;
+  if (requests.length === 0 && !error && !notice) return null;
 
   return (
     <section
@@ -31,11 +33,14 @@ export const PlanRequestInbox: React.FC<PlanRequestInboxProps> = ({
       <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
         <BellRing size={14} />
         <span>
-          {requests.length} tenant{requests.length === 1 ? '' : 's'} waiting for plan activation
+          {requests.length === 0
+            ? 'No tenants waiting for plan activation'
+            : `${requests.length} tenant${requests.length === 1 ? '' : 's'} waiting for plan activation`}
         </span>
         <span className="text-[10px] font-normal text-amber-300/70">Updates automatically</span>
       </div>
 
+      {notice && <p role="status" className="text-xs text-emerald-300">{notice}</p>}
       {error && <p role="alert" className="text-xs text-rose-300">{error}</p>}
 
       {requests.map(item => {
