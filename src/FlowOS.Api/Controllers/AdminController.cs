@@ -20,9 +20,11 @@ public class AdminController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
     private readonly FlowOSDbContext _db;
+    private readonly IPlanRequestNotifier _planNotifier;
 
-    public AdminController(IMediator mediator, ICurrentUser currentUser, FlowOSDbContext db)
+    public AdminController(IMediator mediator, ICurrentUser currentUser, FlowOSDbContext db, IPlanRequestNotifier planNotifier)
     {
+        _planNotifier = planNotifier;
         _mediator = mediator;
         _currentUser = currentUser;
         _db = db;
@@ -136,8 +138,10 @@ public class AdminController : ControllerBase
 
         // Auto-approve any pending plan request
         var existingReq = tenant.GetPlanRequest();
+        var approvedNow = false;
         if (existingReq != null && existingReq.Status == "Pending")
         {
+            approvedNow = true;
             existingReq.Status = "Approved";
             existingReq.ReviewedAt = DateTime.UtcNow;
             existingReq.ReviewedBy = _currentUser.Id ?? "admin";
@@ -146,6 +150,9 @@ public class AdminController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+
+        if (approvedNow && existingReq != null)
+            await _planNotifier.NotifyTenantOfDecisionAsync(tenant.TenantId, tenant.Name, existingReq);
 
         return Ok(new
         {
@@ -178,6 +185,7 @@ public class AdminController : ControllerBase
         tenant.SetPlanRequest(existingReq);
 
         await _db.SaveChangesAsync();
+        await _planNotifier.NotifyTenantOfDecisionAsync(tenant.TenantId, tenant.Name, existingReq);
 
         return Ok(new { message = "Plan request rejected.", tenantId = id });
     }

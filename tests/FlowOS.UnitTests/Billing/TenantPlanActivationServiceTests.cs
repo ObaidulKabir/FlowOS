@@ -31,6 +31,21 @@ public class TenantPlanActivationServiceTests
     }
 
     [Fact]
+    public async Task Submit_NotifiesAdmin_OnlyWhenARequestIsActuallyFiled()
+    {
+        using var h = CreateHarness();
+        var tenant = await SeedAsync(h.Db);
+        var input = new PlanActivationInput("Team", "TRX-1", null, null);
+
+        await h.Service.SubmitAsync(tenant.TenantId, input, idempotent: true);
+        await h.Service.SubmitAsync(tenant.TenantId, input, idempotent: true);
+        await h.Service.SubmitAsync(tenant.TenantId, new PlanActivationInput("Platinum", null, null, null), idempotent: true);
+
+        h.Notifier.Verify(n => n.NotifyAdminOfRequestAsync(
+            tenant.TenantId, "Activation Org", It.IsAny<PlanRequestDto>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Submit_Idempotent_ReturnsAlreadyPending_ForSamePlanAndReference()
     {
         using var h = CreateHarness();
@@ -131,17 +146,20 @@ public class TenantPlanActivationServiceTests
         var db = new FlowOSDbContext(options);
         var entitlements = new Mock<ITenantEntitlementService>();
         entitlements.SetupGet(e => e.IsEnforced).Returns(true);
-        return new Harness(db, new TenantPlanActivationService(db, entitlements.Object, TimeProvider.System));
+        var notifier = new Mock<IPlanRequestNotifier>();
+        return new Harness(db, new TenantPlanActivationService(db, entitlements.Object, TimeProvider.System, notifier.Object), notifier);
     }
 
     private sealed class Harness : IDisposable
     {
-        public Harness(FlowOSDbContext db, TenantPlanActivationService service)
+        public Harness(FlowOSDbContext db, TenantPlanActivationService service, Mock<IPlanRequestNotifier> notifier)
         {
+            Notifier = notifier;
             Db = db;
             Service = service;
         }
 
+        public Mock<IPlanRequestNotifier> Notifier { get; }
         public FlowOSDbContext Db { get; }
         public TenantPlanActivationService Service { get; }
         public void Dispose() => Db.Dispose();

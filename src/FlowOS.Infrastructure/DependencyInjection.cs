@@ -132,6 +132,7 @@ public static class DependencyInjection
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantAuthService, FlowOS.Infrastructure.Services.Security.TenantAuthService>();
         services.AddScoped<FlowOS.Infrastructure.Services.Security.TenantSecurityProvisioningService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantEntitlementService, FlowOS.Infrastructure.Services.TenantEntitlementService>();
+        services.AddScoped<FlowOS.Application.Billing.IPlanRequestNotifier, FlowOS.Infrastructure.Services.EmailPlanRequestNotifier>();
         services.AddScoped<FlowOS.Application.Billing.ITenantPlanActivationService, FlowOS.Infrastructure.Services.TenantPlanActivationService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.ITenantBackupService, TenantBackupService>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.ITenantSecretProtector, DataProtectionTenantSecretProtector>();
