@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { DashboardChrome } from './DashboardChrome';
@@ -16,15 +16,20 @@ const session = (overrides: Partial<AuthSession>): AuthSession => ({
   ...overrides
 });
 
-const renderChrome = (current: AuthSession) => render(
+const renderChrome = (
+  current: AuthSession,
+  extra: Partial<React.ComponentProps<typeof DashboardChrome>> = {}
+) => render(
   <DashboardChrome
     session={current}
     onGoHome={vi.fn()}
-    onSwitchRole={vi.fn()}
+    onOpenPlatformAdmin={vi.fn()}
+    onOpenTenantWorkspace={vi.fn()}
     onRegister={vi.fn()}
     onSignOut={vi.fn()}
     mcpUrl="https://example.test/mcp"
     nav={<div>Nav</div>}
+    {...extra}
   />
 );
 
@@ -77,5 +82,44 @@ describe('DashboardChrome account switch', () => {
 
     expect(screen.getByRole('button', { name: 'Tenant workspace' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Platform admin' })).not.toBeInTheDocument();
+  });
+
+  const adminPanelSession = () => session({
+    role: 'Admin',
+    tenantId: PLATFORM_TENANT_ID,
+    tenantName: 'Default Tenant',
+    token: jwt({ exp: 4_000_000_000, tenant_id: PLATFORM_TENANT_ID, role: 'Admin' })
+  });
+
+  test('the admin panel says which workspace the tenant button opens', () => {
+    renderChrome(adminPanelSession(), { tenantWorkspaceTarget: 'Acme' });
+
+    const button = screen.getByRole('button', { name: 'Tenant workspace' });
+    expect(button).toHaveAccessibleDescription('Opens Acme');
+  });
+
+  test('without a chosen tenant the button says it opens the admin\'s own tenant', () => {
+    renderChrome(adminPanelSession());
+
+    expect(screen.getByRole('button', { name: 'Tenant workspace' }))
+      .toHaveAccessibleDescription('Opens Default Tenant (your own tenant)');
+  });
+
+  test('each button calls its own action', () => {
+    const onOpenTenantWorkspace = vi.fn();
+    const onOpenPlatformAdmin = vi.fn();
+
+    const { unmount } = renderChrome(adminPanelSession(), { onOpenTenantWorkspace, onOpenPlatformAdmin });
+    fireEvent.click(screen.getByRole('button', { name: 'Tenant workspace' }));
+    expect(onOpenTenantWorkspace).toHaveBeenCalledTimes(1);
+    expect(onOpenPlatformAdmin).not.toHaveBeenCalled();
+    unmount();
+
+    renderChrome(session({
+      token: jwt({ exp: 4_000_000_000, tenant_id: PLATFORM_TENANT_ID, role: 'Admin' })
+    }), { onOpenTenantWorkspace, onOpenPlatformAdmin });
+    fireEvent.click(screen.getByRole('button', { name: 'Platform admin' }));
+    expect(onOpenPlatformAdmin).toHaveBeenCalledTimes(1);
+    expect(onOpenTenantWorkspace).toHaveBeenCalledTimes(1);
   });
 });

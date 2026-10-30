@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthSession, RegisterTenantUserRequest } from '../types';
 import { api, applyTenantEntitlement, PLATFORM_TENANT_ID, setAuthSession } from '../api/client';
+import { isPrivilegedRole } from '../auth/platformAdminSession';
 import { 
   Building2, Mail, Lock, User, Key, ArrowRight, 
   Sparkles, CheckCircle2, AlertCircle, X, RefreshCw, Eye, EyeOff
@@ -8,14 +9,16 @@ import {
 
 export type AuthModalMode = 'login' | 'register' | 'verify';
 
-const dashboardRoleForLogin = (role?: string, tenantId?: string): 'Tenant' | 'Admin' =>
-  role?.trim().toLowerCase() === 'admin' && tenantId?.trim().toLowerCase() === PLATFORM_TENANT_ID
+export const dashboardRoleForLogin = (role?: string, tenantId?: string): 'Tenant' | 'Admin' =>
+  isPrivilegedRole(role) && tenantId?.trim().toLowerCase() === PLATFORM_TENANT_ID
     ? 'Admin'
     : 'Tenant';
 
 interface AuthModalProps {
   isOpen: boolean;
   initialMode?: AuthModalMode;
+  /** Explains why the sign-in form opened, for example an expired administrator session. */
+  notice?: string;
   onClose: () => void;
   onSuccess: (session: AuthSession) => void;
   onLaunchSandbox: () => void;
@@ -24,6 +27,7 @@ interface AuthModalProps {
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   initialMode = 'login',
+  notice,
   onClose,
   onSuccess,
   onLaunchSandbox
@@ -358,6 +362,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </p>
           </div>
         </div>
+
+        {notice && mode === 'login' && (
+          <div role="status" className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span>{notice}</span>
+          </div>
+        )}
 
         {/* Top Mode Tabs */}
         <div className="grid grid-cols-3 p-1 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-semibold gap-1">

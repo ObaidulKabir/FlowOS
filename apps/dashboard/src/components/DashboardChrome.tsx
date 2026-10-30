@@ -10,7 +10,12 @@ import { FLOW_OS_VERSION_SCHEME, useFlowOsVersion } from '../flowOsRelease';
 interface DashboardChromeProps {
   session: AuthSession;
   onGoHome: () => void;
-  onSwitchRole: () => void;
+  /** Opens the platform admin panel; shown to a platform administrator browsing a tenant. */
+  onOpenPlatformAdmin?: () => void;
+  /** Opens a tenant workspace; shown in the admin panel. */
+  onOpenTenantWorkspace?: () => void;
+  /** Name of the tenant that "Tenant workspace" opens. Defaults to the administrator's own tenant. */
+  tenantWorkspaceTarget?: string;
   onRegister: () => void;
   onSignOut: () => void;
   mcpUrl: string;
@@ -25,7 +30,9 @@ export const sidebarItemClass = (active: boolean, activeClass = 'bg-blue-600 tex
 export const DashboardChrome: React.FC<DashboardChromeProps> = ({
   session,
   onGoHome,
-  onSwitchRole,
+  onOpenPlatformAdmin,
+  onOpenTenantWorkspace,
+  tenantWorkspaceTarget,
   onRegister,
   onSignOut,
   mcpUrl,
@@ -107,7 +114,7 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
       </button>
       {returnToPlatformAdmin && (
         <button
-          onClick={onSwitchRole}
+          onClick={onOpenPlatformAdmin}
           className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-purple-300 hover:bg-purple-500/15 flex items-center gap-2"
           title="Return to the platform admin panel for this sign-in"
         >
@@ -116,14 +123,22 @@ export const DashboardChrome: React.FC<DashboardChromeProps> = ({
         </button>
       )}
       {session.role === 'Admin' && (
-        <button
-          onClick={onSwitchRole}
-          className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-blue-300 hover:bg-blue-500/15 flex items-center gap-2"
-          title="Open a tenant workspace with this platform admin sign-in"
-        >
-          <Building2 size={14} />
-          Tenant workspace
-        </button>
+        <>
+          <button
+            onClick={onOpenTenantWorkspace}
+            aria-describedby="tenant-workspace-target"
+            className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-blue-300 hover:bg-blue-500/15 flex items-center gap-2"
+            title="Open a tenant workspace with this platform admin sign-in"
+          >
+            <Building2 size={14} />
+            Tenant workspace
+          </button>
+          <p id="tenant-workspace-target" className="px-3 -mt-0.5 text-[10px] text-slate-500 truncate">
+            {tenantWorkspaceTarget
+              ? `Opens ${tenantWorkspaceTarget}`
+              : `Opens ${session.tenantName} (your own tenant)`}
+          </p>
+        </>
       )}
       {session.isSandbox && (
         <button

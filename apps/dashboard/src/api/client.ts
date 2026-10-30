@@ -1,4 +1,4 @@
-import { isPlatformAdminToken, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
+import { isExpiredPlatformAdminToken, isPlatformAdminToken, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
 import { 
   WorkflowClass, CreateDraftRequest, CopyRequest, ValidationResult, 
   WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession, DeadLetterDto,
@@ -83,6 +83,7 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
   let token = session.token?.trim() || undefined;
   let apiKey = session.apiKey?.trim() || undefined;
   let tenantId = session.tenantId;
+  let tenantName = session.tenantName;
   let isSandbox = session.isSandbox;
 
   if (token && tokenIsUnusable(token)) {
@@ -94,10 +95,12 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
       apiKey = undefined;
   } else if (isPlaygroundSession({ ...session, token }, apiKey, tenantId) || (!token && !apiKey && isPlaygroundTenant(tenantId))) {
     apiKey = apiKey || DEMO_API_KEY;
+    if (tenantId !== DEMO_TENANT_ID) tenantName = getDefaultSandboxSession().tenantName;
     tenantId = DEMO_TENANT_ID;
     token = undefined;
     isSandbox = true;
   } else if (isDemoApiKey(apiKey)) {
+    if (tenantId !== DEMO_TENANT_ID) tenantName = getDefaultSandboxSession().tenantName;
     tenantId = DEMO_TENANT_ID;
     token = undefined;
     isSandbox = true;
@@ -109,7 +112,7 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
       ? 'Tenant'
       : session.role;
 
-  return { ...session, token, apiKey, tenantId, isSandbox, role };
+  return { ...session, token, apiKey, tenantId, tenantName, isSandbox, role };
 };
 
 export const applyTenantEntitlement = (
@@ -139,9 +142,38 @@ export const getStoredSession = (): AuthSession | null => {
   return null;
 };
 
+const sessionExpiredListeners = new Set<() => void>();
+let sessionExpiredPending = false;
+let lastReportedExpiredToken: string | undefined;
+
+/** Calls back when a platform administrator sign-in has expired and the session fell back to the sandbox. */
+export const onSessionExpired = (listener: () => void): (() => void) => {
+  sessionExpiredListeners.add(listener);
+  return () => { sessionExpiredListeners.delete(listener); };
+};
+
+/** True once if an expired admin sign-in was found while nobody was listening yet (page load). */
+export const takeSessionExpiredNotice = (): boolean => {
+  const pending = sessionExpiredPending;
+  sessionExpiredPending = false;
+  return pending;
+};
+
+const reportExpiredAdminSession = (token: string) => {
+  if (token === lastReportedExpiredToken) return;
+  lastReportedExpiredToken = token;
+  if (sessionExpiredListeners.size === 0) {
+    sessionExpiredPending = true;
+    return;
+  }
+  sessionExpiredListeners.forEach(listener => listener());
+};
+
 export const getAuthSession = (): AuthSession => {
   const stored = getStoredSession();
   const normalized = withSessionCredentials(stored || getDefaultSandboxSession());
+  const lostAdminToken =
+    stored && stored.isSandbox !== true && isExpiredPlatformAdminToken(stored.token) ? stored.token : undefined;
   if (
     !stored ||
     stored.apiKey !== normalized.apiKey ||
@@ -154,16 +186,19 @@ export const getAuthSession = (): AuthSession => {
       // Ignore quota / private-mode write failures; headers still use the repaired session.
     }
   }
+  if (lostAdminToken) reportExpiredAdminSession(lostAdminToken);
   return normalized;
 };
 
 export const setAuthSession = (session: AuthSession): AuthSession => {
+  lastReportedExpiredToken = undefined;
   const normalized = withSessionCredentials(session);
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(normalized));
   return normalized;
 };
 
 export const clearAuthSession = () => {
+  lastReportedExpiredToken = undefined;
   localStorage.removeItem(AUTH_STORAGE_KEY);
 };
 

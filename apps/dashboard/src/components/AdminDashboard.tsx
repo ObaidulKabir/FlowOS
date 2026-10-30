@@ -207,7 +207,8 @@ export const AdminDashboard: React.FC<Props> = ({
       <DashboardChrome
         session={session}
         onGoHome={onGoHome}
-        onSwitchRole={handleSwitchToTenantView}
+        onOpenTenantWorkspace={handleSwitchToTenantView}
+        tenantWorkspaceTarget={selectedTenantFilter ? effectiveTenantName : undefined}
         onRegister={onRegister}
         onSignOut={onSignOut}
         mcpUrl={mcpUrl}
@@ -298,7 +299,7 @@ export const AdminDashboard: React.FC<Props> = ({
                 <Shield size={13} /> Platform Governance & Control Plane
               </span>
               <span className="text-xs text-slate-500">•</span>
-              <span className="text-xs text-slate-400 font-mono">SuperAdmin: {session.username || 'root'}</span>
+              <span className="text-xs text-slate-400 font-mono">Signed in as: {session.username || 'root'}</span>
             </div>
 
             <h1 className="text-2xl md:text-3xl font-extrabold text-white">
