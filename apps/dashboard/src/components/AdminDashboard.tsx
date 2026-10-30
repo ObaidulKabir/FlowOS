@@ -459,7 +459,7 @@ export const AdminDashboard: React.FC<Props> = ({
             <TenantManager
               openRegisterModal={openRegisterModal}
               onRegisterModalClosed={() => setOpenRegisterModal(false)}
-              onTenantChange={() => loadData()}
+              onTenantChange={tenantId => setSelectedTenantFilter(tenantId)}
               onViewTenantWorkflows={handleViewTenantWorkflows}
               planRequestsVersion={planRequestsVersion}
             />

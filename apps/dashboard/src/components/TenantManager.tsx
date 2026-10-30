@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, getActiveTenantId, setActiveTenantId } from '../api/client';
+import { api } from '../api/client';
 import { TenantDto, TenantPlanRequestItem } from '../types';
 import { mcpRpcUrl } from '../mcpUrl';
 import { Key, Copy, Check, Plus, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, Globe, UserCheck, Sparkles, Layers, Clock, X } from 'lucide-react';
@@ -27,7 +27,9 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Active Tenant
-  const [activeTenant, setActiveTenant] = useState<string>(getActiveTenantId());
+  // The tenant an admin is looking at. It never changes the admin's own sign-in: the API rejects
+  // an x-tenant-id that differs from the credential's tenant (403 Cross-tenant access forbidden).
+  const [activeTenant, setActiveTenant] = useState<string>('');
 
   // Registration Modal State
   const [showRegisterModal, setShowRegisterModal] = useState(openRegisterModal);
@@ -155,7 +157,6 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
 
   const handleSelectTenant = (tenantId: string) => {
     setActiveTenant(tenantId);
-    setActiveTenantId(tenantId);
     if (onTenantChange) {
       onTenantChange(tenantId);
     }
@@ -579,12 +580,13 @@ headers = {
                       <button
                         onClick={() => handleSelectTenant(t.tenantId)}
                         className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                        title="Use this tenant as the scope for the admin views. Your admin sign-in does not change."
                       >
-                        <UserCheck size={13} /> Switch Context
+                        <UserCheck size={13} /> Select tenant
                       </button>
                     ) : (
                       <span className="text-xs text-blue-400 font-semibold flex items-center gap-1">
-                        <CheckCircle2 size={14} /> Selected
+                        <CheckCircle2 size={14} /> In scope
                       </span>
                     )}
 
