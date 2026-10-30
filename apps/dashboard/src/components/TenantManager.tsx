@@ -11,13 +11,16 @@ interface TenantManagerProps {
   openRegisterModal?: boolean;
   onRegisterModalClosed?: () => void;
   onViewTenantWorkflows?: (tenantId: string) => void;
+  /** Bumped by the parent when a plan request was decided elsewhere, so this list reloads. */
+  planRequestsVersion?: number;
 }
 
 export const TenantManager: React.FC<TenantManagerProps> = ({ 
   onTenantChange, 
   openRegisterModal = false,
   onRegisterModalClosed,
-  onViewTenantWorkflows 
+  onViewTenantWorkflows,
+  planRequestsVersion
 }) => {
   const [tenants, setTenants] = useState<TenantDto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -113,7 +116,7 @@ export const TenantManager: React.FC<TenantManagerProps> = ({
   useEffect(() => {
     loadTenants();
     loadPlanRequests();
-  }, []);
+  }, [planRequestsVersion]);
 
   const openReview = (item: TenantPlanRequestItem, mode: 'approve' | 'reject') => {
     setReviewingRequest(item);

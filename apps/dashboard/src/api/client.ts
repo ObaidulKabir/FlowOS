@@ -552,7 +552,7 @@ export const api = {
     plan: string = 'Managed',
     billingStatus: 'Unpaid' | 'Active' | 'PastDue' | 'Canceled' = 'Active',
     adminNotes?: string
-  ): Promise<{ tenantId: string; name: string; plan: string; billingStatus: string; canRunRuntime: boolean }> => {
+  ): Promise<{ tenantId: string; name: string; plan: string; billingStatus: string; canRunRuntime: boolean; keysExtended?: number }> => {
     const headers = getHeaders('Admin');
     const response = await fetch(`/api/admin/tenants/${tenantId}/plan`, {
       method: 'POST',

@@ -74,7 +74,7 @@ Local Development and `MCP_API_KEY=disabled` do not enforce billing. Staging and
 
 Activate with `POST /api/admin/tenants/{id}/plan` (`plan`: Managed or Enterprise, `billingStatus`: Active). Existing production tenants remain Managed + Active.
 
-Before the payment gateway is connected, a tenant asks for activation with **Request Plan Activation** in the dashboard banner (the payment reference is optional). The request waits under **Tenants → Plan requests** until an admin approves or rejects it. The `MCP-PLAN-REQUIRED` message says this, and says the API key itself is still valid.
+Before the payment gateway is connected, a tenant working through MCP calls `get_plan_status` to see its plan and request state, then `request_plan_activation` with the plan and payment reference. Both tools stay available while the plan is blocked, the request is idempotent, and it only files a request: it never activates the plan. A tenant can also ask for activation with **Request Plan Activation** in the dashboard banner (the payment reference is optional). The request waits under **Tenants → Plan requests** until an admin approves or rejects it. The `MCP-PLAN-REQUIRED` message says this, and says the API key itself is still valid.
 
 Before locking the numbers, instrument: MCP calls per active developer, events per workflow, publications per month, concurrency, retention cost, and infrastructure cost per 10K/100K events. Aim for most customers to sit comfortably inside a package, a minority to approach the next tier, and the highest-usage tenants to create expansion revenue.
 
@@ -103,3 +103,9 @@ The marketing site names the seller and links the pages a card processor expects
 | Contact | `/contact` |
 
 The seller block is `apps/dashboard/src/legalEntity.json`. Before a UK Ltd Stripe application, set `operatorName`, `companyNumber`, `registeredOffice`, `registrationJurisdiction`, and `governingLaw` to that company, then run `npm run legal` in `apps/dashboard` so the static pages match. Do not publish a company number before it exists. List prices stay USD and exclude VAT. Card checkout itself remains `L-PAY`. Support and sales use `supportEmail` until separate mailboxes exist.
+
+## Blocked or expired keys
+
+- **402 `MCP-PLAN-REQUIRED`**: the key is valid. The tenant calls `get_plan_status` and `request_plan_activation` with the same key; the request appears in the admin dashboard inbox, where one click approves it.
+- **401 `Invalid or unknown tenant API key`**: the key is expired or revoked and cannot authenticate any tool. The tenant signs in to the dashboard (or calls MCP with a dashboard login JWT, `Authorization: Bearer`) to request activation and create a new key.
+- **Approval renews keys.** When an admin activates a plan, the tenant's non-revoked keys that have an expiry are extended to 365 days from approval, including keys that already lapsed. Revoked keys and keys that never expire are not touched. The admin sees how many keys were renewed.

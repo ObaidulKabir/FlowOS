@@ -10,6 +10,22 @@ public static class McpToolSchemas
     public static JObject TenantOptional() => JObject.Parse(
         """{"type":"object","properties":{"tenantId":{"type":"string","format":"uuid"}},"additionalProperties":false}""");
 
+    public static JObject RequestPlanActivation() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"},
+            "plan":{"type":"string","enum":["Starter","Builder","Team","Growth","Scale","Enterprise"]},
+            "paymentReference":{"type":"string","maxLength":200},
+            "billingContactEmail":{"type":"string","maxLength":254},
+            "notes":{"type":"string","maxLength":1000}
+          },
+          "required":["plan"],
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject ListNotifications() => JObject.Parse(
         """
         {

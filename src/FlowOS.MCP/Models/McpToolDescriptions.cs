@@ -17,6 +17,22 @@ public static class McpToolDescriptions
                 "Errors: MCP-TENANT-001, MCP-TENANT-002. " +
                 "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["get_plan_status"] =
+                "Shows this tenant's plan, billing status, whether runtime tools are allowed, and the state of any plan activation request. " +
+                "Call it first when a tool returns HTTP 402 MCP-PLAN-REQUIRED; that is an unpaid plan, not an expired flw_live_ key. " +
+                "HTTP uses the authenticated x-tenant-id; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{plan,billingStatus,canRunRuntime,billingEnforced,planRequest,nextStep}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. Input example: {}",
+
+            ["request_plan_activation"] =
+                "Asks a platform administrator to activate a paid plan for this tenant. It only files a request and never activates the plan; " +
+                "runtime tools stay blocked until an administrator approves. Repeating the same plan and paymentReference is safe. " +
+                "plan is one of Starter, Builder, Team, Growth, Scale, Enterprise. " +
+                "HTTP uses the authenticated x-tenant-id; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{outcome:\"Submitted\"|\"AlreadyPending\"|\"AlreadyActive\",message,planRequest}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {\"plan\":\"Team\",\"paymentReference\":\"bKash TrxID 8N7A6D5\"}",
+
             ["list_notifications"] =
                 "Lists recent notifications for the tenant and user with read status and severity. " +
                 "HTTP uses the authenticated x-tenant-id; stdio requires tenantId. " +
@@ -425,7 +441,7 @@ public static class McpToolDescriptions
                 "Returns: {ok:true,data:{workflowInstanceId,tenantId,workflowDefinitionId,workflowVersion,externalSourceSystem,externalReference,status,correlationId,message}}. " +
                 "Optional priority (0–100, higher is more urgent) orders the task inbox; change it later with set_instance_priority. " +
                 "Pass businessReference {sourceSystem,externalEntityId} to link the instance to a record in your system; find it later with list_workflow_instances. Reusing an idempotencyKey returns the same instance. " +
-                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
+                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key; call get_plan_status, then request_plan_activation. " +
                 "MCP-CONFLICT-001 (context {conflictCode,retryable:true}) means a concurrent update or a duplicate request still running; retry with the same idempotencyKey. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500},\"roleAssignments\":{\"Sales\":\"user-123\"}}}",
@@ -459,7 +475,7 @@ public static class McpToolDescriptions
                 "causationId (optional UUID) records what caused the event in your system, for example a Learning OS decision ID. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,eventType,message}}. " +
                 "MCP-CONFLICT-001 (context {conflictCode,retryable:true}) means another update won the race or the same idempotencyKey is still running; read the instance again and retry. " +
-                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
+                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key; call get_plan_status, then request_plan_activation. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-EXEC-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"eventType\":\"EVT-SUBMIT\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
@@ -470,7 +486,7 @@ public static class McpToolDescriptions
                 "When the waiting step lists AllowedRoles, actorId must be the person stored for one of those roles (or a valid team member if assigned to 'team:{id}:{level}'). A different role cannot complete the task. " +
                 "A shared tenant API key's caller id is the literal api-key. The history line records that person as ActorId. " +
                 "Returns: {ok:true,data:{success:true,workflowInstanceId,taskId,message}}. " +
-                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key. " +
+                "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key; call get_plan_status, then request_plan_activation. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-AUTHZ-001, MCP-AUTHZ-002, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"taskId\":\"66666666-6666-6666-6666-666666666666\",\"actorId\":\"user-123\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
@@ -902,6 +918,8 @@ public static class McpToolDescriptions
             ["list_workflow_instances"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["read_change_feed"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_workflow_history"] = new("query", "authenticated", true, true, false, "none", true, "low"),
+            ["get_plan_status"] = new("billing", "authenticated", true, true, false, "none", true, "low"),
+            ["request_plan_activation"] = new("billing", "authenticated", true, true, true, "reversible", true, "low"),
             ["list_notifications"] = new("notification", "authenticated", true, true, false, "none", true, "low"),
             ["mark_notification_as_read"] = new("command", "authenticated", true, true, true, "reversible", true, "low"),
             ["create_draft_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
