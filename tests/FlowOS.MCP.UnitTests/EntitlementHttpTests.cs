@@ -148,6 +148,8 @@ public sealed class EntitlementHttpTests
         var (denied, deniedBody) = await CallTool(client, tenantId, "list_public_workflowclasses", new { }, expiredKey);
         Assert.Equal(HttpStatusCode.Unauthorized, denied);
         Assert.Contains("Invalid or unknown tenant API key", deniedBody);
+        Assert.Contains("request_plan_activation", deniedBody);
+        Assert.Contains("create a new key", deniedBody);
 
         var (cross, crossBody) = await CallTool(client, Guid.NewGuid(), "list_public_workflowclasses", new { }, rawKey);
         Assert.Equal(HttpStatusCode.Forbidden, cross);

@@ -51,6 +51,7 @@ export const AdminDashboard: React.FC<Props> = ({
   const [tenantsCount, setTenantsCount] = useState(0);
   const [planRequests, setPlanRequests] = useState<TenantPlanRequestItem[]>([]);
   const [planRequestError, setPlanRequestError] = useState<string | null>(null);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
   const [planBusyTenantId, setPlanBusyTenantId] = useState<string | null>(null);
   const [planRequestsVersion, setPlanRequestsVersion] = useState(0);
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
@@ -154,8 +155,14 @@ export const AdminDashboard: React.FC<Props> = ({
   const handleApprovePlanRequest = async (item: TenantPlanRequestItem) => {
     setPlanBusyTenantId(item.tenantId);
     setPlanRequestError(null);
+    setPlanNotice(null);
     try {
-      await api.setTenantPlan(item.tenantId, item.planRequest.requestedPlan, 'Active');
+      const result = await api.setTenantPlan(item.tenantId, item.planRequest.requestedPlan, 'Active');
+      const extended = result?.keysExtended ?? 0;
+      setPlanNotice(
+        `${item.tenantName} is active on ${item.planRequest.requestedPlan}.` +
+        (extended > 0 ? ` ${extended} lapsed API key${extended === 1 ? ' was' : 's were'} renewed.` : '')
+      );
       await finishPlanDecision();
     } catch (err: any) {
       setPlanRequestError(`Could not approve ${item.tenantName}: ${err?.message || 'unknown error'}`);
@@ -394,6 +401,7 @@ export const AdminDashboard: React.FC<Props> = ({
         requests={planRequests}
         busyTenantId={planBusyTenantId}
         error={planRequestError}
+        notice={planNotice}
         onApprove={handleApprovePlanRequest}
         onReject={handleRejectPlanRequest}
       />

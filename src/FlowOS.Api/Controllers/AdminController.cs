@@ -20,9 +20,11 @@ public class AdminController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
     private readonly FlowOSDbContext _db;
+    private readonly ITenantApiKeyRenewalService _keyRenewal;
 
-    public AdminController(IMediator mediator, ICurrentUser currentUser, FlowOSDbContext db)
+    public AdminController(IMediator mediator, ICurrentUser currentUser, FlowOSDbContext db, ITenantApiKeyRenewalService keyRenewal)
     {
+        _keyRenewal = keyRenewal;
         _mediator = mediator;
         _currentUser = currentUser;
         _db = db;
@@ -147,8 +149,15 @@ public class AdminController : ControllerBase
 
         await _db.SaveChangesAsync();
 
+        // An active paid plan should unblock the tenant completely, including keys that lapsed
+        // while the plan was unpaid.
+        var keysExtended = tenant.CanRunRuntime
+            ? await _keyRenewal.ExtendExpiringKeysAsync(tenant.TenantId)
+            : 0;
+
         return Ok(new
         {
+            keysExtended,
             tenantId = tenant.TenantId,
             name = tenant.Name,
             plan = tenant.Plan.ToString(),
