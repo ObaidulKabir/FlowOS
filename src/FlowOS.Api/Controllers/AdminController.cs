@@ -138,8 +138,10 @@ public class AdminController : ControllerBase
 
         // Auto-approve any pending plan request
         var existingReq = tenant.GetPlanRequest();
+        var approvedNow = false;
         if (existingReq != null && existingReq.Status == "Pending")
         {
+            approvedNow = true;
             existingReq.Status = "Approved";
             existingReq.ReviewedAt = DateTime.UtcNow;
             existingReq.ReviewedBy = _currentUser.Id ?? "admin";
@@ -187,6 +189,7 @@ public class AdminController : ControllerBase
         tenant.SetPlanRequest(existingReq);
 
         await _db.SaveChangesAsync();
+        await _planNotifier.NotifyTenantOfDecisionAsync(tenant.TenantId, tenant.Name, existingReq);
 
         return Ok(new { message = "Plan request rejected.", tenantId = id });
     }

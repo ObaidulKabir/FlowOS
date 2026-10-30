@@ -12,15 +12,18 @@ public sealed class TenantPlanActivationService : ITenantPlanActivationService
     private readonly FlowOSDbContext _db;
     private readonly ITenantEntitlementService _entitlements;
     private readonly TimeProvider _time;
+    private readonly IPlanRequestNotifier _notifier;
 
     public TenantPlanActivationService(
         FlowOSDbContext db,
         ITenantEntitlementService entitlements,
-        TimeProvider time)
+        TimeProvider time,
+        IPlanRequestNotifier notifier)
     {
         _db = db;
         _entitlements = entitlements;
         _time = time;
+        _notifier = notifier;
     }
 
     public async Task<TenantPlanStatus?> GetStatusAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -80,6 +83,7 @@ public sealed class TenantPlanActivationService : ITenantPlanActivationService
 
         tenant.SetPlanRequest(dto);
         await _db.SaveChangesAsync(cancellationToken);
+        await _notifier.NotifyAdminOfRequestAsync(tenant.TenantId, tenant.Name, dto, cancellationToken);
         return new PlanActivationResult(PlanActivationOutcome.Submitted, dto);
     }
 }
