@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
+using FlowOS.Application.Billing;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
@@ -28,19 +29,22 @@ public class TenantsController : ControllerBase
     private readonly TenantSecurityProvisioningService _securityProvisioning;
     private readonly ITenantBackupService _backups;
     private readonly ITenantSecretProtector _secretProtector;
+    private readonly ITenantPlanActivationService _planActivation;
 
     public TenantsController(
         FlowOSDbContext context,
         ICurrentUser currentUser,
         TenantSecurityProvisioningService securityProvisioning,
         ITenantBackupService backups,
-        ITenantSecretProtector secretProtector)
+        ITenantSecretProtector secretProtector,
+        ITenantPlanActivationService planActivation)
     {
         _context = context;
         _currentUser = currentUser;
         _securityProvisioning = securityProvisioning;
         _backups = backups;
         _secretProtector = secretProtector;
+        _planActivation = planActivation;
     }
 
     [HttpGet]
@@ -362,27 +366,17 @@ public class TenantsController : ControllerBase
         if (!CanAccessTenant(id))
             return Forbid();
 
-        var tenant = await _context.Tenants.FindAsync(id);
-        if (tenant == null) return NotFound("Tenant not found.");
+        var result = await _planActivation.SubmitAsync(
+            id,
+            new PlanActivationInput(request?.Plan, request?.PaymentReference, request?.BillingContactEmail, request?.Notes),
+            idempotent: false);
 
-        if (request == null || !CommercialPlans.TryMap(request.Plan, out var storedPlan, out var displayName))
-            return BadRequest("Plan must be Starter, Builder, Team, Growth, Scale, or Enterprise.");
-
-        var planDto = new PlanRequestDto
+        return result.Outcome switch
         {
-            RequestedPlan = displayName,
-            CommercialTier = storedPlan.ToString(),
-            PaymentReference = request.PaymentReference?.Trim(),
-            BillingContactEmail = request.BillingContactEmail?.Trim(),
-            Notes = request.Notes?.Trim(),
-            RequestedAt = DateTime.UtcNow,
-            Status = "Pending"
+            PlanActivationOutcome.TenantNotFound => NotFound("Tenant not found."),
+            PlanActivationOutcome.InvalidPlan => BadRequest("Plan must be Starter, Builder, Team, Growth, Scale, or Enterprise."),
+            _ => Ok(result.PlanRequest)
         };
-
-        tenant.SetPlanRequest(planDto);
-        await _context.SaveChangesAsync();
-
-        return Ok(planDto);
     }
 
     [HttpGet("{id:guid}/plan-request")]

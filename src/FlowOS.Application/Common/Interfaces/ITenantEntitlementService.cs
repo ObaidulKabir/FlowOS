@@ -22,7 +22,8 @@ public static class TenantEntitlementPolicy
         "Runtime execution requires an active paid plan (Starter through Scale, or Enterprise). " +
         "MCP is included on every package. " +
         "Your API key is valid; this is an unpaid plan, not an expired key. " +
-        "To activate, open your tenant workspace in the FlowOS dashboard and choose Request Plan Activation with your payment reference. " +
+        "To activate from MCP, call get_plan_status and then request_plan_activation with your plan and payment reference; " +
+        "or open your tenant workspace in the FlowOS dashboard and choose Request Plan Activation. " +
         "A platform administrator then reviews and activates the plan.";
 
     public static bool McpToolRequiresPaidPlan(string toolName, bool mutating, string sideEffect)
@@ -40,5 +41,7 @@ public static class TenantEntitlementPolicy
         toolName.Equals("create_draft_workflowclass", StringComparison.OrdinalIgnoreCase) ||
         toolName.Equals("update_draft_workflowclass", StringComparison.OrdinalIgnoreCase) ||
         toolName.Equals("create_context_binding", StringComparison.OrdinalIgnoreCase) ||
-        toolName.Equals("update_context_binding", StringComparison.OrdinalIgnoreCase);
+        toolName.Equals("update_context_binding", StringComparison.OrdinalIgnoreCase) ||
+        toolName.Equals("request_plan_activation", StringComparison.OrdinalIgnoreCase) ||
+        toolName.Equals("get_plan_status", StringComparison.OrdinalIgnoreCase);
 }

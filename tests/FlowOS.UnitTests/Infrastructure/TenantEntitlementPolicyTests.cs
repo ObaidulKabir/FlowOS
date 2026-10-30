@@ -16,6 +16,7 @@ public class TenantEntitlementPolicyTests
     public void PlanRequiredMessage_TellsTheTenantHowToActivate()
     {
         Assert.Contains("Request Plan Activation", TenantEntitlementPolicy.PlanRequiredMessage);
+        Assert.Contains("request_plan_activation", TenantEntitlementPolicy.PlanRequiredMessage);
         Assert.Contains("payment reference", TenantEntitlementPolicy.PlanRequiredMessage);
         Assert.Contains("platform administrator", TenantEntitlementPolicy.PlanRequiredMessage);
     }

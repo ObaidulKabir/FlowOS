@@ -58,6 +58,7 @@ public sealed class EntitlementHttpTests
         Assert.Contains("MCP is included on every package", startBody);
         Assert.Contains("not an expired key", startBody);
         Assert.Contains("Request Plan Activation", startBody);
+        Assert.Contains("request_plan_activation", startBody);
 
         using (var scope = app.Services.CreateScope())
         {
@@ -75,6 +76,43 @@ public sealed class EntitlementHttpTests
             new { workflowClassId = Guid.NewGuid() });
         Assert.NotEqual(HttpStatusCode.PaymentRequired, paidStatus);
         Assert.DoesNotContain(TenantEntitlementPolicy.PlanRequiredCode, paidBody);
+    }
+
+    [Fact]
+    public async Task BlockedTrialTenant_CanCheckStatusAndRequestActivation_ButStaysBlocked()
+    {
+        await using var app = BuildApp(enforceBilling: true);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        var tenant = await SeedTrialTenantAsync(app);
+
+        var (statusCode, statusBody) = await CallTool(client, tenant.TenantId, "get_plan_status", new { });
+        Assert.Equal(HttpStatusCode.OK, statusCode);
+        Assert.Contains("canRunRuntime", statusBody);
+        Assert.Contains("request_plan_activation", statusBody);
+
+        var (firstCode, firstBody) = await CallTool(
+            client, tenant.TenantId, "request_plan_activation", new { plan = "Team", paymentReference = "TRX-1" });
+        Assert.Equal(HttpStatusCode.OK, firstCode);
+        Assert.Contains("Submitted", firstBody);
+
+        var (_, repeatBody) = await CallTool(
+            client, tenant.TenantId, "request_plan_activation", new { plan = "Team", paymentReference = "TRX-1" });
+        Assert.Contains("AlreadyPending", repeatBody);
+
+        var (badCode, badBody) = await CallTool(
+            client, tenant.TenantId, "request_plan_activation", new { plan = "Platinum" });
+        Assert.Contains("MCP-ARG-002", badBody);
+        Assert.NotEqual(HttpStatusCode.PaymentRequired, badCode);
+
+        var (startCode, _) = await CallTool(
+            client, tenant.TenantId, "start_workflow", new { workflowClassId = Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.PaymentRequired, startCode);
+
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlowOSDbContext>();
+        var stored = await db.Tenants.FindAsync(tenant.TenantId);
+        Assert.False(stored!.CanRunRuntime);
     }
 
     [Fact]

@@ -27,6 +27,8 @@ public class TenantEntitlementServiceTests
     [InlineData("update_draft_workflowclass", true, "reversible", false)]
     [InlineData("create_context_binding", true, "reversible", false)]
     [InlineData("update_context_binding", true, "reversible", false)]
+    [InlineData("request_plan_activation", true, "reversible", false)]
+    [InlineData("get_plan_status", false, "none", false)]
     [InlineData("start_workflow", true, "irreversible", true)]
     [InlineData("assign_instance_role", true, "irreversible", true)]
     [InlineData("publish_event", true, "irreversible", true)]
