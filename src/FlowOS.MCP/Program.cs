@@ -352,7 +352,8 @@ public partial class Program
                         ? "Authentication required. Provide a tenant API key or a login JWT."
                         : attemptedJwt
                             ? "Invalid or expired login JWT. Sign in again."
-                            : "Invalid or unknown tenant API key.";
+                            : "Invalid or unknown tenant API key. If the key expired or was revoked, sign in to the FlowOS dashboard to request plan activation and create a new key, " +
+                              "or call MCP with a dashboard login JWT (Authorization: Bearer) and use get_plan_status and request_plan_activation.";
                     await WriteHttpError(context, StatusCodes.Status401Unauthorized, -32001, message);
                     return;
                 }

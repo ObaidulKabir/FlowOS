@@ -106,6 +106,19 @@ public class TenantApiKey
         IsRevoked = true;
     }
 
+    /// <summary>
+    /// Pushes an expiry later. Revoked keys and keys that never expire are left alone, and an
+    /// expiry is never moved earlier. Returns true when the key changed.
+    /// </summary>
+    public bool ExtendExpiry(DateTime newExpiresAtUtc)
+    {
+        if (IsRevoked || !ExpiresAt.HasValue || newExpiresAtUtc <= ExpiresAt.Value)
+            return false;
+
+        ExpiresAt = newExpiresAtUtc;
+        return true;
+    }
+
     public static string HashKey(string rawKey)
     {
         using var sha256 = SHA256.Create();

@@ -103,3 +103,9 @@ The marketing site names the seller and links the pages a card processor expects
 | Contact | `/contact` |
 
 The seller block is `apps/dashboard/src/legalEntity.json`. Before a UK Ltd Stripe application, set `operatorName`, `companyNumber`, `registeredOffice`, `registrationJurisdiction`, and `governingLaw` to that company, then run `npm run legal` in `apps/dashboard` so the static pages match. Do not publish a company number before it exists. List prices stay USD and exclude VAT. Card checkout itself remains `L-PAY`. Support and sales use `supportEmail` until separate mailboxes exist.
+
+## Blocked or expired keys
+
+- **402 `MCP-PLAN-REQUIRED`**: the key is valid. The tenant calls `get_plan_status` and `request_plan_activation` with the same key; the request appears in the admin dashboard inbox, where one click approves it.
+- **401 `Invalid or unknown tenant API key`**: the key is expired or revoked and cannot authenticate any tool. The tenant signs in to the dashboard (or calls MCP with a dashboard login JWT, `Authorization: Bearer`) to request activation and create a new key.
+- **Approval renews keys.** When an admin activates a plan, the tenant's non-revoked keys that have an expiry are extended to 365 days from approval, including keys that already lapsed. Revoked keys and keys that never expire are not touched. The admin sees how many keys were renewed.
