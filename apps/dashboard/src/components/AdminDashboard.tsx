@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AuthSession, WorkflowClass, WorkflowClassScope, WorkflowInstance, ValidationResult, TenantDto, WorkflowClassStatus } from '../types';
+import { AuthSession, WorkflowClass, WorkflowClassScope, WorkflowInstance, ValidationResult, TenantDto, WorkflowClassStatus, TenantPlanRequestItem } from '../types';
 import { api } from '../api/client';
 import { TenantManager } from './TenantManager';
 import { WorkflowTable } from './WorkflowTable';
@@ -13,6 +13,7 @@ import { CompetitiveComparison } from './CompetitiveComparison';
 import { SystemArchitecture } from './SystemArchitecture';
 import { DashboardChrome, sidebarItemClass } from './DashboardChrome';
 import { McpAgentGuideline } from './McpAgentGuideline';
+import { PlanRequestInbox } from './PlanRequestInbox';
 import { usePlatformMetrics } from '../platformMetrics';
 import { legalEntity, sellerIdentity } from '../legalEntity';
 import { LegalFooterLinks } from './LegalFooterLinks';
@@ -30,6 +31,9 @@ interface Props {
   mcpUrl: string;
 }
 
+/** How often pending plan requests are re-fetched while the admin dashboard is open. */
+const PLAN_REQUEST_POLL_MS = 15000;
+
 export const AdminDashboard: React.FC<Props> = ({
   session,
   onGoHome,
@@ -45,6 +49,10 @@ export const AdminDashboard: React.FC<Props> = ({
   const [tenants, setTenants] = useState<TenantDto[]>([]);
   const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('');
   const [tenantsCount, setTenantsCount] = useState(0);
+  const [planRequests, setPlanRequests] = useState<TenantPlanRequestItem[]>([]);
+  const [planRequestError, setPlanRequestError] = useState<string | null>(null);
+  const [planBusyTenantId, setPlanBusyTenantId] = useState<string | null>(null);
+  const [planRequestsVersion, setPlanRequestsVersion] = useState(0);
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,6 +123,58 @@ export const AdminDashboard: React.FC<Props> = ({
 
     setError(notices[0] || null);
     setLoading(false);
+  };
+
+  const refreshPlanRequests = async () => {
+    try {
+      const items = await api.listPlanRequests();
+      setPlanRequests(items.filter(item => item.planRequest?.status === 'Pending'));
+      setPlanRequestError(null);
+    } catch (err: any) {
+      const message = err?.message || 'Failed to load plan requests';
+      // A 401/403 is surfaced by the session banner; do not repeat it every poll.
+      setPlanRequestError(/HTTP 401|HTTP 403/.test(message) ? null : message);
+    }
+  };
+
+  useEffect(() => {
+    void refreshPlanRequests();
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') void refreshPlanRequests();
+    }, PLAN_REQUEST_POLL_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  const finishPlanDecision = async () => {
+    await refreshPlanRequests();
+    setPlanRequestsVersion(version => version + 1);
+    void loadData(selectedTenantFilter || undefined);
+  };
+
+  const handleApprovePlanRequest = async (item: TenantPlanRequestItem) => {
+    setPlanBusyTenantId(item.tenantId);
+    setPlanRequestError(null);
+    try {
+      await api.setTenantPlan(item.tenantId, item.planRequest.requestedPlan, 'Active');
+      await finishPlanDecision();
+    } catch (err: any) {
+      setPlanRequestError(`Could not approve ${item.tenantName}: ${err?.message || 'unknown error'}`);
+    } finally {
+      setPlanBusyTenantId(null);
+    }
+  };
+
+  const handleRejectPlanRequest = async (item: TenantPlanRequestItem, reason: string) => {
+    setPlanBusyTenantId(item.tenantId);
+    setPlanRequestError(null);
+    try {
+      await api.rejectPlanRequest(item.tenantId, reason || undefined);
+      await finishPlanDecision();
+    } catch (err: any) {
+      setPlanRequestError(`Could not reject ${item.tenantName}: ${err?.message || 'unknown error'}`);
+    } finally {
+      setPlanBusyTenantId(null);
+    }
   };
 
   const handleViewTenantWorkflows = (tenantId: string) => {
@@ -202,6 +262,14 @@ export const AdminDashboard: React.FC<Props> = ({
               <button type="button" onClick={() => setActiveTab('Tenants')} className={sidebarItemClass(activeTab === 'Tenants', 'bg-purple-600 text-white')}>
                 <Building2 size={14} />
                 <span className="truncate">Tenants ({tenantsCount})</span>
+                {planRequests.length > 0 && (
+                  <span
+                    aria-label={`${planRequests.length} plan requests waiting`}
+                    className="ml-auto px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold"
+                  >
+                    {planRequests.length}
+                  </span>
+                )}
               </button>
               <button type="button" onClick={() => setActiveTab('ReviewQueue')} className={sidebarItemClass(activeTab === 'ReviewQueue', 'bg-purple-600 text-white')}>
                 <AlertTriangle size={14} />
@@ -322,6 +390,14 @@ export const AdminDashboard: React.FC<Props> = ({
         </div>
       )}
 
+      <PlanRequestInbox
+        requests={planRequests}
+        busyTenantId={planBusyTenantId}
+        error={planRequestError}
+        onApprove={handleApprovePlanRequest}
+        onReject={handleRejectPlanRequest}
+      />
+
       {/* Admin Navigation Tabs */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-6">
@@ -340,6 +416,7 @@ export const AdminDashboard: React.FC<Props> = ({
               onRegisterModalClosed={() => setOpenRegisterModal(false)}
               onTenantChange={() => loadData()}
               onViewTenantWorkflows={handleViewTenantWorkflows}
+              planRequestsVersion={planRequestsVersion}
             />
           )}
 
