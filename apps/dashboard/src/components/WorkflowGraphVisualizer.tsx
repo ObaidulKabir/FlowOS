@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
+import { enableNodeDragging, NodeDragging } from '../diagram/nodeDragging';
 import { 
   Check,
   ExternalLink,
@@ -26,6 +27,14 @@ const MIN_DIAGRAM_ZOOM = 0.5;
 const MAX_DIAGRAM_ZOOM = 3;
 const DIAGRAM_ZOOM_STEP = 0.25;
 
+/** Stable localStorage key for a diagram's saved node arrangement. */
+export function diagramLayoutKey(kind: string, ids: string[]): string {
+  const joined = [...ids].map(String).sort().join('|');
+  let hash = 5381;
+  for (let i = 0; i < joined.length; i++) hash = ((hash << 5) + hash + joined.charCodeAt(i)) | 0;
+  return `flowos.diagramLayout.v1.${kind}.${(hash >>> 0).toString(36)}`;
+}
+
 export function clampDiagramZoom(value: number) {
   const rounded = Math.round(value * 100) / 100;
   return Math.min(MAX_DIAGRAM_ZOOM, Math.max(MIN_DIAGRAM_ZOOM, rounded));
@@ -46,10 +55,17 @@ export function panForZoom(
   };
 }
 
-const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRendered?: () => void }> = ({ chart, unconstrained = false, onRendered }) => {
+const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRendered?: () => void; layoutKey?: string }> = ({ chart, unconstrained = false, onRendered, layoutKey }) => {
   const onRenderedRef = useRef(onRendered);
   onRenderedRef.current = onRendered;
   const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<NodeDragging | null>(null);
+  const [movedNodes, setMovedNodes] = useState(0);
+
+  useEffect(() => () => {
+    draggingRef.current?.dispose();
+    draggingRef.current = null;
+  }, []);
   
   useEffect(() => {
     mermaid.initialize({
@@ -80,6 +96,15 @@ const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRender
               }
             }
           }
+          draggingRef.current?.dispose();
+          draggingRef.current = null;
+          const renderedSvg = containerRef.current.querySelector('svg');
+          if (renderedSvg) {
+            draggingRef.current = enableNodeDragging(renderedSvg as SVGSVGElement, {
+              storageKey: layoutKey,
+              onChange: setMovedNodes
+            });
+          }
           onRenderedRef.current?.();
         }
       }).catch(err => {
@@ -89,14 +114,30 @@ const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRender
         }
       });
     }
-  }, [chart, unconstrained]);
+  }, [chart, unconstrained, layoutKey]);
 
   return (
-    <div
-      ref={containerRef}
-      data-diagram-canvas="true"
-      className={`flex justify-center p-4 w-full ${unconstrained ? 'min-h-0' : 'overflow-auto min-h-[300px]'}`}
-    />
+    <div className="relative w-full">
+      <div
+        ref={containerRef}
+        data-diagram-canvas="true"
+        className={`flex justify-center p-4 w-full ${unconstrained ? 'min-h-0' : 'overflow-auto min-h-[300px]'}`}
+      />
+      <div className="absolute left-2 top-2 flex items-center gap-2 text-[10px] text-slate-500">
+        <span>Drag nodes to rearrange</span>
+        {movedNodes > 0 && (
+          <button
+            type="button"
+            onPointerDown={event => event.stopPropagation()}
+            onClick={() => draggingRef.current?.reset()}
+            className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 font-semibold text-slate-200 hover:border-slate-500"
+            title="Put every node back where the automatic layout placed it"
+          >
+            Reset layout
+          </button>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -278,9 +319,10 @@ const LargeDiagramWindow: React.FC<{
   title: string;
   subtitle: string;
   chart: string;
+  layoutKey?: string;
   legendEntries: { role: string; stroke: string }[];
   onClose: () => void;
-}> = ({ title, subtitle, chart, legendEntries, onClose }) => {
+}> = ({ title, subtitle, chart, layoutKey, legendEntries, onClose }) => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
@@ -427,7 +469,7 @@ const LargeDiagramWindow: React.FC<{
             className="absolute left-0 top-0"
             style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}
           >
-            <MermaidViewer chart={chart} unconstrained onRendered={() => centerDiagram(zoomRef.current)} />
+            <MermaidViewer chart={chart} unconstrained layoutKey={layoutKey} onRendered={() => centerDiagram(zoomRef.current)} />
           </div>
         </div>
       </div>
@@ -630,6 +672,11 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     );
     return `${body}${styles.length > 0 ? `\n${styles.join('\n')}\n` : ''}`;
   };
+  // The arrangement a user made is remembered per diagram kind and per set of steps/states.
+  const layoutKey = (kind: 'flowchart' | 'statemachine') =>
+    diagramLayoutKey(kind, kind === 'flowchart'
+      ? [startStepId, ...steps.map(step => step.stepId)]
+      : [entityType, ...smStates]);
   const legendEntries = [
     ...roleOrder.map(role => ({ role, stroke: roleEventStroke(role, roleOrder) })),
     ...(diagramUsesSystem ? [{ role: 'System', stroke: SYSTEM_EVENT_COLOR }] : [])
@@ -930,7 +977,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
               </div>
             </div>
             {orderedSteps.length > 0 ? (
-              <MermaidViewer chart={buildWorkflowMermaid()} />
+              <MermaidViewer chart={buildWorkflowMermaid()} layoutKey={layoutKey('flowchart')} />
             ) : (
               <div className="py-8 text-slate-500 text-xs">No steps defined</div>
             )}
@@ -964,7 +1011,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
               </div>
             </div>
             {smStates.length > 0 ? (
-              <MermaidViewer chart={buildStateMachineMermaid()} />
+              <MermaidViewer chart={buildStateMachineMermaid()} layoutKey={layoutKey('statemachine')} />
             ) : (
               <div className="py-8 text-slate-500 text-xs">No states defined</div>
             )}
@@ -978,6 +1025,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
           title="Workflow Orchestration Steps"
           subtitle={`Start step ${startStepId}. Scroll and zoom this diagram on its own.`}
           chart={buildWorkflowMermaid()}
+          layoutKey={layoutKey('flowchart')}
           legendEntries={legendEntries}
           onClose={() => setLargeView(null)}
         />
@@ -987,6 +1035,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
           title="State Machine Lifecycle"
           subtitle={`${entityType}. Scroll and zoom this diagram on its own.`}
           chart={buildStateMachineMermaid()}
+          layoutKey={layoutKey('statemachine')}
           legendEntries={legendEntries}
           onClose={() => setLargeView(null)}
         />
