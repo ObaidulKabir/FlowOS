@@ -45,6 +45,17 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
 
         var contents = new List<object>();
 
+        // Always include the workflow packet as the first user turn so the model
+        // has full context regardless of whether history or tool-call turns follow.
+        if (!string.IsNullOrWhiteSpace(userPrompt))
+        {
+            contents.Add(new
+            {
+                role = "user",
+                parts = new[] { new { text = userPrompt } }
+            });
+        }
+
         if (history != null)
         {
             foreach (var msg in history)
@@ -94,14 +105,6 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
                     }
                 }
             }
-        }
-        else
-        {
-            contents.Add(new
-            {
-                role = "user",
-                parts = new[] { new { text = userPrompt } }
-            });
         }
 
         var payload = new Dictionary<string, object>

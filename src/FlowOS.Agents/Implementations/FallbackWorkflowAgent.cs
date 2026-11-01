@@ -24,24 +24,32 @@ public sealed class FallbackWorkflowAgent : IConversationalAgent
 
     public int MaxTurns => _primary is IConversationalAgent c ? c.MaxTurns : 1;
 
-    public Task<AgentResult> ExecuteConversationalAsync(DecisionPacket packet, IReadOnlyList<ChatMessage> history, CancellationToken cancellationToken = default)
+    public Task<AgentResult> ExecuteConversationalAsync(
+        DecisionPacket packet,
+        IReadOnlyList<ChatMessage> history,
+        IAgentToolInvoker? toolInvoker = null,
+        CancellationToken cancellationToken = default)
     {
-        return ExecuteConversationalInternalAsync(packet, history, cancellationToken);
+        return ExecuteConversationalInternalAsync(packet, history, toolInvoker, cancellationToken);
     }
 
-    private async Task<AgentResult> ExecuteConversationalInternalAsync(DecisionPacket packet, IReadOnlyList<ChatMessage> history, CancellationToken cancellationToken)
+    private async Task<AgentResult> ExecuteConversationalInternalAsync(
+        DecisionPacket packet,
+        IReadOnlyList<ChatMessage> history,
+        IAgentToolInvoker? toolInvoker,
+        CancellationToken cancellationToken)
     {
-        var result = _primary is IConversationalAgent c 
-            ? await c.ExecuteConversationalAsync(packet, history, cancellationToken)
-            : await _primary.ExecuteAsync(AgentContext.FromPacket(packet), cancellationToken);
+        var result = _primary is IConversationalAgent c
+            ? await c.ExecuteConversationalAsync(packet, history, toolInvoker, cancellationToken)
+            : await _primary.ExecuteAsync(AgentContext.FromPacket(packet, toolInvoker: toolInvoker), cancellationToken);
 
         if (IsRetryableFailure(result))
         {
             foreach (var fallback in _fallbacks)
             {
-                var fallbackResult = fallback is IConversationalAgent fc 
-                    ? await fc.ExecuteConversationalAsync(packet, history, cancellationToken)
-                    : await fallback.ExecuteAsync(AgentContext.FromPacket(packet), cancellationToken);
+                var fallbackResult = fallback is IConversationalAgent fc
+                    ? await fc.ExecuteConversationalAsync(packet, history, toolInvoker, cancellationToken)
+                    : await fallback.ExecuteAsync(AgentContext.FromPacket(packet, toolInvoker: toolInvoker), cancellationToken);
 
                 if (!IsRetryableFailure(fallbackResult))
                 {

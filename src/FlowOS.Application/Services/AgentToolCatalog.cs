@@ -30,18 +30,13 @@ public static class AgentToolCatalog
         IReadOnlyList<PluginBindingDto>? registeredTools)
     {
         var tools = new List<AgentToolDescriptor>();
-
-        foreach (var eventType in legalNextStepEvents)
-        {
-            tools.Add(new AgentToolDescriptor(
-                eventType,
-                "event",
-                null,
-                "Suggest this legal nextSteps event. FlowOS publishes it only if autoCommit allows.",
-                "none",
-                false,
-                null));
-        }
+        // Legal next-step events are NOT exposed as callable tools to the LLM.
+        // They are listed in the system prompt and the model returns them as JSON
+        // actions. Exposing them as functions disabled structured JSON output and
+        // confused the model into "calling" events with no capability behind them.
+        var legalEventNames = new HashSet<string>(
+            legalNextStepEvents,
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var raw in declaredTools ?? Array.Empty<string>())
         {
@@ -111,6 +106,11 @@ public static class AgentToolCatalog
                     parsed = parsed with { Provider = mapped };
                 }
             }
+
+            // Skip tools whose name collides with a legal event — the event takes precedence
+            // and the tool would never be invokable in this context.
+            if (legalEventNames.Contains(parsed.Name))
+                continue;
 
             if (tools.Any(tool => string.Equals(tool.Name, parsed.Name, StringComparison.OrdinalIgnoreCase)))
                 continue;

@@ -34,6 +34,7 @@ public class ConversationalFixedAgent : FixedWorkflowAgent, IConversationalAgent
     public Task<AgentResult> ExecuteConversationalAsync(
         DecisionPacket packet,
         IReadOnlyList<ChatMessage> history,
+        IAgentToolInvoker? toolInvoker = null,
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult(_presetResult);

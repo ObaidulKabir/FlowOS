@@ -11,5 +11,6 @@ public interface IConversationalAgent : IWorkflowAgent
     Task<AgentResult> ExecuteConversationalAsync(
         DecisionPacket packet,
         IReadOnlyList<ChatMessage> history,
+        IAgentToolInvoker? toolInvoker = null,
         CancellationToken cancellationToken = default);
 }

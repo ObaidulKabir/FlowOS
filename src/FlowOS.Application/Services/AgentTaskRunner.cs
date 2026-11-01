@@ -326,7 +326,7 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                         packet.CurrentStepId,
                         cancellationToken);
                         
-                    result = await conversationalAgent.ExecuteConversationalAsync(packet, history, cancellationToken);
+                    result = await conversationalAgent.ExecuteConversationalAsync(packet, history, toolInvoker, cancellationToken);
 
                     if (result.Success && !string.IsNullOrWhiteSpace(result.Insight))
                     {

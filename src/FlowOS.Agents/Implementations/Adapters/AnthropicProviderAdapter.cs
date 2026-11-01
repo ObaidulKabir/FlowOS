@@ -39,6 +39,13 @@ public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
 
         var messages = new List<object>();
 
+        // Always include the workflow packet as the first user message so the model
+        // has full context regardless of whether history or tool-call turns follow.
+        if (!string.IsNullOrWhiteSpace(userPrompt))
+        {
+            messages.Add(new { role = "user", content = userPrompt });
+        }
+
         if (history != null)
         {
             foreach (var msg in history)
@@ -79,17 +86,13 @@ public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
                             });
                         }
                     }
-                    
+
                     if (contents.Count > 0)
                     {
                         messages.Add(new { role = msg.Role, content = contents.ToArray() });
                     }
                 }
             }
-        }
-        else
-        {
-            messages.Add(new { role = "user", content = userPrompt });
         }
 
         var payload = new Dictionary<string, object>

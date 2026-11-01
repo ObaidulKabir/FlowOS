@@ -61,9 +61,10 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
     public Task<AgentResult> ExecuteConversationalAsync(
         DecisionPacket packet,
         IReadOnlyList<ChatMessage> history,
+        IAgentToolInvoker? toolInvoker = null,
         CancellationToken cancellationToken = default)
     {
-        return ExecuteInternalAsync(AgentContext.FromPacket(packet), history, cancellationToken);
+        return ExecuteInternalAsync(AgentContext.FromPacket(packet, toolInvoker: toolInvoker), history, cancellationToken);
     }
 
     public Task<AgentResult> ExecuteAsync(
@@ -108,7 +109,10 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
                 }
                 combinedHistory.AddRange(toolCallHistory);
 
-                var iterationUserPrompt = iterations == 0 ? userPrompt : string.Empty;
+                // Always include the workflow packet as the initial user message.
+                // The tool-call exchanges for this run live in toolCallHistory; repeating
+                // the packet on every iteration keeps the model grounded in the context.
+                var iterationUserPrompt = userPrompt;
                 var toolNames = context.Packet?.DeclaredTools?.Select(t => t.Name).ToList();
 
                 using var request = _adapter.CreateRequest(
