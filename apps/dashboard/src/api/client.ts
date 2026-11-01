@@ -310,6 +310,10 @@ const handleResponse = async (response: Response, errorMessage: string) => {
   return response.json();
 };
 
+/** `?tenantId=` for the admin read-scope; empty when no other tenant is being viewed. */
+const tenantQuery = (tenantId?: string): string =>
+  tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+
 export const api = {
   list: async (scope?: WorkflowClassScope, status?: WorkflowClassStatus, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowClass[]> => {
     const tenantId = resolveRequestedTenantId(tenantIdOverride);
@@ -433,8 +437,8 @@ export const api = {
     return handleResponse(response, 'Failed to copy');
   },
 
-  listInstances: async (role?: 'Tenant' | 'Admin'): Promise<WorkflowInstance[]> => {
-    const tenantId = getActiveTenantId();
+  listInstances: async (role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<WorkflowInstance[]> => {
+    const tenantId = tenantIdOverride || getActiveTenantId();
     const response = await authorizedFetch(`/api/workflows?tenantId=${tenantId}`, {}, role);
     return handleResponse(response, 'Failed to list workflow instances');
   },
@@ -528,13 +532,13 @@ export const api = {
     return handleResponse(response, 'Failed to complete task');
   },
 
-  getWorkflowAudit: async (instanceId: string, role?: 'Tenant' | 'Admin'): Promise<any> => {
-    const response = await authorizedFetch(`/api/workflows/${instanceId}/audit`, {}, role);
+  getWorkflowAudit: async (instanceId: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<any> => {
+    const response = await authorizedFetch(`/api/workflows/${instanceId}/audit${tenantQuery(tenantIdOverride)}`, {}, role);
     return handleResponse(response, 'Failed to get workflow audit history');
   },
 
-  getWorkflowActions: async (instanceId: string, role?: 'Tenant' | 'Admin'): Promise<any[]> => {
-    const response = await authorizedFetch(`/api/workflows/${instanceId}/actions`, {}, role);
+  getWorkflowActions: async (instanceId: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<any[]> => {
+    const response = await authorizedFetch(`/api/workflows/${instanceId}/actions${tenantQuery(tenantIdOverride)}`, {}, role);
     const data = await handleResponse(response, 'Failed to load lifecycle action audit logs');
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.items)) return data.items;
@@ -857,8 +861,8 @@ export const api = {
     return handleResponse(response, 'Failed to generate blueprint with AI Copilot');
   },
 
-  getTimeTravelReplay: async (id: string, role?: 'Tenant' | 'Admin'): Promise<TimeTravelReplay> => {
-    const response = await authorizedFetch(`/api/workflows/${id}/time-travel`, {}, role);
+  getTimeTravelReplay: async (id: string, role?: 'Tenant' | 'Admin', tenantIdOverride?: string): Promise<TimeTravelReplay> => {
+    const response = await authorizedFetch(`/api/workflows/${id}/time-travel${tenantQuery(tenantIdOverride)}`, {}, role);
     return handleResponse(response, 'Failed to load time-travel replay');
   },
 
@@ -868,9 +872,10 @@ export const api = {
     event: string,
     payload?: unknown,
     simulatedRoles?: string[],
-    role?: 'Tenant' | 'Admin'
+    role?: 'Tenant' | 'Admin',
+    tenantIdOverride?: string
   ): Promise<TimeTravelForkResult> => {
-    const response = await authorizedFetch(`/api/workflows/${id}/time-travel/fork`, {
+    const response = await authorizedFetch(`/api/workflows/${id}/time-travel/fork${tenantQuery(tenantIdOverride)}`, {
       method: 'POST',
       body: JSON.stringify({
         targetStepIndex: stepIndex,

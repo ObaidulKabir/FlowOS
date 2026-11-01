@@ -23,9 +23,10 @@ export interface WorkflowActionExecutionLogItem {
 
 interface Props {
   workflowInstanceId: string;
+  tenantId?: string;
 }
 
-export const WorkflowActionAuditViewer: React.FC<Props> = ({ workflowInstanceId }) => {
+export const WorkflowActionAuditViewer: React.FC<Props> = ({ workflowInstanceId, tenantId }) => {
   const [logs, setLogs] = useState<WorkflowActionExecutionLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export const WorkflowActionAuditViewer: React.FC<Props> = ({ workflowInstanceId 
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getWorkflowActions(workflowInstanceId);
+      const data = await api.getWorkflowActions(workflowInstanceId, undefined, tenantId);
       setLogs(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || 'Error loading action history.');
@@ -47,7 +48,7 @@ export const WorkflowActionAuditViewer: React.FC<Props> = ({ workflowInstanceId 
 
   useEffect(() => {
     loadLogs();
-  }, [workflowInstanceId]);
+  }, [workflowInstanceId, tenantId]);
 
   const filteredLogs = logs.filter(item => {
     if (filterType === 'all') return true;

@@ -41,7 +41,7 @@ vi.mock('./WorkflowTable', () => ({
 }));
 
 vi.mock('./WorkflowInstanceTable', () => ({
-  WorkflowInstanceTable: () => <div>Workflow Instances</div>
+  WorkflowInstanceTable: ({ tenantId }: { tenantId?: string }) => <div>Workflow Instances scope={tenantId ?? 'session'}</div>
 }));
 
 vi.mock('./EventAuditViewer', () => ({
@@ -385,5 +385,51 @@ describe('AdminDashboard plan request inbox', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('AdminDashboard instance investigation scope', () => {
+  const session = {
+    role: 'Admin' as const,
+    tenantId: '11111111-1111-1111-1111-111111111111',
+    tenantName: 'Default Tenant',
+    apiKey: 'flowos_prod_secret_key_32_chars_min',
+    username: 'admin@flowos.internal',
+    isSandbox: false,
+    isEmailVerified: true
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMock.listTenants.mockResolvedValue([
+      { tenantId: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Acme Ltd' }
+    ]);
+    apiMock.list.mockResolvedValue([]);
+    apiMock.listInstances.mockResolvedValue([]);
+    apiMock.listPlanRequests.mockResolvedValue([]);
+  });
+
+  test('instances tab loads the instances of the selected tenant and scopes the drill-downs to it', async () => {
+    render(
+      <AdminDashboard
+        session={session}
+        onGoHome={vi.fn()}
+        onSwitchRole={vi.fn()}
+        onRegister={vi.fn()}
+        onSignOut={vi.fn()}
+        mcpUrl="https://example.test/mcp"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /workflow instances/i }));
+    expect(await screen.findByText('Workflow Instances scope=session')).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole('option', { name: /acme ltd/i })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Tenant scope'), { target: { value: 'aaaaaaaa-0000-0000-0000-000000000001' } });
+
+    await waitFor(() =>
+      expect(apiMock.listInstances).toHaveBeenCalledWith('Admin', 'aaaaaaaa-0000-0000-0000-000000000001')
+    );
+    expect(await screen.findByText('Workflow Instances scope=aaaaaaaa-0000-0000-0000-000000000001')).toBeInTheDocument();
   });
 });

@@ -119,7 +119,7 @@ export const AdminDashboard: React.FC<Props> = ({
     }
 
     try {
-      const instList = await api.listInstances('Admin');
+      const instList = await api.listInstances('Admin', targetTenantId);
       setInstances(instList);
     } catch (err: unknown) {
       setInstances([]);
@@ -187,6 +187,40 @@ export const AdminDashboard: React.FC<Props> = ({
       setPlanBusyTenantId(null);
     }
   };
+
+  const tenantScopePicker = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+        <Building2 size={13} className="text-purple-400" /> Tenant Scope:
+      </span>
+      <select
+        aria-label="Tenant scope"
+        value={selectedTenantFilter}
+        onChange={(e) => {
+          setSelectedTenantFilter(e.target.value);
+        }}
+        className="bg-slate-950 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-purple-500 focus:outline-none"
+      >
+        <option value="">{`Session Tenant: ${session.tenantName || session.tenantId}`}</option>
+        {tenants.map(t => (
+          <option key={t.tenantId} value={t.tenantId}>
+            {t.name} ({t.tenantId.substring(0, 8)}...)
+          </option>
+        ))}
+      </select>
+      {selectedTenantFilter && (
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedTenantFilter('');
+          }}
+          className="text-[11px] text-purple-400 hover:text-purple-300 underline ml-1"
+        >
+          Reset Filter
+        </button>
+      )}
+    </div>
+  );
 
   const handleViewTenantWorkflows = (tenantId: string) => {
     setSelectedTenantFilter(tenantId);
@@ -323,7 +357,7 @@ export const AdminDashboard: React.FC<Props> = ({
               </button>
               <button type="button" onClick={() => setActiveTab('Instances')} className={sidebarItemClass(activeTab === 'Instances', 'bg-purple-600 text-white')}>
                 <Activity size={14} />
-                <span className="truncate">Fleet Instances ({instances.length})</span>
+                <span className="truncate">Workflow Instances ({instances.length})</span>
               </button>
               <button type="button" onClick={() => setActiveTab('Events')} className={sidebarItemClass(activeTab === 'Events', 'bg-purple-600 text-white')}>
                 <Terminal size={14} />
@@ -459,7 +493,7 @@ export const AdminDashboard: React.FC<Props> = ({
             <TenantManager
               openRegisterModal={openRegisterModal}
               onRegisterModalClosed={() => setOpenRegisterModal(false)}
-              onTenantChange={() => loadData()}
+              onTenantChange={tenantId => setSelectedTenantFilter(tenantId)}
               onViewTenantWorkflows={handleViewTenantWorkflows}
               planRequestsVersion={planRequestsVersion}
             />
@@ -488,35 +522,7 @@ export const AdminDashboard: React.FC<Props> = ({
           {activeTab === 'Catalog' && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-700/80">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Building2 size={13} className="text-purple-400" /> Tenant Scope:
-                  </span>
-                  <select
-                    value={selectedTenantFilter}
-                    onChange={(e) => {
-                      setSelectedTenantFilter(e.target.value);
-                    }}
-                    className="bg-slate-950 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-purple-500 focus:outline-none"
-                  >
-                    <option value="">{`Session Tenant: ${effectiveTenantName}`}</option>
-                    {tenants.map(t => (
-                      <option key={t.tenantId} value={t.tenantId}>
-                        {t.name} ({t.tenantId.substring(0, 8)}...)
-                      </option>
-                    ))}
-                  </select>
-                  {selectedTenantFilter && (
-                    <button
-                      onClick={() => {
-                        setSelectedTenantFilter('');
-                      }}
-                      className="text-[11px] text-purple-400 hover:text-purple-300 underline ml-1"
-                    >
-                      Reset Filter
-                    </button>
-                  )}
-                </div>
+                {tenantScopePicker}
 
                 <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs w-fit">
                   {(['All', 'Drafts', 'Published', 'Shared', 'Public'] as const).map(sub => (
@@ -546,13 +552,17 @@ export const AdminDashboard: React.FC<Props> = ({
 
           {activeTab === 'Instances' && (
             <div className="space-y-4">
-              <div className="text-xs text-slate-400">
-                Fleet-wide workflow instance executions across all tenant clusters.
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-700/80">
+                {tenantScopePicker}
+                <div className="text-[11px] text-slate-400">
+                  Read-only view of {instances.length} instance{instances.length === 1 ? '' : 's'} for {effectiveTenantName}. Open one to see its timeline, actions and time-travel replay.
+                </div>
               </div>
               <WorkflowInstanceTable
-                key={auditFocus?.requestId ?? 'instances'}
+                key={`${effectiveTenantScope}-${auditFocus?.requestId ?? 'instances'}`}
                 items={instances}
                 blueprints={blueprints}
+                tenantId={selectedTenantFilter || undefined}
                 inspectInstanceId={auditFocus?.instanceId}
                 inspectRequestId={auditFocus?.requestId}
                 onInspectConsumed={() => setAuditFocus(null)}

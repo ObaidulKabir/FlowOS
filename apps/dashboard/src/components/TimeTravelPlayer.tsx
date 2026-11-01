@@ -17,6 +17,8 @@ import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 
 interface Props {
   workflowInstanceId: string;
+  /** Admin read-scope: the tenant that owns the instance, when it is not the signed-in tenant. */
+  tenantId?: string;
   definition?: any;
   onSnapshotChange?: (snapshot: TimeTravelSnapshot | null) => void;
 }
@@ -50,6 +52,7 @@ const variableDiff = (previous: TimeTravelSnapshot | undefined, current: TimeTra
 
 export const TimeTravelPlayer: React.FC<Props> = ({
   workflowInstanceId,
+  tenantId,
   definition,
   onSnapshotChange
 }) => {
@@ -73,7 +76,7 @@ export const TimeTravelPlayer: React.FC<Props> = ({
       setPlaying(false);
       setForkResult(null);
       try {
-        const data = await api.getTimeTravelReplay(workflowInstanceId);
+        const data = await api.getTimeTravelReplay(workflowInstanceId, undefined, tenantId);
         if (cancelled) return;
         setReplay(data);
         setIndex(Math.max(0, (data.snapshots?.length ?? 1) - 1));
@@ -90,7 +93,7 @@ export const TimeTravelPlayer: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [workflowInstanceId]);
+  }, [workflowInstanceId, tenantId]);
 
   const snapshot = replay?.snapshots?.[index];
   const previous = index > 0 ? replay?.snapshots[index - 1] : undefined;
@@ -147,7 +150,9 @@ export const TimeTravelPlayer: React.FC<Props> = ({
         snapshot.stepIndex,
         altEvent.trim(),
         payload,
-        roles
+        roles,
+        undefined,
+        tenantId
       );
       setForkResult(result);
     } catch (err: any) {

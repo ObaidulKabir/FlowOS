@@ -5,6 +5,7 @@ using FlowOS.Application.Queries;
 using FlowOS.Core.Interfaces;
 using FlowOS.API.Filters;
 using MediatR;
+using FlowOS.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -61,14 +62,15 @@ public class WorkflowsController : ControllerBase
     public async Task<IActionResult> List(
         [FromQuery] FlowOS.Workflows.Enums.WorkflowInstanceStatus? status,
         [FromQuery] string? sourceSystem = null,
-        [FromQuery] string? externalReference = null)
+        [FromQuery] string? externalReference = null,
+        [FromQuery] Guid? tenantId = null)
     {
-        var tenantId = _currentUser.TenantId;
-        if (tenantId == Guid.Empty) return Unauthorized();
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized();
+        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
 
         var query = new GetWorkflowsQuery
         {
-            TenantId = tenantId,
+            TenantId = scopedTenantId,
             Status = status,
             ExternalSourceSystem = sourceSystem,
             ExternalReference = externalReference
@@ -79,14 +81,14 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(Guid id)
+    public async Task<IActionResult> GetById(Guid id, [FromQuery] Guid? tenantId = null)
     {
-        var tenantId = _currentUser.TenantId;
+        tenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
 
         var query = new GetWorkflowByIdQuery 
         { 
             Id = id,
-            TenantId = tenantId 
+            TenantId = tenantId.Value
         };
         
         var result = await _mediator.Send(query);
@@ -120,49 +122,50 @@ public class WorkflowsController : ControllerBase
 
     [HttpGet("{id}/audit")]
     [HttpGet("{id}/history")]
-    public async Task<IActionResult> GetAuditHistory(Guid id)
+    public async Task<IActionResult> GetAuditHistory(Guid id, [FromQuery] Guid? tenantId = null)
     {
-        var tenantId = _currentUser.TenantId;
-        if (tenantId == Guid.Empty) return Unauthorized();
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized();
+        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
 
-        var query = new FlowOS.Application.Queries.Admin.GetAdminWorkflowDetailQuery(id, tenantId);
+        var query = new FlowOS.Application.Queries.Admin.GetAdminWorkflowDetailQuery(id, scopedTenantId);
         var result = await _mediator.Send(query);
         if (result == null)
         {
-            _logger.LogWarning("GetAuditHistory Workflow {WorkflowId} not found for Tenant {TenantId}", id, tenantId);
+            _logger.LogWarning("GetAuditHistory Workflow {WorkflowId} not found for Tenant {TenantId}", id, scopedTenantId);
             return NotFound();
         }
         return Ok(result);
     }
 
     [HttpGet("{id}/time-travel")]
-    public async Task<IActionResult> GetTimeTravelReplay(Guid id)
+    public async Task<IActionResult> GetTimeTravelReplay(Guid id, [FromQuery] Guid? tenantId = null)
     {
-        var tenantId = _currentUser.TenantId;
-        if (tenantId == Guid.Empty) return Unauthorized();
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized();
+        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
 
-        var query = new GetWorkflowTimeTravelReplayQuery(tenantId, id);
+        var query = new GetWorkflowTimeTravelReplayQuery(scopedTenantId, id);
         var replay = await _mediator.Send(query);
         if (replay == null)
         {
-            _logger.LogWarning("TimeTravel replay for Workflow {WorkflowId} not found for Tenant {TenantId}", id, tenantId);
+            _logger.LogWarning("TimeTravel replay for Workflow {WorkflowId} not found for Tenant {TenantId}", id, scopedTenantId);
             return NotFound();
         }
         return Ok(replay);
     }
 
     [HttpPost("{id}/time-travel/fork")]
-    public async Task<IActionResult> SimulateFork(Guid id, [FromBody] FlowOS.Core.Common.Interfaces.WorkflowForkSimulationRequest? request)
+    public async Task<IActionResult> SimulateFork(Guid id, [FromBody] FlowOS.Core.Common.Interfaces.WorkflowForkSimulationRequest? request, [FromQuery] Guid? tenantId = null)
     {
-        var tenantId = _currentUser.TenantId;
-        if (tenantId == Guid.Empty) return Unauthorized();
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized();
+        // A what-if fork only replays history; it never changes the instance, so an admin may run it on any tenant.
+        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
         if (request == null || string.IsNullOrWhiteSpace(request.AlternativeEvent))
         {
             return BadRequest(new { error = "alternativeEvent is required." });
         }
 
         var query = new SimulateWorkflowForkQuery(
-            tenantId,
+            scopedTenantId,
             id,
             request.TargetStepIndex,
             request.AlternativeEvent,
@@ -174,16 +177,16 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("{id}/compensation-path")]
-    public async Task<IActionResult> GetCompensationPath(Guid id, [FromQuery] string? failedStepId = null)
+    public async Task<IActionResult> GetCompensationPath(Guid id, [FromQuery] string? failedStepId = null, [FromQuery] Guid? tenantId = null)
     {
-        var tenantId = _currentUser.TenantId;
-        if (tenantId == Guid.Empty) return Unauthorized();
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized();
+        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
 
-        var query = new GetWorkflowCompensationPathQuery(tenantId, id, failedStepId);
+        var query = new GetWorkflowCompensationPathQuery(scopedTenantId, id, failedStepId);
         var result = await _mediator.Send(query);
         if (result == null)
         {
-            _logger.LogWarning("Compensation path for Workflow {WorkflowId} not found for Tenant {TenantId}", id, tenantId);
+            _logger.LogWarning("Compensation path for Workflow {WorkflowId} not found for Tenant {TenantId}", id, scopedTenantId);
             return NotFound();
         }
 
