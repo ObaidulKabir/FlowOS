@@ -195,3 +195,42 @@ describe('expired platform administrator sign-in', () => {
     expect(takeSessionExpiredNotice()).toBe(false);
   });
 });
+
+describe('platform administrator session whose tenant was rewritten', () => {
+  const future = Math.floor(Date.now() / 1000) + 3600;
+  const adminToken = `header.${btoa(JSON.stringify({ exp: future, role: 'Admin', tenant_id: PLATFORM_TENANT_ID, tenant_name: 'Default Tenant' }))}.signature`;
+
+  beforeEach(() => {
+    localStorage.clear();
+    clearAuthSession();
+  });
+
+  test('is put back on the platform tenant so admin calls are not rejected as cross-tenant', () => {
+    localStorage.setItem('flowos_auth_session', JSON.stringify({
+      role: 'Admin',
+      tenantId,
+      tenantName: 'Some Tenant',
+      token: adminToken,
+      isSandbox: false
+    }));
+
+    const session = getAuthSession();
+
+    expect(session.role).toBe('Admin');
+    expect(session.tenantId).toBe(PLATFORM_TENANT_ID);
+    expect(session.tenantName).toBe('Default Tenant');
+    expect(JSON.parse(localStorage.getItem('flowos_auth_session')!).tenantId).toBe(PLATFORM_TENANT_ID);
+  });
+
+  test('a tenant-role session keeps its own tenant (the Tenant workspace)', () => {
+    localStorage.setItem('flowos_auth_session', JSON.stringify({
+      role: 'Tenant',
+      tenantId,
+      tenantName: 'Some Tenant',
+      token: adminToken,
+      isSandbox: false
+    }));
+
+    expect(getAuthSession().tenantId).toBe(tenantId);
+  });
+});
