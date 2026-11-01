@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using FlowOS.Api.Services;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -32,11 +33,12 @@ public class WorkflowActionsController : ControllerBase
         [FromQuery] string? status = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] Guid? tenantId = null,
         CancellationToken ct = default)
     {
-        var tenantId = _currentUser.TenantId;
+        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
         var history = await _actionHistoryService.GetActionHistoryAsync(
-            tenantId,
+            scopedTenantId,
             workflowInstanceId,
             stepId,
             actionType,
@@ -52,10 +54,11 @@ public class WorkflowActionsController : ControllerBase
     public async Task<IActionResult> GetActionLogById(
         [FromRoute] Guid workflowInstanceId,
         [FromRoute] Guid logId,
+        [FromQuery] Guid? tenantId = null,
         CancellationToken ct = default)
     {
-        var tenantId = _currentUser.TenantId;
-        var log = await _actionHistoryService.GetActionLogByIdAsync(logId, tenantId, ct);
+        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
+        var log = await _actionHistoryService.GetActionLogByIdAsync(logId, scopedTenantId, ct);
         if (log == null || log.WorkflowInstanceId != workflowInstanceId)
         {
             return NotFound(new { message = $"Action execution log '{logId}' not found for workflow '{workflowInstanceId}'." });

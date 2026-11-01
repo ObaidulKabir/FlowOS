@@ -13,6 +13,8 @@ interface Props {
   inspectInstanceId?: string | null;
   inspectRequestId?: number | null;
   onInspectConsumed?: () => void;
+  /** Admin read-scope: the tenant whose instances are shown. Used for every drill-down call. */
+  tenantId?: string;
 }
 
 const engineStatusLabel = (status: unknown): string => {
@@ -167,7 +169,8 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
   blueprints = [],
   inspectInstanceId = null,
   inspectRequestId = null,
-  onInspectConsumed
+  onInspectConsumed,
+  tenantId
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [inspectingInstance, setInspectingInstance] = useState<string | null>(null);
@@ -207,7 +210,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
     }
 
     try {
-      const raw = await api.getWorkflowAudit(instanceId);
+      const raw = await api.getWorkflowAudit(instanceId, undefined, tenantId);
       const data = normalizeAuditDetail(raw);
       setAuditDetail(data);
 
@@ -221,7 +224,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
           setResolvedDefinition(foundBp.definition);
         } else {
           try {
-            const list = await api.list();
+            const list = await api.list(undefined, undefined, undefined, tenantId);
             foundBp = list.find(b => 
               b.name.toLowerCase() === (data.definitionName || '').toLowerCase() ||
               b.id === data.definitionId
@@ -484,10 +487,11 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
                   )}
                 </div>
               ) : inspectTab === 'actions' ? (
-                <WorkflowActionAuditViewer workflowInstanceId={inspectingInstance} />
+                <WorkflowActionAuditViewer workflowInstanceId={inspectingInstance} tenantId={tenantId} />
               ) : inspectTab === 'timetravel' ? (
                 <TimeTravelPlayer
                   workflowInstanceId={inspectingInstance}
+                  tenantId={tenantId}
                   definition={resolvedDefinition}
                   onSnapshotChange={setReplaySnapshot}
                 />
