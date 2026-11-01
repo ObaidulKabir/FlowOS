@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { enableNodeDragging, NodeDragging } from '../diagram/nodeDragging';
+import { downloadDiagram, DiagramImageFormat, LegendEntry } from '../diagram/exportImage';
 import { 
   Check,
+  Download,
   ExternalLink,
   GitCommit, 
   Maximize2,
@@ -55,7 +57,51 @@ export function panForZoom(
   };
 }
 
-const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRendered?: () => void; layoutKey?: string }> = ({ chart, unconstrained = false, onRendered, layoutKey }) => {
+/** Saves the diagram, as the user has arranged it, as a PNG or SVG file. */
+const DiagramExportButtons: React.FC<{
+  getSvg: () => SVGSVGElement | null;
+  name: string;
+  legend: LegendEntry[];
+  large?: boolean;
+}> = ({ getSvg, name, legend, large = false }) => {
+  const [busy, setBusy] = useState<DiagramImageFormat | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (format: DiagramImageFormat) => {
+    const svg = getSvg();
+    if (!svg) {
+      setError('There is no diagram to export yet.');
+      return;
+    }
+    setBusy(format);
+    setError(null);
+    try {
+      await downloadDiagram(svg, name, format, { legend });
+    } catch (err: unknown) {
+      setError((err as { message?: string } | null)?.message || 'The diagram could not be exported.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const buttonClass = large
+    ? 'inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500 disabled:opacity-50'
+    : 'inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-slate-200 hover:border-slate-500 disabled:opacity-50';
+
+  return (
+    <div className="flex items-center gap-1.5" onPointerDown={event => event.stopPropagation()}>
+      <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void save('png')} aria-label={`Download ${name} as PNG image`} title="Download this diagram, as arranged, as a PNG image">
+        <Download size={large ? 14 : 11} /> {busy === 'png' ? 'Saving…' : 'PNG'}
+      </button>
+      <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void save('svg')} aria-label={`Download ${name} as SVG image`} title="Download this diagram as a scalable SVG image">
+        <Download size={large ? 14 : 11} /> {busy === 'svg' ? 'Saving…' : 'SVG'}
+      </button>
+      {error && <span role="alert" className="max-w-[16rem] text-[10px] text-rose-300">{error}</span>}
+    </div>
+  );
+};
+
+const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRendered?: () => void; layoutKey?: string; exportName?: string; legendEntries?: LegendEntry[] }> = ({ chart, unconstrained = false, onRendered, layoutKey, exportName, legendEntries = [] }) => {
   const onRenderedRef = useRef(onRendered);
   onRenderedRef.current = onRendered;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -123,6 +169,15 @@ const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRender
         data-diagram-canvas="true"
         className={`flex justify-center p-4 w-full ${unconstrained ? 'min-h-0' : 'overflow-auto min-h-[300px]'}`}
       />
+      {exportName && (
+        <div className="absolute right-2 top-2">
+          <DiagramExportButtons
+            getSvg={() => (containerRef.current?.querySelector('svg') as SVGSVGElement | null) ?? null}
+            name={exportName}
+            legend={legendEntries}
+          />
+        </div>
+      )}
       <div className="absolute left-2 top-2 flex items-center gap-2 text-[10px] text-slate-500">
         <span>Drag nodes to rearrange</span>
         {movedNodes > 0 && (
@@ -437,6 +492,12 @@ const LargeDiagramWindow: React.FC<{
             <button type="button" onClick={() => zoomBy(-DIAGRAM_ZOOM_STEP)} disabled={zoom <= MIN_DIAGRAM_ZOOM} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Zoom out" title="Zoom out. Makes the diagram smaller.">
               <ZoomOut size={14} /> Zoom out
             </button>
+            <DiagramExportButtons
+              large
+              getSvg={() => (canvasHostRef.current?.querySelector('svg') as SVGSVGElement | null) ?? null}
+              name={title}
+              legend={legendEntries}
+            />
             <button
               type="button"
               onClick={() => {
@@ -977,7 +1038,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
               </div>
             </div>
             {orderedSteps.length > 0 ? (
-              <MermaidViewer chart={buildWorkflowMermaid()} layoutKey={layoutKey('flowchart')} />
+              <MermaidViewer chart={buildWorkflowMermaid()} layoutKey={layoutKey('flowchart')} exportName="Workflow Orchestration Steps" legendEntries={legendEntries} />
             ) : (
               <div className="py-8 text-slate-500 text-xs">No steps defined</div>
             )}
@@ -1011,7 +1072,7 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
               </div>
             </div>
             {smStates.length > 0 ? (
-              <MermaidViewer chart={buildStateMachineMermaid()} layoutKey={layoutKey('statemachine')} />
+              <MermaidViewer chart={buildStateMachineMermaid()} layoutKey={layoutKey('statemachine')} exportName="State Machine Lifecycle" legendEntries={legendEntries} />
             ) : (
               <div className="py-8 text-slate-500 text-xs">No states defined</div>
             )}
