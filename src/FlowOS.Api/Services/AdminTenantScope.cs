@@ -11,6 +11,18 @@ namespace FlowOS.Api.Services;
 /// </summary>
 public static class AdminTenantScope
 {
+    public const string AllTenants = "all";
+    public const int DefaultAllTenantsLimit = 500;
+    public const int MaxAllTenantsLimit = 1000;
+
+    /// <summary>True only for a platform administrator who asked for scope=all.</summary>
+    public static bool WantsAllTenants(ICurrentUser currentUser, string? scope) =>
+        string.Equals(scope?.Trim(), AllTenants, StringComparison.OrdinalIgnoreCase) &&
+        TenantIdentityRules.IsPlatformAdministrator(currentUser.TenantId, currentUser.Roles);
+
+    public static int ClampLimit(int? requested) =>
+        Math.Clamp(requested ?? DefaultAllTenantsLimit, 1, MaxAllTenantsLimit);
+
     public static Guid ResolveRead(ICurrentUser currentUser, Guid? requestedTenantId)
     {
         var own = currentUser.TenantId;

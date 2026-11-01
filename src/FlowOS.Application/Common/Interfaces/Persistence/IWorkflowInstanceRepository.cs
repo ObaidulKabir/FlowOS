@@ -21,6 +21,7 @@ public interface IWorkflowInstanceRepository
         Guid? parentWorkflowInstanceId = null,
         string? externalSourceSystem = null,
         string? externalReference = null,
+        int? take = null,
         CancellationToken cancellationToken = default);
     Task<WorkflowSummaryDto?> GetSummaryByIdAsync(Guid id, Guid tenantId, CancellationToken cancellationToken = default);
     Task<WorkflowInstance?> GetLatestChildByParentStepAsync(Guid tenantId, Guid parentWorkflowInstanceId, string parentStepId, CancellationToken cancellationToken = default);

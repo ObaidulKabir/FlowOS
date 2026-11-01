@@ -451,6 +451,12 @@ export const api = {
     return handleResponse(response, 'Failed to list workflow instances');
   },
 
+  /** Platform administrators only: the newest instances of every tenant. */
+  listAllInstances: async (limit: number = 500): Promise<WorkflowInstance[]> => {
+    const response = await authorizedFetch(`/api/workflows?scope=all&limit=${encodeURIComponent(String(limit))}`, {}, 'Admin');
+    return handleResponse(response, 'Failed to list workflow instances');
+  },
+
   getAgentHistory: async (
     limit: number = 50,
     role?: 'Tenant' | 'Admin'

@@ -6,6 +6,7 @@ namespace FlowOS.Application.DTOs;
 public class WorkflowSummaryDto
 {
     public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
     public Guid DefinitionId { get; set; }
     
     // UI expects these properties instead of just DefinitionId

@@ -63,14 +63,21 @@ public class WorkflowsController : ControllerBase
         [FromQuery] FlowOS.Workflows.Enums.WorkflowInstanceStatus? status,
         [FromQuery] string? sourceSystem = null,
         [FromQuery] string? externalReference = null,
-        [FromQuery] Guid? tenantId = null)
+        [FromQuery] Guid? tenantId = null,
+        [FromQuery] string? scope = null,
+        [FromQuery] int? limit = null)
     {
         if (_currentUser.TenantId == Guid.Empty) return Unauthorized();
-        var scopedTenantId = AdminTenantScope.ResolveRead(_currentUser, tenantId);
+
+        // Platform administrators can ask for the newest instances of every tenant (scope=all).
+        // Guid.Empty means "all tenants" to the query; it is only ever set here, after the admin check.
+        var allTenants = AdminTenantScope.WantsAllTenants(_currentUser, scope);
+        var scopedTenantId = allTenants ? Guid.Empty : AdminTenantScope.ResolveRead(_currentUser, tenantId);
 
         var query = new GetWorkflowsQuery
         {
             TenantId = scopedTenantId,
+            Take = allTenants ? AdminTenantScope.ClampLimit(limit) : null,
             Status = status,
             ExternalSourceSystem = sourceSystem,
             ExternalReference = externalReference
