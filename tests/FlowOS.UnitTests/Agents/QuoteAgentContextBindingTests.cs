@@ -65,7 +65,9 @@ public class QuoteAgentContextBindingTests
             Assert.Equal(DataSeeder.QuoteAutoReviewPolicyGuideline, composed.prompt.policyGuideline);
             Assert.Equal("quote-approval", composed.prompt.alias);
             Assert.Equal(900L, composed.data.canonicalContext["Amount"]);
-            Assert.Contains(composed.tools, tool => tool.kind == "event" && tool.name == "EVT-ACCEPT");
+            // Events are NOT in composed.tools — they are in legalNextStepEvents only (Bug 3 fix).
+            Assert.DoesNotContain(composed.tools, tool => tool.kind == "event");
+            Assert.Contains("EVT-ACCEPT", composed.legalNextStepEvents);
             Assert.Null(composed.provider);
             Assert.True(composed.resolved.prompt);
             Assert.False(composed.resolved.provider);

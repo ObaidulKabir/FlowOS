@@ -79,7 +79,9 @@ public class BoundedAutonomyTests
         Assert.Contains("QUOTE_APPROVED", packet.AutoCommit!.AllowedEvents);
         Assert.Equal("Accept if quote within 15% of estimate.", packet.Prompt.TemplateGuideline);
         Assert.Contains("shop limit", packet.Prompt.PolicyGuideline);
-        Assert.Contains(packet.DeclaredTools, t => t.Kind == "event" && t.Name == "QUOTE_APPROVED");
+        // Events are listed in LegalNextStepEvents only — they are NOT added as callable function tools (Bug 3 fix).
+        Assert.DoesNotContain(packet.DeclaredTools, t => t.Kind == "event");
+        Assert.Contains("QUOTE_APPROVED", packet.LegalNextStepEvents);
     }
 
     [Fact]
@@ -330,7 +332,8 @@ public class BoundedAutonomyTests
                 ["webhook"] = "Webhook"
             });
 
-        Assert.Contains(tools, t => t.Kind == "event" && t.Name == "QUOTE_APPROVED");
+        // Events are NOT added as callable function tools (Bug 3 fix) — they appear in LegalNextStepEvents only.
+        Assert.DoesNotContain(tools, t => t.Kind == "event");
         var plugin = Assert.Single(tools, t => t.Kind == "plugin");
         Assert.Equal("plugin:Webhook", plugin.Name);
         Assert.Equal("Webhook", plugin.Provider);
