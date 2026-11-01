@@ -26,6 +26,7 @@ public class WorkflowQueryHandlers :
             request.ParentWorkflowInstanceId,
             request.ExternalSourceSystem,
             request.ExternalReference,
+            request.Take,
             cancellationToken);
 
     public Task<WorkflowSummaryDto?> Handle(GetWorkflowByIdQuery request, CancellationToken cancellationToken)

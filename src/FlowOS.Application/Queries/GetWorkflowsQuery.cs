@@ -13,4 +13,6 @@ public class GetWorkflowsQuery : IRequest<List<WorkflowSummaryDto>>
     public Guid? ParentWorkflowInstanceId { get; set; }
     public string? ExternalSourceSystem { get; set; }
     public string? ExternalReference { get; set; }
+    /// <summary>Caps the number of newest instances returned. Null means no cap.</summary>
+    public int? Take { get; set; }
 }

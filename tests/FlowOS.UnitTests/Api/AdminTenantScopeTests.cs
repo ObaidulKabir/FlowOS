@@ -52,3 +52,46 @@ public class AdminTenantScopeTests
         Assert.Equal(Platform, AdminTenantScope.ResolveRead(User(Platform, "Tenant"), Other));
     }
 }
+
+public class AdminTenantScopeAllTenantsTests
+{
+    private static readonly Guid Platform = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid Other = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+    private static ICurrentUser User(Guid tenant, params string[] roles)
+    {
+        var user = new Mock<ICurrentUser>();
+        user.SetupGet(u => u.TenantId).Returns(tenant);
+        user.SetupGet(u => u.Roles).Returns(roles.ToList());
+        return user.Object;
+    }
+
+    [Theory]
+    [InlineData("all")]
+    [InlineData("ALL")]
+    [InlineData(" all ")]
+    public void PlatformAdmin_CanAskForAllTenants(string scope)
+    {
+        Assert.True(AdminTenantScope.WantsAllTenants(User(Platform, "Admin"), scope));
+    }
+
+    [Fact]
+    public void AllTenants_IsRefused_ForEveryoneElse_AndForOtherScopes()
+    {
+        Assert.False(AdminTenantScope.WantsAllTenants(User(Other, "Admin"), "all"));
+        Assert.False(AdminTenantScope.WantsAllTenants(User(Platform, "Tenant"), "all"));
+        Assert.False(AdminTenantScope.WantsAllTenants(User(Platform, "Admin"), null));
+        Assert.False(AdminTenantScope.WantsAllTenants(User(Platform, "Admin"), "tenant"));
+    }
+
+    [Theory]
+    [InlineData(null, 500)]
+    [InlineData(0, 1)]
+    [InlineData(-5, 1)]
+    [InlineData(50, 50)]
+    [InlineData(100000, 1000)]
+    public void Limit_IsClamped(int? requested, int expected)
+    {
+        Assert.Equal(expected, AdminTenantScope.ClampLimit(requested));
+    }
+}

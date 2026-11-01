@@ -15,6 +15,8 @@ interface Props {
   onInspectConsumed?: () => void;
   /** Admin read-scope: the tenant whose instances are shown. Used for every drill-down call. */
   tenantId?: string;
+  /** Tenant id to name, to show a Tenant column (admin all-tenants view). */
+  tenantNames?: Record<string, string>;
 }
 
 const engineStatusLabel = (status: unknown): string => {
@@ -170,9 +172,12 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
   inspectInstanceId = null,
   inspectRequestId = null,
   onInspectConsumed,
-  tenantId
+  tenantId,
+  tenantNames
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [inspectTenantId, setInspectTenantId] = useState<string | undefined>(tenantId);
   const [inspectingInstance, setInspectingInstance] = useState<string | null>(null);
   const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
@@ -198,6 +203,9 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
     const matchedInstance = items.find(i =>
       (i.id || i.workflowId) === instanceId || i.correlationId === instanceId
     );
+    // In the all-tenants view each row belongs to its own tenant; every drill-down must use it.
+    const rowTenantId = matchedInstance?.tenantId || tenantId;
+    setInspectTenantId(rowTenantId);
     let bp = blueprints.find(b => 
       b.id === matchedInstance?.workflowClassId || 
       b.name.toLowerCase() === (matchedInstance?.workflowClassName || '').toLowerCase()
@@ -210,7 +218,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
     }
 
     try {
-      const raw = await api.getWorkflowAudit(instanceId, undefined, tenantId);
+      const raw = await api.getWorkflowAudit(instanceId, undefined, rowTenantId);
       const data = normalizeAuditDetail(raw);
       setAuditDetail(data);
 
@@ -224,7 +232,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
           setResolvedDefinition(foundBp.definition);
         } else {
           try {
-            const list = await api.list(undefined, undefined, undefined, tenantId);
+            const list = await api.list(undefined, undefined, undefined, rowTenantId);
             foundBp = list.find(b => 
               b.name.toLowerCase() === (data.definitionName || '').toLowerCase() ||
               b.id === data.definitionId
@@ -271,7 +279,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
     } finally {
       setLoadingAudit(false);
     }
-  }, [blueprints, items]);
+  }, [blueprints, items, tenantId]);
 
   useEffect(() => {
     if (!inspectInstanceId) return;
@@ -285,12 +293,47 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
     onInspectConsumed?.();
   };
 
+  const showTenant = Boolean(tenantNames);
+  const statusCounts = items.reduce<Record<string, number>>((acc, item) => {
+    const label = engineStatusLabel(item.status);
+    acc[label] = (acc[label] ?? 0) + 1;
+    return acc;
+  }, {});
+  const statusOptions = ['All', 'Running', 'Waiting', 'Failed', 'Completed'];
+  const visibleItems = statusFilter === 'All'
+    ? items
+    : items.filter(item => engineStatusLabel(item.status) === statusFilter);
+
   return (
     <div className="overflow-x-auto">
+      <div role="group" aria-label="Filter by engine status" className="flex flex-wrap gap-2 mb-3">
+        {statusOptions.map(option => {
+          const count = option === 'All' ? items.length : statusCounts[option] ?? 0;
+          const active = statusFilter === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setStatusFilter(option)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                active
+                  ? 'bg-purple-600 text-white border-purple-500'
+                  : option === 'Failed' && count > 0
+                    ? 'bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20'
+                    : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+              }`}
+            >
+              {option} ({count})
+            </button>
+          );
+        })}
+      </div>
       <table className="w-full text-left text-xs text-slate-300">
         <thead className="bg-slate-800/70 text-[11px] text-slate-400 uppercase tracking-wider">
           <tr>
             <th className="py-3 px-4 rounded-l-lg">Instance ID</th>
+            {showTenant && <th className="py-3 px-4">Tenant</th>}
             <th className="py-3 px-4">WorkflowClass</th>
             <th className="py-3 px-4">Current Step</th>
             <th className="py-3 px-4">Legal State</th>
@@ -300,7 +343,7 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800">
-          {items.map((item, idx) => {
+          {visibleItems.map((item, idx) => {
             const id = item.id || item.workflowId || `instance-${idx}`;
             const className = item.workflowClassName || item.workflowClassId || 'Workflow';
             const step = item.currentStepId || item.currentStep || 'Start';
@@ -329,6 +372,11 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
                     </button>
                   </div>
                 </td>
+                {showTenant && (
+                  <td className="py-3 px-4 text-slate-300">
+                    {(item.tenantId && tenantNames?.[item.tenantId]) || (item.tenantId ? `${item.tenantId.substring(0, 8)}...` : '—')}
+                  </td>
+                )}
                 <td className="py-3 px-4 font-semibold text-white">{className}</td>
                 <td className="py-3 px-4">
                   <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-mono text-[11px]">
@@ -357,11 +405,13 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
               </tr>
             );
           })}
-          {items.length === 0 && (
+          {visibleItems.length === 0 && (
             <tr>
-              <td colSpan={7} className="py-16 text-center text-slate-400">
+              <td colSpan={showTenant ? 8 : 7} className="py-16 text-center text-slate-400">
                 <Activity size={32} className="mx-auto mb-2 text-slate-600 opacity-60" />
-                <div className="font-semibold text-slate-300">No workflow instances found for this tenant.</div>
+                <div className="font-semibold text-slate-300">
+                  {items.length > 0 ? `No ${statusFilter.toLowerCase()} instances.` : 'No workflow instances found for this tenant.'}
+                </div>
                 <p className="text-xs text-slate-500 mt-1">
                   Click &quot;Start Live Instance&quot; above, or trigger via the MCP server or REST API.
                 </p>
@@ -487,11 +537,11 @@ export const WorkflowInstanceTable: React.FC<Props> = ({
                   )}
                 </div>
               ) : inspectTab === 'actions' ? (
-                <WorkflowActionAuditViewer workflowInstanceId={inspectingInstance} tenantId={tenantId} />
+                <WorkflowActionAuditViewer workflowInstanceId={inspectingInstance} tenantId={inspectTenantId} />
               ) : inspectTab === 'timetravel' ? (
                 <TimeTravelPlayer
                   workflowInstanceId={inspectingInstance}
-                  tenantId={tenantId}
+                  tenantId={inspectTenantId}
                   definition={resolvedDefinition}
                   onSnapshotChange={setReplaySnapshot}
                 />

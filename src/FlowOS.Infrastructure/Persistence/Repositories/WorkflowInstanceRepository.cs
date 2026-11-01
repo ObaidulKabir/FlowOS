@@ -60,6 +60,7 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
         Guid? parentWorkflowInstanceId = null,
         string? externalSourceSystem = null,
         string? externalReference = null,
+        int? take = null,
         CancellationToken cancellationToken = default)
     {
         var query = from w in _context.WorkflowInstances.AsNoTracking()
@@ -84,9 +85,11 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
             query = query.Where(x => x.w.ExternalReference == reference);
         }
 
-        var instances = await query
-            .OrderByDescending(x => x.w.CreatedAt)
-            .ToListAsync(cancellationToken);
+        var ordered = query.OrderByDescending(x => x.w.CreatedAt).AsQueryable();
+        if (take.HasValue && take.Value > 0)
+            ordered = ordered.Take(take.Value);
+
+        var instances = await ordered.ToListAsync(cancellationToken);
 
         return instances.Select(x => MapSummary(x.w, x.Name)).ToList();
     }
@@ -143,6 +146,7 @@ public class WorkflowInstanceRepository : IWorkflowInstanceRepository
     {
         Id = w.Id,
         WorkflowId = w.Id,
+        TenantId = w.TenantId,
         WorkflowClassId = w.WorkflowClassId,
         WorkflowClassName = className,
         DefinitionId = w.WorkflowDefinitionId,

@@ -57,6 +57,7 @@ export const AdminDashboard: React.FC<Props> = ({
   const [tenantsCount, setTenantsCount] = useState(0);
   const [planRequests, setPlanRequests] = useState<TenantPlanRequestItem[]>([]);
   const [planRequestError, setPlanRequestError] = useState<string | null>(null);
+  const [instanceScopeAll, setInstanceScopeAll] = useState(true);
   const [planNotice, setPlanNotice] = useState<string | null>(null);
   const [planBusyTenantId, setPlanBusyTenantId] = useState<string | null>(null);
   const [planRequestsVersion, setPlanRequestsVersion] = useState(0);
@@ -119,7 +120,9 @@ export const AdminDashboard: React.FC<Props> = ({
     }
 
     try {
-      const instList = await api.listInstances('Admin', targetTenantId);
+      const instList = instanceScopeAll
+        ? await api.listAllInstances()
+        : await api.listInstances('Admin', targetTenantId);
       setInstances(instList);
     } catch (err: unknown) {
       setInstances([]);
@@ -188,6 +191,37 @@ export const AdminDashboard: React.FC<Props> = ({
     }
   };
 
+  const ALL_TENANTS = '__all__';
+  const tenantNames = Object.fromEntries(tenants.map(t => [t.tenantId, t.name]));
+  const instanceScopePicker = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+        <Building2 size={13} className="text-purple-400" /> Show:
+      </span>
+      <select
+        aria-label="Instance scope"
+        value={instanceScopeAll ? ALL_TENANTS : selectedTenantFilter}
+        onChange={(e) => {
+          if (e.target.value === ALL_TENANTS) {
+            setInstanceScopeAll(true);
+          } else {
+            setInstanceScopeAll(false);
+            setSelectedTenantFilter(e.target.value);
+          }
+        }}
+        className="bg-slate-950 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:border-purple-500 focus:outline-none"
+      >
+        <option value={ALL_TENANTS}>All tenants</option>
+        <option value="">{`Session Tenant: ${session.tenantName || session.tenantId}`}</option>
+        {tenants.map(t => (
+          <option key={t.tenantId} value={t.tenantId}>
+            {t.name} ({t.tenantId.substring(0, 8)}...)
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   const tenantScopePicker = (
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
@@ -230,7 +264,7 @@ export const AdminDashboard: React.FC<Props> = ({
 
   useEffect(() => {
     void loadData(selectedTenantFilter || undefined);
-  }, [activeTab, selectedTenantFilter]);
+  }, [activeTab, selectedTenantFilter, instanceScopeAll]);
 
   // Blueprints waiting for admin approval (Shared scope in Submitted/Shared status)
   const pendingApprovals = blueprints.filter(isSharedCatalogEntry);
@@ -553,16 +587,17 @@ export const AdminDashboard: React.FC<Props> = ({
           {activeTab === 'Instances' && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-700/80">
-                {tenantScopePicker}
+                {instanceScopePicker}
                 <div className="text-[11px] text-slate-400">
-                  Read-only view of {instances.length} instance{instances.length === 1 ? '' : 's'} for {effectiveTenantName}. Open one to see its timeline, actions and time-travel replay.
+                  Read-only view of {instances.length} instance{instances.length === 1 ? '' : 's'}{instanceScopeAll ? ' across all tenants (newest 500)' : ` for ${effectiveTenantName}`}. Open one to see its timeline, actions and time-travel replay.
                 </div>
               </div>
               <WorkflowInstanceTable
-                key={`${effectiveTenantScope}-${auditFocus?.requestId ?? 'instances'}`}
+                key={`${instanceScopeAll ? 'all' : effectiveTenantScope}-${auditFocus?.requestId ?? 'instances'}`}
                 items={instances}
                 blueprints={blueprints}
-                tenantId={selectedTenantFilter || undefined}
+                tenantId={instanceScopeAll ? undefined : selectedTenantFilter || undefined}
+                tenantNames={instanceScopeAll ? tenantNames : undefined}
                 inspectInstanceId={auditFocus?.instanceId}
                 inspectRequestId={auditFocus?.requestId}
                 onInspectConsumed={() => setAuditFocus(null)}

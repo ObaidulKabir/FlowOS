@@ -9,6 +9,7 @@ const { apiMock } = vi.hoisted(() => ({
     listTenants: vi.fn(),
     list: vi.fn(),
     listInstances: vi.fn(),
+    listAllInstances: vi.fn(),
     approve: vi.fn(),
     deprecate: vi.fn(),
     abandon: vi.fn(),
@@ -41,7 +42,7 @@ vi.mock('./WorkflowTable', () => ({
 }));
 
 vi.mock('./WorkflowInstanceTable', () => ({
-  WorkflowInstanceTable: ({ tenantId }: { tenantId?: string }) => <div>Workflow Instances scope={tenantId ?? 'session'}</div>
+  WorkflowInstanceTable: ({ tenantId, tenantNames }: { tenantId?: string; tenantNames?: Record<string, string> }) => <div>Workflow Instances scope={tenantNames ? 'all' : tenantId ?? 'session'}</div>
 }));
 
 vi.mock('./EventAuditViewer', () => ({
@@ -129,6 +130,7 @@ describe('AdminDashboard tenant selection', () => {
     ]);
     apiMock.list.mockResolvedValue([]);
     apiMock.listInstances.mockResolvedValue([]);
+    apiMock.listAllInstances.mockResolvedValue([]);
     apiMock.listPlanRequests.mockResolvedValue([]);
   });
 
@@ -198,7 +200,7 @@ describe('AdminDashboard tenant selection', () => {
 
   test('shows a rejected workflow or instance list instead of an empty dashboard', async () => {
     apiMock.list.mockRejectedValue(new Error('Failed to list workflow classes (HTTP 403 Forbidden)'));
-    apiMock.listInstances.mockRejectedValue(new Error('Failed to list workflow instances (HTTP 401 )'));
+    apiMock.listAllInstances.mockRejectedValue(new Error('Failed to list workflow instances (HTTP 401 )'));
 
     renderDashboard();
 
@@ -318,6 +320,7 @@ describe('AdminDashboard plan request inbox', () => {
     apiMock.listTenants.mockResolvedValue([]);
     apiMock.list.mockResolvedValue([]);
     apiMock.listInstances.mockResolvedValue([]);
+    apiMock.listAllInstances.mockResolvedValue([]);
   });
 
   test('shows waiting tenants with a badge and approves in one click', async () => {
@@ -406,6 +409,7 @@ describe('AdminDashboard instance investigation scope', () => {
     ]);
     apiMock.list.mockResolvedValue([]);
     apiMock.listInstances.mockResolvedValue([]);
+    apiMock.listAllInstances.mockResolvedValue([]);
     apiMock.listPlanRequests.mockResolvedValue([]);
   });
 
@@ -422,10 +426,11 @@ describe('AdminDashboard instance investigation scope', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: /workflow instances/i }));
-    expect(await screen.findByText('Workflow Instances scope=session')).toBeInTheDocument();
+    expect(await screen.findByText('Workflow Instances scope=all')).toBeInTheDocument();
+    await waitFor(() => expect(apiMock.listAllInstances).toHaveBeenCalled());
 
     await waitFor(() => expect(screen.getByRole('option', { name: /acme ltd/i })).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText('Tenant scope'), { target: { value: 'aaaaaaaa-0000-0000-0000-000000000001' } });
+    fireEvent.change(screen.getByLabelText('Instance scope'), { target: { value: 'aaaaaaaa-0000-0000-0000-000000000001' } });
 
     await waitFor(() =>
       expect(apiMock.listInstances).toHaveBeenCalledWith('Admin', 'aaaaaaaa-0000-0000-0000-000000000001')

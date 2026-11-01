@@ -54,6 +54,7 @@ export interface CopyRequest {
 
 export interface WorkflowInstance {
   id?: string;
+  tenantId?: string;
   workflowId?: string;
   workflowClassId?: string;
   workflowClassName?: string;
