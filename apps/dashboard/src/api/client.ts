@@ -1,4 +1,4 @@
-import { isExpiredPlatformAdminToken, isPlatformAdminToken, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
+import { isExpiredPlatformAdminToken, isPlatformAdminToken, platformAdminHomeSession, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
 import { 
   WorkflowClass, CreateDraftRequest, CopyRequest, ValidationResult, 
   WorkflowClassScope, WorkflowClassStatus, WorkflowInstance, AuthSession, DeadLetterDto,
@@ -106,13 +106,21 @@ export const withSessionCredentials = (session: AuthSession): AuthSession => {
     isSandbox = true;
   }
 
-  const role = session.role === 'Admin' && token && isSandbox !== true && isPlatformAdminToken(token)
+  const role: AuthSession['role'] = session.role === 'Admin' && token && isSandbox !== true && isPlatformAdminToken(token)
     ? 'Admin'
     : session.role === 'Admin'
       ? 'Tenant'
       : session.role;
 
-  return { ...session, token, apiKey, tenantId, tenantName, isSandbox, role };
+  const repaired = { ...session, token, apiKey, tenantId, tenantName, isSandbox, role };
+
+  // A platform administrator's requests are always made as the platform tenant. An older dashboard
+  // build stored the tenant an admin was viewing as the admin's own tenant; the API then answered
+  // every call with 403 Cross-tenant access forbidden. Put such a stored session back.
+  if (role === 'Admin' && tenantId !== PLATFORM_TENANT_ID) {
+    return platformAdminHomeSession(repaired) ?? repaired;
+  }
+  return repaired;
 };
 
 export const applyTenantEntitlement = (
