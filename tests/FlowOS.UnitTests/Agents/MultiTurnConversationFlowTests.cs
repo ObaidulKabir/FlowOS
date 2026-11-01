@@ -37,7 +37,7 @@ public class MultiTurnConversationFlowTests
         CancellationToken ct)
     {
         var history = await store.GetHistoryAsync(tenantId, instanceId, stepId, ct);
-        var result = await agent.ExecuteConversationalAsync(packet, history, ct);
+        var result = await agent.ExecuteConversationalAsync(packet, history, cancellationToken: ct);
         if (result.Success && !string.IsNullOrWhiteSpace(result.Insight))
         {
             await store.AppendMessageAsync(
@@ -226,6 +226,7 @@ public class MultiTurnRecordingAgent : IConversationalAgent
     public Task<AgentResult> ExecuteConversationalAsync(
         DecisionPacket packet,
         IReadOnlyList<ChatMessage> history,
+        IAgentToolInvoker? toolInvoker = null,
         CancellationToken cancellationToken = default)
     {
         _capture(history);
