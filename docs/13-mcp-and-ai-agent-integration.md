@@ -155,10 +155,12 @@ compact JSON input example. Successful tool content uses
 `{ "ok": true, "data": ... }`; tool-level failures set `isError: true` and
 return `{ "ok": false, "errorCode": "...", "message": "...", "context": ... }`.
 
-FlowOS advertises **79 tool names**: 76 canonical tools plus 3 deprecated
+FlowOS advertises **113 tool names**: 110 canonical tools plus 3 deprecated
 capability-binding aliases retained for compatibility. They cover governance
 lifecycle, context-aware simulation, Copilot synthesis, time-travel debugging,
-operational execution, tenant IAM, and runtime advisory intelligence:
+operational execution, tenant IAM, connector and plugin registry, resilience/DLQ,
+webhook security, multi-turn agent chat, external AI change feed, reliability primitives,
+and runtime advisory intelligence:
 
 | Tool name | Risk Level | Side Effect | Requires Human Confirmation | Implementation | Description |
 |---|---|---|---|---|---|
@@ -208,6 +210,73 @@ operational execution, tenant IAM, and runtime advisory intelligence:
 | `get_subworkflow_tree` | `low` | `none` | No | `ExecutionTools.GetSubWorkflowTree` | Reconstructs the complete parent-child subworkflow execution hierarchy tree for an instance. |
 | `get_instance_action_history` | `low` | `none` | No | `ActionObservabilityMcpTools.GetInstanceActionHistory` | Returns lifecycle action execution logs (webhooks, notifications, events) for an instance. |
 | `test_action_plugin` | `low` | `none` | No | `PluginDiscoveryMcpTools.TestActionPlugin` | Dry-runs and validates an action plugin (Email, Slack, WhatsApp, Webhook, etc.) with structured payloads and diagnostics. |
+| `get_agent_task_job` | `low` | `none` | No | `AgentTools.GetAgentTaskJob` | Reads the status of a tenant-owned durable agent task job. Use after `run_agent_task` or `suggest_agent_action` returns `pending:true`. |
+| `get_agent_execution_history` | `low` | `none` | No | `AgentTools.GetAgentExecutionHistory` | Reads tenant-scoped durable agent execution history with outcome evaluations and token counts. Never returns API keys or prompt bodies. |
+| `get_agent_evaluation_metrics` | `low` | `none` | No | `AgentTools.GetAgentEvaluationMetrics` | Calculates governed tenant agent metrics (runs, commits, parks, calibration bins, latency, tokens, provider breakdown) for a UTC window of at most 90 days. |
+| `append_agent_chat_message` | `medium` | `reversible` | No | `AgentChatMcpTools.AppendAgentChatMessage` | Appends a user chat message to a workflow instance step conversation and optionally enqueues the step for agent processing (multi-turn MCP). |
+| `get_agent_chat_history` | `low` | `none` | No | `AgentChatMcpTools.GetAgentChatHistory` | Reads the ordered multi-turn chat history for one workflow instance step conversation. |
+| `list_agent_chat_sessions` | `low` | `none` | No | `AgentChatMcpTools.ListAgentChatSessions` | Lists recent workflow-step chat sessions for the tenant ordered by most recent message. |
+| `list_agent_prompt_audits` | `medium` | `none` | No | `AgentContextMcpTools.ListAgentPromptAudits` | Lists tenant prompt/response audit records; pass `includePayloads=true` for raw request/response for forensic debugging. |
+| `get_external_agent_settings` | `low` | `none` | No | `ExternalAgentMcpTools.GetExternalAgentSettings` | Reads tenant-level External AI Agent pipeline settings (enabled, autoPilot, profile, autoCommit). |
+| `configure_agent_auto_commit` | `high` | `reversible` | No | `ExternalAgentMcpTools.ConfigureAgentAutoCommit` | [Governance] Turns agent auto-commit on or off for the tenant. Turning it on requires `confirmHumanApproval: true`. Admin only. |
+| `configure_external_agent_settings` | `medium` | `reversible` | No | `ExternalAgentMcpTools.ConfigureExternalAgentSettings` | Enables or disables the tenant-level External AI Agent pipeline and configures autopilot plus the default planning profile alias. |
+| `upsert_agent_provider` | `medium` | `reversible` | No | `AgentContextMcpTools.UpsertAgentProvider` | Creates or edits a tenant-owned LLM provider. `apiKey` is write-only. Supports default-provider selection, fallback alias, maxTokens, and prompt audit logging. |
+| `list_agent_providers` | `low` | `none` | No | `AgentContextMcpTools.ListAgentProviders` | Lists tenant-owned LLM providers with model/endpoint/hasApiKey plus default/fallback/audit settings. Never returns the API key. |
+| `get_agent_provider` | `low` | `none` | No | `AgentContextMcpTools.GetAgentProvider` | Reads one tenant-owned LLM provider by alias. Returns `hasApiKey`, never the secret. |
+| `upsert_agent_tool` | `low` | `reversible` | No | `AgentContextMcpTools.UpsertAgentTool` | Creates or edits a structured tool in the tenant Tool Registry mapping a business alias to an underlying plugin/connector. Security: mutating tools cannot be prefetched. |
+| `list_agent_tools` | `low` | `none` | No | `AgentContextMcpTools.ListAgentTools` | Lists registered business tools in the tenant Tool Registry including parameter schemas and security classifications. |
+| `get_agent_tool` | `low` | `none` | No | `AgentContextMcpTools.GetAgentTool` | Reads one registered tool by alias from the tenant Tool Registry. |
+| `upsert_agent_profile` | `low` | `reversible` | No | `AgentContextMcpTools.UpsertAgentProfile` | Creates or edits a composite AI Agent persona bundling role, provider alias, prompt alias, tool aliases, and autoCommitThreshold. |
+| `list_agent_profiles` | `low` | `none` | No | `AgentContextMcpTools.ListAgentProfiles` | Lists composite AI Agent personas (bindingType profile) in tenant AI Context. |
+| `get_agent_profile` | `low` | `none` | No | `AgentContextMcpTools.GetAgentProfile` | Reads one composite AI Agent persona by alias or role. |
+| `create_context_binding` | `low` | `reversible` | No | `ContextBindingMcpTools.CreateContextBinding` | Creates a tenant-scoped draft context binding and revision 1 from a Draft, Published, or Public workflow template. |
+| `update_context_binding` | `low` | `reversible` | No | `ContextBindingMcpTools.UpdateContextBinding` | Updates a draft binding revision; updating an active binding creates its next draft revision without affecting running instances. |
+| `validate_context_binding` | `low` | `none` | No | `ContextBindingMcpTools.ValidateContextBinding` | Validates source visibility, aliases, mappings, schemas, roles, capabilities, and decision providers without mutating the binding. |
+| `activate_context_binding` | `high` | `irreversible` | **YES** | `ContextBindingMcpTools.ActivateContextBinding` | Compiles and atomically activates the draft as immutable workflow/state-machine/event definitions. Requires `confirmHumanApproval: true`. |
+| `archive_context_binding` | `high` | `irreversible` | **YES** | `ContextBindingMcpTools.ArchiveContextBinding` | Archives a context binding and blocks new starts while existing pinned instances continue. Requires `confirmHumanApproval: true`. |
+| `list_context_bindings` | `low` | `none` | No | `ContextBindingMcpTools.ListContextBindings` | Lists tenant-scoped context bindings with active and draft revisions. |
+| `get_context_binding` | `low` | `none` | No | `ContextBindingMcpTools.GetContextBinding` | Gets one tenant-scoped context binding and its active/draft revision details. |
+| `inspect_context_schema` | `low` | `none` | No | `ContextBindingMcpTools.InspectContextSchema` | Inspects the declarative ContextSchema of a WorkflowClass blueprint or active context binding (entityType, primary key, correlationFields, typed fields, computed formulas). |
+| `inspect_instance_context` | `low` | `none` | No | `ContextBindingMcpTools.InspectInstanceContext` | Queries the live partitioned Business Context snapshot of a running or completed workflow instance (identity, business data, audit trail, resolved roles). |
+| `test_context_operations` | `low` | `none` | No | `ContextBindingMcpTools.TestContextOperations` | Dry-runs Redis-like atomic context primitives (Set, Increment, Append, DeepMerge, SetIfAbsent) against a test snapshot without persisting. |
+| `set_instance_priority` | `low` | `reversible` | No | `ExecutionTools.SetInstancePriority` | Sets or clears (null) the task priority of a running workflow instance (0–100, higher is more urgent). The inbox is ordered by priority, then SLA due time, then age. |
+| `assign_instance_role` | `medium` | `irreversible` | No | `ExecutionTools.AssignInstanceRole` | Names the one person who holds a declared Assignment business role on a live workflow instance. Only Assignment roles; Expression, Static, and Team roles are rejected. |
+| `list_tenant_teams` | `low` | `none` | No | `TenantIamMcpTools.ListTenantTeams` | Lists all teams with required capabilities and hierarchy levels. Requires `iam.read`. |
+| `create_tenant_team` | `high` | `reversible` | **YES** | `TenantIamMcpTools.CreateTenantTeam` | Creates a new team with specified capabilities and hierarchy levels. Requires `confirmHumanApproval: true`. |
+| `add_team_member` | `high` | `reversible` | **YES** | `TenantIamMcpTools.AddTeamMember` | Adds a user to a team at a specific hierarchy level. Requires `confirmHumanApproval: true`. |
+| `register_connector` | `medium` | `reversible` | No | `ConnectorRegistryMcpTools.RegisterConnector` | Creates or updates a tenant-scoped connector mapping an InvokeConnector action name to a remote endpoint contract. Supports transport, timeout, retry profile, and auth reference. |
+| `list_connectors` | `low` | `none` | No | `ConnectorRegistryMcpTools.ListConnectors` | Lists tenant-scoped connectors available for InvokeConnector actions. |
+| `validate_connector` | `low` | `none` | No | `ConnectorRegistryMcpTools.ValidateConnector` | Validates whether a connector exists, is enabled, uses a supported transport, and has a valid endpoint URL without mutating state. |
+| `register_capability_binding` | `medium` | `reversible` | No | `ConnectorRegistryMcpTools.RegisterCapabilityBinding` | **[Deprecated alias]** Use `register_connector`. Identical behaviour; `capabilityName` is accepted as an alias for `connectorName`. |
+| `list_capability_bindings` | `low` | `none` | No | `ConnectorRegistryMcpTools.ListCapabilityBindings` | **[Deprecated alias]** Use `list_connectors`. Identical behaviour; response repeats the list under both `connectors` and `bindings`. |
+| `validate_capability_binding` | `low` | `none` | No | `ConnectorRegistryMcpTools.ValidateCapabilityBinding` | **[Deprecated alias]** Use `validate_connector`. Identical behaviour; `capabilityName` is accepted as an alias for `connectorName`. |
+| `register_plugin_binding` | `medium` | `reversible` | No | `PluginBindingMcpTools.RegisterPluginBinding` | Creates or updates a tenant-scoped mapping from blueprint aliases to server-owned plugins, a tenant-owned LLM, or a named prompt. Agent bindings take apiKey (write-only). |
+| `list_plugin_bindings` | `low` | `none` | No | `PluginBindingMcpTools.ListPluginBindings` | Lists tenant plugin bindings (action, decision, agent, or prompt). Agent rows include redacted configuration. |
+| `resolve_plugin_binding` | `low` | `none` | No | `PluginBindingMcpTools.ResolvePluginBinding` | Resolves the effective provider for one tenant-scoped source key and reports whether the mapped provider is currently registered on the server. |
+| `list_registered_plugins` | `low` | `none` | No | `PluginDiscoveryMcpTools.ListRegisteredPlugins` | Lists action and decision plugins currently registered on the server runtime so AI agents can design with real provider names instead of guessing. |
+| `list_dead_letters` | `low` | `none` | No | `ResilienceMcpTools.ListDeadLetters` | Lists dead-lettered outbox messages that exhausted all retry attempts, with failure errors, targets, and attempt counts for AI agent diagnosis. |
+| `retry_dead_letter` | `low` | `reversible` | No | `ResilienceMcpTools.RetryDeadLetter` | Resets retry counts and immediately re-enqueues one or all dead letters back into the active Outbox when a downstream API has recovered. |
+| `purge_dead_letter` | `medium` | `irreversible` | No | `ResilienceMcpTools.PurgeDeadLetter` | Permanently deletes an unrecoverable dead letter from the transactional outbox to maintain queue hygiene. |
+| `verify_webhook_signature` | `low` | `none` | No | `WebhookSecurityMcpTools.VerifyWebhookSignature` | Validates or generates HMAC-SHA256 signatures (X-FlowOS-Signature: t={ts},v1={hash}) for a given payload string and signing secret. |
+| `test_webhook_endpoint` | `medium` | `reversible` | No | `WebhookSecurityMcpTools.TestWebhookEndpoint` | Dispatches a live pre-flight probe ping to an external HTTP endpoint with full cryptographic headers; measures latency and reports HTTP status codes. |
+| `rotate_webhook_secret` | `high` | `irreversible` | No | `WebhookSecurityMcpTools.RotateWebhookSecret` | Zero-downtime key rotation: generates a fresh 32-byte HMAC-SHA256 signing secret. Existing webhooks immediately sign using the new key. |
+| `attach_step_action` | `low` | `reversible` | No | `GovernanceTools.AttachStepAction` | Attaches or updates a declarative lifecycle action (Webhook, Notification, PublishEvent, InvokeCapability, or plugin-prefixed alias) on a step's OnEntry, OnExit, or OnFailure hook in a draft. |
+| `remove_step_action` | `low` | `reversible` | No | `GovernanceTools.RemoveStepAction` | Removes a declarative lifecycle action from a step's OnEntry, OnExit, or OnFailure hook in a draft WorkflowClass by index, actionType, or target. |
+| `list_step_actions` | `low` | `none` | No | `GovernanceTools.ListStepActions` | Lists configured OnEntry, OnExit, and OnFailure lifecycle actions for a specific step (or all steps) in a draft or published WorkflowClass. |
+| `simulate_compensation_path` | `low` | `none` | No | `SimulationTools.SimulateCompensationPath` | [Saga Compensation Planner] Produces a deterministic compensation rollback path from a failed step by evaluating configured OnFailure hooks in reverse (LIFO). Analysis-only. |
+| `plan_workflow_compensation_path` | `low` | `none` | No | `ResilienceMcpTools.PlanWorkflowCompensationPath` | [Saga Analysis] Computes an execution-aware compensation rollback path for a live instance using immutable replay history and configured OnFailure hooks. Analysis-only. |
+| `register_idempotency_key` | `low` | `reversible` | No | `ReliabilityMcpTools.RegisterIdempotencyKey` | Reserves a tenant-scoped idempotency key for a named operation before executing mutating calls; returns `registered:false` if the key already exists. |
+| `inspect_idempotency_status` | `low` | `none` | No | `ReliabilityMcpTools.InspectIdempotencyStatus` | Retrieves the status of a tenant-scoped idempotency key (Pending → Completed / Failed). |
+| `preview_retry_policy` | `low` | `none` | No | `ReliabilityMcpTools.PreviewRetryPolicy` | Previews retry scheduling behavior (exponential, linear, constant) and classifies error strings as transient or permanent to help callers tune retry policy. |
+| `poll_external_agent_changes` | `medium` | `reversible` | No | `ExternalAgentMcpTools.PollExternalAgentChanges` | Polls the next batch of tenant-scoped change records for an external autonomous AI agent; atomically leases each record unless `peekOnly=true`. |
+| `ack_external_agent_change` | `medium` | `reversible` | No | `ExternalAgentMcpTools.AckExternalAgentChange` | Idempotently acknowledges a leased external agent change record as succeeded or failed (increments attempt, may promote to DeadLetter). |
+| `renew_change_lease` | `medium` | `reversible` | No | `ExternalAgentMcpTools.RenewChangeLease` | Extends the lease TTL on a Leased change record so a long-running external agent avoids having the record reclaimed mid-processing. |
+| `list_external_agent_changes` | `low` | `none` | No | `ExternalAgentMcpTools.ListExternalAgentChanges` | Read-only observability scan of the tenant's pending/failed change queue. Use `poll_external_agent_changes` to acquire leases for actual processing. |
+| `get_external_agent_change` | `low` | `none` | No | `ExternalAgentMcpTools.GetExternalAgentChange` | Retrieves a single change record by UUID joined with any associated ExternalAgentPlan steps derived from the originating outbox message. |
+| `plan_for_change` | `medium` | `reversible` | No | `ExternalAgentMcpTools.PlanForChange` | Uses the tenant's configured LLM provider to transform one external-agent change into a structured MCP execution plan. Unknown tool names are dropped during validation. |
+| `execute_plan` | `high` | `irreversible` | No | `ExternalAgentMcpTools.ExecutePlan` | Runs each persisted plan step sequentially against the MCP tool registry; a failed step aborts dependent work and marks downstream steps Skipped. |
+| `resume_plan` | `high` | `reversible` | No | `ExternalAgentMcpTools.ResumePlan` | Resets failed/skipped steps back to Pending from the selected step boundary and re-runs the remaining plan sequentially. |
+| `get_external_agent_plan` | `low` | `none` | No | `ExternalAgentMcpTools.GetExternalAgentPlan` | Retrieves a persisted external-agent plan and all step execution statuses for observability and debugging. |
 
 For HTTP, the authenticated `x-tenant-id` header is authoritative. A `tenantId`
 tool argument may repeat that value but cannot override it. For stdio, every
