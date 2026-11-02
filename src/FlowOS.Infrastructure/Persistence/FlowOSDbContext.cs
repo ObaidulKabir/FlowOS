@@ -1,6 +1,7 @@
 using FlowOS.Application.ReadModels;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Entities.ExternalAI;
+using FlowOS.Domain.Entities.Orchestration;
 using FlowOS.Events.Models; // Re-add this
 using FlowOS.Workflows.Domain; // Re-add this
 using FlowOS.Security.Models;
@@ -44,6 +45,11 @@ public class FlowOSDbContext : DbContext
     public DbSet<ExternalAgentChangeRecord> ExternalAgentChangeRecords { get; set; }
     public DbSet<ExternalAgentPlanRecord> ExternalAgentPlanRecords { get; set; }
     public DbSet<ExternalAgentPlanStepRecord> ExternalAgentPlanStepRecords { get; set; }
+
+    // Orchestration — Phase 1: Agent foundation
+    // NOTE: AgentTeam is separate from Team (IAM). See ADR-002.
+    public DbSet<AgentVersion> AgentVersions { get; set; }
+    public DbSet<AgentTeam> AgentTeams { get; set; }
 
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 

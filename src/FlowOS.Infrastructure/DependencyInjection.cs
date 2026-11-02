@@ -116,6 +116,10 @@ public static class DependencyInjection
         services.AddScoped<IExternalAgentChangeStore, ExternalAgentChangeStore>();
         services.AddScoped<IExternalAgentPlanStore, ExternalAgentPlanStore>();
         services.AddScoped<IConversationStore, ConversationStore>();
+
+        // Agent Orchestration Phase 1 — ADR-001/ADR-002/ADR-010
+        services.AddScoped<IAgentVersionRepository, FlowOS.Infrastructure.Persistence.Repositories.AgentVersionRepository>();
+        services.AddScoped<IAgentTeamRepository, FlowOS.Infrastructure.Persistence.Repositories.AgentTeamRepository>();
         services.AddScoped<IAgentObservabilityQueryService, FlowOS.Application.Services.AgentObservabilityQueryService>();
         services.AddScoped(provider =>
         {
