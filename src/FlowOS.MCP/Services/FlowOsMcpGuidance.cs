@@ -1897,10 +1897,18 @@ public static class FlowOsMcpGuidance
 
         ## AgentTeamBlueprint (ADR-007 §8 — early, validate-only)
 
-        A declarative team roster — the slots a plan's `teamRole` binds to — checked with
-        `validate_agent_team_blueprint`. There is no `AgentTeamClass` yet, so nothing is created,
-        updated or published; this is the structural shape only, shipped ahead of persistence so
-        it is reviewable before the roster is wired to real teams and compiled to `AgentTeam`.
+        A declarative team roster, checked with `validate_agent_team_blueprint`. There is no
+        `AgentTeamClass` yet, so nothing is created, updated or published — this is the structural
+        shape only, shipped ahead of persistence so it is reviewable before the roster is wired to
+        real teams and compiled to `AgentTeam`.
+
+        **This is not yet connected to a plan's `teamRole`.** A step's `teamRole` (see "Key step
+        rules") is today a free string the validator only checks is non-empty (`AWF-TEAM-001`) — it
+        is never cross-checked against any `AgentTeamBlueprint` slot's `roleName`, because there is
+        no persisted team to check it against. Declaring a team roster and naming the same string
+        in a step's `teamRole` does not make them agree; nothing enforces that yet. That closure
+        — `teamRole` resolving to a real slot, and the slot's `defaultDefinitionAlias` then checked
+        against the workflow's own `agents` — is exactly what `AgentTeamClass` persistence will add.
 
         ```json
         {

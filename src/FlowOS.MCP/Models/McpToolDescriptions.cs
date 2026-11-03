@@ -923,11 +923,12 @@ public static class McpToolDescriptions
                 "Input example: {}",
 
             ["validate_agent_team_blueprint"] =
-                "[AgentTeam] ADR-007 Section 8: validates an AgentTeamBlueprint - the declarative roster of slots (role " +
-                "name + required capabilities) a multi-agent plan step can bind to. Validate-only: there is no " +
-                "AgentTeamClass yet, so nothing is stored. Slot capability tags are checked for shape only, never " +
-                "resolved against a tenant's registry or against any particular workflow's declared agents - that " +
-                "happens where the team is actually bound to a plan. " +
+                "[AgentTeam] ADR-007 Section 8: validates an AgentTeamBlueprint - a declarative roster of slots (role " +
+                "name + required capabilities), meant to become what a plan step's teamRole resolves to. Validate-only " +
+                "and not yet wired to that: there is no AgentTeamClass yet, so nothing is stored, and a step's teamRole " +
+                "is not cross-checked against any slot here - AWF-TEAM-001 only checks it is non-empty. Slot capability " +
+                "tags are likewise checked for shape only, never resolved against a tenant's registry or a workflow's " +
+                "declared agents. " +
                 "Returns: {ok:true,data:{isValid,errorCount,errors:[{code,category,message,element}]}}. " +
                 "Codes carry an ATM- prefix. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
