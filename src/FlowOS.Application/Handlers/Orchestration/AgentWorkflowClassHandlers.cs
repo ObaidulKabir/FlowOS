@@ -16,7 +16,7 @@ namespace FlowOS.Application.Handlers.Orchestration;
 /// ADR-006 Phase 4A — blueprint CRUD only; dispatch machinery arrives in Phase 4B.
 ///
 /// CR-08: all DateTime values come from the injected <see cref="TimeProvider"/>;
-/// no direct <c>DateTime.UtcNow</c> calls.
+/// no direct clock calls anywhere in this file.
 /// </summary>
 public sealed class AgentWorkflowClassHandlers :
     IRequestHandler<CreateAgentWorkflowClassCommand, AgentWorkflowClassResponseDto>,
