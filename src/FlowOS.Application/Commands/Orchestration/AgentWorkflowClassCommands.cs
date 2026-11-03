@@ -53,6 +53,13 @@ public record AbandonAgentWorkflowClassCommand(Guid TenantId, Guid Id)
 public record DeleteAgentWorkflowClassCommand(Guid TenantId, Guid Id)
     : IRequest<Unit>, IPolicySecuredCommand;
 
+/// <summary>
+/// Validate a blueprint without storing it, so an author can check a draft before
+/// publishing. Returns the full <c>ValidationResult</c> rather than throwing.
+/// </summary>
+public record ValidateAgentWorkflowBlueprintCommand(AgentWorkflowBlueprint Definition)
+    : IRequest<FlowOS.Domain.Validation.ValidationResult>;
+
 // ── Queries ────────────────────────────────────────────────────────────────────
 
 /// <summary>Fetch a single plan by id, scoped to the tenant.</summary>

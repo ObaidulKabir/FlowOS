@@ -756,6 +756,8 @@ public partial class Program
         services.AddScoped<FlowOS.Core.Common.Interfaces.IWorkflowTimeTravelService, FlowOS.Infrastructure.Services.WorkflowTimeTravelService>();
         services.AddScoped<FlowOS.Application.Common.Interfaces.IWorkflowCopilotService, FlowOS.Application.Services.WorkflowCopilotService>();
         services.AddScoped<IWorkflowClassValidator, WorkflowClassValidator>();
+        // ADR-006: structural validation for declarative agent plans.
+        services.AddScoped<IAgentWorkflowBlueprintValidator, AgentWorkflowBlueprintValidator>();
         services.AddMemoryCache();
         services.AddScoped<ICurrentUser, McpCurrentUser>();
         services.AddScoped<ICapabilityService, CapabilityService>();
