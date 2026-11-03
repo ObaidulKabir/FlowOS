@@ -1877,6 +1877,7 @@ public static class FlowOsMcpGuidance
 
         | Tool | Purpose |
         |------|---------|
+        | `validate_agent_team_blueprint` | ADR-007 §8: check an AgentTeamBlueprint roster (slots, role names, required capabilities). Validate-only — there is no AgentTeamClass to store one in yet. |
         | `describe_tenant_agent_bindings` | See this tenant's already-declared tool and LLM bindings. Call before writing an agent's capability tags. |
         | `validate_agent_workflow_class` | Check a blueprint without storing it. Start here. |
         | `create_agent_workflow_class` | Create a Draft. Set `previousVersionId` to start a new version. |
@@ -1893,6 +1894,39 @@ public static class FlowOsMcpGuidance
         Still to come with the Phase 4B engine: `start_agent_workflow`, execution reads, and
         `deprecate_agent_workflow_class` / `abandon_agent_workflow_class` (both are available
         over REST today).
+
+        ## AgentTeamBlueprint (ADR-007 §8 — early, validate-only)
+
+        A declarative team roster — the slots a plan's `teamRole` binds to — checked with
+        `validate_agent_team_blueprint`. There is no `AgentTeamClass` yet, so nothing is created,
+        updated or published; this is the structural shape only, shipped ahead of persistence so
+        it is reviewable before the roster is wired to real teams and compiled to `AgentTeam`.
+
+        ```json
+        {
+          "name": "RiskAssessmentTeam",
+          "objective": "Assess quarterly portfolio risk",
+          "maxAutonomyLevel": "Supervised",
+          "slots": [
+            { "roleName": "RiskAnalyst", "requiredCapabilities": ["ticket-system.search"] }
+          ]
+        }
+        ```
+
+        | Code | Meaning |
+        |------|---------|
+        | `ATM-STR-001` | `name` is missing |
+        | `ATM-STR-002` | `objective` is missing |
+        | `ATM-STR-003` | Unknown `maxAutonomyLevel` |
+        | `ATM-STR-004` | A team must declare at least one slot |
+        | `ATM-SLOT-001` | A slot's `roleName` is empty |
+        | `ATM-SLOT-002` | A slot declares an empty `requiredCapabilities` entry |
+        | `ATM-SLOT-003` | A slot declares both `defaultDefinitionAlias` and `defaultProfileAlias` |
+        | `ATM-SLOT-004` | Duplicate slot `roleName` |
+
+        A slot's `requiredCapabilities` is not resolved here against any registry or any
+        workflow's declared `agents` — there is no workflow pack in scope at this point. That
+        resolution happens where the team is actually bound to a plan.
 
         ## What not to do
 

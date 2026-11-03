@@ -758,6 +758,8 @@ public partial class Program
         services.AddScoped<IWorkflowClassValidator, WorkflowClassValidator>();
         // ADR-006: structural validation for declarative agent plans.
         services.AddScoped<IAgentWorkflowBlueprintValidator, AgentWorkflowBlueprintValidator>();
+        // ADR-007 §8: structural validation for declarative agent team rosters.
+        services.AddScoped<IAgentTeamBlueprintValidator, AgentTeamBlueprintValidator>();
         services.AddMemoryCache();
         services.AddScoped<ICurrentUser, McpCurrentUser>();
         services.AddScoped<ICapabilityService, CapabilityService>();
@@ -781,6 +783,7 @@ public partial class Program
         services.AddScoped<GovernanceTools>();
         // ADR-006/ADR-007: AgentWorkflowClass authoring lifecycle over MCP.
         services.AddScoped<AgentWorkflowClassMcpTools>();
+        services.AddScoped<AgentTeamBlueprintMcpTools>();
         services.AddScoped<InfoTools>();
         services.AddScoped<AnalysisTools>();
         services.AddScoped<SimulationTools>();

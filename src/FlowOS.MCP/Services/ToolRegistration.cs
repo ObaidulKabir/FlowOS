@@ -230,6 +230,10 @@ public static class ToolRegistration
         registry.Register("describe_tenant_agent_bindings", McpToolDescriptions.For("describe_tenant_agent_bindings"), McpToolSchemas.DescribeTenantAgentBindings(),
             async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.DescribeTenantAgentBindings(args)));
 
+        // ADR-007 §8: AgentTeamBlueprint roster validation. Validate-only until AgentTeamClass exists.
+        registry.Register("validate_agent_team_blueprint", McpToolDescriptions.For("validate_agent_team_blueprint"), McpToolSchemas.ValidateAgentTeamBlueprint(),
+            async (args) => await ExecuteScopedAsync<AgentTeamBlueprintMcpTools>(serviceProvider, t => t.Validate(args)));
+
         registry.Register("update_draft_workflowclass", McpToolDescriptions.For("update_draft_workflowclass"), McpToolSchemas.UpdateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.UpdateDraft(args)));
 

@@ -920,7 +920,18 @@ public static class McpToolDescriptions
                 "application-scoped and portable, and readiness is a separate, per-tenant, re-checkable question, never a publish-time rejection. " +
                 "Returns: {ok:true,data:{tenantId,tools:[{sourceName,providerName,bindingType,isEnabled}],providers:[...],profiles:[...],defaultProviderAlias,message}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
-                "Input example: {}"
+                "Input example: {}",
+
+            ["validate_agent_team_blueprint"] =
+                "[AgentTeam] ADR-007 Section 8: validates an AgentTeamBlueprint - the declarative roster of slots (role " +
+                "name + required capabilities) a multi-agent plan step can bind to. Validate-only: there is no " +
+                "AgentTeamClass yet, so nothing is stored. Slot capability tags are checked for shape only, never " +
+                "resolved against a tenant's registry or against any particular workflow's declared agents - that " +
+                "happens where the team is actually bound to a plan. " +
+                "Returns: {ok:true,data:{isValid,errorCount,errors:[{code,category,message,element}]}}. " +
+                "Codes carry an ATM- prefix. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"definition\":{\"name\":\"RiskAssessmentTeam\",\"objective\":\"Assess quarterly portfolio risk\",\"slots\":[{\"roleName\":\"RiskAnalyst\",\"requiredCapabilities\":[\"ticket-system.search\"]}]}}"
         };
 
     public static string For(string toolName) =>
@@ -940,6 +951,7 @@ public static class McpToolDescriptions
             ["list_agent_workflow_classes"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_workflow_class_lineage"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
             ["describe_tenant_agent_bindings"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
+            ["validate_agent_team_blueprint"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_chat_history"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_agent_chat_sessions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_agent_prompt_audits"] = new("observability", "authenticated", true, true, false, "none", true, "medium"),

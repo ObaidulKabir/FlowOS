@@ -2192,6 +2192,46 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject AgentTeamBlueprintSchema() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["name","objective","slots"],
+          "properties":{
+            "name":{"type":"string","minLength":1},
+            "objective":{"type":"string","minLength":1},
+            "maxAutonomyLevel":{"type":"string","enum":["Advisory","Supervised","GovernnedAutonomous","AdaptiveAutonomous"]},
+            "slots":{
+              "type":"array",
+              "minItems":1,
+              "items":{
+                "type":"object",
+                "required":["roleName"],
+                "properties":{
+                  "roleName":{"type":"string","minLength":1},
+                  "requiredCapabilities":{"type":"array","items":{"type":"string"}},
+                  "defaultDefinitionAlias":{"type":"string"},
+                  "defaultProfileAlias":{"type":"string","description":"Deprecated tenant-scoped escape hatch - prefer defaultDefinitionAlias."}
+                }
+              }
+            }
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ValidateAgentTeamBlueprint() => JObject.Parse(
+        $$"""
+        {
+          "type":"object",
+          "required":["definition"],
+          "properties":{
+            "definition":{{AgentTeamBlueprintSchema().ToString(Newtonsoft.Json.Formatting.None)}}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject DescribeTenantAgentBindings() => JObject.Parse(
         """
         {
