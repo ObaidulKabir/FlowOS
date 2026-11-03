@@ -445,6 +445,101 @@ Agents should load MCP prompt `design_dual_kernel_workflow` or resource `flowos:
 { "jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": { "name": "fork_public_workflowclass", "arguments": { "publicId": "<Public_GUID>", "tenantId": "<My_Tenant_ID>" } } }
 ```
 
+## Declarative AI Agent Workflow design (ADR-006 Phase 4A)
+
+An `AgentWorkflowClass` is a **declarative multi-agent coordination plan template** — the agentic counterpart of `WorkflowClass`. It stores an immutable `AgentWorkflowBlueprint` (the "what") and will produce `AgentWorkflowExecution` runtime instances (the "how", Phase 4B). Use it when multiple AI agent steps must be sequenced declaratively, versioned, audited, and governed.
+
+> **Phase boundary**: Phase 4A (current) covers blueprint CRUD and lifecycle — create, read, list, lineage, update, publish, deprecate, abandon, delete. Phase 4B will add the dispatch engine and `start_agent_workflow` MCP tooling.
+
+### How it differs from existing constructs
+
+| | `WorkflowClass` | `AgentWorkflowClass` |
+|---|---|---|
+| Actor | Humans, events, agents (mixed) | AI agents only |
+| State machine | Yes | No |
+| Event registry | Yes | No |
+| Blueprint type | `WorkflowClassBlueprint` (stepTypes, roles) | `AgentWorkflowBlueprint` (steps, routing, fork/join, SLA) |
+| Dispatch | `start_workflow` → `WorkflowInstance` | `start_agent_workflow` (Phase 4B) → `AgentWorkflowExecution` |
+| Versioning | `PreviousVersionId` lineage chain | Same pattern |
+
+### Blueprint shape
+
+```json
+{
+  "objective": "Describe what the plan achieves",
+  "startStepId": "gather",
+  "coordinationRules": {
+    "maxGlobalRetries": 3,
+    "rollbackStrategy": "Abandon",
+    "globalSla": "PT4H",
+    "maxParallelSteps": 2
+  },
+  "steps": [
+    {
+      "stepId": "gather",
+      "stepType": "Agent",
+      "description": "Gather risk data",
+      "agentTeamId": "<team-guid>",
+      "nextSteps": { "Done": "review" },
+      "autoCommit": { "minConfidence": 0.90, "allowedEvents": ["Done"] },
+      "sla": {
+        "duration": "PT2H",
+        "timeoutEvent": "GatherOverdue",
+        "escalationRole": "RiskManager"
+      }
+    },
+    {
+      "stepId": "review",
+      "stepType": "Agent",
+      "description": "Review gate — an agent proposes, a person decides",
+      "teamRole": "RiskReviewer",
+      "consequential": true,
+      "nextSteps": { "Approved": "END", "Rejected": "gather" },
+      "pathLimits": { "Rejected": { "maxTravels": 2 } }
+    }
+  ]
+}
+```
+
+Note the shape contract this example follows: every step declares its `stepType`, every `"Agent"` step binds a team (`agentTeamId` or `teamRole`), the `sla` carries a `timeoutEvent` as well as a `duration`, routing to the literal `"END"` terminates the plan, and the `consequential` review step sets no `autoCommit`. `rollbackStrategy: "Compensate"` is accepted but inert — the step record declares no compensation hooks until Phase 4B, so nothing runs in reverse.
+
+`stepType` is authoritative rather than inferred: `branches` is meaningful only on a `"Fork"` and `inboundSteps` only on a `"Join"`. Declaring either against the step's type is a contradiction, not a hint.
+
+### Lifecycle
+
+```
+Draft → Published → Deprecated
+                  ↘ Abandoned
+```
+
+* **Draft** — editable, not dispatchable. Default on creation.
+* **Published** — immutable, dispatchable. Create a new version to change it.
+* **Deprecated** — no new executions; existing executions continue to completion. Set `migrationTargetId` to point agents to the replacement version.
+* **Abandoned** — soft-deleted; informational only.
+
+Governance guards enforced by the domain model:
+* **GOV-DEL-001** — Only `Draft` plans may be hard-deleted. Use `Abandon` for published plans.
+* **GOV-DEL-002** — A `Draft` with existing executions cannot be deleted.
+
+### MCP guidance
+
+Load the MCP prompt or resource before authoring a plan:
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "prompts/get",
+  "params": { "name": "design_agent_workflow_class",
+               "arguments": { "objective": "QuarterlyRiskAssessment" } } }
+```
+
+Or read the resource directly:
+
+```json
+{ "jsonrpc": "2.0", "id": 2, "method": "resources/read",
+  "params": { "uri": "flowos://guides/agent-workflow-class" } }
+```
+
+> **Note**: MCP *execution* tools (`create_agent_workflow_class`, `start_agent_workflow`) are not yet registered — they ship in Phase 4B. The guidance prompt and resource are available now for design-time authoring assistance.
+
 ## Gap analysis — 10/10 Verification Status
 
 Previously identified MCP control-plane gaps are covered by the maintained `FlowOS.MCP.UnitTests` contract suite:

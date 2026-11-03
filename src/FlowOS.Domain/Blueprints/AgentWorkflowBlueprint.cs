@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlowOS.Domain.Enums;
 
 namespace FlowOS.Domain.Blueprints;
 
@@ -56,6 +57,13 @@ public record AgentStepBlueprint
     /// <summary>Unique identifier within the plan (e.g. "DataGathering", "RiskAssessment").</summary>
     public string StepId { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Node kind: see <see cref="AgentStepType"/> — "Agent" (default), "Fork", "Join" or "End".
+    /// Declared rather than inferred, so the graph shape is unambiguous for the dashboard
+    /// visualiser and the Phase 4B dispatcher.
+    /// </summary>
+    public string StepType { get; init; } = AgentStepType.Agent;
+
     /// <summary>Human-readable purpose of this step.</summary>
     public string Description { get; init; } = string.Empty;
 
@@ -82,15 +90,21 @@ public record AgentStepBlueprint
     public Dictionary<string, string> NextSteps { get; init; } = new();
 
     /// <summary>
-    /// For parallel fork nodes: step ids to execute concurrently.
-    /// For join nodes: inbound step ids that must all complete first.
+    /// Fork targets: step ids to execute concurrently. Only meaningful when
+    /// <see cref="StepType"/> is "Fork". Convergence is declared on the join step's
+    /// <see cref="InboundSteps"/>, never here.
     /// </summary>
     public List<string> Branches { get; init; } = new();
 
-    /// <summary>Join policy when this is a convergence node.</summary>
-    public string JoinPolicy { get; init; } = "WaitAll"; // "WaitAll" | "WaitAny"
+    /// <summary>
+    /// Join policy when <see cref="StepType"/> is "Join": "WaitAll" or "WaitAny".
+    /// </summary>
+    public string JoinPolicy { get; init; } = "WaitAll";
 
-    /// <summary>Inbound steps that must converge here (join node).</summary>
+    /// <summary>
+    /// Inbound steps that must converge here. Only meaningful when
+    /// <see cref="StepType"/> is "Join".
+    /// </summary>
     public List<string> InboundSteps { get; init; } = new();
 
     // ── Autonomy ─────────────────────────────────────────────────────────────
@@ -199,7 +213,9 @@ public record AgentCoordinationRulesBlueprint
     /// <summary>
     /// Rollback strategy when a step fails and retries are exhausted.
     /// "Abandon" (default) — mark the plan failed and stop.
-    /// "Compensate" — execute OnFailure hooks on each completed step in reverse.
+    /// "Compensate" — reserved for Phase 4B. The step record declares no compensation
+    /// hooks today, so the engine has nothing to run in reverse; declaring it now records
+    /// the author's intent only.
     /// </summary>
     public string RollbackStrategy { get; init; } = "Abandon";
 
