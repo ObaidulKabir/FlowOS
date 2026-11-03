@@ -28,7 +28,8 @@ public class UnitOfWork : IUnitOfWork
         Policies = new PolicyRepository(context);
         WorkflowContextBindings = new WorkflowContextBindingRepository(context);
         WorkflowContextSnapshots = new WorkflowContextSnapshotRepository(context);
-        TeamExecutions = new TeamExecutionRepository(context);  // ADR-005 Phase 3
+        TeamExecutions = new TeamExecutionRepository(context);      // ADR-005 Phase 3
+        AgentWorkflowClasses = new AgentWorkflowClassRepository(context); // ADR-006 Phase 4A
     }
 
     public IWorkflowInstanceRepository WorkflowInstances { get; }
@@ -46,6 +47,9 @@ public class UnitOfWork : IUnitOfWork
 
     /// <summary>ADR-005 Phase 3: TeamExecution runtime records.</summary>
     public ITeamExecutionRepository TeamExecutions { get; }
+
+    /// <summary>ADR-006 Phase 4A: AgentWorkflowClass declarative plan templates.</summary>
+    public IAgentWorkflowClassRepository AgentWorkflowClasses { get; }
 
     /// <summary>
     /// Saves all changes. A lost optimistic-concurrency race (for example two events applied to the

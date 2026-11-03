@@ -1,7 +1,7 @@
 using System;
+using FlowOS.Domain;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Enums;
-using FlowOS.Domain.Services;
 
 namespace FlowOS.Domain.Entities.Orchestration;
 
