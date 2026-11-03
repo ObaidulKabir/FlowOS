@@ -107,9 +107,9 @@ public static class FlowOsMcpGuidance
 
         Alert and timer chain law (read before "wait, notify, then wait again"):
         - A timer or SLA is created only while the instance is waiting on that step. The next timer does not exist until the workflow enters its step. Do not put the next tier's SLA on the alert step.
-        - Shape that works: Wait is a HumanTask with no `Default` key, `sla.duration` set to the real wait, `sla.timeoutEvent` set, and `nextSteps[timeoutEvent]` pointing at Alert. Alert is a SystemTask whose only continue key is the exact key `Default`, pointing at the next Wait. Repeat for each tier.
+        - Shape that works: Wait is a HumanTask (or AgentTask) with no `Default` key, `sla.duration` set to the real wait, `sla.timeoutEvent` set, and `nextSteps[timeoutEvent]` pointing at Alert. Alert is a SystemTask whose only continue key is the exact key `Default`, pointing at the next Wait. Repeat for each tier.
         - A SystemTask or Command continues by itself only when `nextSteps` contains the exact key `Default`. `default`, `SystemContinue`, and any other name do not auto-advance. The instance stays on the alert step and later timers never start. Declaring an event named `default` does not count. The engine looks up the key `Default` and publishes that same event.
-        - A HumanTask never auto-advances, even with `Default`. A Command or SystemTask that contains `Default` skips the wait immediately, so its SLA never runs. Keep `Default` off the waiting step.
+        - A HumanTask or AgentTask never auto-advances, even with `Default`. A Command or SystemTask that contains `Default` skips the wait immediately, so its SLA never runs. Keep `Default` off the waiting step.
         - If the state machine never declares event `Default`, auto-advance still moves the step and leaves the state unchanged. Add a `Default` transition only from the alert's current state to the next wait's state. If `Default` is declared on some other state but not from the alert's current state, the advance is a state-machine violation and the instance stays on the alert step.
         - Notification text is `template`. `target` is the recipient role or user id, not the sentence. Putting the sentence in `target` and omitting `template` sends `[StepId] (Target: )`. Use `{ "actionType": "Notification", "target": "Sales", "template": "Alert: Quote not viewed" }` in the `onEntry` array of the Alert step.
         - `timeoutEvent` must be a `nextSteps` key on the waiting step and a state-machine transition from that step's state. Do not publish the next tier's timeout while the instance is still on the alert step.
@@ -138,6 +138,16 @@ public static class FlowOsMcpGuidance
         - Declarative tools: step `agentTools` lists resource plugins (`LookupRecord:<connector>`, `QueryRecords:`, `FetchDocument:`, `SearchKnowledge:`, `CheckPolicy:`) plus notify plugins and `connector:*` writes (legacy `capability:*`). FlowOS prefetches read tools into Agent Context. The model does not call HTTP or see URLs. Legal next-step events (APPROVE, REJECT, etc.) are enumerated in `LegalNextStepEvents` in the system prompt only and returned by the model as JSON actions — they are NOT exposed as callable function tools.
         - Observability is evaluation, not self-learning. FlowOS never retrains a model or silently mutates prompts, auto-commit policy, workflow events, or execution records from these metrics. Outcomes without immutable evidence remain explicitly unevaluated.
         - Preferred prompts: `automate_waiting_task_with_ai_agent` (live loop) and `design_agent_handled_step` (step JSON). Preferred resources: `flowos://guides/ai-task-automation` and `flowos://guides/bounded-autonomy-tasks`.
+
+        AgentTask step type law (ADR-003/ADR-004 — read before using stepType AgentTask):
+        - `AgentTask` is a first-class `WorkflowStepType`. It pauses the engine identically to `HumanTask` (`instance.Wait()`). The workflow resumes only after an AI agent submits a proposal that passes `AutoCommitEvaluator`. No agent code may call `instance.AdvanceTo` or `instance.Complete` directly.
+        - Use `AgentTask` when an AI agent (backed by an `AgentTeam` template) is the designated actor for a step, NOT a human. Use `HumanTask` (with `actor: Agent/Either`) when the same step may be handled by either a human or an agent.
+        - Required field: `agentTeamId` (Guid) — the `AgentTeam` template to instantiate. Optional: `agentTeamSlotRole` (string) — the `AgentTeamSlot.RoleName` performing this step; defaults to the first required slot.
+        - Never set `effectiveAutonomyLevel` in the step definition. It is computed at dispatch from the four-scope autonomy policy hierarchy (ADR-010: Tenant > Objective > Team > Task/Slot); the most restrictive value wins.
+        - At runtime, `AgentTaskScheduling` encodes `RequestedAgentId` as `"team:<teamId>/<slotRole>"` (or `"team:<teamId>"` when no slot role is given). The downstream `AgentTaskCoordinator` resolves this to an actual agent via `IAgentTeamRepository`.
+        - A `TeamExecution` record (table `TeamExecutions`, never `Teams`) is created for each `AgentTask` step execution. It tracks slot assignments (`RoleName → AgentId`) and execution status (Pending → Active → Completed/Failed).
+        - `simulate_workflowclass` and `simulate_context_binding` treat `AgentTask` steps identically to agent-actor `HumanTask` steps for simulation purposes: `autoAdvanceAgents`, `simulatedAgent`, and `pendingAgentTask` all apply.
+        - Preferred prompt: `design_agent_task_step`. Preferred resource: `flowos://guides/agent-team-orchestration`.
 
         OS claim law (read before calling FlowOS an operating system):
         - Load prompt `check_os_release_gate` or resource `flowos://guides/os-release-gate`.
@@ -207,6 +217,16 @@ public static class FlowOsMcpGuidance
                 arguments = new[]
                 {
                     new { name = "stepId", description = "Waiting step to assign (e.g., ApproveQuote, AgentReview, ExecuteRepair)", required = false }
+                }
+            },
+            new
+            {
+                name = "design_agent_task_step",
+                description = "How to design an AgentTask step (ADR-003/ADR-004): a first-class workflow step type where an AgentTeam is the designated actor. Covers agentTeamId, agentTeamSlotRole, autonomy policy, TeamExecution lifecycle, and simulator behaviour.",
+                arguments = new[]
+                {
+                    new { name = "stepId", description = "AgentTask step to design (e.g., RiskAssessment, PolicyReview)", required = false },
+                    new { name = "agentTeamId", description = "AgentTeam template id (Guid, optional). Shown in examples.", required = false }
                 }
             },
             new
@@ -407,6 +427,23 @@ public static class FlowOsMcpGuidance
                         {
                             type = "text",
                             text = BoundedAutonomyTasksGuide.Replace("{STEP_ID}", stepId)
+                        }
+                    }
+                }
+            },
+
+            "design_agent_task_step" => new
+            {
+                description = "How to design an AgentTask workflow step (ADR-003/ADR-004)",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = AgentTaskStepGuide.Replace("{STEP_ID}", stepId)
                         }
                     }
                 }
@@ -861,7 +898,8 @@ public static class FlowOsMcpGuidance
         - Bound business payload: `simulate_context_binding`
         - After a live instance exists: `fork_workflow_simulation` / `replay_workflow_history`
         - SLA reminder vs timeout in the simulator: `test_sla_reminders_in_simulator` / `flowos://guides/sla-reminder-simulation`
-        - Agent-handled waiting steps: `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`
+        - Agent-handled waiting steps (HumanTask + actor Agent/Either): `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`
+        - AgentTask step type (agent-team as sole actor, ADR-003/ADR-004): `design_agent_task_step` / `flowos://guides/agent-team-orchestration`
         - Live AI task automation: `automate_waiting_task_with_ai_agent` / `flowos://guides/ai-task-automation` (`upsert_agent_provider` + `run_agent_task`)
         """;
 
@@ -1271,6 +1309,90 @@ public static class FlowOsMcpGuidance
         - Do not let the model invent URLs or free-form HTTP. Declare tools from existing plugins/capabilities.
         - Do not auto-commit `QUOTE_VOIDED` unless it is explicitly in `allowedEvents`.
         - Do not start a live instance just to "let the AI think." Design-time still uses simulate tools.
+        """;
+
+    /// <summary>
+    /// ADR-003 / ADR-004: AgentTask step type design guide.
+    /// Agents read this via the `design_agent_task_step` prompt.
+    /// AGENTS.md rule 10: never claim something the code does not do.
+    /// </summary>
+    public const string AgentTaskStepGuide =
+        """
+        # AgentTask step type design guide (ADR-003 / ADR-004)
+
+        ## What is AgentTask?
+
+        `AgentTask` is a first-class `WorkflowStepType` (alongside `HumanTask`, `Command`, `Timer`, etc.).
+        It pauses the workflow engine **identically to `HumanTask`** (`instance.Wait()`). The workflow resumes
+        only after an AI agent submits a proposal that passes `AutoCommitEvaluator`. No agent code may call
+        `instance.AdvanceTo` or `instance.Complete` directly (ADR-003).
+
+        Use `AgentTask` when an AI agent (backed by an `AgentTeam` template) is the **sole** designated actor.
+        Use `HumanTask` with `actor: Agent/Either` when the same step may be completed by either a human or an agent.
+
+        ## Required fields
+
+        | Field | Type | Meaning |
+        |---|---|---|
+        | `stepType` | `"AgentTask"` | Identifies this as an agent-team step |
+        | `agentTeamId` | `Guid` | The `AgentTeam` template to instantiate |
+        | `agentTeamSlotRole` | `string?` | `AgentTeamSlot.RoleName` performing this step. Defaults to first required slot. |
+
+        **Never set `effectiveAutonomyLevel`** in the step definition. It is computed at dispatch from the
+        four-scope autonomy policy hierarchy (ADR-010: Tenant > Objective > Team > Task/Slot). The most
+        restrictive value wins.
+
+        ## Example step definition
+
+        ```json
+        {
+          "stepId": "{STEP_ID}",
+          "stepType": "AgentTask",
+          "agentTeamId": "00000000-0000-0000-0000-000000000001",
+          "agentTeamSlotRole": "RiskAnalyst",
+          "decisionGuideline": "Assess risk level. Return HIGH, MEDIUM, or LOW based on the case data.",
+          "agentTools": [
+            "LookupRecord:crm.customer.get.v1",
+            "CheckPolicy:policy.risk-threshold.v1",
+            "FetchDocument:docs.case.get.v1"
+          ],
+          "autoCommit": {
+            "minConfidence": 0.85,
+            "allowedEvents": ["RISK_LOW", "RISK_MEDIUM"]
+          },
+          "nextSteps": {
+            "RISK_LOW": "AutoApprove",
+            "RISK_MEDIUM": "ManualReview",
+            "RISK_HIGH": "Escalate"
+          }
+        }
+        ```
+
+        ## Runtime lifecycle
+
+        1. `WorkflowEngine` calls `instance.Wait()` — workflow pauses.
+        2. `AgentTaskScheduling` encodes `RequestedAgentId = "team:<agentTeamId>/<slotRole>"`.
+        3. `AgentTaskCoordinator` resolves the actual agent via `IAgentTeamRepository` and creates a `TeamExecution` record (table `TeamExecutions` — **never** `Teams`, ADR-002).
+        4. The agent produces a proposal (event + confidence). The proposal flows through `AutoCommitEvaluator`.
+        5. If approved: `publish_event` (actor `Agent:{id}`) advances the workflow.
+        6. If parked: a Smart Action appears in the human inbox for override.
+
+        ## Simulator behaviour
+
+        `simulate_workflowclass` and `simulate_context_binding` treat `AgentTask` steps identically to
+        agent-actor `HumanTask` steps:
+        - `autoAdvanceAgents: true` (default): uses the first `autoCommit.allowedEvents` event at confidence 1.0.
+        - `simulatedAgent: { event, confidence }`: routes through the same deterministic policy.
+        - `autoAdvanceAgents: false`: waits; inspect `pendingAgentTask` in the trace.
+        - Timeout is always timer-owned. Never auto-commit `TimeoutEvent`.
+
+        ## What not to do
+
+        - Do not set `effectiveAutonomyLevel` in the step definition — it is computed at dispatch.
+        - Do not set `actor` on an `AgentTask` step — the actor is implicitly Agent.
+        - Do not set `requiredRoles` on an `AgentTask` step — the step has no human inbox.
+        - Do not call `publish_event` directly from an agent script — use `run_agent_task` or the entry hook.
+        - Do not reference the `Teams` table or `ITeamRepository` when working with `TeamExecution` — they are permanently separate aggregates (ADR-002).
         """;
 
     public const string ReferenceExpenseApprovalJson =

@@ -120,6 +120,11 @@ public static class DependencyInjection
         // Agent Orchestration Phase 1 — ADR-001/ADR-002/ADR-010
         services.AddScoped<IAgentVersionRepository, FlowOS.Infrastructure.Persistence.Repositories.AgentVersionRepository>();
         services.AddScoped<IAgentTeamRepository, FlowOS.Infrastructure.Persistence.Repositories.AgentTeamRepository>();
+
+        // Agent Orchestration Phase 2 — AgentTask step type + TeamExecution runtime (ADR-003)
+        // TeamExecution = runtime instance of AgentTeam template (WorkflowClass → WorkflowInstance pattern)
+        // Table: "TeamExecutions" — NEVER "Teams" (ADR-002)
+        services.AddScoped<ITeamExecutionRepository, FlowOS.Infrastructure.Persistence.Repositories.TeamExecutionRepository>();
         services.AddScoped<IAgentObservabilityQueryService, FlowOS.Application.Services.AgentObservabilityQueryService>();
         services.AddScoped(provider =>
         {

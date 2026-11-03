@@ -2416,6 +2416,28 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("AgentTeams", (string)null);  // NEVER "Teams" -- ADR-002
                 });
 
+            // Agent Orchestration Phase 2 — TeamExecution runtime (ADR-001/ADR-002/ADR-003)
+            modelBuilder.Entity("FlowOS.Domain.Entities.Orchestration.TeamExecution", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").IsRequired().HasColumnType("uuid");
+                    b.Property<Guid>("AgentTeamId").IsRequired().HasColumnType("uuid");
+                    b.Property<Guid?>("WorkflowInstanceId").HasColumnType("uuid");
+                    b.Property<string>("WorkflowStepId").HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<string>("Objective").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(40).HasColumnType("character varying(40)");
+                    b.Property<string>("SlotAssignments").IsRequired().HasColumnType("jsonb");
+                    b.Property<DateTime>("CreatedAtUtc").IsRequired().HasColumnType("timestamp with time zone");
+                    b.Property<DateTime?>("StartedAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<DateTime?>("CompletedAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<string>("FailureReason").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.HasKey("Id");
+                    b.HasIndex("TenantId", "AgentTeamId").HasDatabaseName("IX_TeamExecutions_TenantTeam");
+                    b.HasIndex("TenantId", "WorkflowInstanceId", "WorkflowStepId").HasDatabaseName("IX_TeamExecutions_TenantInstanceStep");
+                    b.HasIndex("TenantId", "Status").HasDatabaseName("IX_TeamExecutions_TenantStatus");
+                    b.ToTable("TeamExecutions", (string)null);  // NEVER "Teams" -- ADR-002
+                });
+
 #pragma warning restore 612, 618
         }
     }
