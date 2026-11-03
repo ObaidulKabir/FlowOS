@@ -2520,6 +2520,66 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("AgentTeams", (string)null);
                 });
 
+            // Agent Orchestration Phase 2 — TeamExecution runtime (ADR-001/ADR-002/ADR-003)
+            modelBuilder.Entity("FlowOS.Domain.Entities.Orchestration.TeamExecution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AgentTeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Objective")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("SlotAssignments")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("WorkflowInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WorkflowStepId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "AgentTeamId")
+                        .HasDatabaseName("IX_TeamExecutions_TenantTeam");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("IX_TeamExecutions_TenantStatus");
+
+                    b.HasIndex("TenantId", "WorkflowInstanceId", "WorkflowStepId")
+                        .HasDatabaseName("IX_TeamExecutions_TenantInstanceStep");
+
+                    b.ToTable("TeamExecutions", (string)null);
+                });
+
 #pragma warning restore 612, 618
         }
     }

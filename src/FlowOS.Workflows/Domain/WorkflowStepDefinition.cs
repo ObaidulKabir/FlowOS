@@ -50,6 +50,26 @@ public class WorkflowStepDefinition
     public string? AgentPrompt { get; set; }
     public List<string> AgentTools { get; set; } = new();
 
+    // ── AgentTask orchestration fields (ADR-003) ─────────────────────────────
+    /// <summary>
+    /// ID of the <c>AgentTeam</c> template to instantiate for this step.
+    /// Required when <see cref="StepType"/> is <c>AgentTask</c>; ignored otherwise.
+    /// </summary>
+    public Guid? AgentTeamId { get; set; }
+
+    /// <summary>
+    /// The <see cref="AgentTeamSlot.RoleName"/> within the team that performs this step.
+    /// If null, the team's first required slot is used.
+    /// </summary>
+    public string? AgentTeamSlotRole { get; set; }
+
+    /// <summary>
+    /// Resolved at dispatch time from the four-scope autonomy hierarchy (ADR-010).
+    /// Stored here so the engine can enforce the policy without re-querying all scopes.
+    /// Never set by the workflow designer — always computed by the autonomy policy resolver.
+    /// </summary>
+    public string? EffectiveAutonomyLevel { get; set; }
+
     // Declarative Lifecycle Actions (Pre/Post Event & Step Hooks, Saga Rollback)
     public List<StepActionDefinition> OnEntry { get; set; } = new();
     public List<StepActionDefinition> OnExit { get; set; } = new();

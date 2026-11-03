@@ -51,6 +51,11 @@ public class FlowOSDbContext : DbContext
     public DbSet<AgentVersion> AgentVersions { get; set; }
     public DbSet<AgentTeam> AgentTeams { get; set; }
 
+    // Orchestration — Phase 2: AgentTask step type + TeamExecution runtime
+    // NOTE: TeamExecution is the runtime instance of an AgentTeam template (ADR-001/ADR-002).
+    //       Table = "TeamExecutions" — NEVER "Teams".
+    public DbSet<TeamExecution> TeamExecutions { get; set; }
+
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

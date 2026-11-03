@@ -220,7 +220,9 @@ public static class DecisionPacketFactory
     public static bool IsWaitingStep(WorkflowStepDefinition? step)
     {
         if (step == null) return false;
+        // HumanTask and AgentTask (ADR-003) both pause the workflow and wait for an actor.
         if (step.StepType == WorkflowStepType.HumanTask) return true;
+        if (step.StepType == WorkflowStepType.AgentTask) return true;
         if (step.StepType != WorkflowStepType.Command) return false;
         return !step.NextSteps.Keys.Any(IsReservedRoute);
     }

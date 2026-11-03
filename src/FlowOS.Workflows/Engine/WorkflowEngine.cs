@@ -191,7 +191,7 @@ public class WorkflowEngine : IWorkflowEngine
             foreach (var targetId in forkTargets)
             {
                 var targetStep = definition.Steps.FirstOrDefault(s => s.StepId == targetId);
-                if (targetStep != null && (targetStep.StepType == WorkflowStepType.HumanTask || targetStep.StepType == WorkflowStepType.Timer || targetStep.StepType == WorkflowStepType.SubWorkflow))
+                if (targetStep != null && (targetStep.StepType == WorkflowStepType.HumanTask || targetStep.StepType == WorkflowStepType.AgentTask || targetStep.StepType == WorkflowStepType.Timer || targetStep.StepType == WorkflowStepType.SubWorkflow))
                 {
                     anyWaiting = true;
                 }
@@ -257,7 +257,7 @@ public class WorkflowEngine : IWorkflowEngine
 
                 instance.JoinTo(continuationStepId);
 
-                if (contStep.StepType == WorkflowStepType.HumanTask || contStep.StepType == WorkflowStepType.Timer || contStep.StepType == WorkflowStepType.SubWorkflow)
+                if (contStep.StepType == WorkflowStepType.HumanTask || contStep.StepType == WorkflowStepType.AgentTask || contStep.StepType == WorkflowStepType.Timer || contStep.StepType == WorkflowStepType.SubWorkflow)
                 {
                     instance.Wait();
                     return WorkflowAdvanceResult.Waiting($"Parallel branches converged at join '{nextStepId}'. Waiting at '{continuationStepId}'.");
@@ -278,7 +278,7 @@ public class WorkflowEngine : IWorkflowEngine
         {
             instance.CompleteBranch(currentStep.StepId, nextStepId);
 
-            if (nextStep.StepType == WorkflowStepType.HumanTask || nextStep.StepType == WorkflowStepType.Timer || nextStep.StepType == WorkflowStepType.SubWorkflow)
+            if (nextStep.StepType == WorkflowStepType.HumanTask || nextStep.StepType == WorkflowStepType.AgentTask || nextStep.StepType == WorkflowStepType.Timer || nextStep.StepType == WorkflowStepType.SubWorkflow)
             {
                 instance.Wait();
                 return WorkflowAdvanceResult.Waiting($"Branch '{currentStep.StepId}' advanced to '{nextStepId}' (waiting).");
@@ -293,6 +293,16 @@ public class WorkflowEngine : IWorkflowEngine
             instance.AdvanceTo(nextStepId);
             instance.Wait(); // Pause for human
             return WorkflowAdvanceResult.Waiting("Waiting for human task completion.");
+        }
+        // --- AGENT TASK (ADR-003) ---
+        // Mirrors HumanTask: workflow pauses and waits for an AI agent acting via AutoCommitEvaluator.
+        // The agent does NOT directly transition state — it submits a proposal (DecisionPacket)
+        // which flows through the existing AgentTaskCoordinator → AutoCommitEvaluator pipeline.
+        else if (nextStep.StepType == WorkflowStepType.AgentTask)
+        {
+            instance.AdvanceTo(nextStepId);
+            instance.Wait(); // Pause for agent task — dispatched by AgentTaskCoordinator
+            return WorkflowAdvanceResult.Waiting("Waiting for agent task completion.");
         }
         else if (nextStep.StepType == WorkflowStepType.Timer)
         {

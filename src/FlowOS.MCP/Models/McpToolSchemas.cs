@@ -639,7 +639,7 @@ public static class McpToolSchemas
                     "required":["stepId","stepType"],
                     "properties":{
                       "stepId":{"type":"string","minLength":1},
-                      "stepType":{"type":"string","enum":["Command","SystemTask","HumanTask","Timer","Decision","End","Fork","Join","SubWorkflow"]},
+                      "stepType":{"type":"string","enum":["Command","SystemTask","HumanTask","Timer","Decision","End","Fork","Join","SubWorkflow","AgentTask"]},
                       "decisionProvider":{"type":"string","description":"Optional decision plugin provider name for Decision steps (e.g. 'default', 'risk-v2')."},
                       "subWorkflow":{
                         "type":"object",
@@ -653,7 +653,7 @@ public static class McpToolSchemas
                         },
                         "additionalProperties":false
                       },
-                      "nextSteps":{"type":"object","additionalProperties":{"type":"string"},"description":"Event id to next step id. A SystemTask or Command continues by itself only when this object contains the exact key Default. default, SystemContinue, and other names do not auto-advance, so later timers never start. If Default is a known state-machine event, the current state must allow it; an event the machine never declares does not block the advance. A HumanTask never auto-advances."},
+                      "nextSteps":{"type":"object","additionalProperties":{"type":"string"},"description":"Event id to next step id. A SystemTask or Command continues by itself only when this object contains the exact key Default. default, SystemContinue, and other names do not auto-advance, so later timers never start. If Default is a known state-machine event, the current state must allow it; an event the machine never declares does not block the advance. A HumanTask or AgentTask never auto-advances."},
                       "pathLimits":{
                         "type":"object",
                         "description":"Per-event travel caps for repeatable paths (retry-password, resubmit). Key matches a nextSteps or Decision conditions key. Cyclic edges without a declaration default to maxTravels=5.",
@@ -679,6 +679,8 @@ public static class McpToolSchemas
                         },
                         "additionalProperties":false
                       },
+                      "agentTeamId":{"type":"string","format":"uuid","description":"AgentTask only (ADR-003). The AgentTeam template to instantiate for this step. Required when stepType is AgentTask; ignored for all other step types."},
+                      "agentTeamSlotRole":{"type":"string","description":"AgentTask only (ADR-003). The AgentTeamSlot.RoleName that will perform this step. Defaults to the first required slot if absent. Never set effectiveAutonomyLevel here — it is computed at dispatch."},
                       "agentProvider":{"type":"string","description":"Alias resolved against a tenant plugin binding of type agent. The binding holds provider/model/endpoint/apiKey. The key never appears in Agent Context."},
                       "agentPrompt":{"type":"string","description":"Alias of a tenant prompt binding (bindingType prompt). Create/edit the prompt independently; FlowOS loads title/system/instructions into Agent Context.Prompt."},
                       "agentTools":{"type":"array","items":{"type":"string"},"description":"Declared tools: resource plugins (LookupRecord:<connector>, QueryRecords:, FetchDocument:, SearchKnowledge:, CheckPolicy:), notify plugins (Webhook/Email/Slack/WhatsApp), and write connectors (connector:payment.refund.v1; legacy capability: prefix still accepted). Reads are prefetched; writes are not. Legal nextSteps events are always included."},
