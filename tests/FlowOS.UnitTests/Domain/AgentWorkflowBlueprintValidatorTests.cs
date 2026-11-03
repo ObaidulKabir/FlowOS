@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.Entities.Orchestration;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.Services;
 using FlowOS.Domain.Validation;
@@ -954,5 +955,149 @@ public class AgentWorkflowBlueprintValidatorTests
         };
 
         AssertNoError(Validator.Validate(plan), "AWF-SCHEMA-001");
+    }
+
+    // ── Agent definitions (ADR-007 §9, added by amendment) ───────────────────
+
+    private static AgentDefinitionBlueprint ValidAgentDefinition() => new()
+    {
+        Alias = "RiskAnalyst",
+        Role = "RiskAnalyst",
+        Prompt = "Assess quarterly portfolio risk against the stated tolerance.",
+        MaxAutonomyLevel = AgentAutonomyLevel.Supervised.ToString(),
+        RequiredToolCapabilities = new List<string> { "ticket-system.search" },
+        RequiredProviderCapability = "function-calling",
+    };
+
+    [Fact]
+    public void ValidAgentDefinition_IsAccepted()
+    {
+        var plan = ValidPlan() with { Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() } };
+        var result = Validator.Validate(plan);
+
+        Assert.True(result.IsValid, Describe(result));
+    }
+
+    [Fact]
+    public void AgentDefinitionWithEmptyAlias_AddsAdf001()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() with { Alias = "" } },
+        };
+
+        AssertHasError(Validator.Validate(plan), "ADF-001");
+    }
+
+    [Fact]
+    public void DuplicateAgentDefinitionAlias_AddsAdf002()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint>
+            {
+                ValidAgentDefinition(),
+                ValidAgentDefinition() with { Role = "SecondAnalyst" },
+            },
+        };
+
+        AssertHasError(Validator.Validate(plan), "ADF-002");
+    }
+
+    [Fact]
+    public void AgentDefinitionWithoutRole_AddsAdf003()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() with { Role = "" } },
+        };
+
+        AssertHasError(Validator.Validate(plan), "ADF-003");
+    }
+
+    [Fact]
+    public void AgentDefinitionWithoutPrompt_AddsAdf004()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() with { Prompt = "" } },
+        };
+
+        AssertHasError(Validator.Validate(plan), "ADF-004");
+    }
+
+    [Fact]
+    public void AgentDefinitionWithUnknownAutonomyLevel_AddsAdf005()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() with { MaxAutonomyLevel = "Omniscient" } },
+        };
+
+        AssertHasError(Validator.Validate(plan), "ADF-005");
+    }
+
+    [Fact]
+    public void AgentDefinitionWithNullAutonomyLevel_IsAccepted()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() with { MaxAutonomyLevel = null } },
+        };
+
+        AssertNoError(Validator.Validate(plan), "ADF-005");
+    }
+
+    [Fact]
+    public void AgentDefinitionWithEmptyRequiredToolCapability_AddsAdf006()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint>
+            {
+                ValidAgentDefinition() with { RequiredToolCapabilities = new List<string> { "" } },
+            },
+        };
+
+        AssertHasError(Validator.Validate(plan), "ADF-006");
+    }
+
+    [Fact]
+    public void AgentDefinitionWithEmptyRequiredProviderCapability_AddsAdf006()
+    {
+        var plan = ValidPlan() with
+        {
+            Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() with { RequiredProviderCapability = "" } },
+        };
+
+        AssertHasError(Validator.Validate(plan), "ADF-006");
+    }
+
+    [Fact]
+    public void StepReferencingUndeclaredAgentDefinition_AddsAwfRef001()
+    {
+        var plan = ValidPlan();
+        plan = plan with
+        {
+            Steps = plan.Steps.Select(s => s.StepId == "gather"
+                ? s with { AgentDefinitionAlias = "NoSuchAgent" }
+                : s).ToList(),
+        };
+
+        AssertHasError(Validator.Validate(plan), "AWF-REF-001");
+    }
+
+    [Fact]
+    public void StepReferencingDeclaredAgentDefinition_IsAccepted()
+    {
+        var plan = ValidPlan() with { Agents = new List<AgentDefinitionBlueprint> { ValidAgentDefinition() } };
+        plan = plan with
+        {
+            Steps = plan.Steps.Select(s => s.StepId == "gather"
+                ? s with { AgentDefinitionAlias = "RiskAnalyst" }
+                : s).ToList(),
+        };
+
+        AssertNoError(Validator.Validate(plan), "AWF-REF-001");
     }
 }

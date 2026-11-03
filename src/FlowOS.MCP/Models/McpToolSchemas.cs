@@ -2083,6 +2083,7 @@ public static class McpToolSchemas
             "capabilities":{"type":"array","items":{"type":"object","properties":{"code":{"type":"string"},"description":{"type":"string"}}}},
             "roles":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"grantedCapabilities":{"type":"array","items":{"type":"string"}},"resolutionType":{"type":"string","enum":["Assignment","Expression","Static"]},"memberExpression":{"type":"string"},"staticMembers":{"type":"array","items":{"type":"string"}}}}},
             "constraints":{"type":"array","items":{"type":"object","properties":{"rule":{"type":"string","enum":["distinct","notSubjectOf","seniorTo"]},"between":{"type":"array","items":{"type":"string"}},"subject":{"type":"string"}}}},
+            "agents":{"type":"array","items":{"type":"object","required":["alias","role","prompt"],"properties":{"alias":{"type":"string","minLength":1},"role":{"type":"string","minLength":1},"prompt":{"type":"string","minLength":1},"maxAutonomyLevel":{"type":"string","enum":["Advisory","Supervised","GovernnedAutonomous","AdaptiveAutonomous"]},"allowedEvents":{"type":"array","items":{"type":"string"}},"requiredToolCapabilities":{"type":"array","items":{"type":"string"}},"requiredProviderCapability":{"type":"string"}}}},
             "steps":{
               "type":"array",
               "minItems":1,
@@ -2098,6 +2099,7 @@ public static class McpToolSchemas
                   "requiredCapabilities":{"type":"array","items":{"type":"string"}},
                   "agentTeamId":{"type":"string","format":"uuid"},
                   "teamRole":{"type":"string"},
+                  "agentDefinitionAlias":{"type":"string","description":"References an Agents[].alias declared on this blueprint."},
                   "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
                   "branches":{"type":"array","items":{"type":"string"}},
                   "joinPolicy":{"type":"string","enum":["WaitAll","WaitAny"]},
@@ -2184,6 +2186,17 @@ public static class McpToolSchemas
             "status":{"type":"string","enum":["Draft","Published","Shared","Public","Deprecated","Abandoned"]},
             "skip":{"type":"integer","minimum":0,"default":0},
             "take":{"type":"integer","minimum":1,"maximum":200,"default":50},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject DescribeTenantAgentBindings() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false

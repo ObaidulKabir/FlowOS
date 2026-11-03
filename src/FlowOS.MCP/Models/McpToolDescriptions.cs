@@ -909,7 +909,18 @@ public static class McpToolDescriptions
                 "maxDepth is 1-100, default 10. " +
                 "Returns: {ok:true,data:{tenantId,depth,lineage:[{id,version,status,publishedAt,changeLog}]}}. " +
                 "Errors: MCP-ARG-001, MCP-INTERNAL. " +
-                "Input example: {\"id\":\"11111111-1111-1111-1111-111111111111\",\"maxDepth\":10}"
+                "Input example: {\"id\":\"11111111-1111-1111-1111-111111111111\",\"maxDepth\":10}",
+
+            ["describe_tenant_agent_bindings"] =
+                "[AgentWorkflow] ADR-007 Section 9: lists this tenant's already-declared tool bindings and LLM provider bindings, " +
+                "so an AgentDefinitionBlueprint's requiredToolCapabilities / requiredProviderCapability can be grounded in what the " +
+                "tenant can actually satisfy today, instead of invented tags. Secrets are never included - bindingType, sourceName, " +
+                "providerName and isEnabled only. Call this before authoring an agent definition, not as a validation gate: a tag " +
+                "this tenant lacks today is still a valid declaration in the blueprint - ADR-007 keeps the agent definition " +
+                "application-scoped and portable, and readiness is a separate, per-tenant, re-checkable question, never a publish-time rejection. " +
+                "Returns: {ok:true,data:{tenantId,tools:[{sourceName,providerName,bindingType,isEnabled}],providers:[...],profiles:[...],defaultProviderAlias,message}}. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {}"
         };
 
     public static string For(string toolName) =>
@@ -928,6 +939,7 @@ public static class McpToolDescriptions
             ["get_agent_workflow_class"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
             ["list_agent_workflow_classes"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_workflow_class_lineage"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
+            ["describe_tenant_agent_bindings"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_chat_history"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_agent_chat_sessions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_agent_prompt_audits"] = new("observability", "authenticated", true, true, false, "none", true, "medium"),

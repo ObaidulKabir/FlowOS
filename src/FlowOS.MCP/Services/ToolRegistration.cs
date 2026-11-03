@@ -225,6 +225,11 @@ public static class ToolRegistration
         registry.Register("get_agent_workflow_class_lineage", McpToolDescriptions.For("get_agent_workflow_class_lineage"), McpToolSchemas.AgentWorkflowClassLineage(),
             async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.GetLineage(args)));
 
+        // ADR-007 §9 (amendment): discovery tool so an authoring agent grounds an
+        // AgentDefinitionBlueprint's capability tags in what this tenant already has.
+        registry.Register("describe_tenant_agent_bindings", McpToolDescriptions.For("describe_tenant_agent_bindings"), McpToolSchemas.DescribeTenantAgentBindings(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.DescribeTenantAgentBindings(args)));
+
         registry.Register("update_draft_workflowclass", McpToolDescriptions.For("update_draft_workflowclass"), McpToolSchemas.UpdateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.UpdateDraft(args)));
 

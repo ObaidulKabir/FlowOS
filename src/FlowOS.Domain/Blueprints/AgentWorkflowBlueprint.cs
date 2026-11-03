@@ -61,6 +61,19 @@ public record AgentWorkflowBlueprint
     public List<AssignmentConstraintBlueprint> Constraints { get; init; } = new();
 
     /// <summary>
+    /// ADR-007 §9 (amendment): the individual agents this plan declares — role, prompt,
+    /// autonomy ceiling, and the tool/provider capabilities each needs. Declared inline so
+    /// they are <em>application-scoped</em>: identical for every tenant that installs this
+    /// published class. A step references one by <see cref="AgentStepBlueprint.AgentDefinitionAlias"/>.
+    ///
+    /// What is deliberately NOT here: which tenant's LLM account or which tenant's tool
+    /// connector satisfies a capability. That resolution is tenant-scoped and lives in the
+    /// plugin binding registry (<c>PluginBindingTypes.Agent</c>/<c>.Decision</c>/<c>.Action</c>),
+    /// looked up by capability tag at activation, never baked into the blueprint.
+    /// </summary>
+    public List<AgentDefinitionBlueprint> Agents { get; init; } = new();
+
+    /// <summary>
     /// JSON Schema for the shared working memory passed between steps.
     /// Validated by the engine on each step handoff.
     /// </summary>
@@ -126,6 +139,16 @@ public record AgentStepBlueprint
     /// The orchestrator resolves the team at runtime (e.g. "RiskAnalyst").
     /// </summary>
     public string? TeamRole { get; init; }
+
+    /// <summary>
+    /// ADR-007 §9 (amendment): the <see cref="AgentWorkflowBlueprint.Agents"/> entry
+    /// (by <see cref="AgentDefinitionBlueprint.Alias"/>) that carries out this step — the
+    /// application-scoped agent, with its own role and prompt. Distinct from
+    /// <see cref="TeamRole"/>, which names a position in a team roster, not an agent
+    /// definition; a plan may use either, both, or neither while the team-blueprint chain
+    /// (ADR-007 §1/§8) remains future work.
+    /// </summary>
+    public string? AgentDefinitionAlias { get; init; }
 
     // ── Routing ──────────────────────────────────────────────────────────────
 
@@ -194,6 +217,58 @@ public record AgentStepBlueprint
     /// Mirrors <see cref="StepBlueprint.PathLimits"/>.
     /// </summary>
     public Dictionary<string, AgentPathTravelLimitBlueprint> PathLimits { get; init; } = new();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent definition (ADR-007 §9, added by amendment)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// One individual agent — application-scoped: declared once, inline, in this blueprint
+/// pack, and identical for every tenant that installs the published class.
+///
+/// What a tenant supplies instead is the concrete LLM provider/model/credentials and the
+/// concrete tool/connector credentials that satisfy <see cref="RequiredProviderCapability"/>
+/// and <see cref="RequiredToolCapabilities"/> — resolved from the plugin binding registry
+/// at activation, by capability tag, never by baking a tenant's alias into this record.
+/// This is deliberately NOT a duplicate of <c>AgentProfileConfiguration</c>: that record
+/// now holds only the tenant-local half (provider/tool aliases); this holds the portable
+/// half (what the agent is).
+/// </summary>
+public record AgentDefinitionBlueprint
+{
+    /// <summary>Unique within this blueprint pack. Referenced by <see cref="AgentStepBlueprint.AgentDefinitionAlias"/>.</summary>
+    public string Alias { get; init; } = string.Empty;
+
+    /// <summary>The role this agent plays, in this pack's own vocabulary (e.g. "RiskAnalyst").</summary>
+    public string Role { get; init; } = string.Empty;
+
+    /// <summary>The agent's instructions. Declared inline — not an alias into tenant storage.</summary>
+    public string Prompt { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Autonomy ceiling for this agent. Composes downward with the tenant setting, the
+    /// team ceiling and the step override — see ADR-007 §4; this agent's value may only
+    /// narrow what a later link permits, never widen it.
+    /// </summary>
+    public string? MaxAutonomyLevel { get; init; }
+
+    /// <summary>Committed events this agent is allowed to raise.</summary>
+    public List<string> AllowedEvents { get; init; } = new();
+
+    /// <summary>
+    /// Capability tags a tool binding must satisfy for this agent to run — e.g.
+    /// "ticket-system.search" — not a tenant's <c>ToolAliases</c>. Resolved per tenant at
+    /// activation; checked for readiness, never rejected at publish (ADR-007 §2).
+    /// </summary>
+    public List<string> RequiredToolCapabilities { get; init; } = new();
+
+    /// <summary>
+    /// Capability tag an LLM provider binding must satisfy — e.g. "function-calling" or
+    /// "context-128k" — not a tenant's <c>ProviderAlias</c>. Same resolution timing as
+    /// <see cref="RequiredToolCapabilities"/>.
+    /// </summary>
+    public string? RequiredProviderCapability { get; init; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

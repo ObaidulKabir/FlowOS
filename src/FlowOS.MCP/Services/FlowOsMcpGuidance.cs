@@ -1691,6 +1691,42 @@ public static class FlowOsMcpGuidance
         against the step's `stepType` is a validation error, not a hint. Omitting `stepType` means
         `"Agent"`.
 
+        ### Agent definitions (ADR-007 Section 9, added by amendment)
+
+        An individual agent — its role, its prompt, its autonomy ceiling — is declared **inline**,
+        in this blueprint, not as a tenant alias. That is what makes it *application-scoped*:
+        identical for every tenant that installs the published class, unlike a tenant's
+        `AgentProfileConfiguration`, which only ever holds the LLM/tool bindings now.
+
+        ```json
+        "agents": [
+          {
+            "alias": "RiskAnalyst",
+            "role": "RiskAnalyst",
+            "prompt": "You assess quarterly portfolio risk. Flag anything above the stated tolerance...",
+            "maxAutonomyLevel": "Supervised",
+            "allowedEvents": ["Approved", "Rejected"],
+            "requiredToolCapabilities": ["ticket-system.search"],
+            "requiredProviderCapability": "function-calling"
+          }
+        ]
+        ```
+
+        A step references one by `"agentDefinitionAlias": "RiskAnalyst"`. **Before** writing an
+        agent's `requiredToolCapabilities` / `requiredProviderCapability`, call
+        `describe_tenant_agent_bindings` to see what this tenant has already declared — ground the
+        tags in real bindings instead of inventing ones nothing can satisfy. This is advisory, not
+        enforcement: a tag the tenant lacks today still validates and still publishes. Whether the
+        tenant is *ready* to run the class (does it hold a binding for every declared tag) is a
+        separate, per-tenant, re-checkable question, never a reason to reject the blueprint itself.
+
+        Do **not** put a tenant's `ProviderAlias` or `ToolAliases` directly into
+        `requiredToolCapabilities` / `requiredProviderCapability` — those name a *capability* the
+        agent needs (what a binding does), not which binding a particular tenant happens to have
+        aliased it as. Naming the alias directly reintroduces the portability defect this amendment
+        fixes: the blueprint would stop working the moment it is installed in, or the alias renamed
+        in, any other tenant.
+
         ### Key step rules
         - `nextSteps` maps outcome label → next stepId. Route to the literal `"END"` to finish the
           plan on that outcome, or give the step `"stepType": "End"` and no `nextSteps`.
@@ -1776,6 +1812,17 @@ public static class FlowOsMcpGuidance
         | `AWF-RULE-003` | `coordinationRules.maxParallelSteps` is negative (use 0 for unlimited) |
         | `AWF-RULE-004` | `coordinationRules.globalSla` is not a recognised duration |
         | `AWF-SCHEMA-001` | `contextSchema` is not valid JSON |
+        | `AWF-REF-001` | Step's `agentDefinitionAlias` names no entry in `agents` |
+        | `ADF-001` | An `agents` entry's `alias` is empty |
+        | `ADF-002` | Duplicate `agents` alias |
+        | `ADF-003` | An `agents` entry has no `role` |
+        | `ADF-004` | An `agents` entry has no inline `prompt` |
+        | `ADF-005` | An `agents` entry's `maxAutonomyLevel` is unknown |
+        | `ADF-006` | An `agents` entry has an empty `requiredToolCapabilities` / `requiredProviderCapability` tag |
+
+        `ADF-*` codes never check a tenant's registry — a capability tag is checked for shape only,
+        so the same blueprint validates identically in every tenant. Call `describe_tenant_agent_bindings`
+        separately to see what this tenant can satisfy today; that is advisory, never a validation gate.
 
         Reachability follows SLA escalation and path-limit overflow targets as well as `nextSteps` and
         `branches`, so a step reached only on an SLA breach is not reported as an orphan.
@@ -1823,11 +1870,14 @@ public static class FlowOsMcpGuidance
 
         ## MCP tools
 
-        The authoring lifecycle is available now. A typical pass: draft the blueprint, call
-        `validate_agent_workflow_class` until it reports `isValid: true`, create it, then publish.
+        The authoring lifecycle is available now. A typical pass: call
+        `describe_tenant_agent_bindings` to see what this tenant already has, draft the blueprint
+        (including any `agents`), call `validate_agent_workflow_class` until it reports
+        `isValid: true`, create it, then publish.
 
         | Tool | Purpose |
         |------|---------|
+        | `describe_tenant_agent_bindings` | See this tenant's already-declared tool and LLM bindings. Call before writing an agent's capability tags. |
         | `validate_agent_workflow_class` | Check a blueprint without storing it. Start here. |
         | `create_agent_workflow_class` | Create a Draft. Set `previousVersionId` to start a new version. |
         | `update_agent_workflow_class_draft` | Replace a Draft's definition. Rejected once Published. |
@@ -1854,6 +1904,9 @@ public static class FlowOsMcpGuidance
         - Do not hard-delete a Published plan — use `Abandon`.
         - Do not set `maxTravels` below 1 — 0 means the path is unreachable.
         - Do not create a new `AgentWorkflowClass` when the goal is to revise a published one — version it via `previousVersionId`.
+        - Do not put a tenant alias (`ProviderAlias`, `ToolAliases`, a profile name) into an `agents`
+          entry's `requiredToolCapabilities` / `requiredProviderCapability` — name the capability, not
+          the tenant's binding for it, or the definition stops being portable.
         """;
 
     public const string StrategicPlanGuide =

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FlowOS.Application.Commands.Orchestration;
 using FlowOS.Application.Handlers.Orchestration;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Enums;
 using FlowOS.MCP.Models;
@@ -27,10 +28,12 @@ namespace FlowOS.MCP.Tools;
 public class AgentWorkflowClassMcpTools
 {
     private readonly IMediator _mediator;
+    private readonly IPluginBindingRegistryService _bindingRegistry;
 
-    public AgentWorkflowClassMcpTools(IMediator mediator)
+    public AgentWorkflowClassMcpTools(IMediator mediator, IPluginBindingRegistryService bindingRegistry)
     {
         _mediator = mediator;
+        _bindingRegistry = bindingRegistry;
     }
 
     // ── Design ────────────────────────────────────────────────────────────────
@@ -300,6 +303,63 @@ public class AgentWorkflowClassMcpTools
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to read agent workflow lineage: {ex.Message}");
         }
     }
+
+    // ── Discovery (ADR-007 §9, added by amendment) ──────────────────────────────
+
+    /// <summary>
+    /// What the tenant has already declared — tool bindings and LLM/provider bindings —
+    /// so a coding agent writing an <see cref="AgentDefinitionBlueprint"/> grounds
+    /// <c>requiredToolCapabilities</c> / <c>requiredProviderCapability</c> in what this
+    /// tenant can actually satisfy today, instead of inventing tags nothing resolves.
+    ///
+    /// This is advisory, not enforcement: the blueprint itself stays application-scoped
+    /// and portable (ADR-007 §9), so nothing here is written into the plan, and nothing
+    /// here blocks publish. A tag this tenant lacks today is still a valid declaration —
+    /// readiness is a separate, per-tenant, re-checkable question (ADR-007 §2).
+    /// </summary>
+    public async Task<CallToolResult> DescribeTenantAgentBindings(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var tools = await _bindingRegistry.ListAgentToolsAsync(tenantId);
+            var profiles = await _bindingRegistry.ListAgentProfilesAsync(tenantId);
+            var providers = await _bindingRegistry.ListAsync(tenantId, PluginBindingTypes.Agent);
+            var defaultProvider = await _bindingRegistry.GetDefaultAgentProviderAsync(tenantId);
+
+            return McpToolResults.Success(new
+            {
+                tenantId,
+                tools = tools.Select(DescribeBinding),
+                providers = providers.Select(DescribeBinding),
+                profiles = profiles.Select(DescribeBinding),
+                defaultProviderAlias = defaultProvider?.SourceName,
+                message = tools.Count == 0 && providers.Count == 0
+                    ? "This tenant has declared no tool or LLM provider bindings yet. An AgentDefinitionBlueprint " +
+                      "may still declare requiredToolCapabilities / requiredProviderCapability — it stays valid and " +
+                      "portable — but this tenant will show as not-ready to run it until a matching binding exists."
+                    : "Use these aliases' providerName/sourceName as a guide for requiredToolCapabilities and " +
+                      "requiredProviderCapability on an AgentDefinitionBlueprint — the tag should describe what the " +
+                      "binding actually does, not name the alias itself, so the same definition still resolves if " +
+                      "this tenant renames or replaces the binding later.",
+            });
+        }
+        catch (McpToolException ex) { return McpToolResults.Fail(ex.Code, ex.Message); }
+        catch (ArgumentException ex) { return McpToolResults.Fail("MCP-ARG-001", ex.Message); }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to describe tenant agent bindings: {ex.Message}");
+        }
+    }
+
+    private static object DescribeBinding(PluginBindingDto b) => new
+    {
+        sourceName = b.SourceName,
+        providerName = b.ProviderName,
+        bindingType = b.BindingType,
+        isEnabled = b.IsEnabled,
+    };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
