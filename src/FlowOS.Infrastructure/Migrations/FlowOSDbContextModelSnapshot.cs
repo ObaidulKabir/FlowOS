@@ -2591,6 +2591,72 @@ namespace FlowOS.Infrastructure.Migrations
                     b.ToTable("TeamExecutions", (string)null);
                 });
 
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.Orchestration.AgentWorkflowClass", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChangeLog")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("DeprecationMigrationTargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DeprecationReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("FlowOsVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("PreviousVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PreviousVersionId")
+                        .HasDatabaseName("IX_AgentWorkflowClasses_PreviousVersionId");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_AgentWorkflowClasses_TenantId");
+
+                    b.ToTable("AgentWorkflowClasses", (string)null);
+                });
+
 #pragma warning restore 612, 618
         }
     }

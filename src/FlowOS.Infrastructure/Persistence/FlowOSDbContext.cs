@@ -56,6 +56,10 @@ public class FlowOSDbContext : DbContext
     //       Table = "TeamExecutions" — NEVER "Teams".
     public DbSet<TeamExecution> TeamExecutions { get; set; }
 
+    // Orchestration — Phase 4A: Declarative agentic workflow blueprint (ADR-006)
+    // AgentWorkflowClass is the plan template; AgentWorkflowExecution (Phase 4B) is its runtime instance.
+    public DbSet<AgentWorkflowClass> AgentWorkflowClasses { get; set; }
+
     public FlowOSDbContext(DbContextOptions<FlowOSDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
