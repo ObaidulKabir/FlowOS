@@ -82,7 +82,9 @@ public static class WorkflowClassCompiler
                 Priority = stepBp.Priority,
                 AgentProvider = string.IsNullOrWhiteSpace(stepBp.AgentProvider) ? null : stepBp.AgentProvider.Trim(),
                 AgentPrompt = string.IsNullOrWhiteSpace(stepBp.AgentPrompt) ? null : stepBp.AgentPrompt.Trim(),
-                AgentTools = stepBp.AgentTools != null ? new List<string>(stepBp.AgentTools) : new List<string>()
+                AgentTools = stepBp.AgentTools != null ? new List<string>(stepBp.AgentTools) : new List<string>(),
+                AgentTeamId = stepBp.AgentTeamId,
+                AgentTeamSlotRole = string.IsNullOrWhiteSpace(stepBp.AgentTeamSlotRole) ? null : stepBp.AgentTeamSlotRole.Trim()
             };
             def.AddStep(stepDef);
         }
@@ -354,7 +356,11 @@ public static class WorkflowClassCompiler
                 Priority = step.Priority,
                 AgentProvider = string.IsNullOrWhiteSpace(step.AgentProvider) ? null : step.AgentProvider.Trim(),
                 AgentPrompt = string.IsNullOrWhiteSpace(step.AgentPrompt) ? null : step.AgentPrompt.Trim(),
-                AgentTools = step.AgentTools != null ? new List<string>(step.AgentTools) : new List<string>()
+                AgentTools = step.AgentTools != null ? new List<string>(step.AgentTools) : new List<string>(),
+                // AgentTeamId is a tenant-scoped AgentTeam reference, not a name/alias, so unlike
+                // roles/events/capabilities above it is never remapped by a context-binding template.
+                AgentTeamId = step.AgentTeamId,
+                AgentTeamSlotRole = string.IsNullOrWhiteSpace(step.AgentTeamSlotRole) ? null : step.AgentTeamSlotRole.Trim()
             };
 
             workflow.AddStep(compiledStep);
