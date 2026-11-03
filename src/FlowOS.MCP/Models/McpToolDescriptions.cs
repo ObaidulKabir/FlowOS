@@ -858,7 +858,50 @@ public static class McpToolDescriptions
                 "Returns: {ok:true,data:{teamExecutionId,tenantId,agentTeamId,workflowInstanceId,workflowStepId," +
                 "status,committedEvent,confidence,actorAgentId,slotAssignments,createdAtUtc,completedAtUtc,...}}. " +
                 "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"workflowInstanceId\":\"11111111-...\",\"stepId\":\"risk-assessment\"}"
+                "Input example: {\"workflowInstanceId\":\"11111111-...\",\"stepId\":\"risk-assessment\"}",
+
+            ["create_agent_workflow_class"] =
+                "[AgentWorkflow] Creates a Draft declarative AgentWorkflowClass (ADR-006) from an AgentWorkflowBlueprint. " +
+                "A plan declares agent steps, fork/join routing, SLAs, autonomy limits and human gates; it does not dispatch anything in Phase 4A. " +
+                "Set previousVersionId to begin a new version of a published plan - there is no separate new-version tool, because a version is a Draft that names its predecessor. " +
+                "Returns: {ok:true,data:{id,tenantId,name,version,status,previousVersionId,message}}. " +
+                "The blueprint is validated on the way in; an invalid one returns ok:false with every AWF- error. Call validate_agent_workflow_class first to see them without storing anything. " +
+                "Errors: MCP-ARG-001, MCP-VALIDATION, MCP-INTERNAL.",
+
+            ["update_agent_workflow_class_draft"] =
+                "[AgentWorkflow] Replaces the definition of a Draft AgentWorkflowClass. Rejected once the plan is Published, because a published blueprint is immutable - create a new version instead. " +
+                "Returns: {ok:true,data:{id,status,version,message}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-STATE-001, MCP-VALIDATION, MCP-INTERNAL.",
+
+            ["validate_agent_workflow_class"] =
+                "[AgentWorkflow] Validates an AgentWorkflowBlueprint without storing it, so a draft can be checked before publishing. " +
+                "An invalid blueprint is a successful call reporting every problem at once, not a failure: ok:true with data:{isValid:false,errorCount,errors:[{code,category,message,element}]}. " +
+                "Codes carry an AWF- prefix and cover structure, reachability, exit paths, fork/join arity, routing targets, team binding, human gates, capabilities, duty separation, autonomy, SLA, path limits and coordination rules. " +
+                "Use this while authoring; publishing runs the same checks as its final gate. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL.",
+
+            ["publish_agent_workflow_class"] =
+                "[AgentWorkflow] Publishes a Draft AgentWorkflowClass, locking its blueprint and making it dispatchable once the Phase 4B engine ships. " +
+                "The blueprint is validated again here - this is the last gate before it becomes immutable. " +
+                "Returns: {ok:true,data:{id,status,version,publishedAt,message}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-STATE-001, MCP-VALIDATION, MCP-INTERNAL.",
+
+            ["get_agent_workflow_class"] =
+                "[AgentWorkflow] Reads one AgentWorkflowClass including its full blueprint. " +
+                "Returns: {ok:true,data:{tenantId,plan:{id,name,version,status,scope,createdAt,publishedAt,previousVersionId,changeLog,flowOsVersion,definition}}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL.",
+
+            ["list_agent_workflow_classes"] =
+                "[AgentWorkflow] Lists the tenant's AgentWorkflowClasses, newest first, with a per-plan summary rather than full blueprints. " +
+                "Filter with status (Draft, Published, Deprecated, Abandoned); page with skip and take (1-200, default 50). " +
+                "Returns: {ok:true,data:{tenantId,count,skip,take,plans:[{id,name,version,status,createdAt,publishedAt,objective,stepCount}]}}. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL.",
+
+            ["get_agent_workflow_class_lineage"] =
+                "[AgentWorkflow] Walks the version lineage backwards through previousVersionId, newest first, so an agent can see what a plan superseded and why. " +
+                "maxDepth is 1-100, default 10. " +
+                "Returns: {ok:true,data:{tenantId,depth,lineage:[{id,version,status,publishedAt,changeLog}]}}. " +
+                "Errors: MCP-ARG-001, MCP-INTERNAL."
         };
 
     public static string For(string toolName) =>
@@ -870,6 +913,13 @@ public static class McpToolDescriptions
         new Dictionary<string, ToolSecurityProfile>(StringComparer.Ordinal)
         {
             ["append_agent_chat_message"] = new("command", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["create_agent_workflow_class"] = new("agent-workflow", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["update_agent_workflow_class_draft"] = new("agent-workflow", "authenticated", true, true, true, "reversible", true, "medium"),
+            ["validate_agent_workflow_class"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
+            ["publish_agent_workflow_class"] = new("agent-workflow", "authenticated", true, true, true, "reversible", true, "high"),
+            ["get_agent_workflow_class"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
+            ["list_agent_workflow_classes"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
+            ["get_agent_workflow_class_lineage"] = new("agent-workflow", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_chat_history"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_agent_chat_sessions"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["list_agent_prompt_audits"] = new("observability", "authenticated", true, true, false, "none", true, "medium"),

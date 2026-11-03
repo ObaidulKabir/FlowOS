@@ -2053,4 +2053,154 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    // ── AgentWorkflowClass (ADR-006/ADR-007) ─────────────────────────────────
+
+    /// <summary>
+    /// Shape of an AgentWorkflowBlueprint. Deliberately permissive on step contents:
+    /// the authoritative rules live in AgentWorkflowBlueprintValidator, and duplicating
+    /// them here would create a second place to keep in step. The schema catches
+    /// malformed input; validate_agent_workflow_class catches everything else.
+    /// </summary>
+    public static JObject AgentBlueprintSchema() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["objective","startStepId","steps"],
+          "properties":{
+            "objective":{"type":"string","minLength":1},
+            "startStepId":{"type":"string","minLength":1},
+            "contextSchema":{"type":"string"},
+            "coordinationRules":{
+              "type":"object",
+              "properties":{
+                "maxGlobalRetries":{"type":"integer","minimum":0},
+                "rollbackStrategy":{"type":"string","enum":["Abandon","Compensate"]},
+                "globalSla":{"type":"string"},
+                "maxParallelSteps":{"type":"integer","minimum":0}
+              }
+            },
+            "capabilities":{"type":"array","items":{"type":"object","properties":{"code":{"type":"string"},"description":{"type":"string"}}}},
+            "roles":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"grantedCapabilities":{"type":"array","items":{"type":"string"}},"resolutionType":{"type":"string","enum":["Assignment","Expression","Static"]},"memberExpression":{"type":"string"},"staticMembers":{"type":"array","items":{"type":"string"}}}}},
+            "constraints":{"type":"array","items":{"type":"object","properties":{"rule":{"type":"string","enum":["distinct","notSubjectOf","seniorTo"]},"between":{"type":"array","items":{"type":"string"}},"subject":{"type":"string"}}}},
+            "steps":{
+              "type":"array",
+              "minItems":1,
+              "items":{
+                "type":"object",
+                "required":["stepId"],
+                "properties":{
+                  "stepId":{"type":"string","minLength":1},
+                  "stepType":{"type":"string","enum":["Agent","Fork","Join","End","HumanTask"]},
+                  "description":{"type":"string"},
+                  "actor":{"type":"string","enum":["Human","Agent","Either"]},
+                  "role":{"type":"string"},
+                  "requiredCapabilities":{"type":"array","items":{"type":"string"}},
+                  "agentTeamId":{"type":"string","format":"uuid"},
+                  "teamRole":{"type":"string"},
+                  "nextSteps":{"type":"object","additionalProperties":{"type":"string"}},
+                  "branches":{"type":"array","items":{"type":"string"}},
+                  "joinPolicy":{"type":"string","enum":["WaitAll","WaitAny"]},
+                  "inboundSteps":{"type":"array","items":{"type":"string"}},
+                  "maxAutonomyLevel":{"type":"string","enum":["Advisory","Supervised","GovernnedAutonomous","AdaptiveAutonomous"]},
+                  "consequential":{"type":"boolean"},
+                  "autoCommit":{"type":"object","properties":{"minConfidence":{"type":"number","exclusiveMinimum":0,"maximum":1},"allowedEvents":{"type":"array","items":{"type":"string"}}}},
+                  "sla":{"type":"object","properties":{"duration":{"type":"string"},"timeoutEvent":{"type":"string"},"escalationStepId":{"type":"string"},"escalationRole":{"type":"string"},"isInterrupting":{"type":"boolean"}}},
+                  "agentPrompt":{"type":"string"},
+                  "agentTools":{"type":"array","items":{"type":"string"}},
+                  "pathLimits":{"type":"object","additionalProperties":{"type":"object","properties":{"maxTravels":{"type":"integer","minimum":1},"onExceeded":{"type":"string"}}}}
+                }
+              }
+            }
+          }
+        }
+        """);
+
+    public static JObject CreateAgentWorkflowClass() => JObject.Parse(
+        $$"""
+        {
+          "type":"object",
+          "required":["name","definition"],
+          "properties":{
+            "name":{"type":"string","minLength":1,"maxLength":200},
+            "version":{"type":"string","default":"1.0.0","pattern":"^\\d+\\.\\d+\\.\\d+$"},
+            "previousVersionId":{"type":"string","format":"uuid","description":"Set to start a new version of a published plan."},
+            "changeLog":{"type":"string","maxLength":2000},
+            "tenantId":{"type":"string","format":"uuid"},
+            "definition":{{AgentBlueprintSchema().ToString(Newtonsoft.Json.Formatting.None)}}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject UpdateAgentWorkflowClass() => JObject.Parse(
+        $$"""
+        {
+          "type":"object",
+          "required":["id","name","definition"],
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "name":{"type":"string","minLength":1,"maxLength":200},
+            "version":{"type":"string","default":"1.0.0","pattern":"^\\d+\\.\\d+\\.\\d+$"},
+            "changeLog":{"type":"string","maxLength":2000},
+            "tenantId":{"type":"string","format":"uuid"},
+            "definition":{{AgentBlueprintSchema().ToString(Newtonsoft.Json.Formatting.None)}}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ValidateAgentWorkflowClass() => JObject.Parse(
+        $$"""
+        {
+          "type":"object",
+          "required":["definition"],
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"},
+            "definition":{{AgentBlueprintSchema().ToString(Newtonsoft.Json.Formatting.None)}}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject AgentWorkflowClassById() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["id"],
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject ListAgentWorkflowClasses() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "status":{"type":"string","enum":["Draft","Published","Shared","Public","Deprecated","Abandoned"]},
+            "skip":{"type":"integer","minimum":0,"default":0},
+            "take":{"type":"integer","minimum":1,"maximum":200,"default":50},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject AgentWorkflowClassLineage() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["id"],
+          "properties":{
+            "id":{"type":"string","format":"uuid"},
+            "maxDepth":{"type":"integer","minimum":1,"maximum":100,"default":10},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
 }

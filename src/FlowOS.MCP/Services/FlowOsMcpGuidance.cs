@@ -1821,16 +1821,28 @@ public static class FlowOsMcpGuidance
         Until Phase 4B is deployed, `HasExecutionsAsync` always returns `false`, so GOV-DEL-002 is not
         enforced at runtime (only the domain guard `plan.Delete(hasExecutions)` enforces it in tests).
 
-        ## MCP tools (Phase 4B — not yet available)
+        ## MCP tools
 
-        These tools will be registered once the execution engine ships. Do not call them now.
+        The authoring lifecycle is available now. A typical pass: draft the blueprint, call
+        `validate_agent_workflow_class` until it reports `isValid: true`, create it, then publish.
 
-        | Planned tool | Purpose |
-        |-------------|---------|
-        | `create_agent_workflow_class` | Create a Draft AgentWorkflowClass |
-        | `publish_agent_workflow_class` | Publish a Draft |
-        | `deprecate_agent_workflow_class` | Deprecate a Published version |
-        | `start_agent_workflow` | Launch an AgentWorkflowExecution from a Published class |
+        | Tool | Purpose |
+        |------|---------|
+        | `validate_agent_workflow_class` | Check a blueprint without storing it. Start here. |
+        | `create_agent_workflow_class` | Create a Draft. Set `previousVersionId` to start a new version. |
+        | `update_agent_workflow_class_draft` | Replace a Draft's definition. Rejected once Published. |
+        | `publish_agent_workflow_class` | Lock the blueprint. Validated again as the last gate. |
+        | `get_agent_workflow_class` | Read one plan including its full blueprint. |
+        | `list_agent_workflow_classes` | List the tenant's plans, newest first. |
+        | `get_agent_workflow_class_lineage` | Walk `previousVersionId` backwards. |
+
+        `validate_agent_workflow_class` reports **every** problem in one call, so fix them in
+        one pass rather than one publish at a time. An invalid blueprint is `ok:true` with
+        `isValid:false` and the error list — not a failed call.
+
+        Still to come with the Phase 4B engine: `start_agent_workflow`, execution reads, and
+        `deprecate_agent_workflow_class` / `abandon_agent_workflow_class` (both are available
+        over REST today).
 
         ## What not to do
 

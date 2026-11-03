@@ -779,6 +779,8 @@ public partial class Program
         services.AddSingleton<IMcpJsonRpcDispatcher, McpJsonRpcDispatcher>();
 
         services.AddScoped<GovernanceTools>();
+        // ADR-006/ADR-007: AgentWorkflowClass authoring lifecycle over MCP.
+        services.AddScoped<AgentWorkflowClassMcpTools>();
         services.AddScoped<InfoTools>();
         services.AddScoped<AnalysisTools>();
         services.AddScoped<SimulationTools>();
