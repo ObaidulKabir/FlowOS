@@ -173,4 +173,45 @@ describe('WorkflowGraphVisualizer large view', () => {
     expect(within(dialog).getByText('Payer')).toBeInTheDocument();
     expect(within(dialog).getByText('Reviewer')).toBeInTheDocument();
   });
+
+  test('ADR-003: badges an AgentTask step bound to a team, and a HumanTask step with an inline agent', async () => {
+    const agentDefinition = {
+      stateMachine: {
+        entityType: 'Ticket',
+        initialState: 'Open',
+        states: ['Open', 'Triaged'],
+        transitions: [{ fromState: 'Open', toState: 'Triaged', eventId: 'EVT-TRIAGED' }]
+      },
+      workflow: {
+        startStepId: 'Triage',
+        steps: [
+          {
+            stepId: 'Triage',
+            stepType: 'AgentTask',
+            actor: 'Agent',
+            agentTeamId: '11111111-2222-3333-4444-555555555555',
+            agentTeamSlotRole: 'Triager',
+            nextSteps: { 'EVT-TRIAGED': 'Review' }
+          },
+          {
+            stepId: 'Review',
+            stepType: 'HumanTask',
+            actor: 'Either',
+            agentProvider: 'flowos-hosted',
+            nextSteps: { 'EVT-TRIAGED': 'END' }
+          }
+        ]
+      }
+    };
+
+    const start = charts.items.length;
+    render(<WorkflowGraphVisualizer definition={agentDefinition} />);
+    await screen.findAllByText('Step');
+
+    const drawn = charts.items.slice(start);
+    const workflow = drawn.find(chart => chart.startsWith('flowchart TD'));
+    expect(workflow).toContain('🤝 Team · Triager');
+    expect(workflow).toContain('🤖 Agent · flowos-hosted');
+    expect(workflow).toContain('stroke:#f97316');
+  });
 });
