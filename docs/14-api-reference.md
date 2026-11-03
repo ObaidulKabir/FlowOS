@@ -237,6 +237,25 @@ See the full lifecycle diagram and blueprint schema in [Chapter 9 — WorkflowCl
 
 ---
 
+## 8a. AgentWorkflowClasses (declarative agent plans) — `AgentWorkflowClassesController` (`/api/agent-workflow-classes`, `[Authorize]`)
+
+ADR-006 Phase 4A. The agentic counterpart of WorkflowClasses: stores an immutable `AgentWorkflowBlueprint` and versions it. The tenant comes from the caller's identity; a platform administrator may target another tenant with `?tenantId=`.
+
+* `POST /api/agent-workflow-classes` — create a Draft plan (`CreateAgentWorkflowClassCommand`). Body: `{ name, version, definition, previousVersionId?, changeLog? }`. Pass `previousVersionId` to start a new version of a published plan — there is no separate new-version endpoint, because a version is a Draft that names its predecessor. `201 Created`; `400` with `{ Errors: [...] }` if the blueprint fails validation.
+* `PUT /api/agent-workflow-classes/{id}` — update a Draft. `400` once the plan is Published.
+* `GET /api/agent-workflow-classes?status=&skip=&take=` — list the tenant's plans, newest first. `take` is 1–200.
+* `GET /api/agent-workflow-classes/{id}` — one plan including its full blueprint. `404` for another tenant's plan, which is indistinguishable from one that does not exist.
+* `GET /api/agent-workflow-classes/{id}/lineage?maxDepth=` — walk `previousVersionId` backwards, newest first. `maxDepth` is 1–100, default 10.
+* `POST /api/agent-workflow-classes/{id}/publish` — lock the blueprint and make the plan dispatchable (`PublishAgentWorkflowClassCommand`). The blueprint is validated again here, the last gate before it becomes immutable.
+* `POST /api/agent-workflow-classes/{id}/deprecate` — no new executions; existing ones continue. Body: `{ reason?, migrationTargetId? }`.
+* `POST /api/agent-workflow-classes/{id}/abandon` — soft-delete a Published or Deprecated plan. Idempotent; `400` for a Draft, which is deleted instead.
+* `DELETE /api/agent-workflow-classes/{id}` — hard-delete a Draft. `204`; `400` carrying `GOV-DEL-001` (not a Draft) or `GOV-DEL-002` (has executions).
+* `POST /api/agent-workflow-classes/validate` — validate a blueprint without storing it, so an author can check a draft before publishing. Body: `{ definition }`. An invalid blueprint is `200` with the full `ValidationResult`, not a `400` — the author gets every problem at once.
+
+Validation error codes carry an `AWF-` prefix. Dispatch endpoints arrive with the Phase 4B engine; see [Chapter 13](13-mcp-and-ai-agent-integration.md#declarative-ai-agent-workflow-design-adr-006-phase-4a) for the blueprint schema and the step rules.
+
+---
+
 ## 9. Context bindings — `ContextBindingsController` (`/api/context-bindings`, `[Authorize]`)
 
 * `POST /api/context-bindings` — create binding plus draft revision 1.
