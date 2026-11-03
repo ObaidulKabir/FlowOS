@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using FlowOS.Application.Common.Exceptions;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using Microsoft.EntityFrameworkCore;
 using FlowOS.Infrastructure.Persistence;
