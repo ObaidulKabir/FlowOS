@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.Validation;
@@ -18,10 +20,6 @@ namespace FlowOS.Domain.Services;
 ///
 /// Error codes are prefixed <c>AWF-</c> so they never collide with the
 /// <c>WF-</c>/<c>CON-</c> codes emitted for human workflow classes.
-///
-/// This pass covers graph integrity: structure, entry point, reachability, step shape,
-/// routing targets and team binding. Step-level policy checks (autonomy, SLA shape,
-/// path-travel limits, coordination rules) follow separately.
 /// </summary>
 public interface IAgentWorkflowBlueprintValidator
 {
@@ -36,6 +34,8 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
 
     private const string JoinWaitAll = "WaitAll";
     private const string JoinWaitAny = "WaitAny";
+    private const string RollbackAbandon = "Abandon";
+    private const string RollbackCompensate = "Compensate";
 
     public ValidationResult Validate(AgentWorkflowBlueprint? blueprint)
     {
@@ -50,6 +50,8 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
         var steps = blueprint.Steps ?? new List<AgentStepBlueprint>();
 
         ValidateStructure(blueprint, steps, result);
+        ValidateCoordinationRules(blueprint.CoordinationRules, result);
+        ValidateContextSchema(blueprint.ContextSchema, result);
 
         // Everything below needs a usable step-id set. Bail out when the plan has no
         // identifiable steps — further checks would only repeat STR-002/STR-003.
@@ -71,6 +73,9 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
             ValidateStepShape(step, result);
             ValidateRoutingTargets(step, stepIds, result);
             ValidateTeamBinding(step, result);
+            ValidateAutonomy(step, result);
+            ValidateSla(step, stepIds, result);
+            ValidatePathLimits(step, stepIds, result);
 
             if (!reachable.Contains(step.StepId.Trim()))
             {
@@ -449,7 +454,263 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
         }
     }
 
+    // ── Autonomy ──────────────────────────────────────────────────────────────
+
+    private static void ValidateAutonomy(AgentStepBlueprint step, ValidationResult result)
+    {
+        if (step.AutoCommit is null) return;
+
+        // CR-11, mirrored for agent plans: a consequential step is never auto-committed,
+        // whatever the confidence says. Declaring both is an authoring mistake.
+        if (step.Consequential)
+        {
+            result.AddError(
+                "AWF-AGENT-001",
+                "Autonomy",
+                $"Step '{step.StepId}' is consequential but configures autoCommit. " +
+                "An agent may propose on a consequential step, but a person must decide. " +
+                "Remove autoCommit or clear consequential.",
+                "Steps");
+        }
+
+        if (step.AutoCommit.MinConfidence is <= 0 or > 1)
+        {
+            result.AddError(
+                "AWF-AGENT-002",
+                "Autonomy",
+                $"Step '{step.StepId}' autoCommit.minConfidence is " +
+                $"{step.AutoCommit.MinConfidence.ToString(CultureInfo.InvariantCulture)}; " +
+                "use a value greater than 0 and at most 1.",
+                "Steps");
+        }
+
+        var keySet = (step.NextSteps?.Keys ?? Enumerable.Empty<string>())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var allowed in step.AutoCommit.AllowedEvents ?? new List<string>())
+        {
+            if (string.IsNullOrWhiteSpace(allowed)) continue;
+
+            if (!keySet.Contains(allowed.Trim()))
+            {
+                result.AddError(
+                    "AWF-AGENT-003",
+                    "Autonomy",
+                    $"Step '{step.StepId}' autoCommit.allowedEvents includes '{allowed}', which is not a nextSteps key.",
+                    "Steps");
+            }
+
+            if (!string.IsNullOrWhiteSpace(step.Sla?.TimeoutEvent) &&
+                string.Equals(allowed.Trim(), step.Sla!.TimeoutEvent.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError(
+                    "AWF-AGENT-004",
+                    "Autonomy",
+                    $"Step '{step.StepId}' cannot auto-commit its SLA timeout event '{allowed}'. " +
+                    "A breach stays SLA-owned.",
+                    "Steps");
+            }
+        }
+    }
+
+    // ── SLA ───────────────────────────────────────────────────────────────────
+
+    private static void ValidateSla(
+        AgentStepBlueprint step,
+        HashSet<string> stepIds,
+        ValidationResult result)
+    {
+        if (step.Sla is null) return;
+
+        if (string.IsNullOrWhiteSpace(step.Sla.Duration))
+        {
+            result.AddError(
+                "AWF-SLA-001",
+                "Sla",
+                $"Step '{step.StepId}' declares an SLA without a duration.",
+                "Steps");
+        }
+        else if (!IsParsableDuration(step.Sla.Duration))
+        {
+            result.AddError(
+                "AWF-SLA-002",
+                "Sla",
+                $"Step '{step.StepId}' SLA duration '{step.Sla.Duration}' is not a recognised duration. " +
+                "Use an ISO-8601 duration such as 'PT4H', or shorthand such as '30m', '4h', '2d'.",
+                "Steps");
+        }
+
+        if (string.IsNullOrWhiteSpace(step.Sla.TimeoutEvent))
+        {
+            result.AddError(
+                "AWF-SLA-003",
+                "Sla",
+                $"Step '{step.StepId}' declares an SLA without a timeoutEvent — " +
+                "the engine would have no event to publish on breach.",
+                "Steps");
+        }
+
+        if (!string.IsNullOrWhiteSpace(step.Sla.EscalationStepId) &&
+            !IsKnownTarget(step.Sla.EscalationStepId, stepIds))
+        {
+            result.AddError(
+                "AWF-CON-004",
+                "Consistency",
+                $"Step '{step.StepId}' SLA escalates to unknown step '{step.Sla.EscalationStepId}'.",
+                "Steps");
+        }
+    }
+
+    // ── Path limits ───────────────────────────────────────────────────────────
+
+    private static void ValidatePathLimits(
+        AgentStepBlueprint step,
+        HashSet<string> stepIds,
+        ValidationResult result)
+    {
+        if (step.PathLimits is null || step.PathLimits.Count == 0) return;
+
+        var knownKeys = (step.NextSteps?.Keys ?? Enumerable.Empty<string>())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pair in step.PathLimits)
+        {
+            if (!knownKeys.Contains(pair.Key))
+            {
+                result.AddError(
+                    "AWF-CON-005",
+                    "Consistency",
+                    $"Step '{step.StepId}' pathLimits key '{pair.Key}' does not match a nextSteps event.",
+                    "Steps");
+                continue;
+            }
+
+            var limit = pair.Value;
+            if (limit is null) continue;
+
+            if (limit.MaxTravels < 1)
+            {
+                result.AddError(
+                    "AWF-LOOP-001",
+                    "PathTravel",
+                    $"Step '{step.StepId}' pathLimits['{pair.Key}'].maxTravels is {limit.MaxTravels}; it must be at least 1.",
+                    "Steps");
+            }
+
+            if (!string.IsNullOrWhiteSpace(limit.OnExceeded) &&
+                !IsKnownTarget(limit.OnExceeded, stepIds))
+            {
+                result.AddError(
+                    "AWF-CON-006",
+                    "Consistency",
+                    $"Step '{step.StepId}' pathLimits['{pair.Key}'].onExceeded '{limit.OnExceeded}' is not a known step.",
+                    "Steps");
+            }
+        }
+    }
+
+    // ── Coordination rules ───────────────────────────────────────────────────
+
+    private static void ValidateCoordinationRules(
+        AgentCoordinationRulesBlueprint? rules,
+        ValidationResult result)
+    {
+        if (rules is null) return;
+
+        if (rules.MaxGlobalRetries < 0)
+        {
+            result.AddError(
+                "AWF-RULE-001",
+                "CoordinationRules",
+                $"coordinationRules.maxGlobalRetries is {rules.MaxGlobalRetries}; it cannot be negative.",
+                "CoordinationRules");
+        }
+
+        if (!string.Equals(rules.RollbackStrategy, RollbackAbandon, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(rules.RollbackStrategy, RollbackCompensate, StringComparison.OrdinalIgnoreCase))
+        {
+            result.AddError(
+                "AWF-RULE-002",
+                "CoordinationRules",
+                $"coordinationRules.rollbackStrategy '{rules.RollbackStrategy}' is unknown. " +
+                $"Allowed values: {RollbackAbandon}, {RollbackCompensate}.",
+                "CoordinationRules");
+        }
+
+        if (rules.MaxParallelSteps < 0)
+        {
+            result.AddError(
+                "AWF-RULE-003",
+                "CoordinationRules",
+                $"coordinationRules.maxParallelSteps is {rules.MaxParallelSteps}; use 0 for unlimited.",
+                "CoordinationRules");
+        }
+
+        if (!string.IsNullOrWhiteSpace(rules.GlobalSla) && !IsParsableDuration(rules.GlobalSla))
+        {
+            result.AddError(
+                "AWF-RULE-004",
+                "CoordinationRules",
+                $"coordinationRules.globalSla '{rules.GlobalSla}' is not a recognised duration. " +
+                "Use an ISO-8601 duration such as 'PT8H'.",
+                "CoordinationRules");
+        }
+    }
+
+    private static void ValidateContextSchema(string? contextSchema, ValidationResult result)
+    {
+        if (string.IsNullOrWhiteSpace(contextSchema)) return;
+
+        try
+        {
+            using var parsed = JsonDocument.Parse(contextSchema);
+        }
+        catch (JsonException)
+        {
+            result.AddError(
+                "AWF-SCHEMA-001",
+                "ContextSchema",
+                "contextSchema is not valid JSON.",
+                "Blueprint");
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Accepts the duration shapes the existing workflow engine already parses
+    /// (<c>WorkflowCommandHandlers.ParseDuration</c>): an ISO-8601 duration, the
+    /// shorthand forms <c>90s</c> / <c>30m</c> / <c>4h</c> / <c>2d</c>, a bare number of
+    /// seconds, and <c>hh:mm:ss</c>. Validating more strictly than the engine parses
+    /// would reject blueprints that run correctly.
+    /// </summary>
+    private static bool IsParsableDuration(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var text = value.Trim();
+        if (text.StartsWith('-') || text.StartsWith('+')) text = text[1..].Trim();
+        if (text.Length == 0) return false;
+
+        var suffix = text[^1];
+        if (suffix is 's' or 'S' or 'm' or 'M' or 'h' or 'H' or 'd' or 'D')
+        {
+            var head = text[..^1];
+            if (double.TryParse(head, NumberStyles.Float, CultureInfo.InvariantCulture, out _)) return true;
+        }
+
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out _)) return true;
+        if (text.Contains(':') && TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out _)) return true;
+
+        try
+        {
+            System.Xml.XmlConvert.ToTimeSpan(text);
+            return true;
+        }
+        catch (FormatException) { return false; }
+        catch (OverflowException) { return false; }
+        catch (ArgumentException) { return false; }
+    }
 
     private static bool IsKnownTarget(string? target, HashSet<string> stepIds) =>
         !string.IsNullOrWhiteSpace(target) &&
