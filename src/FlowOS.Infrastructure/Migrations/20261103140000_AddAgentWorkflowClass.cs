@@ -38,7 +38,7 @@ namespace FlowOS.Infrastructure.Migrations
                     ChangeLog = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                     DeprecationReason = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                     DeprecationMigrationTargetId = table.Column<Guid>(type: "uuid", nullable: true),
-                    FlowOsVersion = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false, defaultValue: "0.0.0-dev"),
+                    FlowOsVersion = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false, defaultValue: "1.1.0"),
                     Definition = table.Column<string>(type: "jsonb", nullable: false)
                 },
                 constraints: table =>

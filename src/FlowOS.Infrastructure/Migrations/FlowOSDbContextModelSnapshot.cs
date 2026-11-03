@@ -2619,6 +2619,7 @@ namespace FlowOS.Infrastructure.Migrations
                     b.Property<string>("FlowOsVersion")
                         .IsRequired()
                         .HasMaxLength(32)
+                        .HasDefaultValue("1.1.0")
                         .HasColumnType("character varying(32)");
 
                     b.Property<string>("Name")
