@@ -70,9 +70,7 @@ public class AgentTeamActorBindingTests
     [Fact]
     public void TeamIdOnNonAgentTaskStepType_AddsAgent008()
     {
-        var step = AgentTaskStep(teamId: Guid.NewGuid());
-        step.StepType = "HumanTask";
-        step.Actor = "Agent";
+        var step = AgentTaskStep(teamId: Guid.NewGuid()) with { StepType = "HumanTask", Actor = "Agent" };
 
         var errors = new WorkflowClassValidator().Validate(Blueprint(step)).Errors;
 
