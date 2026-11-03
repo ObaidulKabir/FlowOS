@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.Entities.Orchestration;
 using FlowOS.Domain.Enums;
 using FlowOS.Domain.Validation;
 
@@ -458,6 +459,26 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
 
     private static void ValidateAutonomy(AgentStepBlueprint step, ValidationResult result)
     {
+        // Checked before anything else and regardless of what else the step declares:
+        // this is the field that caps what an agent may do, so an unrecognised value
+        // must not reach a published blueprint. AgentTeam.MaxAutonomyLevel is the typed
+        // AgentAutonomyLevel; the blueprint carries a string, so the vocabulary is
+        // enforced here instead of by the type system.
+        //
+        // The declaration is documented as overriding the team's ceiling "when more
+        // restrictive". That direction cannot be checked yet — a step references its team
+        // by a free-string role that resolves to nothing (ADR-007). This validates the
+        // value only; enforcing downward-only arrives with AgentTeamBlueprint.
+        if (!string.IsNullOrWhiteSpace(step.MaxAutonomyLevel) && !IsKnownAutonomyLevel(step.MaxAutonomyLevel))
+        {
+            result.AddError(
+                "AWF-AGENT-005",
+                "Autonomy",
+                $"Step '{step.StepId}' has unknown maxAutonomyLevel '{step.MaxAutonomyLevel}'. " +
+                $"Allowed values: {string.Join(", ", Enum.GetNames<AgentAutonomyLevel>())}.",
+                "Steps");
+        }
+
         if (step.AutoCommit is null) return;
 
         // CR-11, mirrored for agent plans: a consequential step is never auto-committed,
@@ -711,6 +732,15 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
         catch (OverflowException) { return false; }
         catch (ArgumentException) { return false; }
     }
+
+    /// <summary>
+    /// True when the value names a defined <see cref="AgentAutonomyLevel"/>.
+    /// <c>Enum.TryParse</c> alone is not enough: it accepts any numeric string, so "99"
+    /// would parse to an undefined member. <c>Enum.IsDefined</c> closes that.
+    /// </summary>
+    private static bool IsKnownAutonomyLevel(string value) =>
+        Enum.TryParse<AgentAutonomyLevel>(value.Trim(), ignoreCase: true, out var level) &&
+        Enum.IsDefined(level);
 
     private static bool IsKnownTarget(string? target, HashSet<string> stepIds) =>
         !string.IsNullOrWhiteSpace(target) &&

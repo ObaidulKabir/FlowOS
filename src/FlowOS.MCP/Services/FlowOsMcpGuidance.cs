@@ -1639,6 +1639,12 @@ public static class FlowOsMcpGuidance
           review, and every entry in `autoCommit.allowedEvents` must be a `nextSteps` key. An SLA
           `timeoutEvent` can never be auto-committed — a breach stays SLA-owned.
         - An `sla` needs both `duration` and `timeoutEvent`.
+        - `maxAutonomyLevel`, when set, must be one of `Advisory`, `Supervised`,
+          `GovernnedAutonomous` or `AdaptiveAutonomous` — note the spelling of the third.
+          Omit it to inherit the AgentTeam's ceiling, which is the usual case. It is
+          documented as narrowing the team's ceiling, never widening it; today only the
+          value is checked, because a step's team binding resolves to nothing until
+          ADR-007 lands.
 
         ## Validation
 
@@ -1678,6 +1684,7 @@ public static class FlowOsMcpGuidance
         | `AWF-AGENT-002` | `autoCommit.minConfidence` outside (0, 1] |
         | `AWF-AGENT-003` | `autoCommit.allowedEvents` entry is not a `nextSteps` key |
         | `AWF-AGENT-004` | `autoCommit` of the SLA `timeoutEvent` |
+        | `AWF-AGENT-005` | Unknown `maxAutonomyLevel` |
         | `AWF-SLA-001` | `sla` without a `duration` |
         | `AWF-SLA-002` | `sla.duration` is not a recognised duration |
         | `AWF-SLA-003` | `sla` without a `timeoutEvent` |

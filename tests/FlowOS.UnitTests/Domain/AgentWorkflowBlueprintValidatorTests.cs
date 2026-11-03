@@ -650,6 +650,59 @@ public class AgentWorkflowBlueprintValidatorTests
         AssertHasError(Validator.Validate(plan with { Steps = steps }), "AWF-AGENT-004");
     }
 
+    // ── Autonomy ceiling ──────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Advisory")]
+    [InlineData("Supervised")]
+    [InlineData("GovernnedAutonomous")]
+    [InlineData("AdaptiveAutonomous")]
+    [InlineData("supervised")]
+    public void KnownAutonomyLevels_AreAccepted(string level)
+    {
+        var plan = ValidPlan();
+        var steps = plan.Steps.ToList();
+        steps[0] = steps[0] with { MaxAutonomyLevel = level };
+
+        AssertNoError(Validator.Validate(plan with { Steps = steps }), "AWF-AGENT-005");
+    }
+
+    [Theory]
+    [InlineData("Supervizd")]
+    [InlineData("FullyAutonomous")]
+    [InlineData("99")]
+    public void UnknownAutonomyLevel_AddsAgent005(string level)
+    {
+        // The field exists to cap what an agent may do, so an unrecognised value must not
+        // reach a published blueprint. "99" parses as an enum but names no member.
+        var plan = ValidPlan();
+        var steps = plan.Steps.ToList();
+        steps[0] = steps[0] with { MaxAutonomyLevel = level };
+
+        AssertHasError(Validator.Validate(plan with { Steps = steps }), "AWF-AGENT-005");
+    }
+
+    [Fact]
+    public void OmittedAutonomyLevel_IsAccepted()
+    {
+        // Absent means "inherit the team's ceiling", which is the common case.
+        var result = Validator.Validate(ValidPlan());
+        AssertNoError(result, "AWF-AGENT-005");
+        Assert.True(result.IsValid, Describe(result));
+    }
+
+    [Fact]
+    public void UnknownAutonomyLevel_IsCheckedEvenWithoutAutoCommit()
+    {
+        // Regression guard: the autonomy check must not sit behind the autoCommit
+        // early return, since most steps declare no autoCommit at all.
+        var plan = ValidPlan();
+        var steps = plan.Steps.ToList();
+        steps[0] = steps[0] with { MaxAutonomyLevel = "Supervizd", AutoCommit = null };
+
+        AssertHasError(Validator.Validate(plan with { Steps = steps }), "AWF-AGENT-005");
+    }
+
     // ── SLA ───────────────────────────────────────────────────────────────────
 
     [Fact]
