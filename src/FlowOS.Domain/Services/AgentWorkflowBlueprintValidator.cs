@@ -80,6 +80,7 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
         if (stepIds.Count == 0) return result;
 
         ValidateEntryPoint(blueprint, stepIds, result);
+        ValidateConstraints(blueprint, declaredRoles, stepIds, result);
 
         var reachable = WalkReachableSteps(blueprint, steps, stepIds);
 
@@ -491,6 +492,166 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
                 "Governance",
                 $"Role '{duplicate}' is declared more than once. Role names must be unique within a plan.",
                 "Roles");
+        }
+    }
+
+    // ── Separation of duties (ADR-007) ────────────────────────────────────────
+
+    private const string AssigneeSuffix = ".assignee";
+
+    /// <summary>
+    /// Structural validation only: the rule is known, the arity fits it, and every
+    /// reference resolves to a declared role or a step in this plan. Whether the actual
+    /// holders satisfy the relationship is an assignment-time question, because that is
+    /// the first moment the holders exist.
+    /// </summary>
+    private static void ValidateConstraints(
+        AgentWorkflowBlueprint blueprint,
+        HashSet<string> declaredRoles,
+        HashSet<string> stepIds,
+        ValidationResult result)
+    {
+        var constraints = blueprint.Constraints ?? new List<AssignmentConstraintBlueprint>();
+
+        for (var i = 0; i < constraints.Count; i++)
+        {
+            var constraint = constraints[i];
+            if (constraint is null) continue;
+
+            var label = $"constraint #{i + 1}";
+            var references = (constraint.Between ?? new List<string>())
+                .Select(r => r?.Trim() ?? string.Empty)
+                .ToList();
+
+            if (!AssignmentConstraintRules.IsKnown(constraint.Rule))
+            {
+                result.AddError(
+                    "AWF-SOD-001",
+                    "DutySeparation",
+                    $"{label} has unknown rule '{constraint.Rule}'. Allowed values: " +
+                    $"{AssignmentConstraintRules.Distinct}, {AssignmentConstraintRules.NotSubjectOf}, " +
+                    $"{AssignmentConstraintRules.SeniorTo}.",
+                    "Constraints");
+            }
+            else
+            {
+                ValidateConstraintArity(constraint, references, label, result);
+            }
+
+            foreach (var reference in references)
+            {
+                ValidateConstraintReference(reference, label, declaredRoles, stepIds, result);
+            }
+        }
+    }
+
+    private static void ValidateConstraintArity(
+        AssignmentConstraintBlueprint constraint,
+        List<string> references,
+        string label,
+        ValidationResult result)
+    {
+        var distinctCount = references
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        if (string.Equals(constraint.Rule, AssignmentConstraintRules.Distinct, StringComparison.OrdinalIgnoreCase))
+        {
+            // Fewer than two *distinct* references makes the rule unsatisfiable rather
+            // than merely redundant: "X must differ from X" can never hold.
+            if (distinctCount < 2)
+            {
+                result.AddError(
+                    "AWF-SOD-002",
+                    "DutySeparation",
+                    $"{label} is '{AssignmentConstraintRules.Distinct}' but names {distinctCount} " +
+                    "distinct assignment(s); it needs at least 2.",
+                    "Constraints");
+            }
+
+            return;
+        }
+
+        if (string.Equals(constraint.Rule, AssignmentConstraintRules.NotSubjectOf, StringComparison.OrdinalIgnoreCase))
+        {
+            if (references.Count != 1 || string.IsNullOrWhiteSpace(constraint.Subject))
+            {
+                result.AddError(
+                    "AWF-SOD-003",
+                    "DutySeparation",
+                    $"{label} is '{AssignmentConstraintRules.NotSubjectOf}' and needs exactly one " +
+                    "assignment in 'between' plus a 'subject' expression identifying who to exclude.",
+                    "Constraints");
+            }
+
+            return;
+        }
+
+        if (references.Count != 2)
+        {
+            result.AddError(
+                "AWF-SOD-004",
+                "DutySeparation",
+                $"{label} is '{AssignmentConstraintRules.SeniorTo}' and needs exactly two " +
+                $"assignments; it names {references.Count}.",
+                "Constraints");
+        }
+    }
+
+    private static void ValidateConstraintReference(
+        string reference,
+        string label,
+        HashSet<string> declaredRoles,
+        HashSet<string> stepIds,
+        ValidationResult result)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            result.AddError(
+                "AWF-CON-008",
+                "Consistency",
+                $"{label} names an empty assignment reference.",
+                "Constraints");
+            return;
+        }
+
+        // Per-role instances ("Marker#0") are not implemented, so the form is rejected
+        // rather than read as a role literally named with a '#'.
+        if (reference.Contains('#'))
+        {
+            result.AddError(
+                "AWF-CON-008",
+                "Consistency",
+                $"{label} names '{reference}'. Instance-qualified references are not supported " +
+                "yet — per-role instances do not exist. Name the role or '<stepId>.assignee'.",
+                "Constraints");
+            return;
+        }
+
+        if (reference.EndsWith(AssigneeSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            var stepId = reference[..^AssigneeSuffix.Length].Trim();
+            if (!stepIds.Contains(stepId))
+            {
+                result.AddError(
+                    "AWF-CON-008",
+                    "Consistency",
+                    $"{label} names assignee of unknown step '{stepId}'.",
+                    "Constraints");
+            }
+
+            return;
+        }
+
+        if (!declaredRoles.Contains(reference))
+        {
+            result.AddError(
+                "AWF-CON-008",
+                "Consistency",
+                $"{label} names undeclared role '{reference}'. Declare it in the plan's roles, " +
+                "or reference a step's assignee as '<stepId>.assignee'.",
+                "Constraints");
         }
     }
 
