@@ -75,6 +75,8 @@ builder.Services.AddSingleton<StateMachineEngine>();
 
 builder.Services.AddScoped<FlowOS.Domain.Services.WorkflowClassValidator>();
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassValidator, FlowOS.Domain.Services.WorkflowClassValidator>();
+// ADR-006: structural validation for declarative agent plans.
+builder.Services.AddScoped<FlowOS.Domain.Services.IAgentWorkflowBlueprintValidator, FlowOS.Domain.Services.AgentWorkflowBlueprintValidator>();
 builder.Services.AddScoped<IWorkflowJsonLinter, WorkflowJsonLinter>();
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassManager, FlowOS.Domain.Services.WorkflowClassManager>();
 builder.Services.AddScoped<FlowOS.Domain.Services.IWorkflowClassVersionManager, FlowOS.Domain.Services.WorkflowClassVersionManager>();

@@ -6,7 +6,10 @@ using System.Threading.Tasks;
 using FlowOS.Application.Commands.Orchestration;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.DTOs.Orchestration;
+using FlowOS.Domain.Blueprints;
 using FlowOS.Domain.Entities.Orchestration;
+using FlowOS.Domain.Services;
+using FlowOS.Domain.Validation;
 using MediatR;
 
 namespace FlowOS.Application.Handlers.Orchestration;
@@ -17,6 +20,9 @@ namespace FlowOS.Application.Handlers.Orchestration;
 ///
 /// CR-08: all DateTime values come from the injected <see cref="TimeProvider"/>;
 /// no direct clock calls anywhere in this file.
+///
+/// A Published plan is immutable and dispatchable, so the blueprint is validated on the
+/// way in (Create, UpdateDraft) and again at Publish — the last gate before it locks.
 /// </summary>
 public sealed class AgentWorkflowClassHandlers :
     IRequestHandler<CreateAgentWorkflowClassCommand, AgentWorkflowClassResponseDto>,
@@ -25,17 +31,23 @@ public sealed class AgentWorkflowClassHandlers :
     IRequestHandler<DeprecateAgentWorkflowClassCommand, AgentWorkflowClassResponseDto>,
     IRequestHandler<AbandonAgentWorkflowClassCommand, AgentWorkflowClassResponseDto>,
     IRequestHandler<DeleteAgentWorkflowClassCommand, Unit>,
+    IRequestHandler<ValidateAgentWorkflowBlueprintCommand, ValidationResult>,
     IRequestHandler<GetAgentWorkflowClassQuery, AgentWorkflowClassResponseDto?>,
     IRequestHandler<ListAgentWorkflowClassesQuery, IReadOnlyList<AgentWorkflowClassResponseDto>>,
     IRequestHandler<GetAgentWorkflowClassLineageQuery, IReadOnlyList<AgentWorkflowClassResponseDto>>
 {
     private readonly IUnitOfWork _uow;
     private readonly TimeProvider _time;
+    private readonly IAgentWorkflowBlueprintValidator _validator;
 
-    public AgentWorkflowClassHandlers(IUnitOfWork uow, TimeProvider time)
+    public AgentWorkflowClassHandlers(
+        IUnitOfWork uow,
+        TimeProvider time,
+        IAgentWorkflowBlueprintValidator validator)
     {
         _uow = uow;
         _time = time;
+        _validator = validator;
     }
 
     // ── Write handlers ─────────────────────────────────────────────────────────
@@ -43,6 +55,8 @@ public sealed class AgentWorkflowClassHandlers :
     public async Task<AgentWorkflowClassResponseDto> Handle(
         CreateAgentWorkflowClassCommand request, CancellationToken cancellationToken)
     {
+        EnsureBlueprintValid(request.Definition);
+
         var now = _time.GetUtcNow().UtcDateTime;
         var plan = new AgentWorkflowClass(
             request.TenantId,
@@ -60,6 +74,8 @@ public sealed class AgentWorkflowClassHandlers :
     public async Task<AgentWorkflowClassResponseDto> Handle(
         UpdateAgentWorkflowClassDraftCommand request, CancellationToken cancellationToken)
     {
+        EnsureBlueprintValid(request.Definition);
+
         var plan = await RequireOwnedAsync(request.TenantId, request.Id, cancellationToken);
         plan.UpdateDraft(request.Name, request.Version, request.Definition, request.ChangeLog);
         await _uow.AgentWorkflowClasses.UpdateAsync(plan, cancellationToken);
@@ -70,6 +86,10 @@ public sealed class AgentWorkflowClassHandlers :
         PublishAgentWorkflowClassCommand request, CancellationToken cancellationToken)
     {
         var plan = await RequireOwnedAsync(request.TenantId, request.Id, cancellationToken);
+
+        // Last gate: publishing locks the blueprint and makes it dispatchable.
+        EnsureBlueprintValid(plan.Definition);
+
         plan.Publish(_time.GetUtcNow().UtcDateTime);
         await _uow.AgentWorkflowClasses.UpdateAsync(plan, cancellationToken);
         return Map(plan);
@@ -105,6 +125,14 @@ public sealed class AgentWorkflowClassHandlers :
         return Unit.Value;
     }
 
+    /// <summary>
+    /// Validate a blueprint without storing it. Returns the result instead of throwing,
+    /// so the dashboard can show every problem at once before the author publishes.
+    /// </summary>
+    public Task<ValidationResult> Handle(
+        ValidateAgentWorkflowBlueprintCommand request, CancellationToken cancellationToken) =>
+        Task.FromResult(_validator.Validate(request.Definition));
+
     // ── Query handlers ─────────────────────────────────────────────────────────
 
     public async Task<AgentWorkflowClassResponseDto?> Handle(
@@ -133,6 +161,13 @@ public sealed class AgentWorkflowClassHandlers :
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
+    private void EnsureBlueprintValid(AgentWorkflowBlueprint? definition)
+    {
+        var result = _validator.Validate(definition);
+        if (!result.IsValid)
+            throw new AgentWorkflowClassValidationException(result);
+    }
+
     private async Task<AgentWorkflowClass> RequireOwnedAsync(
         Guid tenantId, Guid id, CancellationToken ct)
     {
@@ -160,4 +195,26 @@ public sealed class AgentWorkflowClassHandlers :
             FlowOsVersion = p.FlowOsVersion,
             Definition = p.Definition,
         };
+}
+
+/// <summary>
+/// Thrown when an <see cref="AgentWorkflowBlueprint"/> fails structural validation.
+/// Mirrors <c>WorkflowClassValidationException</c>; carries every error so the caller
+/// can show them all rather than one at a time.
+/// </summary>
+public sealed class AgentWorkflowClassValidationException : Exception
+{
+    public ValidationResult ValidationResult { get; }
+
+    public AgentWorkflowClassValidationException(ValidationResult validationResult)
+        : base(BuildMessage(validationResult))
+    {
+        ValidationResult = validationResult;
+    }
+
+    private static string BuildMessage(ValidationResult result)
+    {
+        var detail = string.Join("; ", result.Errors.Select(e => $"{e.Code}: {e.Message}"));
+        return $"AgentWorkflowClass blueprint is invalid. {detail}";
+    }
 }
