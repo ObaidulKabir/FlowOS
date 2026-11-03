@@ -37,6 +37,20 @@ public record AgentWorkflowBlueprint
     public AgentCoordinationRulesBlueprint CoordinationRules { get; init; } = new();
 
     /// <summary>
+    /// ADR-007: capabilities this plan declares. A step or role may only require a
+    /// capability named here, so a typo cannot widen what the plan permits.
+    /// Reuses <see cref="CapabilityBlueprint"/> from the human workflow pack.
+    /// </summary>
+    public List<CapabilityBlueprint> Capabilities { get; init; } = new();
+
+    /// <summary>
+    /// ADR-007: human business roles a <see cref="AgentStepType.HumanTask"/> step may be
+    /// assigned to. Reuses <see cref="RoleBlueprint"/>, including its resolution
+    /// strategies, rather than inventing a second role model.
+    /// </summary>
+    public List<RoleBlueprint> Roles { get; init; } = new();
+
+    /// <summary>
     /// JSON Schema for the shared working memory passed between steps.
     /// Validated by the engine on each step handoff.
     /// </summary>
@@ -66,6 +80,28 @@ public record AgentStepBlueprint
 
     /// <summary>Human-readable purpose of this step.</summary>
     public string Description { get; init; } = string.Empty;
+
+    /// <summary>
+    /// ADR-007: who may complete this step — see <see cref="StepActor"/>: "Human",
+    /// "Agent" or "Either". Defaults to "Agent", which is the common case in an agent
+    /// plan. A <see cref="Consequential"/> step must be completable by a person, so its
+    /// actor must be "Human" or "Either", or it must be a HumanTask.
+    /// </summary>
+    public string Actor { get; init; } = StepActor.Agent;
+
+    /// <summary>
+    /// ADR-007: for a HumanTask, the declared <see cref="AgentWorkflowBlueprint.Roles"/>
+    /// entry whose holders may complete it. Not used on agent steps, which bind a team
+    /// instead.
+    /// </summary>
+    public string? Role { get; init; }
+
+    /// <summary>
+    /// ADR-007: capabilities required to complete this step. Each must be declared in
+    /// <see cref="AgentWorkflowBlueprint.Capabilities"/>. This is the execution gate;
+    /// <see cref="Role"/> determines whose inbox the task appears in.
+    /// </summary>
+    public List<string> RequiredCapabilities { get; init; } = new();
 
     // ── Team binding ─────────────────────────────────────────────────────────
 

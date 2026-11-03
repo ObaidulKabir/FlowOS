@@ -54,6 +54,22 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
         ValidateCoordinationRules(blueprint.CoordinationRules, result);
         ValidateContextSchema(blueprint.ContextSchema, result);
 
+        // ADR-007: the declared governance vocabulary. Built before the per-step loop
+        // because steps and roles are checked against it.
+        var declaredCapabilities = (blueprint.Capabilities ?? new List<CapabilityBlueprint>())
+            .Select(c => c.Code)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var declaredRoles = (blueprint.Roles ?? new List<RoleBlueprint>())
+            .Select(r => r.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        ValidateGovernanceDeclarations(blueprint, declaredCapabilities, result);
+
         // Everything below needs a usable step-id set. Bail out when the plan has no
         // identifiable steps — further checks would only repeat STR-002/STR-003.
         var stepIds = steps
@@ -74,6 +90,7 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
             ValidateStepShape(step, result);
             ValidateRoutingTargets(step, stepIds, result);
             ValidateTeamBinding(step, result);
+            ValidateHumanGate(step, declaredRoles, declaredCapabilities, result);
             ValidateAutonomy(step, result);
             ValidateSla(step, stepIds, result);
             ValidatePathLimits(step, stepIds, result);
@@ -433,11 +450,155 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
         }
     }
 
+    // ── Governance declarations (ADR-007) ─────────────────────────────────────
+
+    private static void ValidateGovernanceDeclarations(
+        AgentWorkflowBlueprint blueprint,
+        HashSet<string> declaredCapabilities,
+        ValidationResult result)
+    {
+        var roles = blueprint.Roles ?? new List<RoleBlueprint>();
+
+        foreach (var role in roles)
+        {
+            if (string.IsNullOrWhiteSpace(role.Name)) continue;
+
+            foreach (var granted in role.GrantedCapabilities ?? new List<string>())
+            {
+                if (string.IsNullOrWhiteSpace(granted)) continue;
+
+                if (!declaredCapabilities.Contains(granted.Trim()))
+                {
+                    result.AddError(
+                        "AWF-GOV-002",
+                        "Governance",
+                        $"Role '{role.Name}' grants undeclared capability '{granted}'.",
+                        "Roles");
+                }
+            }
+        }
+
+        var duplicates = roles
+            .Where(r => !string.IsNullOrWhiteSpace(r.Name))
+            .GroupBy(r => r.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key);
+
+        foreach (var duplicate in duplicates)
+        {
+            result.AddError(
+                "AWF-GOV-003",
+                "Governance",
+                $"Role '{duplicate}' is declared more than once. Role names must be unique within a plan.",
+                "Roles");
+        }
+    }
+
+    // ── Human gate (ADR-007) ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// The rules that make <c>Consequential</c> operative. A consequential step declares
+    /// that an agent may propose but never commit; if no person can complete it either,
+    /// the step can never advance and every execution would deadlock there.
+    /// </summary>
+    private static void ValidateHumanGate(
+        AgentStepBlueprint step,
+        HashSet<string> declaredRoles,
+        HashSet<string> declaredCapabilities,
+        ValidationResult result)
+    {
+        var stepType = AgentStepType.Normalize(step.StepType);
+        var isHumanTask = AgentStepType.IsHumanTask(stepType);
+
+        if (!StepActor.IsKnown(step.Actor))
+        {
+            result.AddError(
+                "AWF-STR-006",
+                "Structural",
+                $"Step '{step.StepId}' has invalid actor '{step.Actor}'. " +
+                $"Allowed values: {StepActor.Human}, {StepActor.Agent}, {StepActor.Either}.",
+                "Steps");
+        }
+
+        foreach (var capability in step.RequiredCapabilities ?? new List<string>())
+        {
+            if (string.IsNullOrWhiteSpace(capability)) continue;
+
+            if (!declaredCapabilities.Contains(capability.Trim()))
+            {
+                result.AddError(
+                    "AWF-GOV-001",
+                    "Governance",
+                    $"Step '{step.StepId}' requires undeclared capability '{capability}'.",
+                    "Steps");
+            }
+        }
+
+        if (isHumanTask)
+        {
+            if (string.IsNullOrWhiteSpace(step.Role))
+            {
+                result.AddError(
+                    "AWF-HUMAN-001",
+                    "HumanGate",
+                    $"HumanTask step '{step.StepId}' declares no role — the plan would have " +
+                    "no way to route the decision to anyone.",
+                    "Steps");
+            }
+            else if (!declaredRoles.Contains(step.Role.Trim()))
+            {
+                result.AddError(
+                    "AWF-HUMAN-002",
+                    "HumanGate",
+                    $"HumanTask step '{step.StepId}' routes to undeclared role '{step.Role}'. " +
+                    "Declare it in the plan's roles.",
+                    "Steps");
+            }
+
+            if (!string.IsNullOrWhiteSpace(step.TeamRole) ||
+                (step.AgentTeamId.HasValue && step.AgentTeamId.Value != Guid.Empty))
+            {
+                result.AddError(
+                    "AWF-HUMAN-003",
+                    "HumanGate",
+                    $"HumanTask step '{step.StepId}' also binds an agent team. A step is " +
+                    "carried out by a person or by an agent team, never both.",
+                    "Steps");
+            }
+
+            return;
+        }
+
+        // Not a HumanTask: a consequential step must still be completable by a person.
+        // Fork, Join and End are control nodes and commit nothing, so they are exempt.
+        if (!step.Consequential) return;
+        if (AgentStepType.IsFork(stepType) || AgentStepType.IsJoin(stepType) || AgentStepType.IsEnd(stepType)) return;
+
+        if (!StepActor.IsKnown(step.Actor)) return;   // already reported as AWF-STR-006
+
+        // Blank means Agent here, which is this record's default. StepActor.Normalize is
+        // deliberately not used: it maps blank to Human, which is right for a human
+        // workflow step and wrong for an agent plan step.
+        var actor = string.IsNullOrWhiteSpace(step.Actor) ? StepActor.Agent : step.Actor.Trim();
+
+        if (string.Equals(actor, StepActor.Agent, StringComparison.OrdinalIgnoreCase))
+        {
+            result.AddError(
+                "AWF-AGENT-006",
+                "Autonomy",
+                $"Step '{step.StepId}' is consequential but its actor is '{StepActor.Agent}', " +
+                "so an agent may never commit it and no person may complete it — the step " +
+                $"could never advance. Set actor to '{StepActor.Either}' or '{StepActor.Human}', " +
+                $"or make it a '{AgentStepType.HumanTask}' step routed to a declared role.",
+                "Steps");
+        }
+    }
+
     // ── Team binding ──────────────────────────────────────────────────────────
 
     private static void ValidateTeamBinding(AgentStepBlueprint step, ValidationResult result)
     {
-        // Fork, Join and End are engine-side control nodes; no team carries them out.
+        // Fork, Join, End and HumanTask are not carried out by an agent team.
         var stepType = AgentStepType.Normalize(step.StepType);
         if (!string.Equals(stepType, AgentStepType.Agent, StringComparison.OrdinalIgnoreCase)) return;
 

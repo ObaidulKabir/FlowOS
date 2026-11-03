@@ -26,12 +26,23 @@ public static class AgentStepType
     /// <summary>Terminal node. Declares no outbound routing.</summary>
     public const string End = "End";
 
+    /// <summary>
+    /// ADR-007: a decision a person makes. This is what a <c>Consequential</c> step hands
+    /// off to — without it, declaring that an agent must not commit a step left the plan
+    /// with no way to name who commits it instead.
+    /// </summary>
+    public const string HumanTask = "HumanTask";
+
     public static bool IsKnown(string? value) =>
         string.IsNullOrWhiteSpace(value) ||
         string.Equals(value, Agent, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(value, Fork, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(value, Join, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, End, StringComparison.OrdinalIgnoreCase);
+        string.Equals(value, End, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, HumanTask, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsHumanTask(string? value) =>
+        string.Equals(value, HumanTask, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsFork(string? value) =>
         string.Equals(value, Fork, StringComparison.OrdinalIgnoreCase);
