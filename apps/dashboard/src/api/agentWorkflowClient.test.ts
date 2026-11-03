@@ -81,6 +81,16 @@ describe('agentWorkflowApi', () => {
     expect(url).not.toContain('status=');
   });
 
+  test('list falls back to the raw number for a status outside the enum', async () => {
+    // Defensive: a numeric enum lookup misses for an out-of-range value, and the
+    // API binds the number as readily as the name.
+    const fetchMock = mockFetch('[]');
+
+    await agentWorkflowApi.list(99 as WorkflowClassStatus);
+
+    expect(urlOf(fetchMock)).toContain('status=99');
+  });
+
   test('list sends the API key with the active tenant', async () => {
     const fetchMock = mockFetch('[]');
 

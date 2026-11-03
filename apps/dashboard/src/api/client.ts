@@ -1079,8 +1079,8 @@ const AGENT_WORKFLOW_BASE = '/api/agent-workflow-classes';
 
 /** For endpoints that answer 204 No Content: there is no body to parse. */
 const handleEmptyResponse = async (response: Response, errorMessage: string): Promise<void> => {
-  if (response.ok) return;
-  await handleResponse(response, errorMessage);
+  // handleResponse throws on failure; on success there is nothing to read.
+  if (!response.ok) await handleResponse(response, errorMessage);
 };
 
 export const agentWorkflowApi = {
