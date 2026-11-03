@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using FlowOS.Application.Common.Exceptions;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using Microsoft.EntityFrameworkCore;
 using FlowOS.Infrastructure.Persistence;
@@ -27,6 +28,7 @@ public class UnitOfWork : IUnitOfWork
         Policies = new PolicyRepository(context);
         WorkflowContextBindings = new WorkflowContextBindingRepository(context);
         WorkflowContextSnapshots = new WorkflowContextSnapshotRepository(context);
+        TeamExecutions = new TeamExecutionRepository(context);  // ADR-005 Phase 3
     }
 
     public IWorkflowInstanceRepository WorkflowInstances { get; }
@@ -41,6 +43,9 @@ public class UnitOfWork : IUnitOfWork
     public IPolicyRepository Policies { get; }
     public IWorkflowContextBindingRepository WorkflowContextBindings { get; }
     public IWorkflowContextSnapshotRepository WorkflowContextSnapshots { get; }
+
+    /// <summary>ADR-005 Phase 3: TeamExecution runtime records.</summary>
+    public ITeamExecutionRepository TeamExecutions { get; }
 
     /// <summary>
     /// Saves all changes. A lost optimistic-concurrency race (for example two events applied to the

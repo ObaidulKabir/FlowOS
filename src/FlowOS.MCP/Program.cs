@@ -805,6 +805,7 @@ public partial class Program
         services.AddScoped<ExternalAgentChangeFeedMcpTools>();
         services.AddScoped<ChangeFeedMcpTools>();
         services.AddScoped<ExternalAgentPlanMcpTools>();
+        services.AddScoped<StrategicPlanMcpTools>(); // ADR-005 Phase 3
         services.AddScoped<IExternalAIAgentPlanner, DefaultExternalAIAgentPlanner>();
         services.AddScoped<IExternalAIAgentExecutor, DefaultExternalAIAgentExecutor>();
         if (includeAutoPilot)
