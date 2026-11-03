@@ -563,9 +563,13 @@ public class AgentWorkflowBlueprintValidatorTests
     [Fact]
     public void ConsequentialStepWithoutAutoCommit_IsAccepted()
     {
+        // ADR-007 tightened this: a consequential step must be completable by a person,
+        // so the actor is now explicit. An Agent-actor consequential step is rejected as
+        // AWF-AGENT-006 — see AgentWorkflowHumanGateTests — because an agent may never
+        // commit it and nobody else could, so it would deadlock.
         var plan = ValidPlan();
         var steps = plan.Steps.ToList();
-        steps[1] = steps[1] with { Consequential = true };
+        steps[1] = steps[1] with { Consequential = true, Actor = StepActor.Either };
 
         var result = Validator.Validate(plan with { Steps = steps });
         Assert.True(result.IsValid, Describe(result));

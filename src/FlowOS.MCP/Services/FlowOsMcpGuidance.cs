@@ -1619,7 +1619,45 @@ public static class FlowOsMcpGuidance
         | `"Agent"` (default) | One unit of work carried out by an AgentTeam | `nextSteps` |
         | `"Fork"` | Splits into concurrent paths | `branches` (at least 2) |
         | `"Join"` | Converges concurrent paths | `inboundSteps` (at least 2), `joinPolicy`, `nextSteps` |
+        | `"HumanTask"` | A decision a person makes — what a `consequential` step hands off to | `role`, `requiredCapabilities`, `nextSteps` |
         | `"End"` | Terminal node | none |
+
+        ### Human gates (ADR-007)
+
+        `consequential: true` says an agent may propose but never commit. The plan must then
+        say who *does* commit, or the step can never advance:
+
+        - Give the step `"stepType": "HumanTask"` with a `role` declared in the plan's
+          `roles`, or
+        - set `"actor": "Either"` (or `"Human"`) on the step so a person can complete it.
+
+        A `consequential` step whose actor is `"Agent"` is rejected as `AWF-AGENT-006`: an
+        agent may not commit it and nobody else can, so every execution would deadlock there.
+
+        Declare the governance vocabulary alongside the steps:
+
+        ```json
+        {
+          "capabilities": [ { "code": "ap.payment.approve", "description": "Release a payment" } ],
+          "roles": [ { "name": "PaymentApprover",
+                       "grantedCapabilities": ["ap.payment.approve"],
+                       "resolutionType": "Expression",
+                       "memberExpression": "{{CostCentreOwnerEmail}}" } ],
+          "steps": [
+            { "stepId": "approve-payment", "stepType": "HumanTask",
+              "role": "PaymentApprover",
+              "requiredCapabilities": ["ap.payment.approve"],
+              "consequential": true,
+              "nextSteps": { "Approved": "END" } }
+          ]
+        }
+        ```
+
+        `roles` reuses the human workflow role model, including `resolutionType`
+        (`Assignment`, `Expression`, `Static`). Every capability a step or role names must
+        appear in `capabilities`. A HumanTask binds no agent team: `agentTeamId` and
+        `teamRole` on one are an error. Declaring `roles` and `capabilities` is optional —
+        a plan of pure agent steps needs neither.
 
         `branches` is meaningful only on a Fork and `inboundSteps` only on a Join. Declaring either
         against the step's `stepType` is a validation error, not a hint. Omitting `stepType` means
@@ -1685,6 +1723,14 @@ public static class FlowOsMcpGuidance
         | `AWF-AGENT-003` | `autoCommit.allowedEvents` entry is not a `nextSteps` key |
         | `AWF-AGENT-004` | `autoCommit` of the SLA `timeoutEvent` |
         | `AWF-AGENT-005` | Unknown `maxAutonomyLevel` |
+        | `AWF-AGENT-006` | `consequential` step that nobody could ever commit |
+        | `AWF-STR-006` | Unknown `actor` |
+        | `AWF-HUMAN-001` | HumanTask with no `role` |
+        | `AWF-HUMAN-002` | HumanTask routes to an undeclared role |
+        | `AWF-HUMAN-003` | HumanTask also binds an agent team |
+        | `AWF-GOV-001` | Step requires an undeclared capability |
+        | `AWF-GOV-002` | Role grants an undeclared capability |
+        | `AWF-GOV-003` | Duplicate role name |
         | `AWF-SLA-001` | `sla` without a `duration` |
         | `AWF-SLA-002` | `sla.duration` is not a recognised duration |
         | `AWF-SLA-003` | `sla` without a `timeoutEvent` |
