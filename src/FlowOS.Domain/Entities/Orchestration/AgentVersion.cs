@@ -124,12 +124,12 @@ public sealed class AgentVersion
             ProviderAlias = providerAlias.Trim(),
             PromptAlias = string.IsNullOrWhiteSpace(promptAlias) ? null : promptAlias.Trim(),
             ToolAliases = toolAliases?.Select(t => t.Trim()).Where(t => t.Length > 0).ToList()
-                          ?? Array.Empty<string>(),
+                          ?? new List<string>(),
             AutonomyLevel = autonomyLevel,
             AutoCommitThreshold = autoCommitThreshold,
             AllowedEvents = allowedEvents?.Select(e => e.Trim()).Where(e => e.Length > 0).ToList(),
             CapabilityTags = capabilityTags?.Select(c => c.Trim()).Where(c => c.Length > 0).ToList()
-                             ?? Array.Empty<string>(),
+                             ?? new List<string>(),
             PublishedBy = publishedBy.Trim(),
             PublishedAtUtc = AsUtc(publishedAtUtc),
             IsDeprecated = false

@@ -76,7 +76,8 @@ public sealed class AgentTeam
         string? defaultObjective,
         IReadOnlyList<AgentTeamSlot>? slots,
         AgentAutonomyLevel maxAutonomyLevel,
-        int maxNestingDepth)
+        int maxNestingDepth,
+        DateTime createdAtUtc)
     {
         if (tenantId == Guid.Empty)
             throw new ArgumentException("TenantId is required.", nameof(tenantId));
@@ -93,9 +94,9 @@ public sealed class AgentTeam
         MaxAutonomyLevel = maxAutonomyLevel;
         MaxNestingDepth = maxNestingDepth;
         Status = AgentTeamStatus.Draft;
-        CreatedAtUtc = DateTime.UtcNow;
+        CreatedAtUtc = AsUtc(createdAtUtc);
 
-        SetSlots(slots ?? Array.Empty<AgentTeamSlot>());
+        SetSlots(slots ?? Array.Empty<AgentTeamSlot>(), createdAtUtc);
     }
 
     /// <summary>
@@ -106,7 +107,8 @@ public sealed class AgentTeam
         string description,
         string? defaultObjective,
         AgentAutonomyLevel maxAutonomyLevel,
-        int maxNestingDepth)
+        int maxNestingDepth,
+        DateTime updatedAtUtc)
     {
         if (Status == AgentTeamStatus.Archived)
             throw new InvalidOperationException("An archived AgentTeam cannot be modified.");
@@ -120,14 +122,14 @@ public sealed class AgentTeam
         DefaultObjective = string.IsNullOrWhiteSpace(defaultObjective) ? null : defaultObjective.Trim();
         MaxAutonomyLevel = maxAutonomyLevel;
         MaxNestingDepth = maxNestingDepth;
-        UpdatedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = AsUtc(updatedAtUtc);
     }
 
     /// <summary>
     /// Replaces the slot definitions. Existing runtime executions referencing this template are
     /// unaffected — they hold a snapshot of the slot configuration at instantiation time.
     /// </summary>
-    public void SetSlots(IReadOnlyList<AgentTeamSlot> slots)
+    public void SetSlots(IReadOnlyList<AgentTeamSlot> slots, DateTime updatedAtUtc)
     {
         if (Status == AgentTeamStatus.Archived)
             throw new InvalidOperationException("An archived AgentTeam cannot be modified.");
@@ -143,7 +145,7 @@ public sealed class AgentTeam
             .OrderBy(t => t)
             .ToList();
 
-        UpdatedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = AsUtc(updatedAtUtc);
     }
 
     /// <summary>
