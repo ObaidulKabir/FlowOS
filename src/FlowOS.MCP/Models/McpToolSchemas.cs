@@ -2024,4 +2024,33 @@ public static class McpToolSchemas
           "additionalProperties":false
         }
         """);
+
+    // ── ADR-005 Phase 3: StrategicPlan / External Orchestrator tools ─────────
+
+    public static JObject GetStrategicPlanStatus() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["workflowInstanceId"],
+          "properties":{
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"UUID of the StrategicPlan WorkflowInstance to inspect."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject GetTeamExecutionOutcome() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "teamExecutionId":{"type":"string","format":"uuid","description":"UUID of the TeamExecution record. Use this or the (workflowInstanceId + stepId) pair."},
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"UUID of the StrategicPlan WorkflowInstance. Required when teamExecutionId is omitted."},
+            "stepId":{"type":"string","description":"Logical step ID within the workflow. Required when workflowInstanceId is provided."},
+            "tenantId":{"type":"string","format":"uuid","description":"Optional tenant UUID; HTTP uses the authenticated tenant."}
+          },
+          "additionalProperties":false
+        }
+        """);
 }

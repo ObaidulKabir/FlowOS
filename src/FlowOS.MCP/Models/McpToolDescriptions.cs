@@ -835,7 +835,30 @@ public static class McpToolDescriptions
                 "[External AI Planner] Retrieves a persisted external-agent plan and all step execution statuses for observability and debugging. " +
                 "Returns: {ok:true,data:{id,changeId,tenantId,agentProfileId,createdAtUtc,planVersion,steps:[...]}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"planId\":\"33333333-3333-3333-3333-333333333333\"}"
+                "Input example: {\"planId\":\"33333333-3333-3333-3333-333333333333\"}",
+
+            // ADR-005 Phase 3: StrategicPlan / External Orchestrator Agent tools
+            ["get_strategic_plan_status"] =
+                "[StrategicPlan] Returns a snapshot of a StrategicPlan WorkflowInstance: status, currentStepId, " +
+                "activeStepIds, completedParallelStepIds, roleAssignments, and timestamps. " +
+                "The External Orchestrator Agent calls this after each AgentTaskCompleted change-feed event " +
+                "to decide which team or workflow event to trigger next. " +
+                "FlowOS never sequences across teams — that sequencing is the orchestrator's sole responsibility (ADR-005). " +
+                "Returns: {ok:true,data:{workflowInstanceId,tenantId,workflowClassId,status,currentStepId," +
+                "activeStepIds,completedParallelStepIds,roleAssignments,createdAt,completedAt,...}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["get_team_execution_outcome"] =
+                "[StrategicPlan] Returns the enriched outcome of a TeamExecution step: committedEvent, confidence, " +
+                "actorAgentId, slotAssignments, and status. " +
+                "Lookup by teamExecutionId, or by workflowInstanceId + stepId. " +
+                "The External Orchestrator Agent uses this to read step outcomes after observing an " +
+                "AgentTaskCompleted change-feed event, then decides which team to start next (ADR-005). " +
+                "Returns: {ok:true,data:{teamExecutionId,tenantId,agentTeamId,workflowInstanceId,workflowStepId," +
+                "status,committedEvent,confidence,actorAgentId,slotAssignments,createdAtUtc,completedAtUtc,...}}. " +
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"workflowInstanceId\":\"11111111-...\",\"stepId\":\"risk-assessment\"}"
         };
 
     public static string For(string toolName) =>
@@ -862,6 +885,8 @@ public static class McpToolDescriptions
             ["execute_plan"] = new("external-agent", "authenticated", true, true, true, "irreversible", true, "high"),
             ["resume_plan"] = new("external-agent", "authenticated", true, true, true, "reversible", true, "high"),
             ["get_external_agent_plan"] = new("external-agent", "authenticated", true, true, false, "none", true, "low"),
+            ["get_strategic_plan_status"] = new("orchestration", "authenticated", true, true, false, "none", true, "low"),
+            ["get_team_execution_outcome"] = new("orchestration", "authenticated", true, true, false, "none", true, "low"),
             ["get_subworkflow_tree"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_parallel_execution"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["refine_workflow_blueprint_from_nl"] = new("governance", "authenticated", true, true, false, "none", true, "low"),

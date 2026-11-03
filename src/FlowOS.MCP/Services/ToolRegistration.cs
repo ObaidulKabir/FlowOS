@@ -347,6 +347,13 @@ public static class ToolRegistration
 
         registry.Register("get_external_agent_plan", McpToolDescriptions.For("get_external_agent_plan"), McpToolSchemas.GetExternalAgentPlan(),
             async (args) => await ExecuteScopedAsync<ExternalAgentPlanMcpTools>(serviceProvider, t => t.GetExternalAgentPlan(args)));
+
+        // ADR-005 Phase 3: StrategicPlan / External Orchestrator Agent tools
+        registry.Register("get_strategic_plan_status", McpToolDescriptions.For("get_strategic_plan_status"), McpToolSchemas.GetStrategicPlanStatus(),
+            async (args) => await ExecuteScopedAsync<StrategicPlanMcpTools>(serviceProvider, t => t.GetStrategicPlanStatus(args)));
+
+        registry.Register("get_team_execution_outcome", McpToolDescriptions.For("get_team_execution_outcome"), McpToolSchemas.GetTeamExecutionOutcome(),
+            async (args) => await ExecuteScopedAsync<StrategicPlanMcpTools>(serviceProvider, t => t.GetTeamExecutionOutcome(args)));
     }
 
     private static async Task<CallToolResult> ExecuteScopedAsync<T>(

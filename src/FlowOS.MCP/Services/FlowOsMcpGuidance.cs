@@ -92,6 +92,7 @@ public static class FlowOsMcpGuidance
           Preferred prompt: `design_dual_kernel_workflow`. Preferred resource: `flowos://guides/dual-kernel-design`.
           For SLA reminders/timeouts: prompt `test_sla_reminders_in_simulator` and resource `flowos://guides/sla-reminder-simulation`.
           For AI task automation: prompt `automate_waiting_task_with_ai_agent` and resource `flowos://guides/ai-task-automation`.
+          For multi-team StrategicPlan design (ADR-005): prompt `design_strategic_plan_workflow`. Tools: `get_strategic_plan_status`, `get_team_execution_outcome`.
 
         Dual-kernel design law (read before drafting Decision steps):
         - The workflow graph moves `currentStep`. The state machine moves `currentState`. They are independent kernels.
@@ -148,6 +149,16 @@ public static class FlowOsMcpGuidance
         - A `TeamExecution` record (table `TeamExecutions`, never `Teams`) is created for each `AgentTask` step execution. It tracks slot assignments (`RoleName → AgentId`) and execution status (Pending → Active → Completed/Failed).
         - `simulate_workflowclass` and `simulate_context_binding` treat `AgentTask` steps identically to agent-actor `HumanTask` steps for simulation purposes: `autoAdvanceAgents`, `simulatedAgent`, and `pendingAgentTask` all apply.
         - Preferred prompt: `design_agent_task_step`. Preferred resource: `flowos://guides/agent-team-orchestration`.
+
+        StrategicPlan law (ADR-005 — read before designing multi-team workflows):
+        - A `StrategicPlan` is a `WorkflowClass` whose steps span multiple `AgentTeam` executions. It is NOT a special entity type: it is a standard FlowOS WorkflowClass with `AgentTask` steps and cross-team sequencing owned entirely by an External Orchestrator Agent.
+        - Three inviolable rules (ADR-005): (1) FlowOS never sequences across teams — the orchestrator decides which team runs next. (2) The orchestrator uses MCP tools only; it never calls internal APIs or holds its own state. (3) The StrategicPlan WorkflowClass is the single source of truth for plan state.
+        - Pattern: External Orchestrator Agent polls `read_change_feed` for `AgentTaskCompleted` events, calls `get_strategic_plan_status` to read the plan snapshot, calls `get_team_execution_outcome` to read step outcomes (committedEvent, confidence, actorAgentId), then calls `publish_event` or `start_workflow` to trigger the next cross-team transition.
+        - `AgentTaskCompleted` change-feed event fields: `WorkflowInstanceId`, `StepId`, `TeamExecutionId`, `CommittedEvent`, `Confidence`, `ActorAgentId`, `CompletedAtUtc`.
+        - `get_strategic_plan_status` returns: status, currentStepId, activeStepIds, completedParallelStepIds, roleAssignments, timestamps. Use this to decide which transition to fire next.
+        - `get_team_execution_outcome` returns: committedEvent, confidence, actorAgentId, slotAssignments, status. Lookup by `teamExecutionId` or by `workflowInstanceId + stepId`.
+        - The orchestrator must never maintain its own copy of plan state. Every decision is made from a fresh MCP tool call; stale local state causes split-brain.
+        - Preferred prompt: `design_strategic_plan_workflow`. Preferred resource: `flowos://guides/agent-team-orchestration`.
 
         OS claim law (read before calling FlowOS an operating system):
         - Load prompt `check_os_release_gate` or resource `flowos://guides/os-release-gate`.
@@ -231,6 +242,16 @@ public static class FlowOsMcpGuidance
             },
             new
             {
+                name = "design_strategic_plan_workflow",
+                description = "ADR-005: How to design a StrategicPlan WorkflowClass (multi-team, cross-team sequencing owned by an External Orchestrator Agent). Covers the three inviolable rules, StrategicPlan WorkflowClass shape, AgentTaskCompleted change-feed events, get_strategic_plan_status, and get_team_execution_outcome.",
+                arguments = new[]
+                {
+                    new { name = "domain", description = "Business process domain (e.g., CrossTeamDealReview, MultiStageRiskAssessment)", required = false },
+                    new { name = "teamCount", description = "Number of AgentTeam steps in the plan (e.g., 3)", required = false }
+                }
+            },
+            new
+            {
                 name = "automate_waiting_task_with_ai_agent",
                 description = "How to bind a tenant AI Agent (prompt + provider) and run it on a waiting Agent/Either task: preview_agent_context, start_workflow, publish the human gate, run_agent_task. Simulate_* does not call the live model.",
                 arguments = new[]
@@ -285,6 +306,7 @@ public static class FlowOsMcpGuidance
         var instanceId = arguments?["instanceId"]?.ToString() ?? "<instanceId>";
         var domain = arguments?["domain"]?.ToString() ?? "ServiceRepair";
         var stepId = arguments?["stepId"]?.ToString() ?? "ApproveQuote";
+        var teamCount = int.TryParse(arguments?["teamCount"]?.ToString(), out var tc) ? tc : 3;
         var automationWorkflow = arguments?["workflowName"]?.ToString() ?? "QuoteAutoReview";
         var automationStep = arguments?["stepId"]?.ToString() ?? "AgentReview";
 
@@ -444,6 +466,25 @@ public static class FlowOsMcpGuidance
                         {
                             type = "text",
                             text = AgentTaskStepGuide.Replace("{STEP_ID}", stepId)
+                        }
+                    }
+                }
+            },
+
+            "design_strategic_plan_workflow" => new
+            {
+                description = "ADR-005: How to design a StrategicPlan WorkflowClass with External Orchestrator Agent",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = StrategicPlanGuide
+                                .Replace("{DOMAIN}", domain)
+                                .Replace("{TEAM_COUNT}", teamCount.ToString())
                         }
                     }
                 }
@@ -900,6 +941,7 @@ public static class FlowOsMcpGuidance
         - SLA reminder vs timeout in the simulator: `test_sla_reminders_in_simulator` / `flowos://guides/sla-reminder-simulation`
         - Agent-handled waiting steps (HumanTask + actor Agent/Either): `design_agent_handled_step` / `flowos://guides/bounded-autonomy-tasks`
         - AgentTask step type (agent-team as sole actor, ADR-003/ADR-004): `design_agent_task_step` / `flowos://guides/agent-team-orchestration`
+        - StrategicPlan multi-team WorkflowClass + External Orchestrator Agent (ADR-005): `design_strategic_plan_workflow` — use `get_strategic_plan_status` + `get_team_execution_outcome` after each `AgentTaskCompleted` change-feed event
         - Live AI task automation: `automate_waiting_task_with_ai_agent` / `flowos://guides/ai-task-automation` (`upsert_agent_provider` + `run_agent_task`)
         """;
 
@@ -1453,5 +1495,106 @@ public static class FlowOsMcpGuidance
             { "code": "event.publish.EVT-REJECT", "description": "Publish the reject event" }
           ]
         }
+        """;
+
+    // ── ADR-005 Phase 3: StrategicPlan / External Orchestrator design guide ──
+
+    /// <summary>
+    /// ADR-005: StrategicPlan WorkflowClass + External Orchestrator Agent design guide.
+    /// Agents read this via the `design_strategic_plan_workflow` prompt.
+    /// AGENTS.md rule 10: never claim something the code does not do.
+    /// </summary>
+    public const string StrategicPlanGuide =
+        """
+        # StrategicPlan WorkflowClass design guide (ADR-005)
+
+        ## Three inviolable rules
+
+        1. **FlowOS never sequences across teams.** The External Orchestrator Agent owns all cross-team sequencing decisions.
+        2. **The orchestrator uses MCP tools only.** It never calls internal APIs or holds its own state copy.
+        3. **The StrategicPlan WorkflowClass is the single source of truth.** Every decision is based on a fresh MCP read.
+
+        ## What is a StrategicPlan?
+
+        A `StrategicPlan` is a standard FlowOS `WorkflowClass` whose steps include multiple `AgentTask` steps that each
+        target a different `AgentTeam`. There is no special entity type — it is a normal `WorkflowClass` with cross-team
+        `AgentTask` steps. The External Orchestrator Agent provides cross-team sequencing on top.
+
+        ## WorkflowClass shape for `{DOMAIN}` with {TEAM_COUNT} teams
+
+        ```json
+        {
+          "name": "{DOMAIN}StrategicPlan",
+          "workflowClassType": "StrategicPlan",
+          "events": [
+            { "eventId": "EVT-TEAM-1-DONE", "name": "Team 1 Completed", "category": "Agent" },
+            { "eventId": "EVT-TEAM-2-DONE", "name": "Team 2 Completed", "category": "Agent" },
+            { "eventId": "EVT-PLAN-COMPLETE", "name": "Strategic Plan Completed", "category": "Agent" }
+          ],
+          "stateMachine": {
+            "initialState": "AwaitingTeam1",
+            "states": ["AwaitingTeam1", "AwaitingTeam2", "Completed"],
+            "transitions": [
+              { "fromState": "AwaitingTeam1", "toState": "AwaitingTeam2", "eventId": "EVT-TEAM-1-DONE" },
+              { "fromState": "AwaitingTeam2", "toState": "Completed", "eventId": "EVT-PLAN-COMPLETE" }
+            ]
+          },
+          "workflow": {
+            "startStepId": "Team1Step",
+            "steps": [
+              {
+                "stepId": "Team1Step",
+                "stepType": "AgentTask",
+                "agentTeamId": "00000000-0000-0000-0000-000000000001",
+                "autoCommit": { "minConfidence": 0.85, "allowedEvents": ["EVT-TEAM-1-DONE"] },
+                "nextSteps": { "EVT-TEAM-1-DONE": "Team2Step" }
+              },
+              {
+                "stepId": "Team2Step",
+                "stepType": "AgentTask",
+                "agentTeamId": "00000000-0000-0000-0000-000000000002",
+                "autoCommit": { "minConfidence": 0.85, "allowedEvents": ["EVT-PLAN-COMPLETE"] },
+                "nextSteps": { "EVT-PLAN-COMPLETE": null }
+              }
+            ]
+          }
+        }
+        ```
+
+        ## External Orchestrator Agent loop
+
+        ```
+        loop:
+          1. poll read_change_feed for { eventType: "AgentTaskCompleted" }
+          2. read step outcome:
+             get_team_execution_outcome { workflowInstanceId, stepId }
+             → { committedEvent, confidence, actorAgentId, status }
+          3. read plan snapshot:
+             get_strategic_plan_status { workflowInstanceId }
+             → { status, currentStepId, activeStepIds, roleAssignments }
+          4. decide:
+             if plan.status == "Completed" → stop
+             if step outcome is acceptable → publish_event to advance the plan
+             else                          → handle error / escalate
+          5. go to 1
+        ```
+
+        ## Tool reference
+
+        | Tool | When to call |
+        |------|-------------|
+        | `read_change_feed` | Poll for `AgentTaskCompleted` events |
+        | `get_strategic_plan_status` | Read plan state after each event |
+        | `get_team_execution_outcome` | Read step outcome (committedEvent, confidence, actorAgentId) |
+        | `publish_event` | Fire the cross-team transition event |
+        | `start_workflow` | Launch a child StrategicPlan or sub-workflow |
+
+        ## What not to do
+
+        - Do not sequence teams from inside FlowOS (no custom WorkflowEngine code, no `instance.AdvanceTo` across teams).
+        - Do not maintain a local state copy in the orchestrator — always read from `get_strategic_plan_status`.
+        - Do not use `HumanTask` for cross-team coordination — `AgentTask` is the correct step type.
+        - Do not call `complete_task` on behalf of a team — the `AgentTaskCoordinator` does this automatically.
+        - Do not declare `effectiveAutonomyLevel` in AgentTask steps — it is computed from the four-scope hierarchy.
         """;
 }

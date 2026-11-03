@@ -3,6 +3,7 @@ using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Domain.Entities;
 using FlowOS.Domain.Enums;
+using FlowOS.Events.Models;
 using System.Diagnostics;
 
 namespace FlowOS.Application.Services;
@@ -229,6 +230,14 @@ public sealed class AgentTaskCoordinator : IAgentTaskCoordinator
                     claim.WorkflowInstanceId,
                     AgentTaskSource.Reconciliation,
                     CancellationToken.None);
+            }
+
+            // ADR-005 Phase 3: When the step completed, update the TeamExecution outcome
+            // fields and emit AgentTaskCompleted into the change feed so that an External
+            // Orchestrator Agent can read it via read_change_feed or get_team_execution_outcome.
+            if (status == AgentTaskJobStatus.Completed)
+            {
+                await TryCompleteTeamExecutionAndEmitEventAsync(claim, run, CancellationToken.None);
             }
         }
 
@@ -530,4 +539,75 @@ public sealed class AgentTaskCoordinator : IAgentTaskCoordinator
             record.HttpStatusCode,
             InputTokens: record.InputTokens,
             OutputTokens: record.OutputTokens);
+
+    // ── ADR-005 Phase 3: TeamExecution outcome + AgentTaskCompleted event ────────
+
+    /// <summary>
+    /// When an AgentTask step completes, writes the outcome fields back to the
+    /// <see cref="TeamExecution"/> record and emits an <see cref="AgentTaskCompleted"/>
+    /// change-feed event so an External Orchestrator Agent can react.
+    ///
+    /// This method intentionally swallows all exceptions: observability enrichment
+    /// must never block the primary completion path.  Missing outcome fields are
+    /// acceptable; a blocked completion is not.
+    /// </summary>
+    private async Task TryCompleteTeamExecutionAndEmitEventAsync(
+        AgentTaskClaim claim,
+        AgentTaskRunResult run,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var teamExecution = await _unitOfWork.TeamExecutions
+                .GetActiveForStepAsync(
+                    claim.TenantId,
+                    claim.WorkflowInstanceId,
+                    claim.StepId,
+                    cancellationToken);
+
+            if (teamExecution is null)
+                return;
+
+            var primaryAction = run.AgentResult?.SuggestedActions?.FirstOrDefault();
+            var now = UtcNow();
+
+            // Normalise ActorAgentId: always "Agent:<id>" unless already prefixed.
+            string? actorId = null;
+            if (!string.IsNullOrWhiteSpace(run.AgentId))
+            {
+                actorId = run.AgentId.StartsWith("Agent:", StringComparison.OrdinalIgnoreCase)
+                    ? run.AgentId
+                    : $"Agent:{run.AgentId}";
+            }
+
+            teamExecution.Complete(
+                now,
+                primaryAction?.EventType,
+                primaryAction?.Confidence,
+                actorId);
+
+            await _unitOfWork.TeamExecutions.UpdateAsync(teamExecution, cancellationToken);
+
+            var completedEvent = new AgentTaskCompleted(
+                claim.TenantId,
+                claim.WorkflowInstanceId,
+                claim.StepId,
+                teamExecution.Id,
+                primaryAction?.EventType,
+                primaryAction?.Confidence,
+                actorId,
+                teamExecution.SlotAssignments,
+                now);
+
+            completedEvent.SetCorrelationId(claim.WorkflowInstanceId);
+            _unitOfWork.Events.Add(completedEvent);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // Intentionally swallowed — see summary doc above.
+            // A failed enrichment must not surface as a job failure.
+        }
+    }
 }

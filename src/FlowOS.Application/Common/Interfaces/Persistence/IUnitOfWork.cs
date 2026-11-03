@@ -21,5 +21,12 @@ public interface IUnitOfWork
     IWorkflowContextBindingRepository WorkflowContextBindings { get; }
     IWorkflowContextSnapshotRepository WorkflowContextSnapshots { get; }
 
+    /// <summary>
+    /// ADR-005 Phase 3: TeamExecution runtime records.
+    /// Used by AgentTaskCoordinator to update outcome fields and emit
+    /// the AgentTaskCompleted change-feed event.
+    /// </summary>
+    ITeamExecutionRepository TeamExecutions { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

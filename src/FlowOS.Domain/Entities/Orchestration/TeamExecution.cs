@@ -52,6 +52,30 @@ public sealed class TeamExecution
     /// <summary>Sanitised failure message when Status = Failed.</summary>
     public string? FailureReason { get; private set; }
 
+    // ── ADR-005 Phase 3: Outcome fields ─────────────────────────────────────
+    // These are written once by Complete() and are the primary signal the
+    // External Orchestrator Agent reads via get_team_execution_outcome to make
+    // its next sequencing decision.
+
+    /// <summary>
+    /// ADR-005 Phase 3: The workflow event the agent committed (e.g. "RISK_LOW",
+    /// "APPROVED", "REJECTED"). Null until the execution completes successfully.
+    /// </summary>
+    public string? CommittedEvent { get; private set; }
+
+    /// <summary>
+    /// ADR-005 Phase 3: Agent confidence score at commit time, in the range
+    /// [0.0, 1.0]. Null when not provided or when the execution did not complete.
+    /// </summary>
+    public double? Confidence { get; private set; }
+
+    /// <summary>
+    /// ADR-005 Phase 3: The specific agent that acted on the slot (e.g.
+    /// "Agent:risk-analyst-v2"). Null until the execution completes.
+    /// Never contains raw tenant IDs — use FlowOsTelemetry.TenantHash in logs.
+    /// </summary>
+    public string? ActorAgentId { get; private set; }
+
     private TeamExecution() { }
 
     /// <summary>
@@ -111,14 +135,51 @@ public sealed class TeamExecution
         }
     }
 
-    /// <summary>Marks the execution as successfully completed.</summary>
-    public void Complete(DateTime completedAtUtc)
+    /// <summary>
+    /// Marks the execution as successfully completed.
+    /// ADR-005 Phase 3: <paramref name="committedEvent"/>, <paramref name="confidence"/>,
+    /// and <paramref name="actorAgentId"/> are written once and become the primary
+    /// signal for the External Orchestrator Agent's next sequencing decision.
+    /// </summary>
+    /// <param name="completedAtUtc">Completion timestamp (must be UTC).</param>
+    /// <param name="committedEvent">
+    ///   Optional. The workflow event the agent committed (e.g. "RISK_LOW").
+    ///   If provided, must not exceed 200 characters.
+    /// </param>
+    /// <param name="confidence">
+    ///   Optional. Agent confidence score in [0.0, 1.0].
+    ///   Values outside the range are clamped.
+    /// </param>
+    /// <param name="actorAgentId">
+    ///   Optional. The agent identifier that acted on the step
+    ///   (e.g. "Agent:risk-analyst-v2"). Must not exceed 200 characters.
+    /// </param>
+    public void Complete(
+        DateTime completedAtUtc,
+        string? committedEvent = null,
+        double? confidence = null,
+        string? actorAgentId = null)
     {
         if (Status == TeamExecutionStatus.Failed)
             throw new InvalidOperationException("A failed execution cannot be completed.");
 
         Status = TeamExecutionStatus.Completed;
         CompletedAtUtc = EnsureUtc(completedAtUtc);
+
+        if (!string.IsNullOrWhiteSpace(committedEvent))
+        {
+            var trimmed = committedEvent.Trim();
+            CommittedEvent = trimmed.Length > 200 ? trimmed[..200] : trimmed;
+        }
+
+        if (confidence.HasValue)
+            Confidence = Math.Clamp(confidence.Value, 0.0, 1.0);
+
+        if (!string.IsNullOrWhiteSpace(actorAgentId))
+        {
+            var trimmed = actorAgentId.Trim();
+            ActorAgentId = trimmed.Length > 200 ? trimmed[..200] : trimmed;
+        }
     }
 
     /// <summary>Marks the execution as failed with a sanitised reason.</summary>

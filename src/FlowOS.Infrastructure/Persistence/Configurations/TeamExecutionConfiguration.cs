@@ -27,6 +27,12 @@ public sealed class TeamExecutionConfiguration : IEntityTypeConfiguration<TeamEx
         builder.Property(x => x.CompletedAtUtc);
         builder.Property(x => x.FailureReason).HasMaxLength(2000);
 
+        // ADR-005 Phase 3: Outcome fields — written once by Complete(), read by
+        // get_team_execution_outcome MCP tool and the AgentTaskCompleted change feed event.
+        builder.Property(x => x.CommittedEvent).HasMaxLength(200);
+        builder.Property(x => x.Confidence);
+        builder.Property(x => x.ActorAgentId).HasMaxLength(200);
+
         // SlotAssignments stored as JSONB: { "roleName": "agentId", ... }
         builder.Property(x => x.SlotAssignments)
             .HasConversion(
