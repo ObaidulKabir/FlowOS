@@ -10,7 +10,9 @@ import {
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
   WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
   TenantApiKeyDto, CreateKeyResponse, TenantRoleDto, AgentEvaluationMetrics,
-  PlanRequestDto, TenantPlanRequestItem
+  PlanRequestDto, TenantPlanRequestItem,
+  AgentWorkflowClass, AgentWorkflowBlueprint,
+  CreateAgentWorkflowClassRequest, DeprecateAgentWorkflowClassRequest
 } from '../types';
 
 export { isPlatformAdminToken, platformAdminHomeSession, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
@@ -1064,3 +1066,133 @@ export interface UpsertPluginBindingRequest {
   isEnabled?: boolean;
   configuration?: Record<string, unknown>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AgentWorkflowClass — declarative multi-agent coordination plans (ADR-006)
+//
+// Backed by AgentWorkflowClassesController. The tenant comes from the caller's
+// identity, so writes send no tenantId; reads accept ?tenantId= for the platform
+// administrator's cross-tenant scope.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const AGENT_WORKFLOW_BASE = '/api/agent-workflow-classes';
+
+/** For endpoints that answer 204 No Content: there is no body to parse. */
+const handleEmptyResponse = async (response: Response, errorMessage: string): Promise<void> => {
+  if (response.ok) return;
+  await handleResponse(response, errorMessage);
+};
+
+export const agentWorkflowApi = {
+  list: async (
+    status?: WorkflowClassStatus,
+    skip = 0,
+    take = 50,
+    role?: 'Tenant' | 'Admin',
+    tenantIdOverride?: string
+  ): Promise<AgentWorkflowClass[]> => {
+    const params = new URLSearchParams();
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
+    if (tenantId) params.append('tenantId', tenantId);
+    if (status !== undefined) {
+      params.append('status', WorkflowClassStatus[status] || status.toString());
+    }
+    params.append('skip', skip.toString());
+    params.append('take', take.toString());
+
+    const response = await authorizedFetch(`${AGENT_WORKFLOW_BASE}?${params.toString()}`, {}, role);
+    return handleResponse(response, 'Failed to list agent workflow classes');
+  },
+
+  get: async (
+    id: string,
+    role?: 'Tenant' | 'Admin',
+    tenantIdOverride?: string
+  ): Promise<AgentWorkflowClass> => {
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/${id}${tenantQuery(resolveRequestedTenantId(tenantIdOverride))}`, {}, role);
+    return handleResponse(response, 'Failed to get agent workflow class');
+  },
+
+  /** Version lineage, newest first, walking previousVersionId backwards. */
+  lineage: async (
+    id: string,
+    maxDepth = 10,
+    role?: 'Tenant' | 'Admin',
+    tenantIdOverride?: string
+  ): Promise<AgentWorkflowClass[]> => {
+    const params = new URLSearchParams();
+    const tenantId = resolveRequestedTenantId(tenantIdOverride);
+    if (tenantId) params.append('tenantId', tenantId);
+    params.append('maxDepth', maxDepth.toString());
+
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/${id}/lineage?${params.toString()}`, {}, role);
+    return handleResponse(response, 'Failed to get agent workflow lineage');
+  },
+
+  /** Pass previousVersionId to start a new version of a published plan. */
+  createDraft: async (
+    req: CreateAgentWorkflowClassRequest,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<AgentWorkflowClass> => {
+    const response = await authorizedFetch(
+      AGENT_WORKFLOW_BASE, { method: 'POST', body: JSON.stringify(req) }, role);
+    return handleResponse(response, 'Failed to create agent workflow draft');
+  },
+
+  updateDraft: async (
+    id: string,
+    req: CreateAgentWorkflowClassRequest,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<AgentWorkflowClass> => {
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/${id}`, { method: 'PUT', body: JSON.stringify(req) }, role);
+    return handleResponse(response, 'Failed to update agent workflow draft');
+  },
+
+  /** Locks the blueprint. Validated again server-side; rejects a broken plan. */
+  publish: async (id: string, role?: 'Tenant' | 'Admin'): Promise<AgentWorkflowClass> => {
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/${id}/publish`, { method: 'POST' }, role);
+    return handleResponse(response, 'Failed to publish agent workflow class');
+  },
+
+  deprecate: async (
+    id: string,
+    req: DeprecateAgentWorkflowClassRequest = {},
+    role?: 'Tenant' | 'Admin'
+  ): Promise<AgentWorkflowClass> => {
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/${id}/deprecate`, { method: 'POST', body: JSON.stringify(req) }, role);
+    return handleResponse(response, 'Failed to deprecate agent workflow class');
+  },
+
+  /** Soft-delete a Published or Deprecated plan. A Draft must be deleted instead. */
+  abandon: async (id: string, role?: 'Tenant' | 'Admin'): Promise<AgentWorkflowClass> => {
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/${id}/abandon`, { method: 'POST' }, role);
+    return handleResponse(response, 'Failed to abandon agent workflow class');
+  },
+
+  /** Hard-delete a Draft. Fails with GOV-DEL-001 / GOV-DEL-002 otherwise. */
+  delete: async (id: string, role?: 'Tenant' | 'Admin'): Promise<void> => {
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/${id}`, { method: 'DELETE' }, role);
+    return handleEmptyResponse(response, 'Failed to delete agent workflow class');
+  },
+
+  /**
+   * Check a blueprint without storing it. An invalid blueprint resolves with
+   * isValid false and the full error list rather than rejecting — the author
+   * wants every problem at once. Only a malformed request rejects.
+   */
+  validate: async (
+    definition: AgentWorkflowBlueprint,
+    role?: 'Tenant' | 'Admin'
+  ): Promise<ValidationResult> => {
+    const response = await authorizedFetch(
+      `${AGENT_WORKFLOW_BASE}/validate`, { method: 'POST', body: JSON.stringify({ definition }) }, role);
+    return handleResponse(response, 'Failed to validate agent workflow blueprint');
+  }
+};

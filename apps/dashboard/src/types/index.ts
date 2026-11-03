@@ -563,3 +563,123 @@ export interface TimeTravelForkResult {
   projectedCanonicalContext?: Record<string, unknown>;
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AgentWorkflowClass — declarative multi-agent coordination plans (ADR-006)
+//
+// Mirrors src/FlowOS.Domain/Blueprints/AgentWorkflowBlueprint.cs. Status and
+// scope reuse the WorkflowClassStatus / WorkflowClassScope enums above, because
+// the C# entity uses those same enums and the API serialises them as numbers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Node kind. Declared rather than inferred: `branches` is meaningful only on a
+ * Fork and `inboundSteps` only on a Join, and the API rejects either against the
+ * wrong stepType. Omitted in stored JSON means 'Agent'.
+ */
+export type AgentStepType = 'Agent' | 'Fork' | 'Join' | 'End';
+
+export type AgentJoinPolicy = 'WaitAll' | 'WaitAny';
+
+/** 'Compensate' is accepted but inert until the Phase 4B engine ships. */
+export type AgentRollbackStrategy = 'Abandon' | 'Compensate';
+
+export interface AgentStepAutoCommit {
+  /** Minimum agent confidence to advance without human review, in (0, 1]. */
+  minConfidence: number;
+  /** Must each be a `nextSteps` key, and never the SLA `timeoutEvent`. */
+  allowedEvents: string[];
+}
+
+export interface AgentStepSla {
+  /** ISO-8601 duration such as 'PT4H'; the shorthand '30m' / '4h' / '2d' is also accepted. */
+  duration: string;
+  timeoutEvent: string;
+  escalationStepId?: string;
+  escalationRole?: string;
+  isInterrupting: boolean;
+}
+
+export interface AgentPathTravelLimit {
+  /** Times this edge may be travelled, including the first pass. At least 1. */
+  maxTravels: number;
+  /** Step id or 'END' taken when the cap is exceeded. */
+  onExceeded?: string;
+}
+
+export interface AgentStepBlueprint {
+  stepId: string;
+  stepType: AgentStepType;
+  description: string;
+  /** Static team binding. An 'Agent' step needs this or `teamRole`. */
+  agentTeamId?: string;
+  /** Dynamic binding the orchestrator resolves at dispatch. */
+  teamRole?: string;
+  /** Outcome event -> next step id. Route to 'END' to finish the plan. */
+  nextSteps: Record<string, string>;
+  /** Fork only: step ids to run concurrently. At least 2. */
+  branches: string[];
+  /** Join only. */
+  joinPolicy: AgentJoinPolicy;
+  /** Join only: steps that must converge here. At least 2. */
+  inboundSteps: string[];
+  maxAutonomyLevel?: string;
+  /** Irreversible external change: an agent may propose, a person must decide. */
+  consequential: boolean;
+  autoCommit?: AgentStepAutoCommit;
+  sla?: AgentStepSla;
+  agentPrompt?: string;
+  agentTools: string[];
+  /** Keyed by a `nextSteps` event. */
+  pathLimits: Record<string, AgentPathTravelLimit>;
+}
+
+export interface AgentCoordinationRules {
+  maxGlobalRetries: number;
+  rollbackStrategy: AgentRollbackStrategy;
+  /** ISO-8601 duration; absent means no global deadline. */
+  globalSla?: string;
+  /** 0 means unlimited. */
+  maxParallelSteps: number;
+}
+
+export interface AgentWorkflowBlueprint {
+  objective: string;
+  startStepId: string;
+  /** JSON Schema for the shared working memory, as a string. */
+  contextSchema?: string;
+  coordinationRules: AgentCoordinationRules;
+  steps: AgentStepBlueprint[];
+}
+
+export interface AgentWorkflowClass {
+  id: string;
+  tenantId: string;
+  name: string;
+  version: string;
+  status: WorkflowClassStatus;
+  scope: WorkflowClassScope;
+  createdAt: string;
+  publishedAt?: string;
+  previousVersionId?: string;
+  changeLog?: string;
+  deprecationReason?: string;
+  deprecationMigrationTargetId?: string;
+  flowOsVersion: string;
+  /** Immutable once published; create a new version to change it. */
+  definition: AgentWorkflowBlueprint;
+}
+
+/** Body for create and draft update. `previousVersionId` starts a new version. */
+export interface CreateAgentWorkflowClassRequest {
+  name: string;
+  version: string;
+  definition: AgentWorkflowBlueprint;
+  previousVersionId?: string;
+  changeLog?: string;
+}
+
+export interface DeprecateAgentWorkflowClassRequest {
+  reason?: string;
+  migrationTargetId?: string;
+}
