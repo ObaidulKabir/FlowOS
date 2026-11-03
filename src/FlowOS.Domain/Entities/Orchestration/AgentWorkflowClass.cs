@@ -75,6 +75,7 @@ public sealed class AgentWorkflowClass
         string name,
         string version,
         AgentWorkflowBlueprint definition,
+        DateTime createdAt,
         Guid? previousVersionId = null,
         string? changeLog = null)
     {
@@ -92,7 +93,7 @@ public sealed class AgentWorkflowClass
         Status = WorkflowClassStatus.Draft;
         Scope = WorkflowClassScope.Private;
         FlowOsVersion = FlowOsRelease.Version;
-        CreatedAt = DateTime.UtcNow;
+        CreatedAt = createdAt.Kind == DateTimeKind.Utc ? createdAt : createdAt.ToUniversalTime();
     }
 
     // ── Lifecycle transitions ─────────────────────────────────────────────────
