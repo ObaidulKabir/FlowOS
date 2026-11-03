@@ -102,6 +102,21 @@ public record StepBlueprint
     public string? AgentProvider { get; set; }
     public string? AgentPrompt { get; set; }
     public List<string> AgentTools { get; set; } = new();
+
+    /// <summary>
+    /// ADR-003: binds this step's agent actor to an orchestrated <c>AgentTeam</c> instead of
+    /// (or alongside) the single inline agent above. Only takes effect when <see cref="StepType"/>
+    /// is <c>"AgentTask"</c> — <c>AgentTaskScheduling.ForCurrentWaitingStep</c> only consults
+    /// AgentTeamId for that step type; set on any other step type it compiles through but is
+    /// never read by the dispatcher.
+    /// </summary>
+    public Guid? AgentTeamId { get; set; }
+
+    /// <summary>
+    /// The <c>AgentTeamSlot.RoleName</c> within <see cref="AgentTeamId"/> that performs this
+    /// step. If null, the dispatcher resolves to the team's first required slot.
+    /// </summary>
+    public string? AgentTeamSlotRole { get; set; }
 }
 
 public record StepAutoCommitBlueprint
