@@ -28,5 +28,11 @@ public interface IUnitOfWork
     /// </summary>
     ITeamExecutionRepository TeamExecutions { get; }
 
+    /// <summary>
+    /// ADR-006 Phase 4A: AgentWorkflowClass declarative plan templates.
+    /// Dispatch machinery (AgentWorkflowExecution) arrives in Phase 4B.
+    /// </summary>
+    IAgentWorkflowClassRepository AgentWorkflowClasses { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
