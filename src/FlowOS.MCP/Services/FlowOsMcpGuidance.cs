@@ -252,6 +252,15 @@ public static class FlowOsMcpGuidance
             },
             new
             {
+                name = "design_agent_workflow_class",
+                description = "ADR-006 Phase 4A: How to author a declarative AgentWorkflowClass blueprint — the multi-agent coordination plan template. Covers AgentWorkflowBlueprint structure, step types, routing, fork/join, SLA, auto-commit, lifecycle (Draft→Published→Deprecated/Abandoned), versioning, and governance guards GOV-DEL-001/002.",
+                arguments = new[]
+                {
+                    new { name = "objective", description = "Business objective of the plan (e.g., QuarterlyRiskAssessment, ComplianceReview)", required = false }
+                }
+            },
+            new
+            {
                 name = "automate_waiting_task_with_ai_agent",
                 description = "How to bind a tenant AI Agent (prompt + provider) and run it on a waiting Agent/Either task: preview_agent_context, start_workflow, publish the human gate, run_agent_task. Simulate_* does not call the live model.",
                 arguments = new[]
@@ -490,6 +499,24 @@ public static class FlowOsMcpGuidance
                 }
             },
 
+            "design_agent_workflow_class" => new
+            {
+                description = "ADR-006 Phase 4A: Declarative AgentWorkflowClass blueprint authoring guide",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new
+                        {
+                            type = "text",
+                            text = AgentWorkflowClassGuide
+                                .Replace("{OBJECTIVE}", arguments?["objective"]?.ToString() ?? "QuarterlyRiskAssessment")
+                        }
+                    }
+                }
+            },
+
             "automate_waiting_task_with_ai_agent" => new
             {
                 description = "How to run a tenant AI Agent on a waiting workflow task",
@@ -644,6 +671,13 @@ public static class FlowOsMcpGuidance
             },
             new
             {
+                uri = "flowos://guides/agent-workflow-class",
+                name = "Declarative AgentWorkflowClass Design Guide",
+                description = "ADR-006 Phase 4A: How to author an AgentWorkflowBlueprint — multi-agent coordination plan with steps, routing, fork/join, SLA, auto-commit, and lifecycle governance.",
+                mimeType = "text/markdown"
+            },
+            new
+            {
                 uri = "flowos://guides/os-release-gate",
                 name = "OS-1 Honesty Gate",
                 description = "Must-pass criteria for calling FlowOS a business automation operating system rather than a workflow engine. If VERDICT is not GREEN, do not use the OS claim.",
@@ -740,6 +774,19 @@ public static class FlowOsMcpGuidance
                         text = AiTaskAutomationGuide
                             .Replace("{WORKFLOW_NAME}", "QuoteAutoReview")
                             .Replace("{STEP_ID}", "AgentReview")
+                    }
+                }
+            },
+
+            "flowos://guides/agent-workflow-class" => new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        uri,
+                        mimeType = "text/markdown",
+                        text = AgentWorkflowClassGuide.Replace("{OBJECTIVE}", "QuarterlyRiskAssessment")
                     }
                 }
             },
@@ -1504,6 +1551,137 @@ public static class FlowOsMcpGuidance
     /// Agents read this via the `design_strategic_plan_workflow` prompt.
     /// AGENTS.md rule 10: never claim something the code does not do.
     /// </summary>
+    public const string AgentWorkflowClassGuide =
+        """
+        # Declarative AgentWorkflowClass design guide (ADR-006 Phase 4A)
+
+        Objective: {OBJECTIVE}
+
+        ## What is an AgentWorkflowClass?
+
+        An `AgentWorkflowClass` is a **declarative multi-agent coordination plan template** — the agentic
+        equivalent of `WorkflowClass`. It stores an immutable `AgentWorkflowBlueprint` (the "what") and
+        produces `AgentWorkflowExecution` runtime instances (the "how", Phase 4B).
+
+        - **Not** a `WorkflowClass` — it has no state machine, no human-task inbox, no event registry.
+        - **Not** an `AgentTeam` — it coordinates across teams, it does not define a team.
+        - Use it when multiple AI agent steps must be sequenced declaratively and the plan itself must
+          be versioned, audited, and governed.
+
+        ## Blueprint structure
+
+        ```json
+        {
+          "objective": "Describe what the plan achieves",
+          "startStepId": "gather",
+          "contextSchema": "{ \"type\": \"object\", \"properties\": { ... } }",
+          "coordinationRules": {
+            "maxGlobalRetries": 3,
+            "rollbackStrategy": "Compensate",
+            "globalSla": "PT4H",
+            "maxParallelSteps": 2
+          },
+          "steps": [ ... ]
+        }
+        ```
+
+        ### coordinationRules defaults
+        | Field | Default | Notes |
+        |-------|---------|-------|
+        | `maxGlobalRetries` | `3` | Total retries across all steps before the execution fails |
+        | `rollbackStrategy` | `"Abandon"` | `"Compensate"` runs OnFailure hooks in LIFO order |
+        | `globalSla` | `null` | ISO 8601 duration; null = no global timeout |
+        | `maxParallelSteps` | `0` | 0 = unlimited parallel steps |
+
+        ## Step structure
+
+        ```json
+        {
+          "stepId": "assess",
+          "description": "Risk assessment by the Risk AgentTeam",
+          "agentTeamId": "<team-guid>",
+          "teamRole": "RiskAnalyst",
+          "nextSteps": { "Approved": "notify", "Rejected": "escalate" },
+          "branches": [],
+          "joinPolicy": "WaitAll",
+          "inboundSteps": [],
+          "maxAutonomyLevel": null,
+          "consequential": false,
+          "autoCommit": { "minConfidence": 0.90 },
+          "sla": { "duration": "PT2H", "escalationRole": "RiskManager" },
+          "agentPrompt": "prompt-alias",
+          "agentTools": ["LookupRecord:risk", "CheckPolicy:compliance"],
+          "pathLimits": { "Retry": { "maxTravels": 3 } }
+        }
+        ```
+
+        ### Key step rules
+        - `nextSteps` maps outcome label → next stepId (null = terminal step).
+        - `branches` lists parallel fork targets; use `joinPolicy: "WaitAll"` or `"WaitAny"` on the join step.
+        - `inboundSteps` on the join step lists all branches that must complete (for `WaitAll`).
+        - `consequential: true` means the step makes irreversible external changes — never set `autoCommit`
+          on a consequential step.
+        - `pathLimits` prevents infinite loops: a step with `maxTravels: 3` under key `"Retry"` may only
+          be entered via that path 3 times per execution.
+        - `autoCommit.minConfidence` is the minimum agent confidence (0–1) to auto-advance without human review.
+
+        ## Lifecycle
+
+        ```
+        Draft → Published → Deprecated
+                          ↘ Abandoned
+        ```
+
+        | Status | Editable | Dispatchable | Notes |
+        |--------|----------|-------------|-------|
+        | `Draft` | ✅ | ❌ | Default on creation; update freely |
+        | `Published` | ❌ | ✅ | Immutable — create a new version to change |
+        | `Deprecated` | ❌ | ❌ | No new executions; running ones continue |
+        | `Abandoned` | ❌ | ❌ | Soft-deleted; informational only |
+
+        ## Governance guards
+
+        - **GOV-DEL-001**: Only `Draft` plans may be hard-deleted. Use `Abandon` for published plans.
+        - **GOV-DEL-002**: A `Draft` with existing executions cannot be deleted.
+
+        ## Versioning (lineage chain)
+
+        When a published plan must change:
+        1. Create a new `Draft` carrying `previousVersionId = <current published id>`.
+        2. Revise the draft.
+        3. Publish the new version.
+        4. Deprecate the old version, setting `migrationTargetId` to the new version's id.
+
+        `GetLineageAsync` walks the `PreviousVersionId` chain up to `maxDepth` (default 10).
+
+        ## Phase boundary
+
+        - **Phase 4A (now)**: blueprint CRUD only — create, read, list, update, publish, deprecate, abandon, delete.
+        - **Phase 4B (next)**: dispatch machinery — `AgentWorkflowExecution` runtime instances, step scheduling, `HasExecutionsAsync` wired to real data.
+
+        Until Phase 4B is deployed, `HasExecutionsAsync` always returns `false`, so GOV-DEL-002 is not
+        enforced at runtime (only the domain guard `plan.Delete(hasExecutions)` enforces it in tests).
+
+        ## MCP tools (Phase 4B — not yet available)
+
+        These tools will be registered once the execution engine ships. Do not call them now.
+
+        | Planned tool | Purpose |
+        |-------------|---------|
+        | `create_agent_workflow_class` | Create a Draft AgentWorkflowClass |
+        | `publish_agent_workflow_class` | Publish a Draft |
+        | `deprecate_agent_workflow_class` | Deprecate a Published version |
+        | `start_agent_workflow` | Launch an AgentWorkflowExecution from a Published class |
+
+        ## What not to do
+
+        - Do not confuse `AgentWorkflowClass` with `WorkflowClass` — there is no state machine, no event registry.
+        - Do not set `autoCommit` on a `consequential: true` step.
+        - Do not hard-delete a Published plan — use `Abandon`.
+        - Do not set `maxTravels` below 1 — 0 means the path is unreachable.
+        - Do not create a new `AgentWorkflowClass` when the goal is to revise a published one — version it via `previousVersionId`.
+        """;
+
     public const string StrategicPlanGuide =
         """
         # StrategicPlan WorkflowClass design guide (ADR-005)
