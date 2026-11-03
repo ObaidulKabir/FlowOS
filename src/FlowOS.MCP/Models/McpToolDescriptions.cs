@@ -866,42 +866,50 @@ public static class McpToolDescriptions
                 "Set previousVersionId to begin a new version of a published plan - there is no separate new-version tool, because a version is a Draft that names its predecessor. " +
                 "Returns: {ok:true,data:{id,tenantId,name,version,status,previousVersionId,message}}. " +
                 "The blueprint is validated on the way in; an invalid one returns ok:false with every AWF- error. Call validate_agent_workflow_class first to see them without storing anything. " +
-                "Errors: MCP-ARG-001, MCP-VALIDATION, MCP-INTERNAL.",
+                "Errors: MCP-ARG-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"name\":\"QuarterlyRiskPlan\",\"version\":\"1.0.0\",\"definition\":{\"objective\":\"Assess quarterly portfolio risk\",\"startStepId\":\"gather\",\"steps\":[{\"stepId\":\"gather\",\"stepType\":\"Agent\",\"teamRole\":\"DataAnalyst\",\"nextSteps\":{\"Gathered\":\"END\"}}]}}",
 
             ["update_agent_workflow_class_draft"] =
                 "[AgentWorkflow] Replaces the definition of a Draft AgentWorkflowClass. Rejected once the plan is Published, because a published blueprint is immutable - create a new version instead. " +
                 "Returns: {ok:true,data:{id,status,version,message}}. " +
-                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-STATE-001, MCP-VALIDATION, MCP-INTERNAL.",
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-STATE-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"QuarterlyRiskPlan\",\"version\":\"1.0.1\",\"definition\":{\"objective\":\"Assess quarterly portfolio risk\",\"startStepId\":\"gather\",\"steps\":[{\"stepId\":\"gather\",\"stepType\":\"Agent\",\"teamRole\":\"DataAnalyst\",\"nextSteps\":{\"Gathered\":\"END\"}}]}}",
 
             ["validate_agent_workflow_class"] =
                 "[AgentWorkflow] Validates an AgentWorkflowBlueprint without storing it, so a draft can be checked before publishing. " +
-                "An invalid blueprint is a successful call reporting every problem at once, not a failure: ok:true with data:{isValid:false,errorCount,errors:[{code,category,message,element}]}. " +
+                "Returns: {ok:true,data:{isValid,errorCount,errors:[{code,category,message,element}]}}. " +
+                "An invalid blueprint is a successful call reporting every problem at once, not a failure: isValid is false and the errors are listed. " +
                 "Codes carry an AWF- prefix and cover structure, reachability, exit paths, fork/join arity, routing targets, team binding, human gates, capabilities, duty separation, autonomy, SLA, path limits and coordination rules. " +
                 "Use this while authoring; publishing runs the same checks as its final gate. " +
-                "Errors: MCP-ARG-001, MCP-INTERNAL.",
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"definition\":{\"objective\":\"Assess quarterly portfolio risk\",\"startStepId\":\"gather\",\"steps\":[{\"stepId\":\"gather\",\"stepType\":\"Agent\",\"teamRole\":\"DataAnalyst\",\"nextSteps\":{\"Gathered\":\"END\"}}]}}",
 
             ["publish_agent_workflow_class"] =
                 "[AgentWorkflow] Publishes a Draft AgentWorkflowClass, locking its blueprint and making it dispatchable once the Phase 4B engine ships. " +
                 "The blueprint is validated again here - this is the last gate before it becomes immutable. " +
                 "Returns: {ok:true,data:{id,status,version,publishedAt,message}}. " +
-                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-STATE-001, MCP-VALIDATION, MCP-INTERNAL.",
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-STATE-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["get_agent_workflow_class"] =
                 "[AgentWorkflow] Reads one AgentWorkflowClass including its full blueprint. " +
                 "Returns: {ok:true,data:{tenantId,plan:{id,name,version,status,scope,createdAt,publishedAt,previousVersionId,changeLog,flowOsVersion,definition}}}. " +
-                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL.",
+                "Errors: MCP-ARG-001, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["list_agent_workflow_classes"] =
                 "[AgentWorkflow] Lists the tenant's AgentWorkflowClasses, newest first, with a per-plan summary rather than full blueprints. " +
                 "Filter with status (Draft, Published, Deprecated, Abandoned); page with skip and take (1-200, default 50). " +
                 "Returns: {ok:true,data:{tenantId,count,skip,take,plans:[{id,name,version,status,createdAt,publishedAt,objective,stepCount}]}}. " +
-                "Errors: MCP-ARG-001, MCP-INTERNAL.",
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"status\":\"Draft\",\"skip\":0,\"take\":50}",
 
             ["get_agent_workflow_class_lineage"] =
                 "[AgentWorkflow] Walks the version lineage backwards through previousVersionId, newest first, so an agent can see what a plan superseded and why. " +
                 "maxDepth is 1-100, default 10. " +
                 "Returns: {ok:true,data:{tenantId,depth,lineage:[{id,version,status,publishedAt,changeLog}]}}. " +
-                "Errors: MCP-ARG-001, MCP-INTERNAL."
+                "Errors: MCP-ARG-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"11111111-1111-1111-1111-111111111111\",\"maxDepth\":10}"
         };
 
     public static string For(string toolName) =>
