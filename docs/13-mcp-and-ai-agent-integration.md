@@ -449,7 +449,7 @@ Agents should load MCP prompt `design_dual_kernel_workflow` or resource `flowos:
 
 An `AgentWorkflowClass` is a **declarative multi-agent coordination plan template** — the agentic counterpart of `WorkflowClass`. It stores an immutable `AgentWorkflowBlueprint` (the "what") and will produce `AgentWorkflowExecution` runtime instances (the "how", Phase 4B). Use it when multiple AI agent steps must be sequenced declaratively, versioned, audited, and governed.
 
-> **Phase boundary**: Phase 4A (current) covers blueprint CRUD and lifecycle — create, read, list, lineage, update, publish, deprecate, abandon, delete. Phase 4B will add the dispatch engine and `start_agent_workflow` MCP tooling.
+> **Phase boundary**: Phase 4A (current) covers blueprint CRUD, lifecycle and validation — create, read, list, lineage, update, validate, publish, deprecate, abandon, delete. Phase 4B will add the dispatch engine and `start_agent_workflow` MCP tooling.
 
 ### How it differs from existing constructs
 
@@ -503,7 +503,15 @@ An `AgentWorkflowClass` is a **declarative multi-agent coordination plan templat
 
 Note the shape contract this example follows: every step declares its `stepType`, every `"Agent"` step binds a team (`agentTeamId` or `teamRole`), the `sla` carries a `timeoutEvent` as well as a `duration`, routing to the literal `"END"` terminates the plan, and the `consequential` review step sets no `autoCommit`. `rollbackStrategy: "Compensate"` is accepted but inert — the step record declares no compensation hooks until Phase 4B, so nothing runs in reverse.
 
-`stepType` is authoritative rather than inferred: `branches` is meaningful only on a `"Fork"` and `inboundSteps` only on a `"Join"`. Declaring either against the step's type is a contradiction, not a hint.
+`stepType` is authoritative rather than inferred: `branches` is meaningful only on a `"Fork"` and `inboundSteps` only on a `"Join"`. Declaring either against the step's type is an error, not a hint.
+
+### Validation
+
+`AgentWorkflowBlueprintValidator` (`FlowOS.Domain/Services`) runs on create, on draft update, and again on publish, which is the last gate before the blueprint becomes immutable. `ValidateAgentWorkflowBlueprintCommand` returns the full `ValidationResult` without storing anything, so an author can check a draft first. Error codes carry an `AWF-` prefix so they never collide with the `WF-`/`CON-` codes used for human workflow classes.
+
+This pass covers graph integrity: structure (objective, unique step ids, known `stepType`), the entry point, reachability from `startStepId`, exit paths, fork and join arity and policy, unknown routing targets, and team binding. Step-level policy checks — autonomy, SLA shape, path-travel limits, coordination rules and `contextSchema` JSON — follow in a separate change.
+
+Reachability follows SLA escalation and path-limit overflow targets as well as `nextSteps` and `branches`, so a step reached only when an SLA breaches is not reported as an orphan.
 
 ### Lifecycle
 

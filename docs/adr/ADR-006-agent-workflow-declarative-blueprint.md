@@ -97,6 +97,25 @@ validator, dashboard graph renderer, Phase 4B dispatcher — to re-implement the
 Consequently `Branches` is meaningful only on a `Fork` and `InboundSteps` only on a `Join`.
 A step that declares either against its `StepType` is a validation error, not a hint.
 
+### Validation
+
+`AgentWorkflowBlueprintValidator` (`FlowOS.Domain/Services`) mirrors
+`WorkflowClassValidator`. It runs on `Create`, on `UpdateDraft`, and again on `Publish` —
+the last gate before the blueprint locks. `ValidateAgentWorkflowBlueprintCommand` returns
+the full `ValidationResult` without storing anything, so an author can check a draft
+first. Error codes carry an `AWF-` prefix so they never collide with the `WF-`/`CON-`
+codes used for human workflow classes.
+
+This pass covers graph integrity: structure (objective, unique step ids, known
+`StepType`), the entry point, reachability from `StartStepId`, exit paths, fork and join
+arity and policy, unknown routing targets, and team binding. Step-level policy checks
+(autonomy, SLA shape, path-travel limits, coordination rules, `ContextSchema` JSON) follow
+in a separate change.
+
+Reachability follows SLA escalation and path-limit overflow targets as well as `NextSteps`
+and `Branches`: a step reached only when an SLA breaches is legitimately reachable, and
+treating it otherwise would report a false orphan.
+
 ### Entity lifecycle
 
 ```
@@ -132,9 +151,9 @@ deserialises with the record's default.
   resource, both served by `FlowOsMcpGuidance`.
 - No new execution machinery
 
-Phase 4A covers the blueprint data model and its CRUD and lifecycle handlers
-(`AgentWorkflowClassHandlers`). The entity is stored and versioned; nothing dispatches
-from it yet.
+Phase 4A covers the blueprint data model, its CRUD and lifecycle handlers
+(`AgentWorkflowClassHandlers`), and its validator. The entity is stored, validated and
+versioned; nothing dispatches from it yet.
 
 `IAgentWorkflowClassRepository.HasExecutionsAsync` returns `false` until Phase 4B adds the
 execution table, so GOV-DEL-002 is enforced by the domain guard and its tests rather than

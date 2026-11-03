@@ -1640,6 +1640,37 @@ public static class FlowOsMcpGuidance
           `timeoutEvent` can never be auto-committed — a breach stays SLA-owned.
         - An `sla` needs both `duration` and `timeoutEvent`.
 
+        ## Validation
+
+        Blueprints are validated by `AgentWorkflowBlueprintValidator` on create, on draft update, and
+        again on publish — publishing locks the blueprint, so that is the last gate. Error codes are
+        prefixed `AWF-`. The graph-integrity checks:
+
+        | Code | Meaning |
+        |------|---------|
+        | `AWF-STR-001` | `objective` is missing |
+        | `AWF-STR-003` | A step has an empty `stepId` |
+        | `AWF-STR-004` | Duplicate `stepId` |
+        | `AWF-STR-005` | Unknown `stepType` |
+        | `AWF-COMP-001` | `startStepId` is missing |
+        | `AWF-COMP-002` | `startStepId` matches no declared step |
+        | `AWF-COMP-003` | Step unreachable from `startStepId` |
+        | `AWF-COMP-004` | Step has no exit path |
+        | `AWF-CON-001` | `nextSteps` routes to an unknown step |
+        | `AWF-CON-002` | Unknown `branches` target |
+        | `AWF-CON-003` | Unknown `inboundSteps` target |
+        | `AWF-END-001` | An `"End"` step declares `nextSteps` |
+        | `AWF-FORK-001` | Fork declares fewer than 2 distinct branches |
+        | `AWF-JOIN-001` | Join declares fewer than 2 distinct `inboundSteps` |
+        | `AWF-JOIN-002` | Unknown `joinPolicy` |
+        | `AWF-STEP-001` | One step both splits and converges |
+        | `AWF-STEP-002` | `branches` on a step that is not a Fork |
+        | `AWF-STEP-003` | `inboundSteps` on a step that is not a Join |
+        | `AWF-TEAM-001` | Agent step binds neither `agentTeamId` nor `teamRole` |
+
+        Reachability follows SLA escalation and path-limit overflow targets as well as `nextSteps` and
+        `branches`, so a step reached only on an SLA breach is not reported as an orphan.
+
         ## Lifecycle
 
         ```
@@ -1671,7 +1702,7 @@ public static class FlowOsMcpGuidance
 
         ## Phase boundary
 
-        - **Phase 4A (now)**: blueprint CRUD and lifecycle — create, read, list, lineage, update, publish, deprecate, abandon, delete.
+        - **Phase 4A (now)**: blueprint CRUD, lifecycle and validation — create, read, list, lineage, update, validate, publish, deprecate, abandon, delete.
         - **Phase 4B (next)**: dispatch machinery — `AgentWorkflowExecution` runtime instances, step scheduling, `HasExecutionsAsync` wired to real data.
 
         Until Phase 4B is deployed, `HasExecutionsAsync` always returns `false`, so GOV-DEL-002 is not
