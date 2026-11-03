@@ -70,11 +70,14 @@ AgentWorkflowBlueprint
   │     └── MaxParallelSteps: int
   └── Steps: AgentStepBlueprint[]
         ├── StepId: string
+        ├── StepType: "Agent" | "Fork" | "Join" | "End"   (default "Agent")
         ├── Description: string
         ├── AgentTeamId: Guid?         (static binding)
         ├── TeamRole: string?          (dynamic binding — resolved by orchestrator)
         ├── NextSteps: dict            (event → next step id)
-        ├── Branches / JoinPolicy / InboundSteps   (fork/join)
+        ├── Branches: string[]         (Fork only — concurrent targets)
+        ├── InboundSteps: string[]     (Join only — steps that converge)
+        ├── JoinPolicy: "WaitAll" | "WaitAny"
         ├── MaxAutonomyLevel: string?
         ├── Consequential: bool        (never auto-committed)
         ├── AutoCommit: AgentStepAutoCommitBlueprint?
@@ -83,6 +86,16 @@ AgentWorkflowBlueprint
         ├── AgentTools: string[]
         └── PathLimits: dict           (retry/resubmit caps)
 ```
+
+### Node kind is declared, not inferred
+
+`StepType` is an explicit field rather than something a reader derives from which routing
+collections happen to be populated. Inference (`Branches` non-empty ⇒ fork, `InboundSteps`
+non-empty ⇒ join) is ambiguous for a step carrying both, and it forces every consumer —
+validator, dashboard graph renderer, Phase 4B dispatcher — to re-implement the same guess.
+
+Consequently `Branches` is meaningful only on a `Fork` and `InboundSteps` only on a `Join`.
+A step that declares either against its `StepType` is a validation error, not a hint.
 
 ### Entity lifecycle
 
@@ -97,8 +110,16 @@ Identical to `WorkflowClass` lifecycle.  Immutable after publish.
 ### Storage
 
 `Definition` is stored as `jsonb` in `AgentWorkflowClasses`, serialised by
-`AgentWorkflowClassConfiguration` — no `HasDefaultValue`, matching the existing
-`WorkflowClassConfiguration` pattern.
+`AgentWorkflowClassConfiguration`.
+
+`FlowOsVersion` carries `HasDefaultValue(FlowOsRelease.PreStampVersion)` so rows written
+by an older client still record which release authored them. A `HasDefaultValue` in the
+configuration must also appear in the migration's `Designer` and in
+`FlowOSDbContextModelSnapshot`, or `MigrationsUpToDateTests` reports model drift.
+
+Because the blueprint lives inside one `jsonb` column, adding a field to the record tree
+(such as `StepType`) needs no migration: a document written before the field existed
+deserialises with the record's default.
 
 ---
 
@@ -106,12 +127,18 @@ Identical to `WorkflowClass` lifecycle.  Immutable after publish.
 
 - `WorkflowEngine` — no changes
 - `AgentTeam` / `TeamExecution` — no changes
-- MCP tools — no changes
-- No new application command/query handlers
+- MCP **tools** — no changes. Phase 4A adds MCP *guidance* only: the
+  `design_agent_workflow_class` prompt and the `flowos://guides/agent-workflow-class`
+  resource, both served by `FlowOsMcpGuidance`.
 - No new execution machinery
 
-Phase 4A is **blueprint data model only** — the entity is stored and versioned;
-nothing dispatches from it yet.
+Phase 4A covers the blueprint data model and its CRUD and lifecycle handlers
+(`AgentWorkflowClassHandlers`). The entity is stored and versioned; nothing dispatches
+from it yet.
+
+`IAgentWorkflowClassRepository.HasExecutionsAsync` returns `false` until Phase 4B adds the
+execution table, so GOV-DEL-002 is enforced by the domain guard and its tests rather than
+by live data.
 
 ---
 
@@ -124,9 +151,11 @@ nothing dispatches from it yet.
 - `get_agent_workflow_blueprint` and `get_agent_workflow_execution` MCP tools
 
 **Phase 4C — Observability**
-- MCP guidance block teaching agents to read the blueprint before acting
 - Change feed enriched with declared-vs-actual step info
-- `design_agent_workflow` MCP prompt (mirrors `design_strategic_plan_workflow`)
+- Dashboard execution overlay: the declared graph with the live step highlighted
+
+The MCP design prompt originally planned for 4C shipped early, in Phase 4A, because
+authoring guidance is useful before any engine exists to dispatch from it.
 
 ---
 

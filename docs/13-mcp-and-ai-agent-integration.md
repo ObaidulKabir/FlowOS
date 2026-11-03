@@ -449,7 +449,7 @@ Agents should load MCP prompt `design_dual_kernel_workflow` or resource `flowos:
 
 An `AgentWorkflowClass` is a **declarative multi-agent coordination plan template** — the agentic counterpart of `WorkflowClass`. It stores an immutable `AgentWorkflowBlueprint` (the "what") and will produce `AgentWorkflowExecution` runtime instances (the "how", Phase 4B). Use it when multiple AI agent steps must be sequenced declaratively, versioned, audited, and governed.
 
-> **Phase boundary**: Phase 4A (current) is blueprint CRUD only — create, read, update, publish, deprecate, abandon, delete. Phase 4B will add the dispatch engine and `start_agent_workflow` MCP tooling.
+> **Phase boundary**: Phase 4A (current) covers blueprint CRUD and lifecycle — create, read, list, lineage, update, publish, deprecate, abandon, delete. Phase 4B will add the dispatch engine and `start_agent_workflow` MCP tooling.
 
 ### How it differs from existing constructs
 
@@ -470,29 +470,40 @@ An `AgentWorkflowClass` is a **declarative multi-agent coordination plan templat
   "startStepId": "gather",
   "coordinationRules": {
     "maxGlobalRetries": 3,
-    "rollbackStrategy": "Compensate",
+    "rollbackStrategy": "Abandon",
     "globalSla": "PT4H",
     "maxParallelSteps": 2
   },
   "steps": [
     {
       "stepId": "gather",
+      "stepType": "Agent",
       "description": "Gather risk data",
       "agentTeamId": "<team-guid>",
       "nextSteps": { "Done": "review" },
-      "autoCommit": { "minConfidence": 0.90 },
-      "sla": { "duration": "PT2H", "escalationRole": "RiskManager" }
+      "autoCommit": { "minConfidence": 0.90, "allowedEvents": ["Done"] },
+      "sla": {
+        "duration": "PT2H",
+        "timeoutEvent": "GatherOverdue",
+        "escalationRole": "RiskManager"
+      }
     },
     {
       "stepId": "review",
-      "description": "Human-in-the-loop review gate",
+      "stepType": "Agent",
+      "description": "Review gate — an agent proposes, a person decides",
+      "teamRole": "RiskReviewer",
       "consequential": true,
-      "nextSteps": { "Approved": null, "Rejected": "gather" },
+      "nextSteps": { "Approved": "END", "Rejected": "gather" },
       "pathLimits": { "Rejected": { "maxTravels": 2 } }
     }
   ]
 }
 ```
+
+Note the shape contract this example follows: every step declares its `stepType`, every `"Agent"` step binds a team (`agentTeamId` or `teamRole`), the `sla` carries a `timeoutEvent` as well as a `duration`, routing to the literal `"END"` terminates the plan, and the `consequential` review step sets no `autoCommit`. `rollbackStrategy: "Compensate"` is accepted but inert — the step record declares no compensation hooks until Phase 4B, so nothing runs in reverse.
+
+`stepType` is authoritative rather than inferred: `branches` is meaningful only on a `"Fork"` and `inboundSteps` only on a `"Join"`. Declaring either against the step's type is a contradiction, not a hint.
 
 ### Lifecycle
 

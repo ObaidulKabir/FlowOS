@@ -1589,7 +1589,7 @@ public static class FlowOsMcpGuidance
         | Field | Default | Notes |
         |-------|---------|-------|
         | `maxGlobalRetries` | `3` | Total retries across all steps before the execution fails |
-        | `rollbackStrategy` | `"Abandon"` | `"Compensate"` runs OnFailure hooks in LIFO order |
+        | `rollbackStrategy` | `"Abandon"` | `"Compensate"` is reserved for Phase 4B: the step record declares no compensation hooks today, so nothing runs in reverse. Setting it records intent only. |
         | `globalSla` | `null` | ISO 8601 duration; null = no global timeout |
         | `maxParallelSteps` | `0` | 0 = unlimited parallel steps |
 
@@ -1598,32 +1598,47 @@ public static class FlowOsMcpGuidance
         ```json
         {
           "stepId": "assess",
+          "stepType": "Agent",
           "description": "Risk assessment by the Risk AgentTeam",
           "agentTeamId": "<team-guid>",
           "teamRole": "RiskAnalyst",
           "nextSteps": { "Approved": "notify", "Rejected": "escalate" },
-          "branches": [],
-          "joinPolicy": "WaitAll",
-          "inboundSteps": [],
           "maxAutonomyLevel": null,
           "consequential": false,
-          "autoCommit": { "minConfidence": 0.90 },
-          "sla": { "duration": "PT2H", "escalationRole": "RiskManager" },
+          "autoCommit": { "minConfidence": 0.90, "allowedEvents": ["Approved"] },
+          "sla": { "duration": "PT2H", "timeoutEvent": "AssessmentOverdue", "escalationRole": "RiskManager" },
           "agentPrompt": "prompt-alias",
           "agentTools": ["LookupRecord:risk", "CheckPolicy:compliance"],
           "pathLimits": { "Retry": { "maxTravels": 3 } }
         }
         ```
 
+        ### stepType — declare the node kind
+        | stepType | Role | Routing fields it uses |
+        |----------|------|------------------------|
+        | `"Agent"` (default) | One unit of work carried out by an AgentTeam | `nextSteps` |
+        | `"Fork"` | Splits into concurrent paths | `branches` (at least 2) |
+        | `"Join"` | Converges concurrent paths | `inboundSteps` (at least 2), `joinPolicy`, `nextSteps` |
+        | `"End"` | Terminal node | none |
+
+        `branches` is meaningful only on a Fork and `inboundSteps` only on a Join. Declaring either
+        against the step's `stepType` is a validation error, not a hint. Omitting `stepType` means
+        `"Agent"`.
+
         ### Key step rules
-        - `nextSteps` maps outcome label → next stepId (null = terminal step).
-        - `branches` lists parallel fork targets; use `joinPolicy: "WaitAll"` or `"WaitAny"` on the join step.
-        - `inboundSteps` on the join step lists all branches that must complete (for `WaitAll`).
+        - `nextSteps` maps outcome label → next stepId. Route to the literal `"END"` to finish the
+          plan on that outcome, or give the step `"stepType": "End"` and no `nextSteps`.
+        - Every non-terminal step needs an exit: `branches` for a Fork, `nextSteps` for everything else.
+        - An `"Agent"` step must bind a team: set `agentTeamId` for a fixed team, or `teamRole` for the
+          orchestrator to resolve at dispatch. Fork, Join and End bind none.
         - `consequential: true` means the step makes irreversible external changes — never set `autoCommit`
           on a consequential step.
         - `pathLimits` prevents infinite loops: a step with `maxTravels: 3` under key `"Retry"` may only
-          be entered via that path 3 times per execution.
-        - `autoCommit.minConfidence` is the minimum agent confidence (0–1) to auto-advance without human review.
+          be entered via that path 3 times per execution. Each key must match a `nextSteps` event.
+        - `autoCommit.minConfidence` is the minimum agent confidence (0–1) to auto-advance without human
+          review, and every entry in `autoCommit.allowedEvents` must be a `nextSteps` key. An SLA
+          `timeoutEvent` can never be auto-committed — a breach stays SLA-owned.
+        - An `sla` needs both `duration` and `timeoutEvent`.
 
         ## Lifecycle
 
@@ -1656,7 +1671,7 @@ public static class FlowOsMcpGuidance
 
         ## Phase boundary
 
-        - **Phase 4A (now)**: blueprint CRUD only — create, read, list, update, publish, deprecate, abandon, delete.
+        - **Phase 4A (now)**: blueprint CRUD and lifecycle — create, read, list, lineage, update, publish, deprecate, abandon, delete.
         - **Phase 4B (next)**: dispatch machinery — `AgentWorkflowExecution` runtime instances, step scheduling, `HasExecutionsAsync` wired to real data.
 
         Until Phase 4B is deployed, `HasExecutionsAsync` always returns `false`, so GOV-DEL-002 is not
@@ -1677,6 +1692,9 @@ public static class FlowOsMcpGuidance
 
         - Do not confuse `AgentWorkflowClass` with `WorkflowClass` — there is no state machine, no event registry.
         - Do not set `autoCommit` on a `consequential: true` step.
+        - Do not put `branches` on a step whose `stepType` is not `"Fork"`, or `inboundSteps` on one that
+          is not a `"Join"` — set the `stepType` instead of relying on the routing fields to imply it.
+        - Do not make one step both split and converge — use a separate Fork and Join.
         - Do not hard-delete a Published plan — use `Abandon`.
         - Do not set `maxTravels` below 1 — 0 means the path is unreachable.
         - Do not create a new `AgentWorkflowClass` when the goal is to revise a published one — version it via `previousVersionId`.

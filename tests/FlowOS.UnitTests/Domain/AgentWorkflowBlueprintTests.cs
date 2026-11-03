@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlowOS.Domain.Blueprints;
+using FlowOS.Domain.Enums;
 using Xunit;
 
 namespace FlowOS.UnitTests.Domain;
@@ -71,10 +72,30 @@ public class AgentWorkflowBlueprintTests
     // ── AgentStepBlueprint ─────────────────────────────────────────────────────
 
     [Fact]
+    public void Step_OmittedStepType_DeserialisesAsAgent()
+    {
+        // The blueprint lives in one jsonb column, so a document written before StepType
+        // existed must still load. The record default carries it.
+        var json = """{"stepId":"legacy","description":"written before StepType existed"}""";
+
+        var step = System.Text.Json.JsonSerializer.Deserialize<AgentStepBlueprint>(
+            json,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+            });
+
+        Assert.NotNull(step);
+        Assert.Equal("legacy", step!.StepId);
+        Assert.Equal(AgentStepType.Agent, step.StepType);
+    }
+
+    [Fact]
     public void Step_DefaultConstruct_HasSensibleDefaults()
     {
         var step = new AgentStepBlueprint();
         Assert.Equal(string.Empty, step.StepId);
+        Assert.Equal(AgentStepType.Agent, step.StepType);
         Assert.Equal(string.Empty, step.Description);
         Assert.Null(step.AgentTeamId);
         Assert.Null(step.TeamRole);
