@@ -509,9 +509,9 @@ Note the shape contract this example follows: every step declares its `stepType`
 
 `AgentWorkflowBlueprintValidator` (`FlowOS.Domain/Services`) runs on create, on draft update, and again on publish, which is the last gate before the blueprint becomes immutable. `ValidateAgentWorkflowBlueprintCommand` returns the full `ValidationResult` without storing anything, so an author can check a draft first. Error codes carry an `AWF-` prefix so they never collide with the `WF-`/`CON-` codes used for human workflow classes.
 
-This pass covers graph integrity: structure (objective, unique step ids, known `stepType`), the entry point, reachability from `startStepId`, exit paths, fork and join arity and policy, unknown routing targets, and team binding. Step-level policy checks — autonomy, SLA shape, path-travel limits, coordination rules and `contextSchema` JSON — follow in a separate change.
+It checks structure (objective, unique step ids, known `stepType`), the entry point, reachability from `startStepId`, exit paths, fork and join arity and policy, unknown routing targets, team binding, autonomy, SLA shape, path-travel limits, coordination rules, and that `contextSchema` parses as JSON.
 
-Reachability follows SLA escalation and path-limit overflow targets as well as `nextSteps` and `branches`, so a step reached only when an SLA breaches is not reported as an orphan.
+Three decisions worth knowing. Reachability follows SLA escalation and path-limit overflow targets as well as `nextSteps` and `branches`, so a step reached only when an SLA breaches is not reported as an orphan. `consequential` and `autoCommit` are mutually exclusive, mirroring CR-11 for agent plans, and an SLA `timeoutEvent` can never be auto-committed. And durations are validated no more strictly than `WorkflowCommandHandlers.ParseDuration` reads them — ISO-8601, the shorthand `90s`/`30m`/`4h`/`2d`, bare seconds and `hh:mm:ss` are all accepted — because rejecting a blueprint that would run correctly only teaches authors to route around validation.
 
 ### Lifecycle
 

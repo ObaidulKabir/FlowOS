@@ -1644,7 +1644,9 @@ public static class FlowOsMcpGuidance
 
         Blueprints are validated by `AgentWorkflowBlueprintValidator` on create, on draft update, and
         again on publish — publishing locks the blueprint, so that is the last gate. Error codes are
-        prefixed `AWF-`. The graph-integrity checks:
+        prefixed `AWF-`.
+
+        Graph integrity:
 
         | Code | Meaning |
         |------|---------|
@@ -1668,8 +1670,33 @@ public static class FlowOsMcpGuidance
         | `AWF-STEP-003` | `inboundSteps` on a step that is not a Join |
         | `AWF-TEAM-001` | Agent step binds neither `agentTeamId` nor `teamRole` |
 
+        Step and plan policy:
+
+        | Code | Meaning |
+        |------|---------|
+        | `AWF-AGENT-001` | `consequential` step also configures `autoCommit` |
+        | `AWF-AGENT-002` | `autoCommit.minConfidence` outside (0, 1] |
+        | `AWF-AGENT-003` | `autoCommit.allowedEvents` entry is not a `nextSteps` key |
+        | `AWF-AGENT-004` | `autoCommit` of the SLA `timeoutEvent` |
+        | `AWF-SLA-001` | `sla` without a `duration` |
+        | `AWF-SLA-002` | `sla.duration` is not a recognised duration |
+        | `AWF-SLA-003` | `sla` without a `timeoutEvent` |
+        | `AWF-CON-004` | `sla.escalationStepId` is an unknown step |
+        | `AWF-CON-005` | `pathLimits` key does not match a `nextSteps` event |
+        | `AWF-CON-006` | `pathLimits.onExceeded` is an unknown step |
+        | `AWF-LOOP-001` | `pathLimits.maxTravels` below 1 |
+        | `AWF-RULE-001` | `coordinationRules.maxGlobalRetries` is negative |
+        | `AWF-RULE-002` | Unknown `coordinationRules.rollbackStrategy` |
+        | `AWF-RULE-003` | `coordinationRules.maxParallelSteps` is negative (use 0 for unlimited) |
+        | `AWF-RULE-004` | `coordinationRules.globalSla` is not a recognised duration |
+        | `AWF-SCHEMA-001` | `contextSchema` is not valid JSON |
+
         Reachability follows SLA escalation and path-limit overflow targets as well as `nextSteps` and
         `branches`, so a step reached only on an SLA breach is not reported as an orphan.
+
+        Durations are validated no more strictly than the engine parses them: ISO-8601 (`PT4H`, `P1D`),
+        the shorthand `90s` / `30m` / `4h` / `2d`, a bare number of seconds, and `hh:mm:ss` are all
+        accepted.
 
         ## Lifecycle
 

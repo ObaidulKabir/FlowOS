@@ -106,15 +106,24 @@ the full `ValidationResult` without storing anything, so an author can check a d
 first. Error codes carry an `AWF-` prefix so they never collide with the `WF-`/`CON-`
 codes used for human workflow classes.
 
-This pass covers graph integrity: structure (objective, unique step ids, known
-`StepType`), the entry point, reachability from `StartStepId`, exit paths, fork and join
-arity and policy, unknown routing targets, and team binding. Step-level policy checks
-(autonomy, SLA shape, path-travel limits, coordination rules, `ContextSchema` JSON) follow
-in a separate change.
+Checks: structure (objective, unique step ids, known `StepType`), the entry point,
+reachability from `StartStepId`, exit paths, fork and join arity and policy, unknown
+routing targets, team binding, autonomy, SLA shape, path-travel limits, coordination
+rules, and that `ContextSchema` parses as JSON.
 
-Reachability follows SLA escalation and path-limit overflow targets as well as `NextSteps`
-and `Branches`: a step reached only when an SLA breaches is legitimately reachable, and
-treating it otherwise would report a false orphan.
+Three decisions worth recording:
+
+- **Reachability follows SLA escalation and path-limit overflow targets** as well as
+  `NextSteps` and `Branches`. A step reached only when an SLA breaches is legitimately
+  reachable, and treating it otherwise would report a false orphan.
+- **`Consequential` and `AutoCommit` are mutually exclusive** (`AWF-AGENT-001`), mirroring
+  CR-11 for agent plans: an agent may propose on a consequential step, but a person must
+  decide. An SLA `TimeoutEvent` can never be auto-committed either — a breach stays
+  SLA-owned.
+- **Durations are validated no more strictly than the engine parses them.** The validator
+  accepts every shape `WorkflowCommandHandlers.ParseDuration` handles — ISO-8601, the
+  shorthand `90s`/`30m`/`4h`/`2d`, bare seconds, `hh:mm:ss` — because rejecting a
+  blueprint that would run correctly only teaches authors to route around validation.
 
 ### Entity lifecycle
 
