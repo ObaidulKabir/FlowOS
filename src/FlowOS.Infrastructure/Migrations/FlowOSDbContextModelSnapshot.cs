@@ -2370,50 +2370,154 @@ namespace FlowOS.Infrastructure.Migrations
             // AgentOrchestrationPhase1 -- added 2026-11-03
             modelBuilder.Entity("FlowOS.Domain.Entities.Orchestration.AgentVersion", b =>
                 {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<Guid>("TenantId").HasColumnType("uuid").IsRequired();
-                    b.Property<string>("AgentId").HasColumnType("character varying(200)").HasMaxLength(200).IsRequired();
-                    b.Property<int>("Version").HasColumnType("integer").IsRequired();
-                    b.Property<string>("Label").HasColumnType("character varying(50)").HasMaxLength(50).IsRequired();
-                    b.Property<string>("Role").HasColumnType("character varying(200)").HasMaxLength(200).IsRequired();
-                    b.Property<string>("ProviderAlias").HasColumnType("character varying(200)").HasMaxLength(200).IsRequired();
-                    b.Property<string>("PromptAlias").HasColumnType("character varying(200)").HasMaxLength(200);
-                    b.Property<string>("ToolAliases").HasColumnType("jsonb").IsRequired().HasDefaultValue("[]");
-                    b.Property<string>("AllowedEvents").HasColumnType("jsonb");
-                    b.Property<string>("CapabilityTags").HasColumnType("jsonb").IsRequired().HasDefaultValue("[]");
-                    b.Property<string>("AutonomyLevel").HasColumnType("character varying(40)").HasMaxLength(40).IsRequired();
-                    b.Property<double?>("AutoCommitThreshold").HasColumnType("double precision");
-                    b.Property<bool>("IsDeprecated").HasColumnType("boolean").IsRequired().HasDefaultValue(false);
-                    b.Property<DateTime>("PublishedAtUtc").HasColumnType("timestamp with time zone").IsRequired();
-                    b.Property<DateTime?>("DeprecatedAtUtc").HasColumnType("timestamp with time zone");
-                    b.Property<string>("PublishedBy").HasColumnType("character varying(200)").HasMaxLength(200).IsRequired();
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AllowedEvents")
+                        .HasColumnType("jsonb");
+
+                    b.Property<double?>("AutoCommitThreshold")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("AutonomyLevel")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("CapabilityTags")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("DeprecatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeprecated")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PromptAlias")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderAlias")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PublishedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToolAliases")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
-                    b.HasIndex("TenantId", "AgentId", "Version").IsUnique().HasDatabaseName("IX_AgentVersions_TenantAgentVersion");
-                    b.HasIndex("TenantId", "AgentId", "IsDeprecated").HasDatabaseName("IX_AgentVersions_TenantAgentDeprecated");
-                    b.HasIndex("TenantId").HasDatabaseName("IX_AgentVersions_TenantId");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_AgentVersions_TenantId");
+
+                    b.HasIndex("TenantId", "AgentId", "IsDeprecated")
+                        .HasDatabaseName("IX_AgentVersions_TenantAgentDeprecated");
+
+                    b.HasIndex("TenantId", "AgentId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AgentVersions_TenantAgentVersion");
+
                     b.ToTable("AgentVersions", (string)null);
                 });
 
             modelBuilder.Entity("FlowOS.Domain.Entities.Orchestration.AgentTeam", b =>
                 {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<Guid>("TenantId").HasColumnType("uuid").IsRequired();
-                    b.Property<string>("Name").HasColumnType("character varying(200)").HasMaxLength(200).IsRequired();
-                    b.Property<string>("Description").HasColumnType("character varying(2000)").HasMaxLength(2000).HasDefaultValue("");
-                    b.Property<string>("DefaultObjective").HasColumnType("character varying(1000)").HasMaxLength(1000);
-                    b.Property<string>("Slots").HasColumnType("jsonb").IsRequired().HasDefaultValue("[]");
-                    b.Property<string>("CapabilityTags").HasColumnType("jsonb").IsRequired().HasDefaultValue("[]");
-                    b.Property<int>("MaxNestingDepth").HasColumnType("integer").IsRequired().HasDefaultValue(1);
-                    b.Property<string>("MaxAutonomyLevel").HasColumnType("character varying(40)").HasMaxLength(40).IsRequired();
-                    b.Property<string>("Status").HasColumnType("character varying(40)").HasMaxLength(40).IsRequired();
-                    b.Property<DateTime>("CreatedAtUtc").HasColumnType("timestamp with time zone").IsRequired();
-                    b.Property<DateTime?>("UpdatedAtUtc").HasColumnType("timestamp with time zone");
-                    b.Property<DateTime?>("ActivatedAtUtc").HasColumnType("timestamp with time zone");
-                    b.Property<DateTime?>("ArchivedAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ActivatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CapabilityTags")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultObjective")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("MaxAutonomyLevel")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("MaxNestingDepth")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Slots")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
-                    b.HasIndex("TenantId", "Name").IsUnique().HasDatabaseName("IX_AgentTeams_TenantName");
-                    b.HasIndex("TenantId", "Status").HasDatabaseName("IX_AgentTeams_TenantStatus");
-                    b.ToTable("AgentTeams", (string)null);  // NEVER "Teams" -- ADR-002
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AgentTeams_TenantName");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("IX_AgentTeams_TenantStatus");
+
+                    b.ToTable("AgentTeams", (string)null);
                 });
 
 #pragma warning restore 612, 618
