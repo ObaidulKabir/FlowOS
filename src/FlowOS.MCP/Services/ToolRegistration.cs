@@ -201,6 +201,35 @@ public static class ToolRegistration
         registry.Register("create_draft_workflowclass", McpToolDescriptions.For("create_draft_workflowclass"), McpToolSchemas.CreateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.CreateDraft(args)));
 
+        // ADR-006/ADR-007: the AgentWorkflowClass authoring lifecycle. Thin wrappers over
+        // the same MediatR commands the REST controller uses, so validation and governance
+        // guards behave identically on both surfaces.
+        registry.Register("create_agent_workflow_class", McpToolDescriptions.For("create_agent_workflow_class"), McpToolSchemas.CreateAgentWorkflowClass(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.CreateDraft(args)));
+
+        registry.Register("update_agent_workflow_class_draft", McpToolDescriptions.For("update_agent_workflow_class_draft"), McpToolSchemas.UpdateAgentWorkflowClass(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.UpdateDraft(args)));
+
+        registry.Register("validate_agent_workflow_class", McpToolDescriptions.For("validate_agent_workflow_class"), McpToolSchemas.ValidateAgentWorkflowClass(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.Validate(args)));
+
+        registry.Register("publish_agent_workflow_class", McpToolDescriptions.For("publish_agent_workflow_class"), McpToolSchemas.AgentWorkflowClassById(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.Publish(args)));
+
+        registry.Register("get_agent_workflow_class", McpToolDescriptions.For("get_agent_workflow_class"), McpToolSchemas.AgentWorkflowClassById(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.Get(args)));
+
+        registry.Register("list_agent_workflow_classes", McpToolDescriptions.For("list_agent_workflow_classes"), McpToolSchemas.ListAgentWorkflowClasses(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.List(args)));
+
+        registry.Register("get_agent_workflow_class_lineage", McpToolDescriptions.For("get_agent_workflow_class_lineage"), McpToolSchemas.AgentWorkflowClassLineage(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.GetLineage(args)));
+
+        // ADR-007 §9 (amendment): discovery tool so an authoring agent grounds an
+        // AgentDefinitionBlueprint's capability tags in what this tenant already has.
+        registry.Register("describe_tenant_agent_bindings", McpToolDescriptions.For("describe_tenant_agent_bindings"), McpToolSchemas.DescribeTenantAgentBindings(),
+            async (args) => await ExecuteScopedAsync<AgentWorkflowClassMcpTools>(serviceProvider, t => t.DescribeTenantAgentBindings(args)));
+
         registry.Register("update_draft_workflowclass", McpToolDescriptions.For("update_draft_workflowclass"), McpToolSchemas.UpdateDraft(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.UpdateDraft(args)));
 

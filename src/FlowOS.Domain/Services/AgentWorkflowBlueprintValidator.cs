@@ -70,6 +70,11 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
 
         ValidateGovernanceDeclarations(blueprint, declaredCapabilities, result);
 
+        // ADR-007 §9 (amendment): application-scoped agent definitions. Structural only —
+        // whether a tenant actually holds a binding for a declared capability tag is
+        // readiness, checked separately per tenant, never here.
+        var declaredAgentAliases = ValidateAgentDefinitions(blueprint, result);
+
         // Everything below needs a usable step-id set. Bail out when the plan has no
         // identifiable steps — further checks would only repeat STR-002/STR-003.
         var stepIds = steps
@@ -91,6 +96,7 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
             ValidateStepShape(step, result);
             ValidateRoutingTargets(step, stepIds, result);
             ValidateTeamBinding(step, result);
+            ValidateAgentDefinitionReference(step, declaredAgentAliases, result);
             ValidateHumanGate(step, declaredRoles, declaredCapabilities, result);
             ValidateAutonomy(step, result);
             ValidateSla(step, stepIds, result);
@@ -492,6 +498,125 @@ public sealed class AgentWorkflowBlueprintValidator : IAgentWorkflowBlueprintVal
                 "Governance",
                 $"Role '{duplicate}' is declared more than once. Role names must be unique within a plan.",
                 "Roles");
+        }
+    }
+
+    // ── Agent definitions (ADR-007 §9, added by amendment) ──────────────────────
+
+    /// <summary>
+    /// Structural checks on every declared <see cref="AgentDefinitionBlueprint"/>: alias
+    /// present and unique within the pack, role and prompt non-empty, autonomy level known
+    /// if set, capability tags well-formed. None of this touches a tenant's registry —
+    /// capability tags are checked for shape only, never resolved, so the same blueprint
+    /// validates identically in every tenant (ADR-007 §2, §9).
+    /// </summary>
+    /// <returns>The set of declared aliases, for step-reference checking.</returns>
+    private static HashSet<string> ValidateAgentDefinitions(
+        AgentWorkflowBlueprint blueprint,
+        ValidationResult result)
+    {
+        var agents = blueprint.Agents ?? new List<AgentDefinitionBlueprint>();
+        var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var agent in agents)
+        {
+            if (string.IsNullOrWhiteSpace(agent.Alias))
+            {
+                result.AddError("ADF-001", "AgentDefinition", "An agent definition's alias cannot be empty.", "Agents");
+            }
+            else
+            {
+                aliases.Add(agent.Alias.Trim());
+            }
+
+            if (string.IsNullOrWhiteSpace(agent.Role))
+            {
+                result.AddError(
+                    "ADF-003",
+                    "AgentDefinition",
+                    $"Agent '{agent.Alias}' must declare a role — it is part of what the agent is.",
+                    "Agents");
+            }
+
+            if (string.IsNullOrWhiteSpace(agent.Prompt))
+            {
+                result.AddError(
+                    "ADF-004",
+                    "AgentDefinition",
+                    $"Agent '{agent.Alias}' must declare a prompt inline. Prompts are application-scoped — " +
+                    "they travel with the pack, not with a tenant alias.",
+                    "Agents");
+            }
+
+            if (!string.IsNullOrWhiteSpace(agent.MaxAutonomyLevel) && !IsKnownAutonomyLevel(agent.MaxAutonomyLevel))
+            {
+                result.AddError(
+                    "ADF-005",
+                    "AgentDefinition",
+                    $"Agent '{agent.Alias}' has unknown maxAutonomyLevel '{agent.MaxAutonomyLevel}'.",
+                    "Agents");
+            }
+
+            foreach (var tag in agent.RequiredToolCapabilities ?? new List<string>())
+            {
+                if (string.IsNullOrWhiteSpace(tag))
+                {
+                    result.AddError(
+                        "ADF-006",
+                        "AgentDefinition",
+                        $"Agent '{agent.Alias}' declares an empty required tool capability.",
+                        "Agents");
+                }
+            }
+
+            if (agent.RequiredProviderCapability is { Length: 0 })
+            {
+                result.AddError(
+                    "ADF-006",
+                    "AgentDefinition",
+                    $"Agent '{agent.Alias}' declares an empty required provider capability — omit the field instead.",
+                    "Agents");
+            }
+        }
+
+        var duplicates = agents
+            .Where(a => !string.IsNullOrWhiteSpace(a.Alias))
+            .GroupBy(a => a.Alias.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key);
+
+        foreach (var duplicate in duplicates)
+        {
+            result.AddError(
+                "ADF-002",
+                "AgentDefinition",
+                $"Agent alias '{duplicate}' is declared more than once. Aliases must be unique within a plan.",
+                "Agents");
+        }
+
+        return aliases;
+    }
+
+    /// <summary>
+    /// A step naming <see cref="AgentStepBlueprint.AgentDefinitionAlias"/> must resolve to
+    /// a declared <see cref="AgentWorkflowBlueprint.Agents"/> entry — the same closure rule
+    /// ADR-007 §2 applies to every other reference in the pack.
+    /// </summary>
+    private static void ValidateAgentDefinitionReference(
+        AgentStepBlueprint step,
+        HashSet<string> declaredAgentAliases,
+        ValidationResult result)
+    {
+        if (string.IsNullOrWhiteSpace(step.AgentDefinitionAlias)) return;
+
+        if (!declaredAgentAliases.Contains(step.AgentDefinitionAlias.Trim()))
+        {
+            result.AddError(
+                "AWF-REF-001",
+                "Reference",
+                $"Step '{step.StepId}' names agentDefinitionAlias '{step.AgentDefinitionAlias}', " +
+                "which is not declared in this plan's Agents.",
+                "Steps");
         }
     }
 
