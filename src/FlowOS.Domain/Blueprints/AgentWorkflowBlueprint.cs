@@ -51,6 +51,16 @@ public record AgentWorkflowBlueprint
     public List<RoleBlueprint> Roles { get; init; } = new();
 
     /// <summary>
+    /// ADR-007: separation of duties. <see cref="RoleBlueprint"/> resolves who holds a
+    /// role; these declare required relationships <em>between</em> assignments — that an
+    /// approver is not the submitter, that two markers differ.
+    ///
+    /// Validated structurally at publish; evaluated against actual holders at assignment
+    /// time, which is the only moment the holders are known.
+    /// </summary>
+    public List<AssignmentConstraintBlueprint> Constraints { get; init; } = new();
+
+    /// <summary>
     /// JSON Schema for the shared working memory passed between steps.
     /// Validated by the engine on each step handoff.
     /// </summary>
@@ -184,6 +194,57 @@ public record AgentStepBlueprint
     /// Mirrors <see cref="StepBlueprint.PathLimits"/>.
     /// </summary>
     public Dictionary<string, AgentPathTravelLimitBlueprint> PathLimits { get; init; } = new();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Separation of duties (ADR-007)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>Known <see cref="AssignmentConstraintBlueprint.Rule"/> values.</summary>
+public static class AssignmentConstraintRules
+{
+    /// <summary>Every reference must resolve to a different person. Needs 2 or more.</summary>
+    public const string Distinct = "distinct";
+
+    /// <summary>
+    /// The one referenced assignment must not be the person identified by
+    /// <see cref="AssignmentConstraintBlueprint.Subject"/> — "the submitter may not
+    /// approve". Needs exactly one reference and a subject.
+    /// </summary>
+    public const string NotSubjectOf = "notSubjectOf";
+
+    /// <summary>
+    /// The first reference must outrank the second in the business role hierarchy.
+    /// Needs exactly two references.
+    /// </summary>
+    public const string SeniorTo = "seniorTo";
+
+    public static bool IsKnown(string? value) =>
+        string.Equals(value, Distinct, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, NotSubjectOf, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, SeniorTo, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// One required relationship between assignments.
+/// </summary>
+public record AssignmentConstraintBlueprint
+{
+    /// <summary>See <see cref="AssignmentConstraintRules"/>.</summary>
+    public string Rule { get; init; } = AssignmentConstraintRules.Distinct;
+
+    /// <summary>
+    /// The assignments this constrains. Each entry is either a declared
+    /// <see cref="AgentWorkflowBlueprint.Roles"/> name, or <c>&lt;stepId&gt;.assignee</c>
+    /// naming the person who completed a step.
+    /// </summary>
+    public List<string> Between { get; init; } = new();
+
+    /// <summary>
+    /// For <see cref="AssignmentConstraintRules.NotSubjectOf"/>: a context expression
+    /// identifying the person who must be excluded, e.g. <c>{{submittedBy}}</c>.
+    /// </summary>
+    public string? Subject { get; init; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

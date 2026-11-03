@@ -1659,6 +1659,34 @@ public static class FlowOsMcpGuidance
         `teamRole` on one are an error. Declaring `roles` and `capabilities` is optional —
         a plan of pure agent steps needs neither.
 
+        ### Separation of duties
+
+        A role says who *may* act. It does not say that the approver differs from the
+        submitter, which is usually the control that matters. Declare that with
+        `constraints`:
+
+        ```json
+        "constraints": [
+          { "rule": "notSubjectOf", "between": ["PaymentApprover"], "subject": "{{submittedBy}}" },
+          { "rule": "distinct", "between": ["PaymentApprover", "review.assignee"] }
+        ]
+        ```
+
+        | rule | Meaning | Shape |
+        |------|---------|-------|
+        | `distinct` | every named assignment resolves to a different person | 2 or more distinct references |
+        | `notSubjectOf` | the named assignment is not the person in `subject` | exactly 1 reference + `subject` |
+        | `seniorTo` | the first outranks the second in the role hierarchy | exactly 2 references |
+
+        A reference is either a declared `roles` name or `<stepId>.assignee`, naming whoever
+        completed that step. Instance-qualified forms such as `Marker#0` are **not** supported
+        yet — per-role instances do not exist, so they are rejected rather than read as a role
+        whose name contains a `#`.
+
+        Constraints are checked structurally at publish: known rule, right arity, every
+        reference resolves. Whether the actual people satisfy the relationship is evaluated
+        when the task is assigned, which is the first moment those people are known.
+
         `branches` is meaningful only on a Fork and `inboundSteps` only on a Join. Declaring either
         against the step's `stepType` is a validation error, not a hint. Omitting `stepType` means
         `"Agent"`.
@@ -1731,6 +1759,11 @@ public static class FlowOsMcpGuidance
         | `AWF-GOV-001` | Step requires an undeclared capability |
         | `AWF-GOV-002` | Role grants an undeclared capability |
         | `AWF-GOV-003` | Duplicate role name |
+        | `AWF-SOD-001` | Unknown constraint `rule` |
+        | `AWF-SOD-002` | `distinct` names fewer than 2 distinct assignments |
+        | `AWF-SOD-003` | `notSubjectOf` needs one assignment plus a `subject` |
+        | `AWF-SOD-004` | `seniorTo` needs exactly two assignments |
+        | `AWF-CON-008` | Constraint names an unknown role or step assignee |
         | `AWF-SLA-001` | `sla` without a `duration` |
         | `AWF-SLA-002` | `sla.duration` is not a recognised duration |
         | `AWF-SLA-003` | `sla` without a `timeoutEvent` |
