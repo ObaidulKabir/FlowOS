@@ -679,7 +679,7 @@ public static class McpToolSchemas
                         },
                         "additionalProperties":false
                       },
-                      "agentTeamId":{"type":"string","format":"uuid","description":"AgentTask only (ADR-003). The AgentTeam template to instantiate for this step. Required when stepType is AgentTask; ignored for all other step types."},
+                      "agentTeamId":{"type":"string","format":"uuid","description":"AgentTask only (ADR-003). The AgentTeam template to instantiate for this step. Optional even on AgentTask: if absent, AgentTaskScheduling falls back to agentProvider (WF-AGENT-007 if agentTeamSlotRole is set without it). Setting it on a non-AgentTask step compiles but is never read (WF-AGENT-008); setting it alongside agentProvider on an AgentTask step is also allowed to compile, but the team wins at dispatch (WF-AGENT-010)."},
                       "agentTeamSlotRole":{"type":"string","description":"AgentTask only (ADR-003). The AgentTeamSlot.RoleName that will perform this step. Defaults to the first required slot if absent. Never set effectiveAutonomyLevel here — it is computed at dispatch."},
                       "agentProvider":{"type":"string","description":"Alias resolved against a tenant plugin binding of type agent. The binding holds provider/model/endpoint/apiKey. The key never appears in Agent Context."},
                       "agentPrompt":{"type":"string","description":"Alias of a tenant prompt binding (bindingType prompt). Create/edit the prompt independently; FlowOS loads title/system/instructions into Agent Context.Prompt."},
