@@ -72,7 +72,17 @@ async function getWorkflowClassId(role) {
 
     console.log('Available Workflow Classes:', response.data.map(w => `${w.name} (${w.status})`));
 
-    // 1. Try V2
+    // 1. Try V3: the Manager/Director escalation threshold is declared inside this blueprint
+    // (a Decision step + guarded Law transitions on EVT-APPROVE), so this app no longer has to
+    // compute it itself - see the approve route below.
+    const v3 = response.data.find(w => w.name === 'ExpenseApprovalV3');
+    if (v3) {
+      WORKFLOW_CLASS_ID = v3.id;
+      console.log(`Selected V3: ${v3.name} (${v3.status})`);
+      return WORKFLOW_CLASS_ID;
+    }
+
+    // 2. Try V2
     const v2 = response.data.find(w => w.name === 'ExpenseApprovalV2');
     if (v2) {
       WORKFLOW_CLASS_ID = v2.id;
@@ -80,7 +90,7 @@ async function getWorkflowClassId(role) {
       return WORKFLOW_CLASS_ID;
     }
 
-    // 2. Try V1 (ExpenseApproval)
+    // 3. Try V1 (ExpenseApproval)
     const v1 = response.data.find(w => w.name === 'ExpenseApproval');
     if (v1) {
       WORKFLOW_CLASS_ID = v1.id;
@@ -88,7 +98,7 @@ async function getWorkflowClassId(role) {
       return WORKFLOW_CLASS_ID;
     }
 
-    // 3. Fallback
+    // 4. Fallback
     const any = response.data[0];
     if (any) {
       WORKFLOW_CLASS_ID = any.id;
@@ -186,34 +196,23 @@ app.post('/api/expenses', async (req, res) => {
 });
 
 // Approve Expense
+//
+// Declarative by design: this route no longer looks at `amount` at all. It only knows which
+// EVENT a Manager-or-Director "Approve" click represents for the expense's current inbox
+// (EVT-APPROVE at PendingManager, EVT-DIRECTOR-APPROVE at PendingDirector) - that's event
+// vocabulary, not a business rule. Whether a Manager's EVT-APPROVE finalizes the request or
+// auto-escalates it to Director is decided inside the ExpenseApprovalV3 blueprint itself (a
+// Decision step + guarded Law transitions on EVT-APPROVE), so this app asks FlowOS what state
+// the instance landed in afterward instead of predicting it from the amount.
 app.post('/api/expenses/:id/approve', async (req, res) => {
   const { id } = req.params;
 
   db.get('SELECT * FROM expenses WHERE id = ?', [id], async (err, row) => {
     if (err || !row) return res.status(404).json({ error: 'Expense not found' });
 
-    const amount = row.amount;
-    let eventType = 'EVT-APPROVE';
-    let newStatus = 'Approved';
+    const eventType = row.status === 'PendingDirector' ? 'EVT-DIRECTOR-APPROVE' : 'EVT-APPROVE';
 
-    if (row.status === 'PendingManager') {
-      if (amount > 100) {
-        // If amount > 100, Manager must escalate to Director
-        eventType = 'EVT-ESCALATE';
-        newStatus = 'PendingDirector';
-      } else {
-        // If amount <= 100, Manager can approve directly
-        eventType = 'EVT-APPROVE';
-        newStatus = 'Approved';
-      }
-    } else if (row.status === 'PendingDirector') {
-      eventType = 'EVT-DIRECTOR-APPROVE';
-      newStatus = 'Approved';
-    }
-
-    console.log(`[Backend Logic] Amount: ${amount}, Status: ${row.status} -> Event: ${eventType}, NewStatus: ${newStatus}`);
-
-    handleExpenseActionLogic(res, row, eventType, newStatus, req.mockRole);
+    handleExpenseActionLogic(res, row, eventType, req.mockRole);
   });
 });
 
@@ -224,18 +223,28 @@ app.post('/api/expenses/:id/reject', async (req, res) => {
   db.get('SELECT * FROM expenses WHERE id = ?', [id], async (err, row) => {
     if (err || !row) return res.status(404).json({ error: 'Expense not found' });
 
-    let eventType = 'EVT-REJECT';
-    let newStatus = 'Rejected';
+    const eventType = row.status === 'PendingDirector' ? 'EVT-DIRECTOR-REJECT' : 'EVT-REJECT';
 
-    if (row.status === 'PendingDirector') {
-      eventType = 'EVT-DIRECTOR-REJECT';
-    }
-
-    handleExpenseActionLogic(res, row, eventType, newStatus, req.mockRole);
+    handleExpenseActionLogic(res, row, eventType, req.mockRole);
   });
 });
 
-async function handleExpenseActionLogic(res, row, eventType, newStatus, mockRole) {
+// Reads the workflow instance's current Law state back from FlowOS. The state machine's state
+// names (PendingManager/PendingDirector/Approved/Rejected) already match this app's local
+// `status` column 1:1, so no client-side mapping or prediction is needed - FlowOS is just asked.
+async function fetchCurrentState(workflowInstanceId, mockRole, fallback) {
+  try {
+    const response = await axios.get(`${FLOWOS_API_URL}/workflows/${workflowInstanceId}`, {
+      headers: { 'x-tenant-id': TENANT_ID, 'X-Mock-Role': mockRole }
+    });
+    return response.data.currentState || response.data.CurrentState || fallback;
+  } catch (error) {
+    console.error('Failed to read back workflow state:', error.response?.data || error.message);
+    return fallback;
+  }
+}
+
+async function handleExpenseActionLogic(res, row, eventType, mockRole) {
   try {
     console.log(`Publishing event ${eventType} for instance ${row.workflow_instance_id}`);
     // Publish Event to FlowOS
@@ -251,6 +260,10 @@ async function handleExpenseActionLogic(res, row, eventType, newStatus, mockRole
         'X-Mock-Role': mockRole // Use role from frontend
       }
     });
+
+    // Ask FlowOS where the instance landed - this app never computes it itself.
+    const newStatus = await fetchCurrentState(row.workflow_instance_id, mockRole, row.status);
+    console.log(`[FlowOS Decision] Event: ${eventType} -> NewStatus: ${newStatus}`);
 
     // Update Local DB
     db.run('UPDATE expenses SET status = ? WHERE id = ?', [newStatus, row.id], (updateErr) => {

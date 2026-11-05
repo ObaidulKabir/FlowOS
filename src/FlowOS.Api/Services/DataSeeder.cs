@@ -369,7 +369,27 @@ public static class DataSeeder
     }
 
     await RepairExpenseApprovalV2GraphAsync(context, clientTenantId);
-    
+
+    // 4b. Seed ExpenseApproval v3: the Manager/Director escalation threshold that the ExpenseApp
+    // Node client used to compute itself (amount > 100 decided in JS before choosing which event
+    // to publish) is moved into the blueprint as a Decision step + dual Law transitions on the
+    // same EVT-APPROVE event, so the client always publishes the one event the UI button
+    // represents and FlowOS alone decides whether that lands on Approved or PendingDirector.
+    var v3Name = "ExpenseApprovalV3";
+    if (!await context.WorkflowClasses.AnyAsync(w => w.TenantId == clientTenantId && w.Name == v3Name))
+    {
+        Console.WriteLine($"[DataSeeder] Creating {v3Name}...");
+        var v3Bp = CreateExpenseApprovalV3Blueprint();
+        var v3Wc = new WorkflowClass(clientTenantId, v3Name, "1.0.0", v3Bp);
+        SetPrivateProperty(v3Wc, "Id", Guid.Parse("e912ab44-3333-3333-3333-333333333333"));
+        var manager3 = new WorkflowClassManager();
+        manager3.Publish(v3Wc);
+        context.WorkflowClasses.Add(v3Wc);
+
+        await EnsureWorkflowClassRuntimePackageAsync(context, v3Wc);
+        await context.SaveChangesAsync();
+    }
+
     // 5. Ensure runtime roles for sandbox + production API keys (demo key maps to Admin).
     await EnsureRoleWithPermissionsAsync(
         context,
@@ -2156,6 +2176,108 @@ public static class DataSeeder
                             { "EVT-ESCALATE", "PendingDirector" },
                             { "EVT-REJECT", "Rejected" }
                         }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "PendingDirector",
+                        StepType = "HumanTask",
+                        RequiredRoles = new() { "Director" },
+                        NextSteps = new()
+                        {
+                            { "EVT-DIRECTOR-APPROVE", "Approved" },
+                            { "EVT-DIRECTOR-REJECT", "Rejected" }
+                        }
+                    },
+                    new StepBlueprint { StepId = "Approved", StepType = "Command", NextSteps = new() { { "Default", "END" } } },
+                    new StepBlueprint { StepId = "Rejected", StepType = "Command", NextSteps = new() { { "Default", "END" } } }
+                }
+            },
+            Roles = ExpenseV2Roles(),
+            Capabilities = ExpenseV2Capabilities()
+        };
+
+        WorkflowSimulationGovernance.Apply(blueprint);
+        return blueprint;
+    }
+
+    private const string ManagerApprovalEscalationCondition = "Amount > 100";
+
+    /// <summary>
+    /// ADR-003/dual-kernel pattern reused from CreateExpenseApprovalV2Blueprint's CheckAmount
+    /// step, but applied at the Manager's approve decision instead of at submission: V2 decides
+    /// Director-vs-Manager routing at EVT-SUBMIT, before any human has reviewed the request. The
+    /// ExpenseApp Node client's actual behavior always routes to PendingManager first, then - in
+    /// its own JavaScript, not FlowOS - decides whether the Manager's "Approve" click becomes
+    /// EVT-APPROVE (finalize) or EVT-ESCALATE (send to Director) by comparing Amount to 100. That
+    /// decision belongs in the declarative blueprint, not the client: here, PendingManager's
+    /// single EVT-APPROVE always routes through the CheckApprovalAmount Decision step, which (like
+    /// CheckAmount) pairs with two Law transitions guarding the same EventId from the same
+    /// FromState - the guarded one listed first, Default second, so simulate_workflowclass and
+    /// the live engine pick the same branch. EVT-ESCALATE remains available too, for a Manager who
+    /// wants to escalate below the threshold on their own judgment.
+    /// </summary>
+    private static WorkflowClassBlueprint CreateExpenseApprovalV3Blueprint()
+    {
+        var blueprint = new WorkflowClassBlueprint
+        {
+            Events = new()
+            {
+                new EventBlueprint { EventId = "EVT-SUBMIT", Name = "Submit Request", AllowedRoles = new() { "Employee", "User" } },
+                new EventBlueprint { EventId = "EVT-APPROVE", Name = "Approve Request", AllowedRoles = new() { "Manager" } },
+                new EventBlueprint { EventId = "EVT-REJECT", Name = "Reject Request", AllowedRoles = new() { "Manager" } },
+                new EventBlueprint { EventId = "EVT-DIRECTOR-APPROVE", Name = "Director Approve", AllowedRoles = new() { "Director" } },
+                new EventBlueprint { EventId = "EVT-DIRECTOR-REJECT", Name = "Director Reject", AllowedRoles = new() { "Director" } },
+                new EventBlueprint { EventId = "EVT-ESCALATE", Name = "Escalate to Director", AllowedRoles = new() { "Manager" } }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = new() { "Draft", "PendingManager", "PendingDirector", "Approved", "Rejected" },
+                Transitions = new()
+                {
+                    new TransitionBlueprint { FromState = "Draft", ToState = "PendingManager", EventId = "EVT-SUBMIT" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-APPROVE", Condition = ManagerApprovalEscalationCondition },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "Approved", EventId = "EVT-APPROVE" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "PendingDirector", EventId = "EVT-ESCALATE" },
+                    new TransitionBlueprint { FromState = "PendingManager", ToState = "Rejected", EventId = "EVT-REJECT" },
+                    new TransitionBlueprint { FromState = "PendingDirector", ToState = "Approved", EventId = "EVT-DIRECTOR-APPROVE" },
+                    new TransitionBlueprint { FromState = "PendingDirector", ToState = "Rejected", EventId = "EVT-DIRECTOR-REJECT" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "Draft",
+                Steps = new()
+                {
+                    new StepBlueprint
+                    {
+                        StepId = "Draft",
+                        StepType = "Command",
+                        NextSteps = new() { { "EVT-SUBMIT", "PendingManager" } }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "PendingManager",
+                        StepType = "HumanTask",
+                        RequiredRoles = new() { "Manager" },
+                        NextSteps = new()
+                        {
+                            { "EVT-APPROVE", "CheckApprovalAmount" },
+                            { "EVT-ESCALATE", "PendingDirector" },
+                            { "EVT-REJECT", "Rejected" }
+                        }
+                    },
+                    new StepBlueprint
+                    {
+                        StepId = "CheckApprovalAmount",
+                        StepType = "Decision",
+                        RequiredRoles = new() { "System" },
+                        Conditions = new()
+                        {
+                            { ManagerApprovalEscalationCondition, "PendingDirector" },
+                            { "Default", "Approved" }
+                        },
+                        NextSteps = new() { { "Default", "Approved" } }
                     },
                     new StepBlueprint
                     {
