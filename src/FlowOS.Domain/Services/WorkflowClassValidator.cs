@@ -723,6 +723,8 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                 "Workflow");
         }
 
+        ValidateTeamActorBinding(step, result);
+
         if (step.AutoCommit == null) return;
 
         // CR-11: a consequential decision is never auto-committed; configuring autoCommit on it is a mistake.
@@ -779,6 +781,65 @@ public class WorkflowClassValidator : IWorkflowClassValidator
                     $"Step '{step.StepId}' autoCommit references undeclared event '{allowedEvent}'",
                     "Workflow");
             }
+        }
+    }
+
+    /// <summary>
+    /// ADR-003: a step's agent actor may be a single inline agent (AgentProvider/AgentPrompt)
+    /// or an orchestrated AgentTeam (AgentTeamId/AgentTeamSlotRole). This only checks structural
+    /// consistency of the team binding itself — not whether AgentTeamId resolves to a real,
+    /// persisted AgentTeam, which the engine has no way to check at blueprint-validation time.
+    /// </summary>
+    private static void ValidateTeamActorBinding(StepBlueprint step, ValidationResult result)
+    {
+        var hasTeam = step.AgentTeamId.HasValue && step.AgentTeamId.Value != Guid.Empty;
+        var hasSlotRole = !string.IsNullOrWhiteSpace(step.AgentTeamSlotRole);
+
+        if (hasSlotRole && !hasTeam)
+        {
+            result.AddError(
+                "WF-AGENT-007",
+                "AgentTask",
+                $"Step '{step.StepId}' sets agentTeamSlotRole without agentTeamId. A slot role " +
+                "only means something within a team; set agentTeamId too.",
+                "Workflow");
+        }
+
+        if (!hasTeam) return;
+
+        var isAgentTaskType = string.Equals(step.StepType, "AgentTask", StringComparison.OrdinalIgnoreCase);
+
+        if (!isAgentTaskType)
+        {
+            result.AddError(
+                "WF-AGENT-008",
+                "AgentTask",
+                $"Step '{step.StepId}' sets agentTeamId but StepType is '{step.StepType}', not " +
+                "'AgentTask'. AgentTaskScheduling only resolves a team actor for AgentTask steps; " +
+                "on any other step type agentTeamId compiles through but is never read, so the " +
+                "team is silently ignored at dispatch. Change StepType to 'AgentTask'.",
+                "Workflow");
+        }
+
+        // Note: Actor is not re-checked here. AgentTaskScheduling.ForCurrentWaitingStep treats
+        // every AgentTask-typed step as agent-handled regardless of Actor (that field only
+        // gates dispatch for legacy HumanTask/Command steps), so an AgentTask step with a team
+        // binding dispatches the team whatever Actor says — flagging it here would overclaim a
+        // constraint the dispatcher does not enforce.
+
+        // AgentTaskScheduling only prefers AgentTeamId over AgentProvider within the AgentTask
+        // branch; on any other step type AgentProvider is what actually dispatches (and
+        // AgentTeamId is the one being ignored, already reported above as WF-AGENT-008), so this
+        // "which one wins" warning only applies once the step is genuinely an AgentTask step.
+        if (isAgentTaskType && !string.IsNullOrWhiteSpace(step.AgentProvider))
+        {
+            result.AddError(
+                "WF-AGENT-010",
+                "AgentTask",
+                $"Step '{step.StepId}' sets both agentTeamId and agentProvider. When agentTeamId " +
+                "is present the dispatcher resolves the team and never reads agentProvider, so " +
+                "the inline agent is silently ignored. Remove whichever one should not apply.",
+                "Workflow");
         }
     }
 

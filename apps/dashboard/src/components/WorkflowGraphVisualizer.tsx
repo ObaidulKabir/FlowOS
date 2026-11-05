@@ -198,6 +198,9 @@ const MermaidViewer: React.FC<{ chart: string; unconstrained?: boolean; onRender
 
 const ROLE_EVENT_COLORS = ['#38bdf8', '#f472b6', '#a78bfa', '#fbbf24', '#34d399', '#fb7185', '#22d3ee', '#e879f9'];
 const SYSTEM_EVENT_COLOR = '#94a3b8';
+/** ADR-003: distinct from both role colors and SYSTEM_EVENT_COLOR, so an agent/team-handled
+ * step reads as neither "owned by a person" nor "plain automation". */
+const AGENT_ACTOR_COLOR = '#f97316';
 
 const isSystemRoleName = (role: string) => ['system', 'anyone', 'unassigned'].includes(role.trim().toLowerCase());
 
@@ -594,6 +597,10 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     inboundSteps?: string[];
     sla?: { duration?: string; timeoutEvent?: string; escalationStepId?: string };
     totalHooks?: number;
+    actor?: string;
+    agentTeamId?: string;
+    agentTeamSlotRole?: string;
+    agentProvider?: string;
   }
 
   const steps: NormalizedStep[] = rawSteps.map(s => {
@@ -634,8 +641,14 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
 
     const onEntryList = getProp(s, 'onEntry', 'OnEntry') || [];
     const onExitList = getProp(s, 'onExit', 'OnExit') || [];
-    const totalHooks = (Array.isArray(onEntryList) ? onEntryList.length : 0) + 
+    const totalHooks = (Array.isArray(onEntryList) ? onEntryList.length : 0) +
                        (Array.isArray(onExitList) ? onExitList.length : 0);
+
+    const actor = (getProp(s, 'actor', 'Actor') || '').toString();
+    const agentTeamIdRaw = getProp(s, 'agentTeamId', 'AgentTeamId');
+    const agentTeamId = agentTeamIdRaw ? String(agentTeamIdRaw) : undefined;
+    const agentTeamSlotRole = getProp(s, 'agentTeamSlotRole', 'AgentTeamSlotRole') || undefined;
+    const agentProvider = getProp(s, 'agentProvider', 'AgentProvider') || undefined;
 
     return {
       stepId,
@@ -648,9 +661,36 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       joinPolicy,
       inboundSteps,
       sla,
-      totalHooks
+      totalHooks,
+      actor,
+      agentTeamId,
+      agentTeamSlotRole,
+      agentProvider
     };
   });
+
+  // ADR-003: a step is agent-handled either because its actor is explicitly Agent/Either,
+  // or because its stepType is AgentTask (AgentTaskScheduling treats AgentTask as agent-handled
+  // regardless of the actor field - see WorkflowClassValidator.ValidateTeamActorBinding).
+  const isAgentHandledStep = (step: NormalizedStep) => {
+    const actor = (step.actor || '').toLowerCase();
+    return actor === 'agent' || actor === 'either' || step.stepType.toLowerCase() === 'agenttask';
+  };
+
+  // A team actor only dispatches when stepType is AgentTask (an agentTeamId set on any other
+  // step type compiles but is never read - WF-AGENT-008), so only show the team badge there.
+  const agentActorBadge = (step: NormalizedStep): { text: string; isTeam: boolean } | null => {
+    if (!isAgentHandledStep(step)) return null;
+    const isAgentTask = step.stepType.toLowerCase() === 'agenttask';
+    if (isAgentTask && step.agentTeamId) {
+      const shortTeamId = step.agentTeamId.split('-')[0];
+      return {
+        text: step.agentTeamSlotRole ? `Team · ${step.agentTeamSlotRole}` : `Team · ${shortTeamId}`,
+        isTeam: true
+      };
+    }
+    return { text: step.agentProvider ? `Agent · ${step.agentProvider}` : 'Agent', isTeam: false };
+  };
 
   // Sort / Organize steps topologically starting with startStepId
   const orderedSteps: NormalizedStep[] = [];
@@ -738,9 +778,11 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
     diagramLayoutKey(kind, kind === 'flowchart'
       ? [startStepId, ...steps.map(step => step.stepId)]
       : [entityType, ...smStates]);
+  const hasAgentHandledSteps = steps.some(isAgentHandledStep);
   const legendEntries = [
     ...roleOrder.map(role => ({ role, stroke: roleEventStroke(role, roleOrder) })),
-    ...(diagramUsesSystem ? [{ role: 'System', stroke: SYSTEM_EVENT_COLOR }] : [])
+    ...(diagramUsesSystem ? [{ role: 'System', stroke: SYSTEM_EVENT_COLOR }] : []),
+    ...(hasAgentHandledSteps ? [{ role: '🤖 Agent / 🤝 Team', stroke: AGENT_ACTOR_COLOR }] : [])
   ];
 
   const buildWorkflowMermaid = () => {
@@ -792,12 +834,20 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
       if (step.totalHooks && step.totalHooks > 0) {
          displayLabel += `<br/>⚡ ${step.totalHooks} Hook${step.totalHooks > 1 ? 's' : ''}`;
       }
+      const badge = agentActorBadge(step);
+      if (badge) {
+        displayLabel += `<br/>${badge.isTeam ? '🤝' : '🤖'} ${badge.text}`;
+      }
       chart += `  ${safeId(step.stepId)}${shapeStart}"${displayLabel}"${shapeEnd}${className}\n`;
       const outgoingRoles = Object.keys(step.nextSteps).flatMap(eventId => rolesForEvent(eventId, step.roles));
       const owner = outgoingRoles.find(role => !isSystemRoleName(role))
         || step.roles.find(role => !isSystemRoleName(role));
       if (!isCurrent && !isCompleted && owner) {
         chart += `  style ${safeId(step.stepId)} stroke:${roleEventStroke(owner, roleOrder)},stroke-width:2px\n`;
+      } else if (!isCurrent && !isCompleted && badge) {
+        // Agent/team-handled steps with no human owner role get their own stroke so they read
+        // as distinct from plain System automation (Command/SystemTask with no actor at all).
+        chart += `  style ${safeId(step.stepId)} stroke:${AGENT_ACTOR_COLOR},stroke-width:2px,stroke-dasharray:3 2\n`;
       }
     });
 
@@ -985,11 +1035,27 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
                   <>
                     <span className="text-slate-500">•</span>
                     <span>Active Role:</span>
-                    <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-xs border border-indigo-500/30 flex items-center gap-1 font-semibold">
-                      <UserCheck size={12} className="text-indigo-400" />
-                      {activeStep?.roles && activeStep.roles.length > 0 
-                        ? activeStep.roles.join(', ') 
-                        : (activeStep?.stepType.toLowerCase().includes('human') ? 'Unassigned' : 'System')}
+                    <span className={`px-2 py-0.5 rounded font-mono text-xs border flex items-center gap-1 font-semibold ${
+                      !activeStep?.roles?.length && activeStep && agentActorBadge(activeStep)
+                        ? 'bg-orange-500/20 text-orange-300 border-orange-500/30'
+                        : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                    }`}>
+                      {activeStep?.roles && activeStep.roles.length > 0 ? (
+                        <>
+                          <UserCheck size={12} className="text-indigo-400" />
+                          {activeStep.roles.join(', ')}
+                        </>
+                      ) : activeStep && agentActorBadge(activeStep) ? (
+                        <>
+                          <span>{agentActorBadge(activeStep)!.isTeam ? '🤝' : '🤖'}</span>
+                          {agentActorBadge(activeStep)!.text}
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck size={12} className="text-indigo-400" />
+                          {activeStep?.stepType.toLowerCase().includes('human') ? 'Unassigned' : 'System'}
+                        </>
+                      )}
                     </span>
                   </>
                 )}
@@ -997,8 +1063,10 @@ export const WorkflowGraphVisualizer: React.FC<WorkflowGraphVisualizerProps> = (
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {workflowFinished
                   ? `Both kernels are finished. Workflow step is END${currentState ? ` and the state machine is ${currentState}` : ''}.`
-                  : activeStep?.roles && activeStep.roles.length > 0 
+                  : activeStep?.roles && activeStep.roles.length > 0
                   ? `Pausing in engine: Awaiting Human Task sign-off by role [${activeStep.roles.join(', ')}]`
+                  : activeStep && agentActorBadge(activeStep)
+                  ? `Pausing in engine: Awaiting ${agentActorBadge(activeStep)!.isTeam ? 'an orchestrated AgentTeam' : 'an AI agent'} to propose the next event (${agentActorBadge(activeStep)!.text})`
                   : activeStep?.stepType.toLowerCase().includes('human')
                   ? `Pausing in engine: Awaiting Human Task sign-off (Any Role)`
                   : `Automated engine action executing under System role for step [${currentStepId}]`}
