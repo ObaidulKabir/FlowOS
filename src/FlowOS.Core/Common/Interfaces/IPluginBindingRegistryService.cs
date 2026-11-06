@@ -84,6 +84,16 @@ public interface IPluginBindingRegistryService
         string? configurationJson = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Permanently deletes a plugin binding (e.g. an agent provider) by tenant/bindingType/sourceName.
+    /// Returns false when no matching binding exists; the caller maps that to a not-found error.
+    /// </summary>
+    Task<bool> DeleteAsync(
+        Guid tenantId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default);
+
     Task<IReadOnlyList<PluginBindingDto>> ListAsync(
         Guid tenantId,
         string? bindingType = null,

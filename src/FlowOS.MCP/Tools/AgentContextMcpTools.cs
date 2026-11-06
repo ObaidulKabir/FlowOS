@@ -395,6 +395,44 @@ public class AgentContextMcpTools
         }
     }
 
+    public async Task<CallToolResult> DeleteAgentProvider(JObject args)
+    {
+        try
+        {
+            var alias = FirstNonEmpty(args, "alias", "sourceName");
+            if (string.IsNullOrWhiteSpace(alias))
+                return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var profile = McpToolDescriptions.ProfileFor("delete_agent_provider");
+            if (profile.RequiresHumanConfirmation)
+            {
+                var confirmed = args["confirmHumanApproval"]?.Value<bool>() ?? false;
+                if (!confirmed)
+                {
+                    return McpToolResults.Fail(
+                        "MCP-APPROVAL-REQUIRED",
+                        "High-risk irreversible operation 'delete_agent_provider' requires explicit human confirmation. Supply 'confirmHumanApproval: true' in arguments to execute.");
+                }
+            }
+
+            var deleted = await _pluginBindings.DeleteAsync(tenantId, PluginBindingTypes.Agent, alias);
+            if (!deleted)
+                return McpToolResults.Fail("MCP-NOTFOUND-001", $"Agent provider '{alias}' was not found.");
+
+            return McpToolResults.Success(new { alias, tenantId, status = "Deleted", message = "Agent provider permanently deleted." });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to delete agent provider.");
+        }
+    }
+
     public async Task<CallToolResult> UpsertAgentTool(JObject args)
     {
         try

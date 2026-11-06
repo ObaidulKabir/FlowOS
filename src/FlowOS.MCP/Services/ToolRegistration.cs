@@ -89,6 +89,9 @@ public static class ToolRegistration
         registry.Register("get_agent_provider", McpToolDescriptions.For("get_agent_provider"), McpToolSchemas.GetAgentProvider(),
             async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.GetAgentProvider(args)));
 
+        registry.Register("delete_agent_provider", McpToolDescriptions.For("delete_agent_provider"), McpToolSchemas.DeleteAgentProvider(),
+            async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.DeleteAgentProvider(args)));
+
         registry.Register("upsert_agent_tool", McpToolDescriptions.For("upsert_agent_tool"), McpToolSchemas.UpsertAgentTool(),
             async (args) => await ExecuteScopedAsync<AgentContextMcpTools>(serviceProvider, t => t.UpsertAgentTool(args)));
 

@@ -110,6 +110,31 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         return ToDto(existing);
     }
 
+    public async Task<bool> DeleteAsync(
+        Guid tenantId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default)
+    {
+        var normalizedType = NormalizeBindingType(bindingType);
+        var normalizedSource = NormalizeKey(sourceName);
+        if (string.IsNullOrWhiteSpace(normalizedType) || string.IsNullOrWhiteSpace(normalizedSource))
+            return false;
+
+        var existing = await _dbContext.PluginBindings
+            .FirstOrDefaultAsync(x =>
+                x.TenantId == tenantId &&
+                x.BindingType == normalizedType &&
+                x.SourceName == normalizedSource, ct);
+
+        if (existing == null)
+            return false;
+
+        _dbContext.PluginBindings.Remove(existing);
+        await _dbContext.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<IReadOnlyList<PluginBindingDto>> ListAsync(
         Guid tenantId,
         string? bindingType = null,

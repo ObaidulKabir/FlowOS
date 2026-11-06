@@ -265,12 +265,12 @@ public sealed class AgentContextMcpToolsTests
     }
 
     [Fact]
-    public async Task UpsertAgentProvider_ReservedAliasFlowOsHosted_RejectsNonHostedProviderName()
+    public async Task DeleteAgentProvider_WithoutConfirmation_IsRejectedBeforeDeleting()
     {
-        // Tenant integration finding H3 (P0): a step whose agentProvider resolves to the alias
-        // "flowos-hosted" always gets the platform's hosted lease at runtime, so saving a BYO
-        // providerName under that alias was previously accepted silently (ok:true, no warning),
-        // leaving the saved configuration permanently unreachable. Must be rejected at write time.
+        // New finding (P2), same gap class as H1: probe/test agent providers (e.g. leftover from
+        // integration testing) could be disabled (isEnabled:false) but never removed - there was no
+        // delete_agent_provider tool at all. It must require explicit human confirmation, same as
+        // delete_workflowclass.
         McpRequestContext.Clear();
         try
         {
@@ -278,21 +278,89 @@ public sealed class AgentContextMcpToolsTests
             var registry = new InMemoryPromptRegistry();
             var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
 
-            var upsert = await tools.UpsertAgentProvider(JObject.FromObject(new
+            await tools.UpsertAgentProvider(JObject.FromObject(new
             {
                 tenantId,
-                alias = "flowos-hosted",
+                alias = "zz-probe-bad-endpoint",
                 providerName = "openai",
-                apiKey = "sk-should-not-be-stored"
+                isEnabled = false
             }));
-            Assert.True(upsert.IsError);
-            var text = upsert.Content.Single().Text;
-            Assert.Contains("AGENT-ALIAS-RESERVED", text);
-            Assert.DoesNotContain("sk-should-not-be-stored", text, StringComparison.OrdinalIgnoreCase);
 
-            var listed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
-            var listJson = JObject.Parse(listed.Content.Single().Text);
-            Assert.Equal(0, listJson["data"]!["totalCount"]?.Value<int>());
+            var result = await tools.DeleteAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "zz-probe-bad-endpoint"
+            }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-APPROVAL-REQUIRED", result.Content.Single().Text);
+
+            var stillListed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            Assert.Equal(1, JObject.Parse(stillListed.Content.Single().Text)["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAgentProvider_WithConfirmation_Succeeds()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "zz-probe-bad-endpoint",
+                providerName = "openai",
+                isEnabled = false
+            }));
+
+            var result = await tools.DeleteAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "zz-probe-bad-endpoint",
+                confirmHumanApproval = true
+            }));
+
+            Assert.False(result.IsError);
+            var data = JObject.Parse(result.Content.Single().Text)["data"]!;
+            Assert.Equal("Deleted", data["status"]?.ToString());
+
+            var listedAfterDelete = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            Assert.Equal(0, JObject.Parse(listedAfterDelete.Content.Single().Text)["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAgentProvider_UnknownAlias_ReturnsNotFound()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var result = await tools.DeleteAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "does-not-exist",
+                confirmHumanApproval = true
+            }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-NOTFOUND-001", result.Content.Single().Text);
         }
         finally
         {
@@ -635,6 +703,22 @@ public sealed class AgentContextMcpToolsTests
                 configuration);
             _items[sourceName] = created;
             return Task.FromResult(created);
+        }
+
+        public Task<bool> DeleteAsync(
+            Guid tenantId,
+            string bindingType,
+            string sourceName,
+            CancellationToken ct = default)
+        {
+            if (_items.TryGetValue(sourceName, out var item) && item.TenantId == tenantId &&
+                string.Equals(item.BindingType, bindingType, StringComparison.OrdinalIgnoreCase))
+            {
+                _items.Remove(sourceName);
+                _rawJson.Remove(sourceName);
+                return Task.FromResult(true);
+            }
+            return Task.FromResult(false);
         }
 
         public Task<IReadOnlyList<PluginBindingDto>> ListAsync(

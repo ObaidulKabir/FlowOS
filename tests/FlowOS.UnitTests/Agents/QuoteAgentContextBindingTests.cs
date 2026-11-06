@@ -358,6 +358,13 @@ public class QuoteAgentContextBindingTests
             CancellationToken ct = default) =>
             Task.FromResult(_prompt);
 
+        public Task<bool> DeleteAsync(
+            Guid tenantId,
+            string bindingType,
+            string sourceName,
+            CancellationToken ct = default) =>
+            Task.FromResult(false);
+
         public Task<IReadOnlyList<PluginBindingDto>> ListAsync(
             Guid tenantId,
             string? bindingType = null,

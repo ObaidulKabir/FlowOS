@@ -24,6 +24,13 @@ public sealed class NullPluginBindingRegistryService : IPluginBindingRegistrySer
         CancellationToken ct = default) =>
         throw new NotSupportedException("Plugin bindings cannot be updated on the null registry.");
 
+    public Task<bool> DeleteAsync(
+        Guid tenantId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default) =>
+        throw new NotSupportedException("Plugin bindings cannot be deleted on the null registry.");
+
     public Task<IReadOnlyList<PluginBindingDto>> ListAsync(
         Guid tenantId,
         string? bindingType = null,

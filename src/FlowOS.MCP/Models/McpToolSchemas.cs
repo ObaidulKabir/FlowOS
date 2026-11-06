@@ -380,6 +380,29 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject DeleteAgentProvider()
+    {
+        var properties = new JObject
+        {
+            ["alias"] = new JObject { ["type"] = "string", ["minLength"] = 1 },
+            ["sourceName"] = new JObject { ["type"] = "string" },
+            ["tenantId"] = new JObject { ["type"] = "string", ["format"] = "uuid" },
+            ["confirmHumanApproval"] = new JObject
+            {
+                ["type"] = "boolean",
+                ["description"] = "Explicit confirmation of human approval for this high-risk irreversible operation."
+            }
+        };
+
+        return new JObject
+        {
+            ["type"] = "object",
+            ["required"] = new JArray("alias"),
+            ["properties"] = properties,
+            ["additionalProperties"] = false
+        };
+    }
+
     public static JObject UpsertAgentTool() => JObject.Parse(
         """
         {

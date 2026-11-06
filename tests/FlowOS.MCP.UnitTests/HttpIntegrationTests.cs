@@ -468,7 +468,7 @@ public sealed class HttpIntegrationTests : IAsyncLifetime
                 or "activate_context_binding" or "archive_context_binding"
                 or "create_tenant_role" or "grant_role_capability" or "revoke_role_capability"
                 or "create_tenant_team" or "add_team_member"
-                or "configure_agent_auto_commit")
+                or "configure_agent_auto_commit" or "delete_agent_provider")
             {
                 Assert.True(requiresHumanConfirmation.Value<bool>());
                 Assert.NotNull(schema["properties"]?["confirmHumanApproval"]);
