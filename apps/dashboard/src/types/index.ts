@@ -440,6 +440,8 @@ export interface WorkflowContextSimulationTrace {
   isAllowed: boolean;
   outcome: string;
   reason?: string;
+  /** Set only when isAllowed is false: "WorkflowTerminated" | "ProjectionFailed" | "RoleDenied" | "TransitionRejected". */
+  failureKind?: string;
   sourcePayload: Record<string, unknown>;
   canonicalDelta: Record<string, unknown>;
   contextBefore: Record<string, unknown>;

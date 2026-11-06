@@ -162,7 +162,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     scenarioEvent.Payload,
                     contextBefore,
                     "Cannot advance a terminated workflow.",
-                    beforeStep));
+                    beforeStep,
+                    failureKind: WorkflowContextSimulationFailureKinds.WorkflowTerminated));
                 denied = true;
                 break;
             }
@@ -191,7 +192,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     scenarioEvent.Payload,
                     contextBefore,
                     exception.Message,
-                    beforeStep));
+                    beforeStep,
+                    failureKind: WorkflowContextSimulationFailureKinds.ProjectionFailed));
                 denied = true;
                 break;
             }
@@ -213,7 +215,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     contextBefore,
                     roleFailure,
                     beforeStep,
-                    ToObjectDictionary(prepared.Delta)));
+                    ToObjectDictionary(prepared.Delta),
+                    failureKind: WorkflowContextSimulationFailureKinds.RoleDenied));
                 denied = true;
                 break;
             }
@@ -246,7 +249,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     contextBefore,
                     result.FailureReason ?? result.Message,
                     beforeStep,
-                    ToObjectDictionary(prepared.Delta)));
+                    ToObjectDictionary(prepared.Delta),
+                    failureKind: WorkflowContextSimulationFailureKinds.TransitionRejected));
                 denied = true;
                 break;
             }
@@ -620,7 +624,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 PlanTransitionActions(beforeStep, afterStep, item.IsAllowed),
                 item.IsAllowed
                     ? PendingWork(runtime.WorkflowDefinition, instance)
-                    : Array.Empty<WorkflowContextSimulationPendingWorkDto>()));
+                    : Array.Empty<WorkflowContextSimulationPendingWorkDto>(),
+                item.IsAllowed ? null : WorkflowContextSimulationFailureKinds.TransitionRejected));
         }
     }
 
@@ -636,7 +641,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         IReadOnlyDictionary<string, object?> contextBefore,
         string reason,
         WorkflowStepDefinition? currentStep,
-        IReadOnlyDictionary<string, object?>? delta = null)
+        IReadOnlyDictionary<string, object?>? delta = null,
+        string? failureKind = null)
         => new(
             index,
             eventType,
@@ -655,7 +661,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             CloneDictionary(contextBefore),
             CloneDictionary(contextBefore),
             PlanActions(currentStep, "OnFailure"),
-            PendingWorkForStep(currentStep));
+            PendingWorkForStep(currentStep),
+            failureKind);
 
     private static bool IsSlaClockEvent(WorkflowStepDefinition? step, string eventType) =>
         SlaSimulationClock.IsReminderEvent(step?.Sla, eventType) ||

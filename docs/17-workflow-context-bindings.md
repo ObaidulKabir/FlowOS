@@ -162,7 +162,7 @@ Use the tenant dashboard **Context Simulator** or `POST /api/context-bindings/si
 - `revision: "active"` loads the exact `WorkflowDefinition` and `StateMachineDefinition` IDs pinned to the active binding revision.
 - Initial and event payloads use the same source schemas, aliases, global/event-specific mappings, immutable condition parameters, and canonical schema validation as production.
 - Simulated roles participate in human-task and state-machine role checks. Tenant decision-provider bindings are resolved exactly as they are at runtime.
-- A denied event is included in the trace, but its proposed canonical delta and transient instance changes are discarded.
+- A denied event is included in the trace, but its proposed canonical delta and transient instance changes are discarded. Every denied entry's `outcome` stays `"Denied"`, but it now also carries a `failureKind` so a caller doesn't have to parse the free-text `reason`: `WorkflowTerminated` (the instance was already Completed/Failed), `ProjectionFailed` (the payload failed `sourcePayloadSchema`/`eventSourcePayloadSchemas`, so the mapping into canonical context never ran - a data/mapping problem), `RoleDenied` (the simulated role lacks a required capability for this event - a permissions problem), or `TransitionRejected` (projection and the role check both passed, but the workflow/state-machine engine rejected the transition itself, for example no matching transition for the current state).
 - Webhooks, notifications, timers, lifecycle actions, and child workflows appear as **would execute** or pending work; none are dispatched or persisted.
 
 Example:
