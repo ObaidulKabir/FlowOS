@@ -72,6 +72,38 @@ public class WorkflowEngineTests
     }
 
     [Fact]
+    public void Advance_ToExplicitEndStep_ShouldComplete()
+    {
+        // Tenant integration finding (M3): a workflow whose terminal node is authored as a real
+        // step with StepType "End" (as opposed to transitioning straight to the "END" sentinel)
+        // previously advanced CurrentStepId there and then just sat at Status "Running"/"Waiting"
+        // forever, with CompletedAt null - clients polling status never saw a terminal value.
+        var def = new WorkflowDefinition(_tenantId, "ExplicitEnd");
+        var start = new WorkflowStepDefinition("Start", WorkflowStepType.Command);
+        start.NextSteps.Add("Submitted", "Review");
+        def.AddStep(start);
+
+        var review = new WorkflowStepDefinition("Review", WorkflowStepType.HumanTask);
+        review.NextSteps.Add("Approved", "End");
+        def.AddStep(review);
+
+        var end = new WorkflowStepDefinition("End", WorkflowStepType.End);
+        def.AddStep(end);
+
+        def.Publish();
+
+        var instance = new WorkflowInstance(_tenantId, def.Id, Guid.Empty, def.Version, "Review");
+        var evt = new TestDomainEvent(_tenantId, "Approved");
+
+        var result = _engine.Advance(instance, def, evt, new FlowOS.StateMachines.Models.ExecutionContext());
+
+        Assert.True(result.Success);
+        Assert.Equal("End", instance.CurrentStepId);
+        Assert.Equal(WorkflowInstanceStatus.Completed, instance.Status);
+        Assert.NotNull(instance.CompletedAt);
+    }
+
+    [Fact]
     public void Advance_InvalidEvent_ShouldFail()
     {
         // Arrange
