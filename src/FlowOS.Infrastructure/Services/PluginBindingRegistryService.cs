@@ -135,6 +135,42 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         return true;
     }
 
+    public async Task<int> BackfillAgentProviderKeyMetadataAsync(
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        var records = await _dbContext.PluginBindings
+            .Where(x => x.TenantId == tenantId && x.BindingType == PluginBindingTypes.Agent)
+            .ToListAsync(ct);
+
+        var updatedCount = 0;
+        foreach (var record in records)
+        {
+            var parsed = AgentProviderConfiguration.Parse(record.ConfigurationJson);
+            if (parsed == null ||
+                string.IsNullOrWhiteSpace(parsed.ApiKey) ||
+                !string.IsNullOrWhiteSpace(parsed.ApiKeyFingerprint))
+            {
+                continue; // no stored key to fingerprint, or already backfilled
+            }
+
+            var decryptedKey = TryDecrypt(parsed.ApiKey);
+            if (string.IsNullOrWhiteSpace(decryptedKey))
+                continue;
+
+            parsed.ApiKeyFingerprint = AgentProviderConfiguration.ComputeFingerprint(decryptedKey);
+            parsed.ApiKeyUpdatedAtUtc ??= record.UpdatedAtUtc;
+
+            record.BackfillConfigurationJson(AgentProviderConfiguration.Serialize(parsed));
+            updatedCount++;
+        }
+
+        if (updatedCount > 0)
+            await _dbContext.SaveChangesAsync(ct);
+
+        return updatedCount;
+    }
+
     public async Task<IReadOnlyList<PluginBindingDto>> ListAsync(
         Guid tenantId,
         string? bindingType = null,

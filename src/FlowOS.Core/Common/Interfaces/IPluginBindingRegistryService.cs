@@ -94,6 +94,19 @@ public interface IPluginBindingRegistryService
         string sourceName,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Tenant integration finding M2 follow-up: computes and stores ApiKeyFingerprint/ApiKeyUpdatedAtUtc
+    /// for this tenant's existing agent provider bindings whose key was stored before those fields
+    /// existed (so they otherwise stay null forever unless the key happens to be rewritten). Decrypts
+    /// the already-stored key only to compute a one-way fingerprint from it - the plaintext is never
+    /// returned or logged. ApiKeyUpdatedAtUtc is backfilled from the binding's own UpdatedAtUtc as the
+    /// best known approximation of when the key was last touched. A binding that already has a
+    /// fingerprint, or has no key at all, is left untouched. Returns the number of bindings updated.
+    /// </summary>
+    Task<int> BackfillAgentProviderKeyMetadataAsync(
+        Guid tenantId,
+        CancellationToken ct = default);
+
     Task<IReadOnlyList<PluginBindingDto>> ListAsync(
         Guid tenantId,
         string? bindingType = null,

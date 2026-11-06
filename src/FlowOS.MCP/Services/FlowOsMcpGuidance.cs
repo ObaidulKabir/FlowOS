@@ -1171,6 +1171,7 @@ public static class FlowOsMcpGuidance
         3. Dashboard equivalent: tenant portal → **Application** → select the workflow → scroll to **AI Context** → **Prompts** / **Providers**. Do not use the top **Keys** tab (that is the FlowOS API key).
         4. Do **not** paste the LLM key into MCP chat, the blueprint, `decisionGuideline`, or Agent Context.
         5. `delete_agent_provider` permanently removes a provider binding (e.g. a probe/test provider left over from integration testing) - `confirmHumanApproval:true` required. Use `upsert_agent_provider` with `isEnabled:false` instead if you only want to disable it.
+        6. Providers saved before `apiKeyFingerprint`/`keyUpdatedAtUtc` existed show both as `null` forever, because they only get stamped when the key value is set or changed. Call `backfill_agent_provider_key_metadata` (no args beyond `tenantId` on stdio) to compute them for any such provider - it decrypts the already-stored key only to hash it, never exposes or changes the key, and is safe to call repeatedly (already-stamped or keyless providers are left alone).
 
         Example prompt:
 

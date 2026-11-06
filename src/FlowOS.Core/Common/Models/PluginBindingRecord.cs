@@ -48,6 +48,16 @@ public class PluginBindingRecord
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Replaces the stored configuration JSON without touching ProviderName, IsEnabled, FlowOsVersion,
+    /// or UpdatedAtUtc. Used to backfill computed metadata (e.g. an API key fingerprint added in a
+    /// later release) that is not a tenant-initiated configuration edit and must not look like one.
+    /// </summary>
+    public void BackfillConfigurationJson(string configurationJson)
+    {
+        ConfigurationJson = configurationJson;
+    }
+
     private static string Normalize(string? value) =>
         value?.Trim().ToLowerInvariant() ?? string.Empty;
 }

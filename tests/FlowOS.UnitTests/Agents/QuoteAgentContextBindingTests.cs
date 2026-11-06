@@ -365,6 +365,11 @@ public class QuoteAgentContextBindingTests
             CancellationToken ct = default) =>
             Task.FromResult(false);
 
+        public Task<int> BackfillAgentProviderKeyMetadataAsync(
+            Guid tenantId,
+            CancellationToken ct = default) =>
+            Task.FromResult(0);
+
         public Task<IReadOnlyList<PluginBindingDto>> ListAsync(
             Guid tenantId,
             string? bindingType = null,

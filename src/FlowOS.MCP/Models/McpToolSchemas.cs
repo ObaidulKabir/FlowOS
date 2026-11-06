@@ -403,6 +403,17 @@ public static class McpToolSchemas
         };
     }
 
+    public static JObject BackfillAgentProviderKeyMetadata() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "properties":{
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
     public static JObject UpsertAgentTool() => JObject.Parse(
         """
         {
