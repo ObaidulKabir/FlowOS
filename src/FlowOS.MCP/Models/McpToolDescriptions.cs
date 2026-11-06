@@ -117,7 +117,7 @@ public static class McpToolDescriptions
 
             ["list_agent_prompt_audits"] =
                 "Lists tenant prompt/response audit records when provider-level prompt auditing is enabled. " +
-                "By default returns metadata only; pass includePayloads=true to include raw request/response payloads for forensic debugging. " +
+                "By default returns metadata only; pass includePayloads=true to include raw request/response payloads for forensic debugging. rawRequestPayload includes EffectiveSamplingParams {Temperature,Seed} - the sampling values actually sent on that request (null for a provider/field combination the adapter doesn't support, e.g. Seed on anthropic/google). " +
                 "Returns: {ok:true,data:{tenantId,includePayloads,totalCount,audits:[{auditId,providerAlias,providerName,model,recordedAtUtc,...}]}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"includePayloads\":false,\"limit\":20}",
@@ -185,24 +185,24 @@ public static class McpToolDescriptions
                 "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key; setting providerName:flowos-hosted on any alias forces apiKey/endpoint to be ignored at write time). " +
                 "Alias \"flowos-hosted\" is also platform-reserved on its own: a step whose agentProvider resolves to that exact alias always gets the platform's hosted OpenAI lease, and saving a different (BYO) providerName under this alias is rejected at write time (AGENT-ALIAS-RESERVED) rather than silently ignored - use a different alias for a BYO key provider. " +
                 "Changing endpoint to a different host without also supplying a new apiKey clears the stored key (and its fingerprint/timestamp) instead of silently sending the old key to the new host - re-supply apiKey in the same call. " +
-                "Also supports default-provider selection, provider fallback alias, maxTokens, and opt-in prompt audit logging. Dashboard: Application → AI Context → Providers. " +
+                "Also supports default-provider selection, provider fallback alias, maxTokens, optional sampling params (temperature, seed), and opt-in prompt audit logging. temperature (0-2, provider-clamped - Anthropic rejects above 1) is honored by openai/azure-openai/custom, anthropic, and google; seed is honored only by openai/azure-openai/custom (anthropic/google have no equivalent and ignore it). Omitting either leaves it unset (provider default), not unchanged-if-omitted like apiKey/model/endpoint - repeat the current value to keep it. The effective values actually sent are recorded in rawRequestPayload when enablePromptAudit is on (see list_agent_prompt_audits). Dashboard: Application → AI Context → Providers. " +
                 "Requires the agent.manage capability. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,temperature,seed,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, PLUGIN-BIND-005, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"flowos-hosted\",\"providerName\":\"flowos-hosted\",\"isDefault\":true,\"enablePromptAudit\":false}",
 
             ["list_agent_providers"] =
-                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey plus default/fallback/audit settings. Never returns the API key - apiKeyFingerprint (non-reversible) and keyUpdatedAtUtc let you verify which key is active, e.g. after a rotation. " +
+                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey plus default/fallback/audit/sampling settings. Never returns the API key - apiKeyFingerprint (non-reversible) and keyUpdatedAtUtc let you verify which key is active, e.g. after a rotation. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}]}}. " +
+                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,temperature,seed,isEnabled}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {}",
 
             ["get_agent_provider"] =
-                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret, plus a non-reversible apiKeyFingerprint and keyUpdatedAtUtc to verify which key is active, and includes default/fallback/audit settings. " +
+                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret, plus a non-reversible apiKeyFingerprint and keyUpdatedAtUtc to verify which key is active, and includes default/fallback/audit/sampling settings. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,temperature,seed,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-llm\"}",
 

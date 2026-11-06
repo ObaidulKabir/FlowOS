@@ -11,11 +11,16 @@ namespace FlowOS.Agents.Implementations.Adapters;
 public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
 {
     private readonly int _maxTokens;
+    private readonly double? _temperature;
 
-    public AnthropicProviderAdapter(int maxTokens = 1024)
+    public AnthropicProviderAdapter(int maxTokens = 1024, double? temperature = null)
     {
         _maxTokens = maxTokens > 0 ? maxTokens : 1024;
+        _temperature = temperature;
     }
+
+    // N5: Anthropic's Messages API has no deterministic-seed parameter, so Seed is always null here.
+    public (double? Temperature, int? Seed) EffectiveSamplingParams => (_temperature, null);
 
     public HttpRequestMessage CreateRequest(
         string endpoint,
@@ -102,6 +107,9 @@ public sealed class AnthropicProviderAdapter : ILlmProviderAdapter
             ["system"] = systemPrompt,
             ["messages"] = messages
         };
+
+        if (_temperature.HasValue)
+            payload["temperature"] = _temperature.Value;
 
         if (tools != null && tools.Count > 0)
         {

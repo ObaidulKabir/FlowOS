@@ -40,19 +40,22 @@ public interface ILlmProviderAdapterFactory
 public sealed class OpenAiAdapterFactory : ILlmProviderAdapterFactory
 {
     public bool Supports(string providerName) => providerName == "openai";
-    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) => new OpenAiProviderAdapter(useStrictJsonSchema: true);
+    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) =>
+        new OpenAiProviderAdapter(useStrictJsonSchema: true, temperature: config?.Temperature, seed: config?.Seed);
 }
 
 public sealed class AzureOpenAiAdapterFactory : ILlmProviderAdapterFactory
 {
     public bool Supports(string providerName) => providerName == "azure-openai";
-    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) => new OpenAiProviderAdapter(useStrictJsonSchema: true, useApiKeyHeader: true);
+    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) =>
+        new OpenAiProviderAdapter(useStrictJsonSchema: true, useApiKeyHeader: true, temperature: config?.Temperature, seed: config?.Seed);
 }
 
 public sealed class CustomOpenAiAdapterFactory : ILlmProviderAdapterFactory
 {
     public bool Supports(string providerName) => providerName == "custom";
-    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) => new OpenAiProviderAdapter(useStrictJsonSchema: false);
+    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) =>
+        new OpenAiProviderAdapter(useStrictJsonSchema: false, temperature: config?.Temperature, seed: config?.Seed);
 }
 
 public sealed class AnthropicAdapterFactory : ILlmProviderAdapterFactory
@@ -61,13 +64,14 @@ public sealed class AnthropicAdapterFactory : ILlmProviderAdapterFactory
     public ILlmProviderAdapter Create(AgentProviderConfiguration? config)
     {
         return config?.MaxTokens is { } maxTokens
-            ? new AnthropicProviderAdapter(maxTokens)
-            : new AnthropicProviderAdapter();
+            ? new AnthropicProviderAdapter(maxTokens, config?.Temperature)
+            : new AnthropicProviderAdapter(temperature: config?.Temperature);
     }
 }
 
 public sealed class GoogleAdapterFactory : ILlmProviderAdapterFactory
 {
     public bool Supports(string providerName) => providerName == "google";
-    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) => new GoogleProviderAdapter();
+    public ILlmProviderAdapter Create(AgentProviderConfiguration? config) =>
+        new GoogleProviderAdapter(temperature: config?.Temperature);
 }

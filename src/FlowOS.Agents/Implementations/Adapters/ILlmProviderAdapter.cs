@@ -41,4 +41,12 @@ public interface ILlmProviderAdapter
 
     LlmProviderResponse ParseResponse(string responseBody) =>
         new(ExtractContent(responseBody));
+
+    /// <summary>
+    /// Tenant integration finding N5: the sampling parameters this adapter instance will actually
+    /// send on the next request, for the prompt auditor to record. Null for a parameter this
+    /// adapter/provider doesn't support (e.g. Seed on Anthropic/Google) or that wasn't configured.
+    /// Default (null, null) for any adapter that doesn't override this.
+    /// </summary>
+    (double? Temperature, int? Seed) EffectiveSamplingParams => (null, null);
 }

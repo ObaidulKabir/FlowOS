@@ -43,6 +43,20 @@ public sealed class AgentProviderConfiguration
 
     public bool EnablePromptAudit { get; set; }
 
+    /// <summary>
+    /// Tenant integration finding N5: optional sampling temperature passed through to the provider.
+    /// When null, adapters omit it and the provider's own default applies. Honored by OpenAI
+    /// (including Azure/custom OpenAI-compatible endpoints), Anthropic, and Google.
+    /// </summary>
+    public double? Temperature { get; set; }
+
+    /// <summary>
+    /// Tenant integration finding N5: optional deterministic sampling seed. Only OpenAI-compatible
+    /// providers (openai/azure-openai/custom) honor seed; Anthropic and Google have no equivalent
+    /// parameter in their APIs and ignore it.
+    /// </summary>
+    public int? Seed { get; set; }
+
     public static AgentProviderConfiguration? Parse(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -99,6 +113,8 @@ public sealed class AgentProviderConfiguration
         existing.MaxTokens = incoming.MaxTokens ?? existing.MaxTokens;
         existing.FallbackProviderAlias = string.IsNullOrWhiteSpace(incoming.FallbackProviderAlias) ? existing.FallbackProviderAlias : incoming.FallbackProviderAlias.Trim();
         existing.EnablePromptAudit = incoming.EnablePromptAudit;
+        existing.Temperature = incoming.Temperature ?? existing.Temperature;
+        existing.Seed = incoming.Seed ?? existing.Seed;
 
         return JsonSerializer.Serialize(existing, JsonOptions);
     }
@@ -115,7 +131,9 @@ public sealed class AgentProviderConfiguration
             parsed.FallbackProviderAlias,
             parsed.EnablePromptAudit,
             parsed.ApiKeyFingerprint,
-            parsed.ApiKeyUpdatedAtUtc);
+            parsed.ApiKeyUpdatedAtUtc,
+            parsed.Temperature,
+            parsed.Seed);
     }
 
     public static string Serialize(AgentProviderConfiguration config) =>
@@ -168,4 +186,6 @@ public sealed record AgentProviderPublicSettings(
     string? FallbackProviderAlias = null,
     bool EnablePromptAudit = false,
     string? ApiKeyFingerprint = null,
-    DateTime? ApiKeyUpdatedAtUtc = null);
+    DateTime? ApiKeyUpdatedAtUtc = null,
+    double? Temperature = null,
+    int? Seed = null);
