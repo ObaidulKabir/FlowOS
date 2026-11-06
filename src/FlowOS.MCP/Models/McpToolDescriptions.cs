@@ -332,7 +332,7 @@ public static class McpToolDescriptions
 
             ["publish_workflowclass"] =
                 "[Lifecycle Step 3: Publish] Publishes a tenant-owned Draft WorkflowClass, compiling it into an executable runtime WorkflowDefinition and registering associated EventDefinitions. " +
-                "If a runtime definition with the same (Name, Version) already exists for this tenant and is pinned to a different WorkflowClass, publish fails with WF-NAME-PINNED - publish under a different name or version, or deprecate/delete the WorkflowClass that currently owns that name+version. " +
+                "The runtime WorkflowDefinition's version is the WorkflowClass's MAJOR version number only (Minor/Build are ignored for pinning - e.g. 1.0.0 and 1.3.2 compile to the same runtime v1). If a runtime definition with the same (Name, MAJOR version) already exists for this tenant and is pinned to a different WorkflowClass, publish fails with WF-NAME-PINNED - a Minor/Build bump on new_version_workflowclass does NOT resolve this, only a Major bump does (that compiles to a new, unpinned runtime version). Otherwise publish under a different name, or deprecate/delete the WorkflowClass that currently owns that name+MAJOR version. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, WF-NAME-PINNED, MCP-INTERNAL. " +
@@ -341,7 +341,8 @@ public static class McpToolDescriptions
             ["new_version_workflowclass"] =
                 "Creates a new Draft version of an existing WorkflowClass (any status: Draft, Published, Deprecated...), bumping Version per bumpType and copying its blueprint Definition as the starting point. " +
                 "The new row is a separate WorkflowClass (its own id); the source is untouched and keeps running any existing instances. previousVersionId on the result links back to the source for GetWorkflowClassVersionTreeQuery-style lineage. " +
-                "Edit it with update_draft_workflowclass and publish it with publish_workflowclass like any other draft - note that publishing it will still hit WF-NAME-PINNED if its Name is unchanged and the bumped Version was already published under a different WorkflowClass id (e.g. from an earlier version-bump that was itself re-bumped). " +
+                "bumpType matters for publishing: the runtime WorkflowDefinition version is the MAJOR number only, so bumpType:\"Minor\" or \"Build\" keeps the same runtime version as the class you bumped from and will hit WF-NAME-PINNED on publish if that runtime version is still owned by the source (or any other) WorkflowClass - use bumpType:\"Major\" to evolve the name in place onto a fresh, unpinned runtime version. " +
+                "Edit it with update_draft_workflowclass and publish it with publish_workflowclass like any other draft - note that publishing it will still hit WF-NAME-PINNED if its Name is unchanged and the bumped MAJOR version was already published under a different WorkflowClass id (e.g. from an earlier version-bump that was itself re-bumped). " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{id,tenantId,name,version,previousVersionId,status,message}}. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
@@ -364,8 +365,11 @@ public static class McpToolDescriptions
             ["create_context_binding"] =
                 "Creates a tenant-scoped draft context binding and revision 1 from a Draft, Published, or Public workflow template. " +
                 "Draft sources are for simulate_context_binding only; activate_context_binding still requires the template to be Published or Public. " +
-                "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-ARG-001, MCP-NOTFOUND-001, CTX-STATE-001. " +
-                "Input example: {\"sourceWorkflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"contextType\":\"Expense\",\"name\":\"ExpenseApproval\",\"definition\":{\"entityType\":\"ExpenseEntity\"},\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+                "definition.inputMapping projects the instance's start payload into canonical ContextSchema fields: {canonicalField: \"<dotted path in the start payload>\"} (the start payload must be flat - a nested payload does not project). " +
+                "definition.eventInputMappings is the only channel for projecting a later human/agent event's payload into canonical context (e.g. carrying reviewer feedback back to an agent on the next step): {eventId: {canonicalField: \"<dotted path in that event's payload>\"}}. " +
+                "Both use bare dotted paths (no leading $.); every canonicalField referenced must already be declared in the template's ContextSchema.properties, and any field ContextSchema marks required must be reachable from inputMapping or conditionParameters - violations return CTX-SCHEMA-005/006 or CTX-MAP-002, all collected together rather than one at a time. " +
+                "Returns: {ok:true,data:<contextBinding>}. Errors: MCP-ARG-001, MCP-NOTFOUND-001, CTX-STATE-001, CTX-SCHEMA-005, CTX-SCHEMA-006, CTX-MAP-002. " +
+                "Input example: {\"sourceWorkflowClassId\":\"33333333-3333-3333-3333-333333333333\",\"contextType\":\"Expense\",\"name\":\"ExpenseApproval\",\"definition\":{\"entityType\":\"ExpenseEntity\",\"inputMapping\":{\"amount\":\"Amount\"},\"eventInputMappings\":{\"EVT-REVIEW-REJECTED\":{\"reviewNotes\":\"notes\"}}},\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["update_context_binding"] =
                 "Updates only a draft binding revision. Updating an active binding creates its next draft revision without affecting running instances. " +
