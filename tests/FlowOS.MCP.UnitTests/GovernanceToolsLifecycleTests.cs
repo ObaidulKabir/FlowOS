@@ -56,9 +56,9 @@ public sealed class GovernanceToolsLifecycleTests
 
             Assert.False(result.IsError);
             var json = JObject.Parse(result.Content.Single().Text)["data"]!;
-            Assert.Equal(newId, json["id"]!.Value<Guid>());
+            Assert.Equal(newId, Guid.Parse(json["id"]!.ToString()));
             Assert.Equal("2.0.0", json["version"]!.ToString());
-            Assert.Equal(sourceId, json["previousVersionId"]!.Value<Guid>());
+            Assert.Equal(sourceId, Guid.Parse(json["previousVersionId"]!.ToString()));
         }
         finally
         {
