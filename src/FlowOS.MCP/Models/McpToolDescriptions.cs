@@ -181,13 +181,15 @@ public static class McpToolDescriptions
             ["upsert_agent_provider"] =
                 "Creates or edits a tenant-owned LLM provider used for AI task automation. Point a waiting step at it with agentProvider. " +
                 "apiKey is write-only: stored on the tenant, omitted from responses, and left unchanged when you omit it on update; the same unchanged-if-omitted rule applies to model, endpoint, and fallbackProviderAlias (isDefault, maxTokens, and enablePromptAudit are not sentinel fields - they are set to whatever you pass, so repeat the current value if you only mean to change something else). " +
-                "endpoint must be a full http(s) URL, not a bare host or base path - validated at write time (MCP-ARG-001) when providerName is not flowos-hosted. For providerName:\"openai\" use https://api.openai.com/v1/chat/completions, not .../v1 (that path 404s at call time). " +
+                "endpoint must be a full http(s) URL, not a bare host or base path - validated at write time (MCP-ARG-001) when providerName is not flowos-hosted. For providerName:\"openai\" use https://api.openai.com/v1/chat/completions, not .../v1 (that path 404s at call time). endpoint must be https:// outside Development, since the key is sent to it as a Bearer token. " +
                 "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key; setting providerName:flowos-hosted on any alias forces apiKey/endpoint to be ignored at write time). " +
                 "Alias \"flowos-hosted\" is also platform-reserved on its own: a step whose agentProvider resolves to that exact alias always gets the platform's hosted OpenAI lease, and saving a different (BYO) providerName under this alias is rejected at write time (AGENT-ALIAS-RESERVED) rather than silently ignored - use a different alias for a BYO key provider. " +
+                "Changing endpoint to a different host without also supplying a new apiKey clears the stored key (and its fingerprint/timestamp) instead of silently sending the old key to the new host - re-supply apiKey in the same call. " +
                 "Also supports default-provider selection, provider fallback alias, maxTokens, and opt-in prompt audit logging. Dashboard: Application → AI Context → Providers. " +
+                "Requires the agent.manage capability. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
-                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, PLUGIN-BIND-005, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"flowos-hosted\",\"providerName\":\"flowos-hosted\",\"isDefault\":true,\"enablePromptAudit\":false}",
 
             ["list_agent_providers"] =
@@ -206,17 +208,18 @@ public static class McpToolDescriptions
 
             ["delete_agent_provider"] =
                 "Permanently deletes a tenant-owned LLM provider binding by alias (e.g. a disabled probe/test provider left over from integration testing). This is irreversible: use upsert_agent_provider with isEnabled:false if you only want to disable it. " +
-                "Requires confirmHumanApproval:true. " +
+                "Requires confirmHumanApproval:true and the agent.manage capability. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{alias,tenantId,status:\"Deleted\",message}}. " +
-                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-APPROVAL-REQUIRED, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, MCP-APPROVAL-REQUIRED, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"zz-probe-bad-endpoint\",\"confirmHumanApproval\":true}",
 
             ["backfill_agent_provider_key_metadata"] =
                 "Computes apiKeyFingerprint and keyUpdatedAtUtc for tenant-owned LLM providers that predate those fields (stored key present but fingerprint still null). Decrypts the existing stored key only to compute a non-reversible SHA-256-derived fingerprint; the key itself is never exposed, returned, logged, or changed. Safe to call repeatedly - providers that already have a fingerprint, have no stored key, or whose stored key can no longer be decrypted (re-enter it with upsert_agent_provider) are left untouched. " +
+                "Requires the agent.manage capability. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{tenantId,providersBackfilled,message}}. " +
-                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-AUTHZ-001, MCP-INTERNAL. " +
                 "Input example: {}",
 
             ["upsert_agent_tool"] =
@@ -650,9 +653,9 @@ public static class McpToolDescriptions
             ["register_plugin_binding"] =
                 "[Plugin Binding Registry] Creates or updates a tenant-scoped mapping from blueprint aliases to server-owned plugins (action/decision), a tenant-owned LLM (bindingType agent), or a named prompt (bindingType prompt). " +
                 "Agent bindings take configuration {model,endpoint,apiKey} (apiKey write-only). Prompt bindings take {title,system,instructions} so a user can create and edit prompt text independently of the workflow template. " +
-                "For bindingType agent, saving a non-hosted (BYO) providerName under the platform-reserved sourceName \"flowos-hosted\" is rejected at write time (AGENT-ALIAS-RESERVED). " +
+                "For bindingType agent, saving a non-hosted (BYO) providerName under the platform-reserved sourceName \"flowos-hosted\" is rejected at write time (AGENT-ALIAS-RESERVED), configuration.endpoint must be a full https:// URL outside Development (http:// only in Development), and repointing it to a different host without a new apiKey clears the stored key instead of sending it to the new host. For bindingType agent this also requires the agent.manage capability; the other binding types do not. " +
                 "Returns: {ok:true,data:{id,tenantId,bindingType,sourceName,providerName,isEnabled,configuration,createdAtUtc,updatedAtUtc}}. " +
-                "Errors: MCP-ARG-001, PLUGIN-BIND-001, PLUGIN-BIND-002, PLUGIN-BIND-003, PLUGIN-BIND-004, PLUGIN-BIND-005, AGENT-ALIAS-RESERVED, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, PLUGIN-BIND-001, PLUGIN-BIND-002, PLUGIN-BIND-003, PLUGIN-BIND-004, PLUGIN-BIND-005, AGENT-ALIAS-RESERVED, MCP-AUTHZ-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"bindingType\":\"prompt\",\"sourceName\":\"quote-approval\",\"providerName\":\"markdown\",\"configuration\":{\"title\":\"Quote approval\",\"instructions\":\"Approve if within 15% of estimate.\"}}",
 
             ["list_plugin_bindings"] =
@@ -1041,7 +1044,13 @@ public static class McpToolDescriptions
             ["assign_instance_role"] = new[] { "workflow.start" },
             ["set_instance_priority"] = new[] { "workflow.start" },
             ["publish_event"] = new[] { "event.publish or event.publish.<eventId>" },
-            ["complete_task"] = new[] { "task/step required capability" }
+            ["complete_task"] = new[] { "task/step required capability" },
+            ["upsert_agent_provider"] = new[] { FlowOS.Core.Common.Interfaces.AgentProviderKinds.ManageCapability },
+            ["delete_agent_provider"] = new[] { FlowOS.Core.Common.Interfaces.AgentProviderKinds.ManageCapability },
+            ["backfill_agent_provider_key_metadata"] = new[] { FlowOS.Core.Common.Interfaces.AgentProviderKinds.ManageCapability }
+            // register_plugin_binding also requires agent.manage, but only for bindingType "agent" -
+            // this discovery map can't express a per-argument requirement, so it is enforced inline
+            // in PluginBindingMcpTools.RegisterPluginBinding instead and left out of this map.
         };
 
     public static ToolSecurityProfile ProfileFor(string toolName) =>

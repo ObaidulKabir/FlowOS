@@ -4,8 +4,12 @@ using System.Threading.Tasks;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
+using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
+using FlowOS.Security.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.Tools;
@@ -15,16 +19,71 @@ public class PluginBindingMcpTools
     private readonly IPluginBindingRegistryService _bindingRegistry;
     private readonly IWorkflowActionPluginRegistry? _actionPluginRegistry;
     private readonly IPolicyDecisionPluginRegistry? _decisionPluginRegistry;
+    private readonly IConfiguration? _configuration;
+    private readonly ICurrentUser? _currentUser;
+    private readonly ICapabilityService? _capabilityService;
 
     public PluginBindingMcpTools(
         IPluginBindingRegistryService bindingRegistry,
         IWorkflowActionPluginRegistry? actionPluginRegistry = null,
-        IPolicyDecisionPluginRegistry? decisionPluginRegistry = null)
+        IPolicyDecisionPluginRegistry? decisionPluginRegistry = null,
+        IConfiguration? configuration = null,
+        ICurrentUser? currentUser = null,
+        ICapabilityService? capabilityService = null)
     {
         _bindingRegistry = bindingRegistry;
         _actionPluginRegistry = actionPluginRegistry;
         _decisionPluginRegistry = decisionPluginRegistry;
+        _configuration = configuration;
+        _currentUser = currentUser;
+        _capabilityService = capabilityService;
     }
+
+    /// <summary>
+    /// Same gate as <c>AgentContextMcpTools.RequireAgentManageCapabilityAsync</c> - only applies to the
+    /// bindingType "agent" path of <see cref="RegisterPluginBinding"/>. Null currentUser/capabilityService
+    /// only happens in unit tests constructed directly; production DI always supplies both.
+    /// </summary>
+    private async Task<CallToolResult?> RequireAgentManageCapabilityAsync(Guid tenantId, string activity)
+    {
+        if (_currentUser == null || _capabilityService == null)
+            return null;
+
+        if (await TenantCapabilityGate.HasCapabilityAsync(
+                _currentUser, _capabilityService, tenantId, AgentProviderKinds.ManageCapability))
+        {
+            return null;
+        }
+
+        return McpToolResults.Fail(
+            "MCP-AUTHZ-001",
+            $"Missing required capability: {AgentProviderKinds.ManageCapability}",
+            new
+            {
+                activity,
+                tenantId,
+                requiredAnyOf = new[] { AgentProviderKinds.ManageCapability },
+                callerRoles = _currentUser.Roles,
+                callerScopes = _currentUser.Scopes
+            });
+    }
+
+    private bool IsEndpointSchemeAllowed(string scheme)
+    {
+        if (string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!string.Equals(scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var environmentName = _configuration?["ASPNETCORE_ENVIRONMENT"];
+        return TenantIdentityRules.AllowInsecureAgentEndpoints(
+            environmentName,
+            _configuration?[TenantIdentityRules.AllowInsecureAgentEndpointsKey]);
+    }
+
+    private static bool IsWellFormedHttpUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     public async Task<CallToolResult> RegisterPluginBinding(JObject args)
     {
@@ -79,6 +138,10 @@ public class PluginBindingMcpTools
             }
             else if (normalizedType == PluginBindingTypes.Agent)
             {
+                var deniedAgentManage = await RequireAgentManageCapabilityAsync(tenantId, "register_plugin_binding");
+                if (deniedAgentManage != null)
+                    return deniedAgentManage;
+
                 if (!AgentProviderKinds.IsKnown(providerName))
                 {
                     return McpToolResults.Fail(
@@ -91,6 +154,28 @@ public class PluginBindingMcpTools
                     return McpToolResults.Fail(
                         "AGENT-ALIAS-RESERVED",
                         "The alias 'flowos-hosted' is platform-reserved: a step whose agentProvider resolves to it always gets the platform's hosted lease at runtime, regardless of what is saved here. Rejected to prevent silently orphaned configuration - use a different alias for a BYO providerName key.");
+                }
+
+                if (!AgentProviderKinds.IsFlowOsHosted(providerName))
+                {
+                    var endpointCandidate = (args["configuration"] as JObject)?["endpoint"]?.ToString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(endpointCandidate))
+                    {
+                        if (!IsWellFormedHttpUrl(endpointCandidate))
+                        {
+                            return McpToolResults.Fail(
+                                "MCP-ARG-001",
+                                "configuration.endpoint must be a full http(s) URL, not a bare host, path, or email address.");
+                        }
+
+                        var endpointScheme = new Uri(endpointCandidate, UriKind.Absolute).Scheme;
+                        if (!IsEndpointSchemeAllowed(endpointScheme))
+                        {
+                            return McpToolResults.Fail(
+                                "MCP-ARG-001",
+                                "configuration.endpoint must be https:// outside Development - a BYO API key is sent to it as a Bearer token.");
+                        }
+                    }
                 }
             }
             else if (!AgentPromptKinds.IsKnown(providerName))

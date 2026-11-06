@@ -2,8 +2,11 @@ using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.Services;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
+using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
+using FlowOS.Security.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 
@@ -15,18 +18,72 @@ public class AgentContextMcpTools
     private readonly IPluginBindingRegistryService _pluginBindings;
     private readonly IAgentToolHost? _toolHost;
     private readonly bool _allowGatewayPrefetch;
+    private readonly IConfiguration? _configuration;
+    private readonly ICurrentUser? _currentUser;
+    private readonly ICapabilityService? _capabilityService;
 
     public AgentContextMcpTools(
         IDecisionPacketBuilder packetBuilder,
         IPluginBindingRegistryService pluginBindings,
         IAgentToolHost? toolHost = null,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        ICurrentUser? currentUser = null,
+        ICapabilityService? capabilityService = null)
     {
         _packetBuilder = packetBuilder;
         _pluginBindings = pluginBindings;
         _toolHost = toolHost;
+        _configuration = configuration;
         _allowGatewayPrefetch = configuration?.GetValue<bool?>(
             "FlowOS:Agents:AllowGatewayPrefetch") ?? true;
+        _currentUser = currentUser;
+        _capabilityService = capabilityService;
+    }
+
+    /// <summary>
+    /// Gate for any write that can point a tenant's BYO LLM key at a different endpoint or remove a
+    /// provider outright (<see cref="AgentProviderKinds.ManageCapability"/>). Returns null when allowed.
+    ///
+    /// <paramref name="activity"/>-only instances constructed without a current-user/capability-service
+    /// (always the case in production - both are registered in DI and <c>ToolRegistration</c> resolves
+    /// this class through it) skip the check: that happens only in unit tests that construct this class
+    /// directly to exercise unrelated logic, never in a live deployment.
+    /// </summary>
+    private async Task<CallToolResult?> RequireAgentManageCapabilityAsync(Guid tenantId, string activity)
+    {
+        if (_currentUser == null || _capabilityService == null)
+            return null;
+
+        if (await TenantCapabilityGate.HasCapabilityAsync(
+                _currentUser, _capabilityService, tenantId, AgentProviderKinds.ManageCapability))
+        {
+            return null;
+        }
+
+        return McpToolResults.Fail(
+            "MCP-AUTHZ-001",
+            $"Missing required capability: {AgentProviderKinds.ManageCapability}",
+            new
+            {
+                activity,
+                tenantId,
+                requiredAnyOf = new[] { AgentProviderKinds.ManageCapability },
+                callerRoles = _currentUser.Roles,
+                callerScopes = _currentUser.Scopes
+            });
+    }
+
+    private bool IsEndpointSchemeAllowed(string scheme)
+    {
+        if (string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!string.Equals(scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var environmentName = _configuration?["ASPNETCORE_ENVIRONMENT"];
+        return TenantIdentityRules.AllowInsecureAgentEndpoints(
+            environmentName,
+            _configuration?[TenantIdentityRules.AllowInsecureAgentEndpointsKey]);
     }
 
     public async Task<CallToolResult> GetAgentContext(JObject args)
@@ -271,6 +328,11 @@ public class AgentContextMcpTools
                 return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var denied = await RequireAgentManageCapabilityAsync(tenantId, "upsert_agent_provider");
+            if (denied != null)
+                return denied;
+
             var existing = (await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Agent, alias))
                 .FirstOrDefault();
 
@@ -300,11 +362,22 @@ public class AgentContextMcpTools
             {
                 var endpointCandidate = FirstNonEmpty(args, "endpoint")
                     ?? (args["configuration"] as JObject)?["endpoint"]?.ToString()?.Trim();
-                if (!string.IsNullOrWhiteSpace(endpointCandidate) && !IsWellFormedHttpUrl(endpointCandidate))
+                if (!string.IsNullOrWhiteSpace(endpointCandidate))
                 {
-                    return McpToolResults.Fail(
-                        "MCP-ARG-001",
-                        "endpoint must be a full http(s) URL (e.g. https://api.openai.com/v1/chat/completions), not a bare host, path, or email address.");
+                    if (!IsWellFormedHttpUrl(endpointCandidate))
+                    {
+                        return McpToolResults.Fail(
+                            "MCP-ARG-001",
+                            "endpoint must be a full http(s) URL (e.g. https://api.openai.com/v1/chat/completions), not a bare host, path, or email address.");
+                    }
+
+                    var endpointScheme = new Uri(endpointCandidate, UriKind.Absolute).Scheme;
+                    if (!IsEndpointSchemeAllowed(endpointScheme))
+                    {
+                        return McpToolResults.Fail(
+                            "MCP-ARG-001",
+                            "endpoint must be https:// outside Development - a BYO API key is sent to it as a Bearer token.");
+                    }
                 }
             }
 
@@ -405,6 +478,10 @@ public class AgentContextMcpTools
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
 
+            var denied = await RequireAgentManageCapabilityAsync(tenantId, "delete_agent_provider");
+            if (denied != null)
+                return denied;
+
             var profile = McpToolDescriptions.ProfileFor("delete_agent_provider");
             if (profile.RequiresHumanConfirmation)
             {
@@ -438,6 +515,11 @@ public class AgentContextMcpTools
         try
         {
             var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var denied = await RequireAgentManageCapabilityAsync(tenantId, "backfill_agent_provider_key_metadata");
+            if (denied != null)
+                return denied;
+
             var updatedCount = await _pluginBindings.BackfillAgentProviderKeyMetadataAsync(tenantId);
             return McpToolResults.Success(new
             {

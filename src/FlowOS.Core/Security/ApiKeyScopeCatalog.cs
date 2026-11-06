@@ -23,7 +23,8 @@ public static class ApiKeyScopeCatalog
             ["task:complete"] = new[] { "task.complete" },
             ["governance:manage"] = new[] { "workflow.create", "workflow.approve_public" },
             ["iam:read"] = new[] { "iam.read" },
-            ["iam:manage"] = new[] { "iam.read", "iam.manage" }
+            ["iam:manage"] = new[] { "iam.read", "iam.manage" },
+            ["agent:manage"] = new[] { FlowOS.Core.Common.Interfaces.AgentProviderKinds.ManageCapability }
         };
 
     public static IReadOnlyCollection<string> KnownScopes => CapabilityMap.Keys.ToArray();

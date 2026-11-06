@@ -1,8 +1,13 @@
 using System.Text.Json;
+using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
+using FlowOS.Core.Security;
+using FlowOS.Security.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace FlowOS.Api.Controllers;
 
@@ -13,11 +18,34 @@ public class PluginBindingsController : ControllerBase
 {
     private readonly IPluginBindingRegistryService _bindings;
     private readonly ICurrentUser _currentUser;
+    private readonly ICapabilityService _capabilityService;
+    private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
 
-    public PluginBindingsController(IPluginBindingRegistryService bindings, ICurrentUser currentUser)
+    public PluginBindingsController(
+        IPluginBindingRegistryService bindings,
+        ICurrentUser currentUser,
+        ICapabilityService capabilityService,
+        IWebHostEnvironment environment,
+        IConfiguration configuration)
     {
         _bindings = bindings;
         _currentUser = currentUser;
+        _capabilityService = capabilityService;
+        _environment = environment;
+        _configuration = configuration;
+    }
+
+    private bool IsEndpointSchemeAllowed(string scheme)
+    {
+        if (string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!string.Equals(scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return TenantIdentityRules.AllowInsecureAgentEndpoints(
+            _environment.EnvironmentName,
+            _configuration[TenantIdentityRules.AllowInsecureAgentEndpointsKey]);
     }
 
     [HttpGet]
@@ -120,6 +148,12 @@ public class PluginBindingsController : ControllerBase
         }
         else if (bindingType == PluginBindingTypes.Agent)
         {
+            if (!await TenantCapabilityGate.HasCapabilityAsync(
+                    _currentUser, _capabilityService, _currentUser.TenantId, AgentProviderKinds.ManageCapability))
+            {
+                return Forbid();
+            }
+
             if (!AgentProviderKinds.IsKnown(providerName))
             {
                 return BadRequest(
@@ -139,6 +173,25 @@ public class PluginBindingsController : ControllerBase
             var existingSettings = existingAgent?.Configuration as FlowOS.Core.Common.Models.AgentProviderPublicSettings;
 
             var normalizedProvider = providerName.ToLowerInvariant();
+
+            // Any supplied endpoint must be a well-formed http(s) URL, and https:// outside Development,
+            // for every BYO provider kind - not just the ones that require an endpoint. A BYO API key is
+            // sent to this endpoint as a Bearer token.
+            if (normalizedProvider != AgentProviderKinds.FlowosHosted &&
+                !string.IsNullOrWhiteSpace(parsedAgent?.Endpoint))
+            {
+                if (!Uri.TryCreate(parsedAgent.Endpoint, UriKind.Absolute, out var suppliedUri) ||
+                    (suppliedUri.Scheme != Uri.UriSchemeHttp && suppliedUri.Scheme != Uri.UriSchemeHttps))
+                {
+                    return BadRequest("endpoint must be a valid HTTP or HTTPS URL.");
+                }
+
+                if (!IsEndpointSchemeAllowed(suppliedUri.Scheme))
+                {
+                    return BadRequest("endpoint must be https:// outside Development - a BYO API key is sent to it as a Bearer token.");
+                }
+            }
+
             if (normalizedProvider is AgentProviderKinds.AzureOpenAi or AgentProviderKinds.Custom)
             {
                 var effectiveEndpoint = !string.IsNullOrWhiteSpace(parsedAgent?.Endpoint)
@@ -148,12 +201,6 @@ public class PluginBindingsController : ControllerBase
                 if (string.IsNullOrWhiteSpace(effectiveEndpoint))
                 {
                     return BadRequest($"endpoint is required for '{normalizedProvider}' provider.");
-                }
-
-                if (!Uri.TryCreate(effectiveEndpoint, UriKind.Absolute, out var uri) ||
-                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-                {
-                    return BadRequest("endpoint must be a valid HTTP or HTTPS URL.");
                 }
             }
 
