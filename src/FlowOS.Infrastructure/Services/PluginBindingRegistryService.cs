@@ -154,9 +154,9 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 continue; // no stored key to fingerprint, or already backfilled
             }
 
-            var decryptedKey = TryDecrypt(parsed.ApiKey);
+            var decryptedKey = DecryptStoredKeyForUse(parsed.ApiKey);
             if (string.IsNullOrWhiteSpace(decryptedKey))
-                continue;
+                continue; // undecryptable: fingerprinting the ciphertext would store a wrong fingerprint
 
             parsed.ApiKeyFingerprint = AgentProviderConfiguration.ComputeFingerprint(decryptedKey);
             parsed.ApiKeyUpdatedAtUtc ??= record.UpdatedAtUtc;
@@ -313,7 +313,9 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         var config = record == null ? null : AgentProviderConfiguration.Parse(record.ConfigurationJson);
         if (config?.ApiKey != null)
         {
-            config.ApiKey = TryDecrypt(config.ApiKey);
+            // Null when the stored key can't be decrypted: the agent then fails with a clear
+            // "API key is not configured" error instead of sending ciphertext as the Bearer token.
+            config.ApiKey = DecryptStoredKeyForUse(config.ApiKey);
         }
         return config;
     }
@@ -478,6 +480,38 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             // Fallback for legacy plain-text keys before encryption was enabled
             return value;
         }
+    }
+
+    /// <summary>
+    /// Every ASP.NET Core Data Protection payload starts with this (base64url of its magic header).
+    /// No provider API key format (sk-, sk-ant-, AIza, ...) does.
+    /// </summary>
+    internal const string ProtectedPayloadPrefix = "CfDJ8";
+
+    /// <summary>
+    /// Decrypts a stored API key for actual use (calling the provider, fingerprinting it). Unlike
+    /// <see cref="TryDecrypt"/>, a Data Protection payload that this host cannot decrypt (key ring lost
+    /// on a redeploy, or encrypted by another host with a different key ring) returns null instead of
+    /// the ciphertext. A legacy plaintext key, stored before encryption was enabled, is still returned
+    /// as-is.
+    /// </summary>
+    private string? DecryptStoredKeyForUse(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value;
+
+        if (_dataProtector != null)
+        {
+            try
+            {
+                return _dataProtector.Unprotect(value);
+            }
+            catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or FormatException)
+            {
+                // Fall through: either legacy plaintext or an undecryptable payload.
+            }
+        }
+
+        return value.StartsWith(ProtectedPayloadPrefix, StringComparison.Ordinal) ? null : value;
     }
 
     private string TryEncrypt(string value)

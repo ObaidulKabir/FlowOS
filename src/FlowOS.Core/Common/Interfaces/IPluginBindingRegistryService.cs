@@ -101,7 +101,8 @@ public interface IPluginBindingRegistryService
     /// the already-stored key only to compute a one-way fingerprint from it - the plaintext is never
     /// returned or logged. ApiKeyUpdatedAtUtc is backfilled from the binding's own UpdatedAtUtc as the
     /// best known approximation of when the key was last touched. A binding that already has a
-    /// fingerprint, or has no key at all, is left untouched. Returns the number of bindings updated.
+    /// fingerprint, has no key at all, or whose stored key can't be decrypted, is left untouched.
+    /// Returns the number of bindings updated.
     /// </summary>
     Task<int> BackfillAgentProviderKeyMetadataAsync(
         Guid tenantId,

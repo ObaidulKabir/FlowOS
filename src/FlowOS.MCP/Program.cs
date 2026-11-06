@@ -750,6 +750,10 @@ public partial class Program
         });
 
         services.AddFlowOSPersistence();
+        // The MCP host never registered Data Protection itself, so the agent-secret protector could
+        // resolve to null here and BYO LLM keys saved through MCP be stored unencrypted. Same
+        // application name and key ring as the API host.
+        services.AddFlowOsDataProtection();
         services.AddScoped<IEventRegistry, EventRegistry>();
         services.AddSingleton<WorkflowEngine>();
         services.AddSingleton<StateMachineEngine>();

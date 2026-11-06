@@ -28,8 +28,12 @@ services:
       - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
       - FLOWOS_HOSTED_LLM_ENDPOINT=${FLOWOS_HOSTED_LLM_ENDPOINT:-}
       - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
+      - FLOWOS_DATA_PROTECTION_KEYS_PATH=/app/dataprotection-keys
     volumes:
       - ./flowos-config:/app/flowos-config
+      # Shared with flowos-mcp. A named volume, not a folder in the checkout: deploy runs
+      # `git clean -fd` there, and the key ring must survive redeploys.
+      - flowos-dataprotection-keys:/app/dataprotection-keys
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,6 +94,9 @@ services:
       - FLOWOS_HOSTED_LLM_MODEL=${FLOWOS_HOSTED_LLM_MODEL:-gpt-4o-mini}
       - FLOWOS_HOSTED_LLM_ENDPOINT=${FLOWOS_HOSTED_LLM_ENDPOINT:-}
       - FLOWOS_HOSTED_LLM_MAX_PER_DAY=${FLOWOS_HOSTED_LLM_MAX_PER_DAY:-200}
+      - FLOWOS_DATA_PROTECTION_KEYS_PATH=/app/dataprotection-keys
+    volumes:
+      - flowos-dataprotection-keys:/app/dataprotection-keys
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,3 +171,6 @@ networks:
 volumes:
   expense-db-data:
   db-data:
+  # ASP.NET Core Data Protection key ring for flowos-api and flowos-mcp. Deleting it makes every
+  # stored tenant secret (BYO LLM keys, webhook secrets) undecryptable.
+  flowos-dataprotection-keys:
