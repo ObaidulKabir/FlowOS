@@ -180,8 +180,10 @@ public static class McpToolDescriptions
 
             ["upsert_agent_provider"] =
                 "Creates or edits a tenant-owned LLM provider used for AI task automation. Point a waiting step at it with agentProvider. " +
-                "apiKey is write-only: stored on the tenant, omitted from responses, and left unchanged when you omit it on update. " +
-                "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key). " +
+                "apiKey is write-only: stored on the tenant, omitted from responses, and left unchanged when you omit it on update; the same unchanged-if-omitted rule applies to model, endpoint, and fallbackProviderAlias (isDefault, maxTokens, and enablePromptAudit are not sentinel fields - they are set to whatever you pass, so repeat the current value if you only mean to change something else). " +
+                "endpoint must be a full http(s) URL, not a bare host or base path - validated at write time (MCP-ARG-001) when providerName is not flowos-hosted. For providerName:\"openai\" use https://api.openai.com/v1/chat/completions, not .../v1 (that path 404s at call time). " +
+                "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key; setting providerName:flowos-hosted on any alias forces apiKey/endpoint to be ignored at write time). " +
+                "Alias \"flowos-hosted\" is also platform-reserved on its own: a step whose agentProvider resolves to that exact alias always gets the platform's hosted OpenAI lease, even if you saved a different providerName/apiKey/endpoint under it - use a different alias for a BYO key provider. " +
                 "Also supports default-provider selection, provider fallback alias, maxTokens, and opt-in prompt audit logging. Dashboard: Application → AI Context → Providers. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +

@@ -289,6 +289,18 @@ public class AgentContextMcpTools
                     "Unknown providerName. Use openai, anthropic, azure-openai, google, custom, flowos-risk, or flowos-hosted.");
             }
 
+            if (!AgentProviderKinds.IsFlowOsHosted(providerName))
+            {
+                var endpointCandidate = FirstNonEmpty(args, "endpoint")
+                    ?? (args["configuration"] as JObject)?["endpoint"]?.ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(endpointCandidate) && !IsWellFormedHttpUrl(endpointCandidate))
+                {
+                    return McpToolResults.Fail(
+                        "MCP-ARG-001",
+                        "endpoint must be a full http(s) URL (e.g. https://api.openai.com/v1/chat/completions), not a bare host, path, or email address.");
+                }
+            }
+
             var isEnabled = args["isEnabled"]?.Value<bool>() ?? existing?.IsEnabled ?? true;
             var configuration = AgentProviderKinds.IsFlowOsHosted(providerName)
                 ? "{}"
@@ -807,6 +819,15 @@ public class AgentContextMcpTools
 
         return null;
     }
+
+    /// <summary>
+    /// Rejects values like a bare host, a path, or an email address at write time instead of
+    /// letting them surface later as a misleading provider-call failure (e.g. a 404 reported as
+    /// PROVIDER_UNAVAILABLE). Only checks shape (absolute http/https URL) - not reachability.
+    /// </summary>
+    private static bool IsWellFormedHttpUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     private static IReadOnlyDictionary<string, object?>? ParseCanonical(JToken? token)
     {

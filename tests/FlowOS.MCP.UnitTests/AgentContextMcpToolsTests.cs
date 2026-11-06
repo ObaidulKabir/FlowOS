@@ -242,6 +242,94 @@ public sealed class AgentContextMcpToolsTests
     }
 
     [Fact]
+    public async Task UpsertAgentProvider_RejectsNonUrlEndpoint()
+    {
+        // Tenant integration finding: an email address passed as `endpoint` was previously
+        // accepted silently and only surfaced much later as a misleading PROVIDER_UNAVAILABLE
+        // at call time. It must now be rejected at write time.
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                endpoint = "prospectbd2024@gmail.com"
+            }));
+            Assert.True(upsert.IsError);
+            Assert.Contains("endpoint must be a full http(s) URL", upsert.Content.Single().Text);
+
+            var listed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            var listJson = JObject.Parse(listed.Content.Single().Text);
+            Assert.Equal(0, listJson["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task UpsertAgentProvider_AcceptsFullChatCompletionsUrl()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                endpoint = "https://api.openai.com/v1/chat/completions"
+            }));
+            Assert.False(upsert.IsError);
+            var provider = JObject.Parse(upsert.Content.Single().Text)["data"]!;
+            Assert.Equal("https://api.openai.com/v1/chat/completions", provider["endpoint"]?.ToString());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task UpsertAgentProvider_FlowOsHosted_SkipsEndpointValidation()
+    {
+        // flowos-hosted's configuration is forced to {} regardless of what's passed (see
+        // UpsertAgentProvider_FlowOsHosted_DropsTenantApiKey), so a malformed endpoint on that
+        // providerName must not be rejected - it is never stored or read.
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "flowos-hosted",
+                providerName = "flowos-hosted",
+                endpoint = "not-a-url"
+            }));
+            Assert.False(upsert.IsError);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
     public async Task PreviewAgentContext_MissingStep_ReturnsNotFound()
     {
         McpRequestContext.Clear();
