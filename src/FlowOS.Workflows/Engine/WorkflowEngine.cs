@@ -175,6 +175,31 @@ public class WorkflowEngine : IWorkflowEngine
 
         // 6. Execute Step Logic
 
+        // --- END STEP (StepType: End) ---
+        // Distinct from the "END" sentinel handled in step 4: a step authored with StepType "End"
+        // is a real, addressable step (so CurrentStepId reflects it) rather than a transition target
+        // that never becomes a step. Before this check existed, advancing onto such a step fell
+        // through to "Default Advance" below, which left Status stuck at Running/Waiting forever
+        // with CompletedAt null, even though the workflow had reached its terminal step.
+        if (nextStep.StepType == WorkflowStepType.End)
+        {
+            if (instance.ActiveStepIds != null && instance.ActiveStepIds.Count > 1)
+            {
+                instance.CompleteBranch(currentStep.StepId);
+                if (instance.ActiveStepIds.Count == 0)
+                {
+                    instance.Complete();
+                    return WorkflowAdvanceResult.Completed();
+                }
+                instance.Wait();
+                return WorkflowAdvanceResult.Waiting($"Branch '{currentStep.StepId}' ended. Remaining parallel branch(es): {string.Join(", ", instance.ActiveStepIds)}.");
+            }
+
+            instance.AdvanceTo(nextStepId);
+            instance.Complete();
+            return WorkflowAdvanceResult.Completed();
+        }
+
         // --- FORK STEP ---
         if (nextStep.StepType == WorkflowStepType.Fork)
         {
