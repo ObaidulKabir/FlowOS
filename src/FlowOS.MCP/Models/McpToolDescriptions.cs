@@ -314,9 +314,10 @@ public static class McpToolDescriptions
 
             ["publish_workflowclass"] =
                 "[Lifecycle Step 3: Publish] Publishes a tenant-owned Draft WorkflowClass, compiling it into an executable runtime WorkflowDefinition and registering associated EventDefinitions. " +
+                "If a runtime definition with the same (Name, Version) already exists for this tenant and is pinned to a different WorkflowClass, publish fails with WF-NAME-PINNED - publish under a different name or version, or deprecate/delete the WorkflowClass that currently owns that name+version. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
-                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, WF-NAME-PINNED, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["create_context_binding"] =
