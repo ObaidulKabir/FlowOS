@@ -27,8 +27,12 @@ public sealed class AgentWorkerModeTests
         ]);
         var services = host.Services.GetServices<IHostedService>().ToList();
 
-        Assert.Single(services);
-        Assert.IsType<AgentTaskProcessorService>(services[0]);
+        // The worker decrypts BYO provider keys, so it also runs Data Protection's key-ring loader.
+        // Nothing else may start: no outbox, timer or cleanup processors.
+        Assert.Equal(2, services.Count);
+        Assert.Single(services.OfType<AgentTaskProcessorService>());
+        Assert.Single(services, service =>
+            service.GetType().FullName == "Microsoft.AspNetCore.DataProtection.Internal.DataProtectionHostedService");
 
         using var scope = host.Services.CreateScope();
         Assert.IsType<AgentWorkerCurrentUser>(
