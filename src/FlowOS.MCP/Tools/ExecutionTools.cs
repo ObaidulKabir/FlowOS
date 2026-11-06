@@ -139,7 +139,8 @@ public class ExecutionTools
                 externalReference = summary?.ExternalReference,
                 status = string.IsNullOrEmpty(summary?.Status) ? "Running" : summary!.Status,
                 correlationId = summary?.CorrelationId ?? command.CorrelationId,
-                message = "Workflow instance started successfully."
+                message = "Workflow instance started successfully.",
+                warning = CtxEmptyDataWarning(payload, contextBindingId, contextType)
             });
         }
         catch (McpToolException ex)
@@ -170,6 +171,46 @@ public class ExecutionTools
         {
             return McpToolResults.Fail("MCP-INTERNAL", $"Failed to start workflow instance: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Tenant integration finding N1: a payload passed to start_workflow only ever reaches the agent's
+    /// composed DecisionPacket.Data when the instance is started through an activated context binding
+    /// (contextBindingId or contextType) - StartWorkflowCommand's legacy selectors (workflowClassId /
+    /// workflowDefinitionId / workflowName) never apply inputMapping, so the payload is silently
+    /// dropped. Warns (CTX-EMPTY-DATA) rather than failing the call, since the workflow may genuinely
+    /// have no agent step that needs business context.
+    /// </summary>
+    private static string? CtxEmptyDataWarning(object? payload, Guid? contextBindingId, string? contextType)
+    {
+        if (contextBindingId.HasValue || !string.IsNullOrWhiteSpace(contextType))
+            return null;
+
+        if (!HasMeaningfulPayload(payload))
+            return null;
+
+        return "CTX-EMPTY-DATA: a payload was supplied but no contextBindingId/contextType was used to " +
+               "start this instance, so the payload is not mapped into canonical context - any agent " +
+               "step's composed Data will be empty. Start via an activated context binding (contextBindingId " +
+               "or contextType) whose definition.inputMapping projects this payload, or ignore this warning " +
+               "if no step on this workflow needs business context.";
+    }
+
+    private static bool HasMeaningfulPayload(object? payload)
+    {
+        if (payload == null) return false;
+        if (payload is JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.Undefined => false,
+                JsonValueKind.Null => false,
+                JsonValueKind.Object => element.EnumerateObject().Any(),
+                JsonValueKind.Array => element.EnumerateArray().Any(),
+                _ => true
+            };
+        }
+        return true;
     }
 
     public async Task<CallToolResult> PublishEvent(JObject args)

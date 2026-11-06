@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using FlowOS.Application.Commands;
 using FlowOS.Application.Queries;
@@ -54,8 +55,48 @@ public class WorkflowsController : ControllerBase
             CorrelationId = summary?.CorrelationId,
             ExternalSourceSystem = summary?.ExternalSourceSystem,
             ExternalReference = summary?.ExternalReference,
-            Status = summary?.Status
+            Status = summary?.Status,
+            Warning = CtxEmptyDataWarning(command.Payload, command.ContextBindingId, command.ContextType)
         });
+    }
+
+    /// <summary>
+    /// Tenant integration finding N1 (MCP parity): a payload only reaches the agent's composed
+    /// DecisionPacket.Data when the instance is started through an activated context binding
+    /// (ContextBindingId/ContextType) - the legacy selectors never apply inputMapping, so the payload
+    /// is silently dropped. Warns (CTX-EMPTY-DATA) rather than failing, since the workflow may genuinely
+    /// have no agent step that needs business context.
+    /// </summary>
+    private static string? CtxEmptyDataWarning(object? payload, Guid? contextBindingId, string? contextType)
+    {
+        if (contextBindingId.HasValue || !string.IsNullOrWhiteSpace(contextType))
+            return null;
+
+        if (!HasMeaningfulPayload(payload))
+            return null;
+
+        return "CTX-EMPTY-DATA: a payload was supplied but no ContextBindingId/ContextType was used to " +
+               "start this instance, so the payload is not mapped into canonical context - any agent " +
+               "step's composed Data will be empty. Start via an activated context binding " +
+               "(ContextBindingId or ContextType) whose definition.inputMapping projects this payload, " +
+               "or ignore this warning if no step on this workflow needs business context.";
+    }
+
+    private static bool HasMeaningfulPayload(object? payload)
+    {
+        if (payload == null) return false;
+        if (payload is System.Text.Json.JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Undefined => false,
+                System.Text.Json.JsonValueKind.Null => false,
+                System.Text.Json.JsonValueKind.Object => element.EnumerateObject().Any(),
+                System.Text.Json.JsonValueKind.Array => element.EnumerateArray().Any(),
+                _ => true
+            };
+        }
+        return true;
     }
 
     [HttpGet]

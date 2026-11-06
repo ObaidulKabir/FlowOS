@@ -218,5 +218,52 @@ public class WorkflowsControllerTests : IClassFixture<CustomWebApplicationFactor
         Assert.NotEqual(mismatchedTenantId, createdInstance.TenantId);
     }
 
-    private record WorkflowStartResponse(Guid WorkflowInstanceId);
+    /// <summary>
+    /// Tenant integration finding N1: a payload only reaches an agent step's composed Data when
+    /// start_workflow is called with contextBindingId/contextType - the legacy selectors used here
+    /// (WorkflowClassId/WorkflowDefinitionId/WorkflowName) never apply inputMapping, so a Payload
+    /// passed alongside one of them is silently unused. The REST start endpoint must warn
+    /// (CTX-EMPTY-DATA) rather than stay silent, without failing the call.
+    /// </summary>
+    [Fact]
+    public async Task Start_WithPayloadAndNoContextSelector_ReturnsCtxEmptyDataWarning()
+    {
+        var seeded = await SeedRunnableWorkflowAsync(_tenantId, "PayloadNoContextFlow");
+        var command = new StartWorkflowCommand(
+            TenantId: _tenantId,
+            WorkflowDefinitionId: seeded.DefinitionId,
+            WorkflowClassId: seeded.WorkflowClassId,
+            InitialStepId: "Start",
+            CorrelationId: Guid.NewGuid(),
+            Payload: new { amount = 1500 });
+
+        var response = await _client.PostAsJsonAsync("/api/workflows/start", command);
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<WorkflowStartResponse>();
+        Assert.NotNull(payload);
+        Assert.NotNull(payload!.Warning);
+        Assert.Contains("CTX-EMPTY-DATA", payload.Warning);
+    }
+
+    [Fact]
+    public async Task Start_WithoutPayload_NoWarning()
+    {
+        var seeded = await SeedRunnableWorkflowAsync(_tenantId, "NoPayloadFlow");
+        var command = new StartWorkflowCommand(
+            TenantId: _tenantId,
+            WorkflowDefinitionId: seeded.DefinitionId,
+            WorkflowClassId: seeded.WorkflowClassId,
+            InitialStepId: "Start",
+            CorrelationId: Guid.NewGuid());
+
+        var response = await _client.PostAsJsonAsync("/api/workflows/start", command);
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<WorkflowStartResponse>();
+        Assert.NotNull(payload);
+        Assert.Null(payload!.Warning);
+    }
+
+    private record WorkflowStartResponse(Guid WorkflowInstanceId, string? Warning);
 }

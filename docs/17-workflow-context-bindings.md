@@ -284,6 +284,8 @@ Example start:
 }
 ```
 
+**`payload` is only ever projected into canonical context (and therefore into an agent step's composed `Data`) through an activated binding's `inputMapping`, which requires starting via `contextBindingId` or `contextType` as shown above.** Starting the same workflow by `workflowClassId`, `workflowDefinitionId`, or `workflowName` instead never applies that mapping - a `payload` passed there is accepted but silently has no effect on canonical context. `start_workflow`'s response returns a non-fatal `CTX-EMPTY-DATA` warning in that case, as a signal to check whether a context binding was meant to be used.
+
 ## REST API
 
 - `POST /api/context-bindings`

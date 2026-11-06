@@ -85,6 +85,88 @@ public class IntegrationContractMcpToolsTests : IDisposable
         Assert.Equal(JTokenType.Null, data["externalReference"]!.Type);
     }
 
+    /// <summary>
+    /// Tenant integration finding N1: a payload only reaches an agent step's composed Data when start_workflow
+    /// is called with contextBindingId/contextType (the activated binding's inputMapping is what actually
+    /// projects it) - the legacy selectors (workflowClassId/workflowDefinitionId/workflowName) never apply that
+    /// mapping, so a payload passed alongside one of them is silently unused. start_workflow must now warn
+    /// (CTX-EMPTY-DATA) rather than stay silent, without failing the call.
+    /// </summary>
+    [Fact]
+    public async Task StartWorkflow_PayloadWithoutContextSelector_ReturnsCtxEmptyDataWarning()
+    {
+        var instanceId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+        mediator.Setup(m => m.Send(It.IsAny<StartWorkflowCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(instanceId);
+
+        var result = await new ExecutionTools(mediator.Object).StartWorkflow(JObject.FromObject(new
+        {
+            tenantId = _tenantId,
+            workflowName = "Recovery",
+            payload = new { amount = 1500 }
+        }));
+
+        var data = Payload(result)["data"]!;
+        Assert.False(result.IsError);
+        Assert.Contains("CTX-EMPTY-DATA", data["warning"]!.Value<string>());
+    }
+
+    [Fact]
+    public async Task StartWorkflow_PayloadWithContextType_NoWarning()
+    {
+        var instanceId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+        mediator.Setup(m => m.Send(It.IsAny<StartWorkflowCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(instanceId);
+
+        var result = await new ExecutionTools(mediator.Object).StartWorkflow(JObject.FromObject(new
+        {
+            tenantId = _tenantId,
+            contextType = "Expense",
+            payload = new { amount = 1500 }
+        }));
+
+        var data = Payload(result)["data"]!;
+        Assert.False(result.IsError);
+        Assert.Equal(JTokenType.Null, data["warning"]!.Type);
+    }
+
+    [Fact]
+    public async Task StartWorkflow_NoPayload_NoWarning()
+    {
+        var instanceId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+        mediator.Setup(m => m.Send(It.IsAny<StartWorkflowCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(instanceId);
+
+        var result = await new ExecutionTools(mediator.Object).StartWorkflow(JObject.FromObject(new
+        {
+            tenantId = _tenantId,
+            workflowName = "Recovery"
+        }));
+
+        var data = Payload(result)["data"]!;
+        Assert.False(result.IsError);
+        Assert.Equal(JTokenType.Null, data["warning"]!.Type);
+    }
+
+    [Fact]
+    public async Task StartWorkflow_EmptyPayloadObject_NoWarning()
+    {
+        var instanceId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+        mediator.Setup(m => m.Send(It.IsAny<StartWorkflowCommand>(), It.IsAny<CancellationToken>())).ReturnsAsync(instanceId);
+
+        var result = await new ExecutionTools(mediator.Object).StartWorkflow(JObject.FromObject(new
+        {
+            tenantId = _tenantId,
+            workflowName = "Recovery",
+            payload = new { }
+        }));
+
+        var data = Payload(result)["data"]!;
+        Assert.False(result.IsError);
+        Assert.Equal(JTokenType.Null, data["warning"]!.Type);
+    }
+
     [Fact]
     public async Task PublishEvent_passes_the_causation_id()
     {
