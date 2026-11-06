@@ -668,7 +668,7 @@ public static class McpToolSchemas
           "type":"object",
           "required":["events","stateMachine","workflow","roles","capabilities"],
           "properties":{
-            "contextSchema":{"type":["string","null"],"description":"Optional canonical JSON Schema used by reusable workflow context bindings."},
+            "contextSchema":{"type":["string","null"],"description":"Optional canonical JSON Schema used by reusable workflow context bindings. Declaring it here is inert on its own - it only registers the canonical field names/types that a context binding's definition.inputMapping/definition.eventInputMappings may project payload values into; it has no effect on a workflow instance unless that instance was started via contextBindingId or contextType and an activated binding actually maps fields into it."},
             "events":{
               "type":"array",
               "items":{
@@ -1109,20 +1109,26 @@ public static class McpToolSchemas
           "type":"object",
           "required":["entityType"],
           "properties":{
-            "entityType":{"type":"string","minLength":1},
-            "eventAliases":{"type":"object","additionalProperties":{"type":"string"}},
-            "roleOverrides":{"type":"object","additionalProperties":{"type":"string"}},
-            "capabilityOverrides":{"type":"object","additionalProperties":{"type":"string"}},
-            "inputMapping":{"type":"object","additionalProperties":{"type":"string"}},
+            "entityType":{"type":"string","minLength":1,"description":"Canonical entity name this binding projects context onto (e.g. 'ExpenseEntity'). Used to resolve which ContextSchema the inputMapping/eventInputMappings fields below are validated against."},
+            "eventAliases":{"type":"object","additionalProperties":{"type":"string"},"description":"Maps a tenant-facing event id to the template's underlying event id, so a tenant can publish/dispatch under its own event name. Each key must resolve to an event id declared on the source workflow template."},
+            "roleOverrides":{"type":"object","additionalProperties":{"type":"string"},"description":"Maps a template role name to the tenant's own business role name, so a tenant can assign/resolve roles under its own naming. Each value must be a business role the tenant has actually declared."},
+            "capabilityOverrides":{"type":"object","additionalProperties":{"type":"string"},"description":"Maps a template capability name to the tenant's own capability name, mirroring roleOverrides for capability-gated steps."},
+            "roleStaticMemberOverrides":{
+              "type":"object",
+              "additionalProperties":{"type":"array","items":{"type":"string"}},
+              "description":"Tenant override of a template role's Static-resolution member list, keyed by the template role name (e.g. {\"Approver\":[\"alice@acme.com\"]}). Business-context configuration only - this never writes to FlowOS's own Role/TenantUserRole tables."
+            },
+            "inputMapping":{"type":"object","additionalProperties":{"type":"string"},"description":"Maps a bare dotted path in the workflow's start payload (no leading $.) to a canonicalField already declared in ContextSchema.properties. Applied only when the workflow instance is started via contextBindingId or contextType - it has no effect on instances started by workflowClassId/workflowDefinitionId/workflowName."},
             "eventInputMappings":{
               "type":"object",
-              "additionalProperties":{"type":"object","additionalProperties":{"type":"string"}}
+              "additionalProperties":{"type":"object","additionalProperties":{"type":"string"}},
+              "description":"Per-event version of inputMapping, keyed by event id: maps a bare dotted path in that event's payload to a canonicalField declared in ContextSchema.properties. This is the only channel for a human/agent feedback event's payload to reach canonical context after the workflow has started."
             },
-            "conditionParameters":{"type":"object","additionalProperties":true},
-            "decisionProviderOverrides":{"type":"object","additionalProperties":{"type":"string"}},
-            "sourcePayloadSchema":{"type":["string","null"]},
-            "eventSourcePayloadSchemas":{"type":"object","additionalProperties":{"type":"string"}},
-            "metadata":{"type":"object","additionalProperties":{"type":"string"}},
+            "conditionParameters":{"type":"object","additionalProperties":true,"description":"Literal, tenant-supplied values for canonicalFields that aren't sourced from any payload (inputMapping or eventInputMappings) - for example a constant threshold a decision condition reads. Each key must still be declared in ContextSchema.properties; any field ContextSchema marks required must be reachable from either inputMapping or conditionParameters."},
+            "decisionProviderOverrides":{"type":"object","additionalProperties":{"type":"string"},"description":"Maps a template decision-step id to a tenant-specific decision provider implementation name, letting a tenant swap the logic a Decision step runs without altering the template."},
+            "sourcePayloadSchema":{"type":["string","null"],"description":"Optional JSON Schema the start payload must satisfy before inputMapping is applied. When set, a start payload that fails this schema is rejected rather than silently producing an incomplete canonical context."},
+            "eventSourcePayloadSchemas":{"type":"object","additionalProperties":{"type":"string"},"description":"Per-event version of sourcePayloadSchema, keyed by event id: an optional JSON Schema that event's payload must satisfy before eventInputMappings is applied to it."},
+            "metadata":{"type":"object","additionalProperties":{"type":"string"},"description":"Free-form tenant notes/labels stored on the binding (e.g. an owning team or ticket reference). Not read by any validation or runtime projection logic."},
             "policyGuideline":{"type":["string","null"],"description":"Tenant overlay for how to decide in this binding without copying the template guideline."}
           },
           "additionalProperties":false
