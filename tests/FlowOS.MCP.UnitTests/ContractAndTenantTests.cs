@@ -197,6 +197,7 @@ public sealed class ContractAndTenantTests
 
         var blueprintProperties = McpToolSchemas.BlueprintSchema()["properties"]!;
         Assert.NotNull(blueprintProperties["contextSchema"]);
+        Assert.Contains("inert", blueprintProperties["contextSchema"]?["description"]?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
         var transitionProperties = blueprintProperties["stateMachine"]?["properties"]?["transitions"]?
             ["items"]?["properties"];
         Assert.NotNull(transitionProperties?["condition"]);
@@ -210,6 +211,29 @@ public sealed class ContractAndTenantTests
         Assert.NotNull(stepProperties?["requiredCapabilities"]);
         Assert.Contains("inbox", stepProperties?["requiredRoles"]?["description"]?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
         Assert.Contains("grant bags", blueprintProperties["roles"]?["description"]?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ContextBindingDefinitionSchema_documents_every_field()
+    {
+        var definitionProperties = (JObject)McpToolSchemas.CreateContextBinding()["properties"]!["definition"]!["properties"]!;
+
+        // Every property the schema advertises must carry a description - the DX report (R6) found
+        // only policyGuideline had one, leaving an agent to guess what inputMapping vs
+        // eventInputMappings vs conditionParameters actually do.
+        Assert.All(definitionProperties.Properties(), property =>
+        {
+            Assert.False(
+                string.IsNullOrWhiteSpace(property.Value["description"]?.ToString()),
+                $"ContextBindingDefinitionSchema property '{property.Name}' has no description.");
+        });
+
+        // roleStaticMemberOverrides is a real field on WorkflowContextBindingDefinition (used by
+        // ContextRoleProvisioningRules) that was missing from the advertised schema entirely, even
+        // though additionalProperties is false - an agent following the schema could never know to
+        // send it. Guard against it silently dropping out again.
+        Assert.NotNull(definitionProperties["roleStaticMemberOverrides"]);
+        Assert.Equal("array", definitionProperties["roleStaticMemberOverrides"]?["additionalProperties"]?["type"]?.ToString());
     }
 
     [Fact]
