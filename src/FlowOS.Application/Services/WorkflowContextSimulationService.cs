@@ -250,7 +250,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     result.FailureReason ?? result.Message,
                     beforeStep,
                     ToObjectDictionary(prepared.Delta),
-                    failureKind: WorkflowContextSimulationFailureKinds.TransitionRejected));
+                    failureKind: ClassifyEngineDenial(result.FailureReason ?? result.Message)));
                 denied = true;
                 break;
             }
@@ -625,7 +625,7 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 item.IsAllowed
                     ? PendingWork(runtime.WorkflowDefinition, instance)
                     : Array.Empty<WorkflowContextSimulationPendingWorkDto>(),
-                item.IsAllowed ? null : WorkflowContextSimulationFailureKinds.TransitionRejected));
+                item.IsAllowed ? null : ClassifyEngineDenial(item.Message)));
         }
     }
 
@@ -667,6 +667,23 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
     private static bool IsSlaClockEvent(WorkflowStepDefinition? step, string eventType) =>
         SlaSimulationClock.IsReminderEvent(step?.Sla, eventType) ||
         SlaSimulationClock.IsTimeoutEvent(step?.Sla, eventType);
+
+    /// <summary>
+    /// A transition the engine itself rejects (result.Success:false, or an automatic-advance that
+    /// isn't allowed) can still be a role-authorization failure: StateMachineEngine evaluates a
+    /// transition's Constraints["Role"] (StateMachineEngine.EvaluateConstraints) independently of
+    /// WorkflowContextSimulationService's own ValidateHumanActivityAsync capability pre-check, and
+    /// its denial message has a recognizable shape ("Required role '...' is missing." / "... no
+    /// roles were provided in context."). Classify those as RoleDenied rather than
+    /// TransitionRejected so the distinction holds everywhere a role can be the actual cause,
+    /// not just where ValidateHumanActivityAsync happens to catch it first.
+    /// </summary>
+    private static string ClassifyEngineDenial(string? reason) =>
+        !string.IsNullOrEmpty(reason) &&
+        (reason.Contains("Required role", StringComparison.OrdinalIgnoreCase) ||
+         reason.Contains("no roles were provided", StringComparison.OrdinalIgnoreCase))
+            ? WorkflowContextSimulationFailureKinds.RoleDenied
+            : WorkflowContextSimulationFailureKinds.TransitionRejected;
 
     private async Task<string?> ValidateHumanActivityAsync(
         ResolvedSimulationRuntime runtime,
