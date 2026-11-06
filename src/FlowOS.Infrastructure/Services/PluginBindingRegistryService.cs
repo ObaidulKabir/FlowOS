@@ -16,11 +16,16 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
 {
     private readonly FlowOSDbContext _dbContext;
     private readonly IDataProtector? _dataProtector;
+    private readonly TimeProvider _time;
 
-    public PluginBindingRegistryService(FlowOSDbContext dbContext, IDataProtectionProvider? dataProtectionProvider = null)
+    public PluginBindingRegistryService(
+        FlowOSDbContext dbContext,
+        IDataProtectionProvider? dataProtectionProvider = null,
+        TimeProvider? timeProvider = null)
     {
         _dbContext = dbContext;
         _dataProtector = dataProtectionProvider?.CreateProtector("FlowOS.AgentSecrets");
+        _time = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<PluginBindingDto> UpsertAsync(
@@ -379,8 +384,9 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 incomingParsed.ApiKey = TryDecrypt(incomingParsed.ApiKey); // In case it's somehow already encrypted, though unlikely from API
 
             var mergedJson = AgentProviderConfiguration.Merge(
-                existingParsed == null ? null : AgentProviderConfiguration.Serialize(existingParsed), 
-                incomingParsed == null ? null : AgentProviderConfiguration.Serialize(incomingParsed));
+                existingParsed == null ? null : AgentProviderConfiguration.Serialize(existingParsed),
+                incomingParsed == null ? null : AgentProviderConfiguration.Serialize(incomingParsed),
+                _time.GetUtcNow().UtcDateTime);
             
             var mergedParsed = AgentProviderConfiguration.Parse(mergedJson);
             if (mergedParsed?.ApiKey != null)

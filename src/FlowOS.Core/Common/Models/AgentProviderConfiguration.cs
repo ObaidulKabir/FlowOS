@@ -1,3 +1,6 @@
+using System;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -13,6 +16,19 @@ public sealed class AgentProviderConfiguration
     public string? Endpoint { get; set; }
     public string? ApiKey { get; set; }
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// Tenant integration finding M2: a non-reversible SHA-256-derived fingerprint of the currently
+    /// stored API key, so a tenant can verify which key is active (e.g. after a rotation) without
+    /// the key itself ever being exposed. Recomputed only when the key value actually changes.
+    /// </summary>
+    public string? ApiKeyFingerprint { get; set; }
+
+    /// <summary>
+    /// When the stored API key was last changed to a new value (not bumped merely by an unrelated
+    /// field update). Null until a key has been set at least once.
+    /// </summary>
+    public DateTime? ApiKeyUpdatedAtUtc { get; set; }
 
     /// <summary>
     /// Maximum output tokens to request from the provider. When null, adapters use their own default.
@@ -40,7 +56,12 @@ public sealed class AgentProviderConfiguration
         }
     }
 
-    public static string Merge(string? existingJson, string? incomingJson)
+    /// <param name="nowUtc">
+    /// Current UTC time, supplied by the caller (via TimeProvider) rather than read here, used only
+    /// to stamp <see cref="ApiKeyUpdatedAtUtc"/> when the incoming apiKey actually changes the stored
+    /// value. Omit to merge without stamping (e.g. callers that only read/inspect, never persist).
+    /// </param>
+    public static string Merge(string? existingJson, string? incomingJson, DateTime? nowUtc = null)
     {
         var existing = Parse(existingJson) ?? new AgentProviderConfiguration();
         var incoming = Parse(incomingJson);
@@ -49,7 +70,15 @@ public sealed class AgentProviderConfiguration
         existing.Model = string.IsNullOrWhiteSpace(incoming.Model) ? existing.Model : incoming.Model.Trim();
         existing.Endpoint = string.IsNullOrWhiteSpace(incoming.Endpoint) ? existing.Endpoint : incoming.Endpoint.Trim();
         if (!string.IsNullOrWhiteSpace(incoming.ApiKey))
-            existing.ApiKey = incoming.ApiKey.Trim();
+        {
+            var trimmedKey = incoming.ApiKey.Trim();
+            if (trimmedKey != existing.ApiKey)
+            {
+                existing.ApiKeyFingerprint = ComputeFingerprint(trimmedKey);
+                existing.ApiKeyUpdatedAtUtc = nowUtc ?? existing.ApiKeyUpdatedAtUtc;
+            }
+            existing.ApiKey = trimmedKey;
+        }
         existing.IsDefault = incoming.IsDefault;
         existing.MaxTokens = incoming.MaxTokens ?? existing.MaxTokens;
         existing.FallbackProviderAlias = string.IsNullOrWhiteSpace(incoming.FallbackProviderAlias) ? existing.FallbackProviderAlias : incoming.FallbackProviderAlias.Trim();
@@ -68,11 +97,24 @@ public sealed class AgentProviderConfiguration
             parsed.IsDefault,
             parsed.MaxTokens,
             parsed.FallbackProviderAlias,
-            parsed.EnablePromptAudit);
+            parsed.EnablePromptAudit,
+            parsed.ApiKeyFingerprint,
+            parsed.ApiKeyUpdatedAtUtc);
     }
 
     public static string Serialize(AgentProviderConfiguration config) =>
         JsonSerializer.Serialize(config, JsonOptions);
+
+    /// <summary>
+    /// A non-reversible 16-hex-char SHA-256-derived fingerprint. Never exposes any part of the key
+    /// itself - only lets a caller verify two values are the same key (e.g. confirming a rotation
+    /// actually changed it).
+    /// </summary>
+    public static string ComputeFingerprint(string apiKey)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(apiKey));
+        return Convert.ToHexString(hash)[..16].ToLowerInvariant();
+    }
 
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -89,4 +131,6 @@ public sealed record AgentProviderPublicSettings(
     bool IsDefault = false,
     int? MaxTokens = null,
     string? FallbackProviderAlias = null,
-    bool EnablePromptAudit = false);
+    bool EnablePromptAudit = false,
+    string? ApiKeyFingerprint = null,
+    DateTime? ApiKeyUpdatedAtUtc = null);

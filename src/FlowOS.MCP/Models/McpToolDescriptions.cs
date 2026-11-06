@@ -186,21 +186,21 @@ public static class McpToolDescriptions
                 "Alias \"flowos-hosted\" is also platform-reserved on its own: a step whose agentProvider resolves to that exact alias always gets the platform's hosted OpenAI lease, even if you saved a different providerName/apiKey/endpoint under it - use a different alias for a BYO key provider. " +
                 "Also supports default-provider selection, provider fallback alias, maxTokens, and opt-in prompt audit logging. Dashboard: Application → AI Context → Providers. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"flowos-hosted\",\"providerName\":\"flowos-hosted\",\"isDefault\":true,\"enablePromptAudit\":false}",
 
             ["list_agent_providers"] =
-                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey plus default/fallback/audit settings. Never returns the API key. " +
+                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey plus default/fallback/audit settings. Never returns the API key - apiKeyFingerprint (non-reversible) and keyUpdatedAtUtc let you verify which key is active, e.g. after a rotation. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}]}}. " +
+                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {}",
 
             ["get_agent_provider"] =
-                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret, and includes default/fallback/audit settings. " +
+                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret, plus a non-reversible apiKeyFingerprint and keyUpdatedAtUtc to verify which key is active, and includes default/fallback/audit settings. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-llm\"}",
 

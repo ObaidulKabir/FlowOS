@@ -192,6 +192,14 @@ public sealed class AgentContextMcpToolsTests
             Assert.Null(provider["apiKey"]);
             Assert.DoesNotContain("sk-test", provider.ToString(), StringComparison.OrdinalIgnoreCase);
 
+            // Tenant integration finding M2: get/list previously returned only a bare hasApiKey
+            // boolean. A non-reversible fingerprint and a keyUpdatedAtUtc timestamp must now be
+            // present too, with the key itself still never exposed anywhere in the response.
+            var fingerprint = provider["apiKeyFingerprint"]?.ToString();
+            Assert.False(string.IsNullOrWhiteSpace(fingerprint));
+            Assert.DoesNotContain("sk-test", fingerprint, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(provider["keyUpdatedAtUtc"]);
+
             var keepKey = await tools.UpsertAgentProvider(JObject.FromObject(new
             {
                 tenantId,
@@ -205,6 +213,21 @@ public sealed class AgentContextMcpToolsTests
             Assert.True(updated["hasApiKey"]?.Value<bool>());
             Assert.Equal(1024, updated["maxTokens"]?.Value<int>());
             Assert.Equal("backup-llm", updated["fallbackProviderAlias"]?.ToString());
+
+            // Omitting apiKey (keep-stored-key) must not change the fingerprint - only an actual
+            // key rotation does.
+            Assert.Equal(fingerprint, updated["apiKeyFingerprint"]?.ToString());
+
+            var rotated = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                apiKey = "sk-test-rotated-key"
+            }));
+            Assert.False(rotated.IsError);
+            var rotatedJson = JObject.Parse(rotated.Content.Single().Text)["data"]!;
+            Assert.NotEqual(fingerprint, rotatedJson["apiKeyFingerprint"]?.ToString());
+            Assert.DoesNotContain("sk-test-rotated-key", rotatedJson.ToString(), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -528,7 +551,7 @@ public sealed class AgentContextMcpToolsTests
             var existingJson = _rawJson.GetValueOrDefault(sourceName);
             if (string.Equals(bindingType, PluginBindingTypes.Agent, StringComparison.OrdinalIgnoreCase))
             {
-                var merged = AgentProviderConfiguration.Merge(existingJson, configurationJson);
+                var merged = AgentProviderConfiguration.Merge(existingJson, configurationJson, DateTime.UtcNow);
                 _rawJson[sourceName] = merged;
                 configuration = AgentProviderConfiguration.Redact(merged);
             }
