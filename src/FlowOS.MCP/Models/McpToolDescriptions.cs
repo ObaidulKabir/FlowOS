@@ -486,11 +486,12 @@ public static class McpToolDescriptions
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Authorization: requires effective capability workflow.start. For API keys, role permissions are restricted by workflow:start (or *). On MCP-AUTHZ-001 call diagnose_caller_permissions. " +
                 "payload.roleAssignments sets Assignment business roles only at start. After the instance exists, call assign_instance_role. (Note: For ResolutionType 'Team', the engine auto-assigns 'team:{id}:0'.) " +
-                "Returns: {ok:true,data:{workflowInstanceId,tenantId,workflowDefinitionId,workflowVersion,externalSourceSystem,externalReference,status,correlationId,message}}. " +
+                "Returns: {ok:true,data:{workflowInstanceId,tenantId,workflowDefinitionId,workflowVersion,externalSourceSystem,externalReference,status,correlationId,message,warning}}. warning is null on the normal path. " +
                 "Optional priority (0–100, higher is more urgent) orders the task inbox; change it later with set_instance_priority. " +
                 "Pass businessReference {sourceSystem,externalEntityId} to link the instance to a record in your system; find it later with list_workflow_instances. Reusing an idempotencyKey returns the same instance. " +
                 "A Trial tenant receives HTTP 402 MCP-PLAN-REQUIRED. That is an unpaid plan, not an expired flw_live_ key; call get_plan_status, then request_plan_activation. " +
                 "MCP-CONFLICT-001 (context {conflictCode,retryable:true}) means a concurrent update or a duplicate request still running; retry with the same idempotencyKey. " +
+                "payload only reaches an agent step's composed Data when you start via contextBindingId or contextType (an activated context binding's definition.inputMapping projects it into canonical context) - starting via workflowClassId/workflowDefinitionId/workflowName never applies that mapping, so the payload is otherwise dropped; data.warning returns CTX-EMPTY-DATA in that case as a non-fatal heads-up, not an error. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-AUTHZ-001, MCP-AUTHZ-003, MCP-CONFLICT-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"contextType\":\"Expense\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"payload\":{\"expense\":{\"amount\":1500},\"roleAssignments\":{\"Sales\":\"user-123\"}}}",
 

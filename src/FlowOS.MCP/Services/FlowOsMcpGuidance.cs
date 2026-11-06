@@ -94,6 +94,7 @@ public static class FlowOsMcpGuidance
           • Call `start_workflow` with exactly one selector: `workflowClassId`, `workflowName`,
             `workflowDefinitionId`, `contextBindingId`, or `contextType`.
           • The response contains `workflowInstanceId`, `workflowDefinitionId`, `workflowVersion`, `status`, `correlationId`, and the caller's reference (`externalSourceSystem`, `externalReference`).
+          • `payload` only reaches an agent step's composed `Data` when you start via `contextBindingId` or `contextType` - the activated binding's `definition.inputMapping` is what actually projects it into canonical context. Starting via `workflowClassId`/`workflowDefinitionId`/`workflowName` never applies that mapping, so a payload passed there is silently unused by any agent step. The response's `warning` field returns `CTX-EMPTY-DATA` in that case as a heads-up, not an error - ignore it if nothing on this workflow needs business context.
           • To link the instance to a record in another system (for example Learning OS), pass `businessReference` with `sourceSystem` and `externalEntityId`. Find it again with `list_workflow_instances` (`sourceSystem`, `externalReference`).
           • When you may retry, send the same `idempotencyKey` each time. A retry then returns the same instance instead of starting a second one.
 
