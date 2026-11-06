@@ -5,6 +5,19 @@ using FlowOS.Workflows.Enums;
 
 namespace FlowOS.Workflows.Domain;
 
+/// <summary>
+/// Thrown by <see cref="WorkflowDefinition.SetClassLineage"/> when a (Name, Version, TenantId)
+/// runtime definition already belongs to a different WorkflowClass. Distinct from the generic
+/// <see cref="InvalidOperationException"/> other domain methods throw so MCP/API callers can map
+/// it to its own error code (<c>WF-NAME-PINNED</c>) instead of a generic internal error.
+/// </summary>
+public class WorkflowDefinitionPinConflictException : InvalidOperationException
+{
+    public WorkflowDefinitionPinConflictException(string message) : base(message)
+    {
+    }
+}
+
 public class WorkflowDefinition
 {
     public Guid Id { get; private set; }
@@ -100,7 +113,8 @@ public class WorkflowDefinition
         if (ContextBindingRevisionId.HasValue)
             throw new InvalidOperationException("Context-materialized definitions cannot be assigned class-only lineage.");
         if (SourceWorkflowClassId.HasValue && SourceWorkflowClassId.Value != sourceWorkflowClassId)
-            throw new InvalidOperationException("Workflow definition is already pinned to a different WorkflowClass.");
+            throw new WorkflowDefinitionPinConflictException(
+                $"WF-NAME-PINNED: WorkflowDefinition '{Name}' v{Version} is already pinned to WorkflowClass '{SourceWorkflowClassId.Value}' and cannot be re-pinned to a different WorkflowClass ('{sourceWorkflowClassId}'). Publish under a different name or version, or deprecate/delete the WorkflowClass that currently owns this name+version.");
 
         SourceWorkflowClassId = sourceWorkflowClassId;
         StateMachineDefinitionId = stateMachineDefinitionId;

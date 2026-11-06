@@ -64,6 +64,10 @@ public static class FlowOsMcpGuidance
           • To reuse one template in multiple business domains, call `create_context_binding` against the draft or published class,
             then `simulate_context_binding` with revision `draft`. Do not publish a throwaway simulator variant first.
             `validate_context_binding` and `activate_context_binding` require a Published or Public source.
+          • `WF-NAME-PINNED`: this tenant already has a runtime WorkflowDefinition with the same (Name, Version) pinned to a
+            different WorkflowClass - a (Name, Version) pair identifies one runtime definition per tenant, not one per class.
+            Bump `version` on the draft (or rename it) and publish that, or deprecate/delete the WorkflowClass that currently
+            owns the name+version first.
             WorkflowClass roles are business-context declarations, not FlowOS tenant/IAM roles; activation never writes Roles or TenantUserRole.
           • Call `simulate_context_binding` with revision `draft` before activation, then with `active`
             to verify the exact pinned runtime. Simulation never dispatches or persists side effects.

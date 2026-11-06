@@ -4,6 +4,7 @@ using FlowOS.Application.Queries.Governance;
 using FlowOS.Domain.Blueprints;
 using FlowOS.MCP.Models;
 using FlowOS.MCP.Services;
+using FlowOS.Workflows.Domain;
 using MediatR;
 using Newtonsoft.Json.Linq;
 
@@ -270,6 +271,10 @@ public class GovernanceTools
         catch (UnauthorizedAccessException)
         {
             return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (WorkflowDefinitionPinConflictException ex)
+        {
+            return McpToolResults.Fail("WF-NAME-PINNED", ex.Message);
         }
         catch (McpToolException ex)
         {
