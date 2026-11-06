@@ -211,13 +211,16 @@ An outcome with no immutable evidence is labeled `unevaluated`; a run with no su
 
 ## Troubleshooting
 
-1. Save `jobId` and `executionId` from `run_agent_task` / `suggest_agent_action`.
-2. Read execution history for the instance. If no record exists yet, the job may still be pending/claimed; MCP waiting is synchronous but the durable worker is authoritative.
-3. `ENTITLEMENT_DENIED`: activate the tenant plan. No paid provider request was made.
-4. `HOSTED_QUOTA_DENIED`: inspect the UTC date and hosted cap. BYO is the non-host-metered alternative.
-5. `PROVIDER_CONFIGURATION`: confirm API and MCP use the same PostgreSQL database and that the platform key exists on the process that actually claimed the job.
-6. Provider codes: fix credentials/vendor availability or wait for the retry schedule. Do not treat a failed run as an Agent insight.
-7. A green `simulate_*` run proves deterministic Law/Work/auto-commit behavior only. It does not verify network access, a secret, hosted entitlement, quota, or the paid provider.
+1. Start with `preview_agent_context` - it composes the prompt/data/redacted provider for a step **without spending a token**, and is the fastest way to confirm the prompt and provider resolve, and that `data.*` actually carries what you expect, before touching a live run.
+2. Save `jobId` and `executionId` from `run_agent_task` / `suggest_agent_action`.
+3. Read execution history for the instance. If no record exists yet, the job may still be pending/claimed; MCP waiting is synchronous but the durable worker is authoritative.
+4. `ENTITLEMENT_DENIED`: activate the tenant plan. No paid provider request was made.
+5. `HOSTED_QUOTA_DENIED`: inspect the UTC date and hosted cap. BYO is the non-host-metered alternative.
+6. `PROVIDER_CONFIGURATION`: confirm API and MCP use the same PostgreSQL database and that the platform key exists on the process that actually claimed the job.
+7. Provider codes: fix credentials/vendor availability or wait for the retry schedule. Do not treat a failed run as an Agent insight.
+8. A green `simulate_*` run proves deterministic Law/Work/auto-commit behavior only. It does not verify network access, a secret, hosted entitlement, quota, or the paid provider.
+9. To debug an event→canonical-context mapping (`eventInputMappings`/`inputMapping` on a context binding), use `simulate_context_binding`: it is side-effect-free and shows `canonicalDelta`/`contextAfter` for the projection. Note: if the simulated role doesn't hold `event.publish.<eventId>`, the event is recorded as *Denied* in the trace, but `canonicalDelta` is still shown - a Denied event never actually projects in a live run, so don't read the delta as proof the mapping would apply.
+10. To see the exact composed `userPrompt` sent to the model and its raw response, set `enablePromptAudit:true` on the agent provider and read it back with `list_agent_prompt_audits`. This is the only way to inspect the literal text the model received and returned, and is the right tool when an agent's output looks wrong but every upstream step (context, prompt, provider) checks out.
 
 ## What must not change
 
