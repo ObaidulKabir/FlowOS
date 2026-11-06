@@ -106,7 +106,10 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.SimulateSubWorkflow(),
             McpToolSchemas.InspectContextSchema(),
             McpToolSchemas.InspectInstanceContext(),
-            McpToolSchemas.TestContextOperations()
+            McpToolSchemas.TestContextOperations(),
+            McpToolSchemas.NewWorkflowClassVersion(),
+            McpToolSchemas.WorkflowClassById(),
+            McpToolSchemas.WorkflowClassById(true)
         };
 
         Assert.All(schemas, schema =>

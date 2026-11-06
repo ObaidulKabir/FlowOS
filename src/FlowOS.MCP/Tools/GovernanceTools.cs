@@ -281,6 +281,149 @@ public class GovernanceTools
         }
     }
 
+    public async Task<CallToolResult> NewVersion(JObject args)
+    {
+        try
+        {
+            var idStr = args["id"]?.ToString();
+            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
+                return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            var bumpType = FlowOS.Domain.Enums.VersionBumpType.Minor;
+            var bumpTypeStr = args["bumpType"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(bumpTypeStr) &&
+                !Enum.TryParse(bumpTypeStr, true, out bumpType))
+            {
+                return McpToolResults.Fail("MCP-ARG-001", "bumpType must be one of: Build, Minor, Major.");
+            }
+
+            var changeLog = args["changeLog"]?.ToString();
+
+            var result = await _mediator.Send(new CreateNewWorkflowClassVersionCommand(tenantId, id, bumpType, changeLog));
+            return McpToolResults.Success(new
+            {
+                id = result.Id,
+                tenantId,
+                name = result.Name,
+                version = result.Version,
+                previousVersionId = result.PreviousVersionId,
+                status = result.Status.ToString(),
+                message = $"Created version {result.Version} as a new Draft, linked to its previous version via previousVersionId. Edit and publish it like any other draft."
+            });
+        }
+        catch (KeyNotFoundException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to create new version: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> Deprecate(JObject args)
+    {
+        try
+        {
+            var idStr = args["id"]?.ToString();
+            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
+                return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            // Enforced Agent Safety Policy Gate for high-risk irreversible operations
+            var profile = McpToolDescriptions.ProfileFor("deprecate_workflowclass");
+            if (profile.RequiresHumanConfirmation)
+            {
+                var confirmed = args["confirmHumanApproval"]?.Value<bool>() ?? false;
+                if (!confirmed)
+                {
+                    return McpToolResults.Fail(
+                        "MCP-APPROVAL-REQUIRED",
+                        "High-risk irreversible operation 'deprecate_workflowclass' requires explicit human confirmation. Supply 'confirmHumanApproval: true' in arguments to execute.");
+                }
+            }
+
+            var result = await _mediator.Send(new DeprecateWorkflowClassCommand(tenantId, id));
+            return McpToolResults.Success(new { id = result.Id, tenantId, status = result.Status.ToString(), message = "WorkflowClass deprecated. Existing running instances are unaffected; it can no longer be used to start new ones." });
+        }
+        catch (KeyNotFoundException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to deprecate workflow class: {ex.Message}");
+        }
+    }
+
+    public async Task<CallToolResult> Delete(JObject args)
+    {
+        try
+        {
+            var idStr = args["id"]?.ToString();
+            if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
+                return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
+
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+
+            // Enforced Agent Safety Policy Gate for high-risk irreversible operations
+            var profile = McpToolDescriptions.ProfileFor("delete_workflowclass");
+            if (profile.RequiresHumanConfirmation)
+            {
+                var confirmed = args["confirmHumanApproval"]?.Value<bool>() ?? false;
+                if (!confirmed)
+                {
+                    return McpToolResults.Fail(
+                        "MCP-APPROVAL-REQUIRED",
+                        "High-risk irreversible operation 'delete_workflowclass' requires explicit human confirmation. Supply 'confirmHumanApproval: true' in arguments to execute.");
+                }
+            }
+
+            await _mediator.Send(new DeleteWorkflowClassCommand(tenantId, id));
+            return McpToolResults.Success(new { id, tenantId, status = "Deleted", message = "WorkflowClass permanently deleted." });
+        }
+        catch (KeyNotFoundException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // WorkflowClass.Delete() embeds its own domain code (GOV-DEL-001/002) in the message.
+            return McpToolResults.Fail("MCP-ARG-001", ex.Message);
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", $"Failed to delete workflow class: {ex.Message}");
+        }
+    }
+
     public async Task<CallToolResult> GenerateBlueprintFromNaturalLanguage(JObject args)
     {
         try

@@ -225,6 +225,15 @@ public static class ToolRegistration
         registry.Register("publish_workflowclass", McpToolDescriptions.For("publish_workflowclass"), McpToolSchemas.PublishWorkflowClass(),
             async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.Publish(args)));
 
+        registry.Register("new_version_workflowclass", McpToolDescriptions.For("new_version_workflowclass"), McpToolSchemas.NewWorkflowClassVersion(),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.NewVersion(args)));
+
+        registry.Register("deprecate_workflowclass", McpToolDescriptions.For("deprecate_workflowclass"), McpToolSchemas.WorkflowClassById(true),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.Deprecate(args)));
+
+        registry.Register("delete_workflowclass", McpToolDescriptions.For("delete_workflowclass"), McpToolSchemas.WorkflowClassById(true),
+            async (args) => await ExecuteScopedAsync<GovernanceTools>(serviceProvider, t => t.Delete(args)));
+
         registry.Register("diagnose_caller_permissions", McpToolDescriptions.For("diagnose_caller_permissions"), McpToolSchemas.DiagnoseCallerPermissions(),
             async (args) => await ExecuteScopedAsync<TenantIamMcpTools>(serviceProvider, t => t.DiagnoseCallerPermissions(args)));
 
