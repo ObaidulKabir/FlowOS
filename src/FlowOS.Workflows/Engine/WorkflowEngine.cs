@@ -197,7 +197,7 @@ public class WorkflowEngine : IWorkflowEngine
 
             instance.AdvanceTo(nextStepId);
             instance.Complete();
-            return WorkflowAdvanceResult.Completed();
+            return WorkflowAdvanceResult.Completed(nextStepId);
         }
 
         // --- FORK STEP ---
