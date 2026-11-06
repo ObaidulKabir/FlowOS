@@ -242,6 +242,42 @@ public sealed class AgentContextMcpToolsTests
     }
 
     [Fact]
+    public async Task UpsertAgentProvider_ReservedAliasFlowOsHosted_RejectsNonHostedProviderName()
+    {
+        // Tenant integration finding H3 (P0): a step whose agentProvider resolves to the alias
+        // "flowos-hosted" always gets the platform's hosted lease at runtime, so saving a BYO
+        // providerName under that alias was previously accepted silently (ok:true, no warning),
+        // leaving the saved configuration permanently unreachable. Must be rejected at write time.
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var upsert = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "flowos-hosted",
+                providerName = "openai",
+                apiKey = "sk-should-not-be-stored"
+            }));
+            Assert.True(upsert.IsError);
+            var text = upsert.Content.Single().Text;
+            Assert.Contains("AGENT-ALIAS-RESERVED", text);
+            Assert.DoesNotContain("sk-should-not-be-stored", text, StringComparison.OrdinalIgnoreCase);
+
+            var listed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            var listJson = JObject.Parse(listed.Content.Single().Text);
+            Assert.Equal(0, listJson["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
     public async Task UpsertAgentProvider_RejectsNonUrlEndpoint()
     {
         // Tenant integration finding: an email address passed as `endpoint` was previously
