@@ -68,6 +68,8 @@ public static class McpToolDescriptions
                 "Otherwise the instance stays a HumanTask and the insight is parked as a Smart Action. Do not invent transitions or paste API keys. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. Runtime plan required. " +
                 "Returns: a completed run or {ok:true,data:{jobId,status,pending:true}} if the worker is still running. Use get_agent_task_job to poll. " +
+                "A completed run's data.result is the agent's DecisionPacket output contract: {Success,Insight,StructuredData,SuggestedActions,FailureCode,FailureReason,Telemetry}. " +
+                "The tenant LLM's JSON reply may include an optional top-level structuredOutput object next to insight/actions (business data extracted or computed for this step, for example amounts or line items); when present it becomes data.result.StructuredData. A missing or malformed structuredOutput is silently ignored - it never fails the run - and StructuredData is then {} as before this field existed. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}",
 

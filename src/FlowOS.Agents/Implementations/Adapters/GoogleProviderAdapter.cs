@@ -172,7 +172,11 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
                                     reason = new { type = "string" }
                                 }
                             }
-                        }
+                        },
+                        // N4: optional business data for this step. Not in `required` - Gemini's
+                        // responseSchema (unlike OpenAI strict mode) treats unlisted properties as
+                        // optional rather than forbidding them.
+                        structuredOutput = new { type = "object" }
                     }
                 }
             };

@@ -56,13 +56,17 @@ public sealed class OpenAiProviderAdapter : ILlmProviderAdapter
                     {
                         type = "object",
                         additionalProperties = false,
-                        required = new[] { "eventType", "confidence", "reason", "insight" },
+                        // structuredOutput (N4) is carried as a nullable JSON-encoded string, not a
+                        // nested object: OpenAI strict schema requires additionalProperties:false at
+                        // every level, which can't represent an arbitrary/open business-data shape.
+                        required = new[] { "eventType", "confidence", "reason", "insight", "structuredOutput" },
                         properties = new
                         {
                             eventType = new { type = "string", minLength = 1, maxLength = 200 },
                             confidence = new { type = "number", minimum = 0, maximum = 1 },
                             reason = new { type = "string", minLength = 1, maxLength = 2000 },
-                            insight = new { type = "string", minLength = 1, maxLength = 2000 }
+                            insight = new { type = "string", minLength = 1, maxLength = 2000 },
+                            structuredOutput = new { type = new[] { "string", "null" }, maxLength = 4000 }
                         }
                     }
                 }
