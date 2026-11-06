@@ -892,6 +892,8 @@ public class AgentContextMcpTools
             maxTokens = settings.MaxTokens,
             fallbackProviderAlias = settings.FallbackProviderAlias,
             enablePromptAudit = settings.EnablePromptAudit,
+            temperature = settings.Temperature,
+            seed = settings.Seed,
             binding.Id,
             binding.TenantId,
             binding.CreatedAtUtc,
@@ -928,6 +930,8 @@ public class AgentContextMcpTools
         var maxTokens = args["maxTokens"]?.Value<int?>() ?? nested?["maxTokens"]?.Value<int?>();
         var fallbackProviderAlias = FirstNonEmpty(args, "fallbackProviderAlias") ?? nested?["fallbackProviderAlias"]?.ToString();
         var enablePromptAudit = args["enablePromptAudit"]?.Value<bool>() ?? nested?["enablePromptAudit"]?.Value<bool>() ?? false;
+        var temperature = args["temperature"]?.Value<double?>() ?? nested?["temperature"]?.Value<double?>();
+        var seed = args["seed"]?.Value<int?>() ?? nested?["seed"]?.Value<int?>();
 
         var config = new JObject
         {
@@ -942,6 +946,10 @@ public class AgentContextMcpTools
             config["maxTokens"] = maxTokens.Value;
         if (!string.IsNullOrWhiteSpace(fallbackProviderAlias))
             config["fallbackProviderAlias"] = fallbackProviderAlias;
+        if (temperature.HasValue)
+            config["temperature"] = temperature.Value;
+        if (seed.HasValue)
+            config["seed"] = seed.Value;
 
         return config.ToString(Newtonsoft.Json.Formatting.None);
     }

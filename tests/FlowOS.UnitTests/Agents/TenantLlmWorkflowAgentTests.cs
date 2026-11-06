@@ -3,9 +3,11 @@ using System.Net.Http;
 using System.Text;
 using FlowOS.Agents.Abstractions;
 using FlowOS.Agents.Implementations;
+using FlowOS.Agents.Implementations.Adapters;
 using FlowOS.Application.Services;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
+using FlowOS.Domain.Entities;
 using Moq;
 
 namespace FlowOS.UnitTests.Agents;
@@ -580,6 +582,45 @@ public class TenantLlmWorkflowAgentTests
         Assert.True(result.Success);
         Assert.Single(result.SuggestedActions);
         Assert.Equal("QUOTE_APPROVED", result.SuggestedActions[0].EventType);
+    }
+
+    /// <summary>
+    /// Tenant integration finding N5: the prompt auditor's rawRequestPayload must record the
+    /// sampling params actually sent on the request, not just the prompt text, so a tenant can
+    /// confirm what was effective without re-deriving it from the saved provider configuration.
+    /// </summary>
+    [Fact]
+    public async Task PromptAudit_RecordsEffectiveSamplingParams()
+    {
+        var handler = new StubHandler("""
+            {"choices":[{"message":{"content":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.95,\"reason\":\"ok\",\"insight\":\"approved\"}"}}]}
+            """);
+
+        AgentPromptAuditRecord? captured = null;
+        var auditor = new Mock<IAgentPromptAuditor>();
+        auditor.Setup(a => a.IsEnabled).Returns(true);
+        auditor.Setup(a => a.TryRecordAsync(It.IsAny<AgentPromptAuditRecord>(), It.IsAny<CancellationToken>()))
+            .Callback<AgentPromptAuditRecord, CancellationToken>((record, _) => captured = record)
+            .Returns(Task.CompletedTask);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "openai",
+            "gpt-4o-mini",
+            "https://llm.example/v1/chat/completions",
+            "sk-test-key",
+            handler,
+            adapter: new OpenAiProviderAdapter(temperature: 0.4, seed: 7),
+            auditor: auditor.Object);
+
+        var packet = Packet("QUOTE_APPROVED");
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(packet));
+
+        Assert.True(result.Success);
+        Assert.NotNull(captured);
+        using var doc = System.Text.Json.JsonDocument.Parse(captured!.RawRequestPayload);
+        var sampling = doc.RootElement.GetProperty("EffectiveSamplingParams");
+        Assert.Equal(0.4, sampling.GetProperty("Temperature").GetDouble());
+        Assert.Equal(7, sampling.GetProperty("Seed").GetInt32());
     }
 
     private static DecisionPacket Packet(params string[] legalEvents) =>

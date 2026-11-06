@@ -13,14 +13,22 @@ public sealed class OpenAiProviderAdapter : ILlmProviderAdapter
 {
     private readonly bool _useStrictJsonSchema;
     private readonly bool _useApiKeyHeader;
+    private readonly double? _temperature;
+    private readonly int? _seed;
 
     public OpenAiProviderAdapter(
         bool useStrictJsonSchema = true,
-        bool useApiKeyHeader = false)
+        bool useApiKeyHeader = false,
+        double? temperature = null,
+        int? seed = null)
     {
         _useStrictJsonSchema = useStrictJsonSchema;
         _useApiKeyHeader = useApiKeyHeader;
+        _temperature = temperature;
+        _seed = seed;
     }
+
+    public (double? Temperature, int? Seed) EffectiveSamplingParams => (_temperature, _seed);
 
     public HttpRequestMessage CreateRequest(
         string endpoint,
@@ -142,6 +150,11 @@ public sealed class OpenAiProviderAdapter : ILlmProviderAdapter
             ["model"] = model,
             ["messages"] = messages
         };
+
+        if (_temperature.HasValue)
+            payload["temperature"] = _temperature.Value;
+        if (_seed.HasValue)
+            payload["seed"] = _seed.Value;
 
         if (toolsPayload != null)
         {

@@ -148,4 +148,55 @@ public sealed class AgentProviderConfigurationTests
         Assert.Equal("https://api.openai.com/v1/chat/completions", result.Endpoint);
         Assert.Equal("sk-original-key", result.ApiKey);
     }
+
+    /// <summary>
+    /// Tenant integration finding N5: temperature/seed round-trip through Merge like maxTokens -
+    /// set to whatever is passed (not an omit-to-keep sentinel field), and kept when a later call
+    /// omits them.
+    /// </summary>
+    [Fact]
+    public void Merge_TemperatureAndSeed_AreSetFromIncoming()
+    {
+        var existing = Json(new { model = "gpt-4o-mini" });
+
+        var merged = AgentProviderConfiguration.Merge(
+            existing,
+            Json(new { temperature = 0.3, seed = 7 }));
+
+        var result = AgentProviderConfiguration.Parse(merged)!;
+        Assert.Equal(0.3, result.Temperature);
+        Assert.Equal(7, result.Seed);
+    }
+
+    [Fact]
+    public void Merge_OmittingTemperatureAndSeed_KeepsPreviousValues()
+    {
+        var existing = Json(new { model = "gpt-4o-mini", temperature = 0.3, seed = 7 });
+
+        var merged = AgentProviderConfiguration.Merge(
+            existing,
+            Json(new { model = "gpt-4o" }));
+
+        var result = AgentProviderConfiguration.Parse(merged)!;
+        Assert.Equal(0.3, result.Temperature);
+        Assert.Equal(7, result.Seed);
+    }
+
+    [Fact]
+    public void Redact_ExposesTemperatureAndSeed_ButNeverTheApiKey()
+    {
+        var json = Json(new
+        {
+            model = "gpt-4o-mini",
+            apiKey = "sk-should-never-be-redacted-out",
+            temperature = 0.5,
+            seed = 99
+        });
+
+        var settings = AgentProviderConfiguration.Redact(json);
+
+        Assert.Equal(0.5, settings.Temperature);
+        Assert.Equal(99, settings.Seed);
+        Assert.True(settings.HasApiKey);
+    }
 }

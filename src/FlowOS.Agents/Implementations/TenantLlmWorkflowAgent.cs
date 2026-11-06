@@ -142,12 +142,17 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
                         ? _adapter.ParseResponse(response.Content!)
                         : null;
 
+                    // N5: effective sampling params actually sent on this request, for audit visibility.
+                    // Null fields mean "not configured" or "not supported by this provider" - see
+                    // ILlmProviderAdapter.EffectiveSamplingParams.
+                    var sampling = _adapter.EffectiveSamplingParams;
                     var rawRequestPayload = JsonSerializer.Serialize(new
                     {
                         SystemPrompt = systemPrompt,
                         UserPrompt = iterationUserPrompt,
                         TurnMessages = combinedHistory,
-                        ToolNames = toolNames
+                        ToolNames = toolNames,
+                        EffectiveSamplingParams = new { Temperature = sampling.Temperature, Seed = sampling.Seed }
                     });
 
                     var rawResponsePayload = response.Content ?? (providerResponseForAudit?.ErrorCode != null

@@ -3,9 +3,57 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using FlowOS.Agents.Abstractions;
 using FlowOS.Agents.Implementations.Adapters;
+using FlowOS.Core.Common.Models;
 using Xunit;
 
 namespace FlowOS.UnitTests.Agents;
+
+/// <summary>
+/// Tenant integration finding N5: AgentProviderConfiguration.Temperature/Seed must actually reach
+/// the constructed adapter instance through each factory, not just exist as unused config fields.
+/// </summary>
+public class LlmProviderAdapterRegistrySamplingParamsTests
+{
+    private static readonly LlmProviderAdapterRegistry Registry = new(new ILlmProviderAdapterFactory[]
+    {
+        new OpenAiAdapterFactory(),
+        new AzureOpenAiAdapterFactory(),
+        new CustomOpenAiAdapterFactory(),
+        new AnthropicAdapterFactory(),
+        new GoogleAdapterFactory()
+    });
+
+    [Theory]
+    [InlineData("openai")]
+    [InlineData("azure-openai")]
+    [InlineData("custom")]
+    public void OpenAiCompatibleFactories_PassThroughTemperatureAndSeed(string providerName)
+    {
+        var adapter = Registry.GetAdapter(providerName, new AgentProviderConfiguration { Temperature = 0.6, Seed = 5 });
+        Assert.Equal(((double?)0.6, (int?)5), adapter.EffectiveSamplingParams);
+    }
+
+    [Fact]
+    public void AnthropicFactory_PassesThroughTemperature_ButNeverASeed()
+    {
+        var adapter = Registry.GetAdapter("anthropic", new AgentProviderConfiguration { Temperature = 0.1, Seed = 99, MaxTokens = 2048 });
+        Assert.Equal(((double?)0.1, (int?)null), adapter.EffectiveSamplingParams);
+    }
+
+    [Fact]
+    public void GoogleFactory_PassesThroughTemperature_ButNeverASeed()
+    {
+        var adapter = Registry.GetAdapter("google", new AgentProviderConfiguration { Temperature = 0.9, Seed = 99 });
+        Assert.Equal(((double?)0.9, (int?)null), adapter.EffectiveSamplingParams);
+    }
+
+    [Fact]
+    public void NullConfig_LeavesSamplingParamsUnset()
+    {
+        var adapter = Registry.GetAdapter("openai", config: null);
+        Assert.Equal(((double?)null, (int?)null), adapter.EffectiveSamplingParams);
+    }
+}
 
 public class OpenAiProviderAdapterTests
 {
@@ -75,6 +123,50 @@ public class OpenAiProviderAdapterTests
         var parsed = adapter.ParseResponse("not json");
 
         Assert.Null(parsed.Content);
+    }
+
+    /// <summary>Tenant integration finding N5: temperature/seed, when configured, are sent as top-level
+    /// request fields and reported back via EffectiveSamplingParams for audit visibility.</summary>
+    [Fact]
+    public async Task CreateRequest_WithTemperatureAndSeed_IncludesBothInPayload()
+    {
+        var adapter = new OpenAiProviderAdapter(temperature: 0.4, seed: 42);
+        Assert.Equal(((double?)0.4, (int?)42), adapter.EffectiveSamplingParams);
+
+        var request = adapter.CreateRequest(
+            endpoint: "",
+            apiKey: "sk-test",
+            model: "gpt-4o-mini",
+            systemPrompt: "be good",
+            userPrompt: "do it");
+
+        var body = await request.Content!.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        Assert.Equal(0.4, root.GetProperty("temperature").GetDouble());
+        Assert.Equal(42, root.GetProperty("seed").GetInt32());
+    }
+
+    [Fact]
+    public async Task CreateRequest_WithoutTemperatureOrSeed_OmitsBothFromPayload()
+    {
+        var adapter = new OpenAiProviderAdapter();
+        Assert.Equal(((double?)null, (int?)null), adapter.EffectiveSamplingParams);
+
+        var request = adapter.CreateRequest(
+            endpoint: "",
+            apiKey: "sk-test",
+            model: "gpt-4o-mini",
+            systemPrompt: "be good",
+            userPrompt: "do it");
+
+        var body = await request.Content!.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        Assert.False(root.TryGetProperty("temperature", out _));
+        Assert.False(root.TryGetProperty("seed", out _));
     }
 }
 
@@ -159,6 +251,46 @@ public class AnthropicProviderAdapterTests
         Assert.Equal("user", messages[0].GetProperty("role").GetString());
         Assert.Equal("user", messages[0].GetProperty("content").GetString());
     }
+
+    /// <summary>N5: Anthropic has no deterministic-seed API parameter, so EffectiveSamplingParams.Seed
+    /// is always null regardless of configuration - only Temperature is ever sent.</summary>
+    [Fact]
+    public async Task CreateRequest_WithTemperature_IncludesItAndNeverASeed()
+    {
+        var adapter = new AnthropicProviderAdapter(temperature: 0.2);
+        Assert.Equal(((double?)0.2, (int?)null), adapter.EffectiveSamplingParams);
+
+        var request = adapter.CreateRequest(
+            endpoint: "",
+            apiKey: "sk-ant-123",
+            model: "claude-3-sonnet",
+            systemPrompt: "sys",
+            userPrompt: "user");
+
+        var body = await request.Content!.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        Assert.Equal(0.2, root.GetProperty("temperature").GetDouble());
+        Assert.False(root.TryGetProperty("seed", out _));
+    }
+
+    [Fact]
+    public async Task CreateRequest_WithoutTemperature_OmitsItFromPayload()
+    {
+        var adapter = new AnthropicProviderAdapter();
+
+        var request = adapter.CreateRequest(
+            endpoint: "",
+            apiKey: "sk-ant-123",
+            model: "claude-3-sonnet",
+            systemPrompt: "sys",
+            userPrompt: "user");
+
+        var body = await request.Content!.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        Assert.False(doc.RootElement.TryGetProperty("temperature", out _));
+    }
 }
 
 public class GoogleProviderAdapterTests
@@ -236,5 +368,50 @@ public class GoogleProviderAdapterTests
 
         Assert.Equal("sys", root.GetProperty("systemInstruction").GetProperty("parts")[0].GetProperty("text").GetString());
         Assert.Equal("hi", root.GetProperty("contents")[0].GetProperty("parts")[0].GetProperty("text").GetString());
+    }
+
+    /// <summary>N5: temperature lands in generationConfig alongside the existing responseSchema;
+    /// Gemini's generateContent (as this adapter targets it) has no equivalent to a deterministic
+    /// seed, so EffectiveSamplingParams.Seed is always null.</summary>
+    [Fact]
+    public async Task CreateRequest_WithTemperature_AddsItToGenerationConfig()
+    {
+        var adapter = new GoogleProviderAdapter(temperature: 0.7);
+        Assert.Equal(((double?)0.7, (int?)null), adapter.EffectiveSamplingParams);
+
+        var request = adapter.CreateRequest(
+            endpoint: "",
+            apiKey: "goog-key",
+            model: "gemini-1.5-flash",
+            systemPrompt: "sys",
+            userPrompt: "hi");
+
+        var body = await request.Content!.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var generationConfig = doc.RootElement.GetProperty("generationConfig");
+
+        Assert.Equal(0.7, generationConfig.GetProperty("temperature").GetDouble());
+        // Existing responseSchema behavior must be unaffected by adding temperature.
+        Assert.True(generationConfig.TryGetProperty("responseSchema", out _));
+    }
+
+    [Fact]
+    public async Task CreateRequest_WithoutTemperature_OmitsGenerationConfigTemperature()
+    {
+        var adapter = new GoogleProviderAdapter(useResponseSchema: false);
+
+        var request = adapter.CreateRequest(
+            endpoint: "",
+            apiKey: "goog-key",
+            model: "gemini-1.5-flash",
+            systemPrompt: "sys",
+            userPrompt: "hi");
+
+        var body = await request.Content!.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+
+        // No temperature and no responseSchema -> generationConfig has nothing to carry, so it's
+        // omitted entirely rather than sent as an empty object.
+        Assert.False(doc.RootElement.TryGetProperty("generationConfig", out _));
     }
 }

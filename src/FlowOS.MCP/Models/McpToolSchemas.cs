@@ -333,6 +333,8 @@ public static class McpToolSchemas
             "maxTokens":{"type":"integer","minimum":1,"description":"Optional provider output-token cap. Important for Anthropic requests that require an explicit max_tokens value."},
             "fallbackProviderAlias":{"type":"string","description":"Optional provider alias FlowOS should try when the primary provider is overloaded or unavailable."},
             "enablePromptAudit":{"type":"boolean","default":false,"description":"Opt-in raw prompt/response audit logging for this provider binding."},
+            "temperature":{"type":"number","minimum":0,"maximum":2,"description":"Optional sampling temperature sent to the provider (0 = deterministic, higher = more random). Honored by openai/azure-openai/custom, anthropic, and google. Anthropic rejects values above 1."},
+            "seed":{"type":"integer","description":"Optional deterministic sampling seed. Only openai/azure-openai/custom providers honor it; anthropic and google have no equivalent parameter and ignore it."},
             "configuration":{
               "type":"object",
               "properties":{
@@ -342,7 +344,9 @@ public static class McpToolSchemas
                 "isDefault":{"type":"boolean"},
                 "maxTokens":{"type":"integer","minimum":1},
                 "fallbackProviderAlias":{"type":"string"},
-                "enablePromptAudit":{"type":"boolean"}
+                "enablePromptAudit":{"type":"boolean"},
+                "temperature":{"type":"number","minimum":0,"maximum":2},
+                "seed":{"type":"integer"}
               },
               "additionalProperties":false
             },

@@ -12,14 +12,21 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
 {
     private readonly bool _useSystemInstruction;
     private readonly bool _useResponseSchema;
+    private readonly double? _temperature;
 
     public GoogleProviderAdapter(
         bool useSystemInstruction = true,
-        bool useResponseSchema = true)
+        bool useResponseSchema = true,
+        double? temperature = null)
     {
         _useSystemInstruction = useSystemInstruction;
         _useResponseSchema = useResponseSchema;
+        _temperature = temperature;
     }
+
+    // N5: Gemini's generateContent has no public deterministic-seed parameter in this adapter's
+    // target API surface, so Seed is always null here.
+    public (double? Temperature, int? Seed) EffectiveSamplingParams => (_temperature, null);
 
     public HttpRequestMessage CreateRequest(
         string endpoint,
@@ -129,6 +136,12 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
             }
         }
 
+        // N5: temperature applies regardless of which branch below runs, so it's collected into its
+        // own generationConfig dict rather than duplicated in both the tools and responseSchema cases.
+        var generationConfig = new Dictionary<string, object>();
+        if (_temperature.HasValue)
+            generationConfig["temperature"] = _temperature.Value;
+
         if (tools != null && tools.Count > 0)
         {
             payload["tools"] = new[]
@@ -148,29 +161,26 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
         }
         else if (_useResponseSchema)
         {
-            payload["generationConfig"] = new
+            generationConfig["responseMimeType"] = "application/json";
+            generationConfig["responseSchema"] = new
             {
-                responseMimeType = "application/json",
-                responseSchema = new
+                type = "object",
+                required = new[] { "insight", "actions" },
+                properties = new
                 {
-                    type = "object",
-                    required = new[] { "insight", "actions" },
-                    properties = new
+                    insight = new { type = "string" },
+                    actions = new
                     {
-                        insight = new { type = "string" },
-                        actions = new
+                        type = "array",
+                        items = new
                         {
-                            type = "array",
-                            items = new
+                            type = "object",
+                            required = new[] { "eventType", "confidence", "reason" },
+                            properties = new
                             {
-                                type = "object",
-                                required = new[] { "eventType", "confidence", "reason" },
-                                properties = new
-                                {
-                                    eventType = new { type = "string" },
-                                    confidence = new { type = "number" },
-                                    reason = new { type = "string" }
-                                }
+                                eventType = new { type = "string" },
+                                confidence = new { type = "number" },
+                                reason = new { type = "string" }
                             }
                         },
                         // N4: optional business data for this step. Not in `required` - Gemini's
@@ -180,6 +190,11 @@ public sealed class GoogleProviderAdapter : ILlmProviderAdapter
                     }
                 }
             };
+        }
+
+        if (generationConfig.Count > 0)
+        {
+            payload["generationConfig"] = generationConfig;
         }
 
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
