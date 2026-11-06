@@ -242,6 +242,110 @@ public sealed class AgentContextMcpToolsTests
     }
 
     [Fact]
+    public async Task DeleteAgentProvider_WithoutConfirmation_IsRejectedBeforeDeleting()
+    {
+        // New finding (P2), same gap class as H1: probe/test agent providers (e.g. leftover from
+        // integration testing) could be disabled (isEnabled:false) but never removed - there was no
+        // delete_agent_provider tool at all. It must require explicit human confirmation, same as
+        // delete_workflowclass.
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "zz-probe-bad-endpoint",
+                providerName = "openai",
+                isEnabled = false
+            }));
+
+            var result = await tools.DeleteAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "zz-probe-bad-endpoint"
+            }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-APPROVAL-REQUIRED", result.Content.Single().Text);
+
+            var stillListed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            Assert.Equal(1, JObject.Parse(stillListed.Content.Single().Text)["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAgentProvider_WithConfirmation_Succeeds()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "zz-probe-bad-endpoint",
+                providerName = "openai",
+                isEnabled = false
+            }));
+
+            var result = await tools.DeleteAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "zz-probe-bad-endpoint",
+                confirmHumanApproval = true
+            }));
+
+            Assert.False(result.IsError);
+            var data = JObject.Parse(result.Content.Single().Text)["data"]!;
+            Assert.Equal("Deleted", data["status"]?.ToString());
+
+            var listedAfterDelete = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            Assert.Equal(0, JObject.Parse(listedAfterDelete.Content.Single().Text)["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAgentProvider_UnknownAlias_ReturnsNotFound()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var result = await tools.DeleteAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "does-not-exist",
+                confirmHumanApproval = true
+            }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-NOTFOUND-001", result.Content.Single().Text);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
     public async Task UpsertAgentProvider_RejectsNonUrlEndpoint()
     {
         // Tenant integration finding: an email address passed as `endpoint` was previously
@@ -576,6 +680,22 @@ public sealed class AgentContextMcpToolsTests
                 configuration);
             _items[sourceName] = created;
             return Task.FromResult(created);
+        }
+
+        public Task<bool> DeleteAsync(
+            Guid tenantId,
+            string bindingType,
+            string sourceName,
+            CancellationToken ct = default)
+        {
+            if (_items.TryGetValue(sourceName, out var item) && item.TenantId == tenantId &&
+                string.Equals(item.BindingType, bindingType, StringComparison.OrdinalIgnoreCase))
+            {
+                _items.Remove(sourceName);
+                _rawJson.Remove(sourceName);
+                return Task.FromResult(true);
+            }
+            return Task.FromResult(false);
         }
 
         public Task<IReadOnlyList<PluginBindingDto>> ListAsync(

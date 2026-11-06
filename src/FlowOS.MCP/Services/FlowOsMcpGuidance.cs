@@ -1170,6 +1170,7 @@ public static class FlowOsMcpGuidance
         2. Provider — `upsert_agent_provider` (preferred) or `register_plugin_binding` `bindingType: agent`. Point the step with `agentProvider`. Write-only `apiKey`. List/get return `hasApiKey`, never the secret. Omit `apiKey` on later updates to keep the stored key; `model`/`endpoint`/`fallbackProviderAlias` follow the same omit-to-keep rule, `isDefault`/`maxTokens`/`enablePromptAudit` do not. `endpoint` must be the full chat-completions URL (`https://api.openai.com/v1/chat/completions`, not the `/v1` base — that 404s) and is rejected at write time if it is not an absolute `http(s)` URL. The alias `flowos-hosted` is platform-reserved: a step whose `agentProvider` resolves to that alias always gets the platform's hosted lease, even if a tenant binding of a different `providerName` was saved under it — use a different alias for a BYO key.
         3. Dashboard equivalent: tenant portal → **Application** → select the workflow → scroll to **AI Context** → **Prompts** / **Providers**. Do not use the top **Keys** tab (that is the FlowOS API key).
         4. Do **not** paste the LLM key into MCP chat, the blueprint, `decisionGuideline`, or Agent Context.
+        5. `delete_agent_provider` permanently removes a provider binding (e.g. a probe/test provider left over from integration testing) - `confirmHumanApproval:true` required. Use `upsert_agent_provider` with `isEnabled:false` instead if you only want to disable it.
 
         Example prompt:
 
