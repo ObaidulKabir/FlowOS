@@ -17,6 +17,17 @@ public static class PluginBindingTypes
 
 public static class AgentProviderKinds
 {
+    /// <summary>
+    /// Tenant integration finding (post-H3/M2/P2 review): writing, deleting, or backfilling an agent
+    /// provider binding - which can point a tenant's BYO LLM key at any endpoint - had no capability
+    /// check at all. Required on upsert_agent_provider, delete_agent_provider,
+    /// backfill_agent_provider_key_metadata, register_plugin_binding's agent path, and REST
+    /// PUT /api/plugin-bindings for bindingType "agent". Granted to the reserved Admin role by default
+    /// (see TenantSecurityDefaults); a narrower role or API-key scope can be granted it explicitly via
+    /// grant_role_capability.
+    /// </summary>
+    public const string ManageCapability = "agent.manage";
+
     public const string OpenAi = "openai";
     public const string Anthropic = "anthropic";
     public const string AzureOpenAi = "azure-openai";

@@ -2,15 +2,45 @@ using FlowOS.Agents.Abstractions;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Common.Models;
+using FlowOS.Core.Interfaces;
 using FlowOS.MCP.Services;
 using FlowOS.MCP.Tools;
+using FlowOS.Security.Interfaces;
 using Microsoft.Extensions.Configuration;
+using Moq;
 using Newtonsoft.Json.Linq;
 
 namespace FlowOS.MCP.UnitTests;
 
 public sealed class AgentContextMcpToolsTests
 {
+    /// <summary>
+    /// Builds an <see cref="AgentContextMcpTools"/> with a real <see cref="ICurrentUser"/>/
+    /// <see cref="ICapabilityService"/> pair, so the finding #1 capability gate actually runs - unlike
+    /// the plain 2-arg constructions used by every pre-existing test in this file, which construct the
+    /// class without those services and so skip the gate entirely (production DI always supplies both).
+    /// </summary>
+    private static (AgentContextMcpTools Tools, Mock<ICapabilityService> Capabilities) CreateGatedTools(
+        Guid tenantId,
+        IConfiguration? configuration = null)
+    {
+        var currentUser = new Mock<ICurrentUser>();
+        currentUser.SetupGet(u => u.TenantId).Returns(tenantId);
+        currentUser.SetupGet(u => u.Roles).Returns(new List<string> { "Admin" });
+        currentUser.SetupGet(u => u.Scopes).Returns(Array.Empty<string>());
+        currentUser.SetupGet(u => u.IsApiKey).Returns(false);
+
+        var capabilities = new Mock<ICapabilityService>();
+        var tools = new AgentContextMcpTools(
+            new StubPacketBuilder(null),
+            new InMemoryPromptRegistry(),
+            configuration: configuration,
+            currentUser: currentUser.Object,
+            capabilityService: capabilities.Object);
+
+        return (tools, capabilities);
+    }
+
     [Fact]
     public async Task GetAgentContext_GatewayPrefetchDisabled_RejectsExplicitRequest()
     {
@@ -504,6 +534,200 @@ public sealed class AgentContextMcpToolsTests
                 endpoint = "not-a-url"
             }));
             Assert.False(upsert.IsError);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task UpsertAgentProvider_CallerLacksManageCapability_ReturnsAuthzError()
+    {
+        // Tenant integration finding #1: upsert_agent_provider had no capability check at all - any
+        // authenticated caller, however narrowly scoped, could write/repoint any tenant's BYO provider.
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var (tools, capabilities) = CreateGatedTools(tenantId);
+            capabilities.Setup(c => c.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+                .ReturnsAsync(new HashSet<string>());
+
+            var result = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                apiKey = "sk-should-not-be-stored"
+            }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-AUTHZ-001", result.Content.Single().Text);
+
+            var listed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            Assert.Equal(0, JObject.Parse(listed.Content.Single().Text)["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task UpsertAgentProvider_CallerHasManageCapability_Succeeds()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var (tools, capabilities) = CreateGatedTools(tenantId);
+            capabilities.Setup(c => c.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+                .ReturnsAsync(new HashSet<string> { AgentProviderKinds.ManageCapability });
+
+            var result = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                apiKey = "sk-test"
+            }));
+
+            Assert.False(result.IsError);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAgentProvider_CallerLacksManageCapability_ReturnsAuthzErrorBeforeDeleting()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var (tools, capabilities) = CreateGatedTools(tenantId);
+            capabilities.Setup(c => c.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+                .ReturnsAsync(new HashSet<string> { AgentProviderKinds.ManageCapability });
+
+            await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai"
+            }));
+
+            // Now simulate the caller losing the capability (e.g. a narrowly-scoped API key) before
+            // the delete call.
+            capabilities.Setup(c => c.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+                .ReturnsAsync(new HashSet<string>());
+
+            var result = await tools.DeleteAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                confirmHumanApproval = true
+            }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-AUTHZ-001", result.Content.Single().Text);
+
+            var stillListed = await tools.ListAgentProviders(JObject.FromObject(new { tenantId }));
+            Assert.Equal(1, JObject.Parse(stillListed.Content.Single().Text)["data"]!["totalCount"]?.Value<int>());
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task BackfillAgentProviderKeyMetadata_CallerLacksManageCapability_ReturnsAuthzError()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var (tools, capabilities) = CreateGatedTools(tenantId);
+            capabilities.Setup(c => c.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+                .ReturnsAsync(new HashSet<string>());
+
+            var result = await tools.BackfillAgentProviderKeyMetadata(JObject.FromObject(new { tenantId }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-AUTHZ-001", result.Content.Single().Text);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task UpsertAgentProvider_PlainHttpEndpointOutsideDevelopment_IsRejected()
+    {
+        // Tenant integration finding #1: endpoint URLs were only checked for shape, so a bare
+        // http:// endpoint was accepted in every environment - a BYO API key sent as a Bearer token
+        // over plain HTTP is exposed to anything on the network path.
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ASPNETCORE_ENVIRONMENT"] = "Production"
+                })
+                .Build();
+            var (tools, capabilities) = CreateGatedTools(tenantId, configuration);
+            capabilities.Setup(c => c.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+                .ReturnsAsync(new HashSet<string> { AgentProviderKinds.ManageCapability });
+
+            var result = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                endpoint = "http://api.example.com/v1/chat/completions"
+            }));
+
+            Assert.True(result.IsError);
+            Assert.Contains("https://", result.Content.Single().Text);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task UpsertAgentProvider_PlainHttpEndpointInDevelopment_IsAllowed()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ASPNETCORE_ENVIRONMENT"] = "Development"
+                })
+                .Build();
+            var (tools, capabilities) = CreateGatedTools(tenantId, configuration);
+            capabilities.Setup(c => c.GetCapabilitiesAsync(tenantId, It.IsAny<IEnumerable<string>>()))
+                .ReturnsAsync(new HashSet<string> { AgentProviderKinds.ManageCapability });
+
+            var result = await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                endpoint = "http://localhost:11434/v1/chat/completions"
+            }));
+
+            Assert.False(result.IsError);
         }
         finally
         {

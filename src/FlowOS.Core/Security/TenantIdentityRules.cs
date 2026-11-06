@@ -43,6 +43,21 @@ public static class TenantIdentityRules
     public static bool IsAcceptedDemoApiKey(string? suppliedApiKey, string? environmentName, string? configuredValue) =>
         IsDemoApiKey(suppliedApiKey) && DemoKeysAllowed(environmentName, configuredValue);
 
+    /// <summary>
+    /// Configuration switch allowing a plain <c>http://</c> agent-provider endpoint. A BYO LLM API key
+    /// is sent as a Bearer token to whatever endpoint is configured; outside Development that endpoint
+    /// must be <c>https://</c> so the key is never sent in clear text.
+    /// </summary>
+    public const string AllowInsecureAgentEndpointsKey = "FlowOS:Agents:AllowInsecureEndpoints";
+
+    public static bool AllowInsecureAgentEndpoints(string? environmentName, string? configuredValue)
+    {
+        if (bool.TryParse(configuredValue, out var configured))
+            return configured;
+
+        return string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool TryParseTenant(string? value, out Guid tenantId)
     {
         if (Guid.TryParse(value, out tenantId) && tenantId != Guid.Empty)

@@ -68,7 +68,10 @@ public sealed class AgentProviderConfiguration
         if (incoming == null) return existingJson ?? "{}";
 
         existing.Model = string.IsNullOrWhiteSpace(incoming.Model) ? existing.Model : incoming.Model.Trim();
+
+        var previousEndpoint = existing.Endpoint;
         existing.Endpoint = string.IsNullOrWhiteSpace(incoming.Endpoint) ? existing.Endpoint : incoming.Endpoint.Trim();
+
         if (!string.IsNullOrWhiteSpace(incoming.ApiKey))
         {
             var trimmedKey = incoming.ApiKey.Trim();
@@ -78,6 +81,19 @@ public sealed class AgentProviderConfiguration
                 existing.ApiKeyUpdatedAtUtc = nowUtc ?? existing.ApiKeyUpdatedAtUtc;
             }
             existing.ApiKey = trimmedKey;
+        }
+        else if (!string.IsNullOrWhiteSpace(incoming.Endpoint) &&
+                 !string.IsNullOrWhiteSpace(existing.ApiKey) &&
+                 !EndpointsShareHost(previousEndpoint, existing.Endpoint))
+        {
+            // Tenant integration finding (post-H3/M2/P2 review): repointing the endpoint without
+            // supplying a new key kept sending the previously stored key to whatever host was saved -
+            // the key is a Bearer token, so moving the endpoint silently redirects where it is sent.
+            // Force the key to be re-supplied whenever the endpoint's host actually changes; a path-only
+            // or scheme-only edit to the same host is not treated as a move.
+            existing.ApiKey = null;
+            existing.ApiKeyFingerprint = null;
+            existing.ApiKeyUpdatedAtUtc = null;
         }
         existing.IsDefault = incoming.IsDefault;
         existing.MaxTokens = incoming.MaxTokens ?? existing.MaxTokens;
@@ -104,6 +120,25 @@ public sealed class AgentProviderConfiguration
 
     public static string Serialize(AgentProviderConfiguration config) =>
         JsonSerializer.Serialize(config, JsonOptions);
+
+    /// <summary>
+    /// True when there is no earlier endpoint to compare against (nothing to have moved from), or both
+    /// endpoints parse to the same host and port. An unparseable new endpoint is treated as a move
+    /// (returns false) rather than silently kept.
+    /// </summary>
+    private static bool EndpointsShareHost(string? previousEndpoint, string? newEndpoint)
+    {
+        if (string.IsNullOrWhiteSpace(previousEndpoint))
+            return true;
+
+        if (Uri.TryCreate(previousEndpoint, UriKind.Absolute, out var previousUri) &&
+            Uri.TryCreate(newEndpoint, UriKind.Absolute, out var newUri))
+        {
+            return string.Equals(previousUri.Authority, newUri.Authority, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(previousEndpoint.Trim(), newEndpoint?.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// A non-reversible 16-hex-char SHA-256-derived fingerprint. Never exposes any part of the key

@@ -23,7 +23,8 @@ public static class TenantSecurityDefaults
         "role.create",
         "agent.insight.publish",
         "iam.read",
-        "iam.manage"
+        "iam.manage",
+        FlowOS.Core.Common.Interfaces.AgentProviderKinds.ManageCapability
     ];
 
     public static readonly IReadOnlyCollection<string> ApiKeyCapabilities =
