@@ -956,7 +956,7 @@ public static class FlowOsMcpGuidance
         - Bindings never create roles or permissions.
         - Role overrides that rename an undeclared template role fail with `CTX-ROLE-001`. Empty override names fail with `CTX-ROLE-002`. A FlowOS tenant role does not have to exist for a business-context role name.
         - Do not publish a stripped-roles copy of the template just to bind and simulate. Bind the draft, simulate, then publish once.
-        - `simulate_context_binding` never persists instances or snapshots. A Denied trace is a design signal, not a reason to delete the template.
+        - `simulate_context_binding` never persists instances or snapshots. A Denied trace is a design signal, not a reason to delete the template. Read `failureKind` on the denied entry rather than guessing from `reason`: `ProjectionFailed` means the payload itself didn't pass the binding's schema (fix the payload or the mapping), `RoleDenied` means the simulated role lacks a capability (fix `roles`/`roleOverrides`, not the template), `TransitionRejected` means the engine itself has no route for that event from the current state, and `WorkflowTerminated` means the instance was already finished.
 
         ## Tool names to use
 

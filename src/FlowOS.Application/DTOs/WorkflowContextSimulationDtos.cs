@@ -3,6 +3,35 @@ using FlowOS.Workflows.Domain;
 
 namespace FlowOS.Application.DTOs;
 
+/// <summary>
+/// Distinguishes *why* a simulate_context_binding trace entry has IsAllowed:false. Before this,
+/// every disallowed entry just said Outcome:"Denied" with a free-text Reason, so an agent couldn't
+/// tell "the caller's simulated role can't emit this event" apart from "the event payload failed
+/// projection into canonical context" without parsing the Reason string (DX report R7).
+/// </summary>
+public static class WorkflowContextSimulationFailureKinds
+{
+    /// <summary>The instance had already reached a terminal (Completed/Failed) status.</summary>
+    public const string WorkflowTerminated = "WorkflowTerminated";
+
+    /// <summary>
+    /// The event's (or initial) payload failed sourcePayloadSchema/eventSourcePayloadSchemas
+    /// validation, so inputMapping/eventInputMappings was never applied. This is a data/mapping
+    /// problem, not a permissions problem - distinct from RoleDenied.
+    /// </summary>
+    public const string ProjectionFailed = "ProjectionFailed";
+
+    /// <summary>The simulated role(s) lack a capability the current step requires for this event.</summary>
+    public const string RoleDenied = "RoleDenied";
+
+    /// <summary>
+    /// The projection succeeded and the role was authorized, but the workflow/state-machine engine
+    /// itself rejected the transition (no matching transition for the current state, or a guard
+    /// condition failed).
+    /// </summary>
+    public const string TransitionRejected = "TransitionRejected";
+}
+
 public sealed record WorkflowContextSimulationEventRequest(
     string EventType,
     object? Payload = null,
@@ -78,7 +107,8 @@ public sealed record WorkflowContextSimulationTraceDto(
     IReadOnlyDictionary<string, object?> ContextBefore,
     IReadOnlyDictionary<string, object?> ContextAfter,
     IReadOnlyList<WorkflowContextSimulationActionDto> PlannedActions,
-    IReadOnlyList<WorkflowContextSimulationPendingWorkDto> PendingWork);
+    IReadOnlyList<WorkflowContextSimulationPendingWorkDto> PendingWork,
+    string? FailureKind = null);
 
 public sealed record WorkflowContextSimulationWorkflowGraphDto(
     string Name,

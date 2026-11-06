@@ -162,7 +162,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     scenarioEvent.Payload,
                     contextBefore,
                     "Cannot advance a terminated workflow.",
-                    beforeStep));
+                    beforeStep,
+                    failureKind: WorkflowContextSimulationFailureKinds.WorkflowTerminated));
                 denied = true;
                 break;
             }
@@ -191,7 +192,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     scenarioEvent.Payload,
                     contextBefore,
                     exception.Message,
-                    beforeStep));
+                    beforeStep,
+                    failureKind: WorkflowContextSimulationFailureKinds.ProjectionFailed));
                 denied = true;
                 break;
             }
@@ -213,7 +215,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     contextBefore,
                     roleFailure,
                     beforeStep,
-                    ToObjectDictionary(prepared.Delta)));
+                    ToObjectDictionary(prepared.Delta),
+                    failureKind: WorkflowContextSimulationFailureKinds.RoleDenied));
                 denied = true;
                 break;
             }
@@ -246,7 +249,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                     contextBefore,
                     result.FailureReason ?? result.Message,
                     beforeStep,
-                    ToObjectDictionary(prepared.Delta)));
+                    ToObjectDictionary(prepared.Delta),
+                    failureKind: ClassifyEngineDenial(result.FailureReason ?? result.Message)));
                 denied = true;
                 break;
             }
@@ -620,7 +624,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
                 PlanTransitionActions(beforeStep, afterStep, item.IsAllowed),
                 item.IsAllowed
                     ? PendingWork(runtime.WorkflowDefinition, instance)
-                    : Array.Empty<WorkflowContextSimulationPendingWorkDto>()));
+                    : Array.Empty<WorkflowContextSimulationPendingWorkDto>(),
+                item.IsAllowed ? null : ClassifyEngineDenial(item.Message)));
         }
     }
 
@@ -636,7 +641,8 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
         IReadOnlyDictionary<string, object?> contextBefore,
         string reason,
         WorkflowStepDefinition? currentStep,
-        IReadOnlyDictionary<string, object?>? delta = null)
+        IReadOnlyDictionary<string, object?>? delta = null,
+        string? failureKind = null)
         => new(
             index,
             eventType,
@@ -655,11 +661,29 @@ public sealed class WorkflowContextSimulationService : IWorkflowContextSimulatio
             CloneDictionary(contextBefore),
             CloneDictionary(contextBefore),
             PlanActions(currentStep, "OnFailure"),
-            PendingWorkForStep(currentStep));
+            PendingWorkForStep(currentStep),
+            failureKind);
 
     private static bool IsSlaClockEvent(WorkflowStepDefinition? step, string eventType) =>
         SlaSimulationClock.IsReminderEvent(step?.Sla, eventType) ||
         SlaSimulationClock.IsTimeoutEvent(step?.Sla, eventType);
+
+    /// <summary>
+    /// A transition the engine itself rejects (result.Success:false, or an automatic-advance that
+    /// isn't allowed) can still be a role-authorization failure: StateMachineEngine evaluates a
+    /// transition's Constraints["Role"] (StateMachineEngine.EvaluateConstraints) independently of
+    /// WorkflowContextSimulationService's own ValidateHumanActivityAsync capability pre-check, and
+    /// its denial message has a recognizable shape ("Required role '...' is missing." / "... no
+    /// roles were provided in context."). Classify those as RoleDenied rather than
+    /// TransitionRejected so the distinction holds everywhere a role can be the actual cause,
+    /// not just where ValidateHumanActivityAsync happens to catch it first.
+    /// </summary>
+    private static string ClassifyEngineDenial(string? reason) =>
+        !string.IsNullOrEmpty(reason) &&
+        (reason.Contains("Required role", StringComparison.OrdinalIgnoreCase) ||
+         reason.Contains("no roles were provided", StringComparison.OrdinalIgnoreCase))
+            ? WorkflowContextSimulationFailureKinds.RoleDenied
+            : WorkflowContextSimulationFailureKinds.TransitionRejected;
 
     private async Task<string?> ValidateHumanActivityAsync(
         ResolvedSimulationRuntime runtime,

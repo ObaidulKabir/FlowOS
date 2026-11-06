@@ -441,6 +441,10 @@ public class WorkflowContextBindingTests
 
         var denied = Assert.Single(result.Trace, item => !item.IsAllowed);
         Assert.Equal("Denied", result.Status);
+        // Projection and the role check both succeed here (FinanceManager is granted the capability);
+        // it's the state-machine guard "Amount <= ApprovalLimit" that rejects the transition, so this
+        // must surface as TransitionRejected, not RoleDenied or ProjectionFailed (R7).
+        Assert.Equal(WorkflowContextSimulationFailureKinds.TransitionRejected, denied.FailureKind);
         Assert.Equal("EVT-APPROVE", denied.CanonicalEventType);
         Assert.Equal(1200L, denied.CanonicalDelta["Amount"]);
         Assert.Equal(500L, denied.ContextBefore["Amount"]);
@@ -451,6 +455,152 @@ public class WorkflowContextBindingTests
         Assert.Equal(trackedEntriesBefore, context.ChangeTracker.Entries().Count());
         Assert.Empty(context.WorkflowInstances);
         Assert.Empty(context.WorkflowContextSnapshots);
+    }
+
+    [Fact]
+    public async Task ContextSimulation_EventPayloadFailsSchema_ReportsProjectionFailed()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var pluginRegistry = new Mock<IPolicyDecisionPluginRegistry>().Object;
+        var service = new WorkflowContextSimulationService(
+            unitOfWork,
+            new WorkflowContextBindingValidator(unitOfWork, pluginRegistry),
+            new WorkflowExecutionContextService(unitOfWork),
+            new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()));
+
+        // EVT-EXP-APPROVE's EventSourcePayloadSchemas requires decision.amount - send a payload
+        // missing it entirely, before the role check or the engine ever runs (R7).
+        var result = await service.SimulateAsync(source.TenantId, new WorkflowContextSimulationRequest(
+            ContextBindingId: binding.Id,
+            Revision: "draft",
+            InitialPayload: new { expense = new { amount = 500 } },
+            Roles: ["FinanceManager"],
+            Events:
+            [
+                new WorkflowContextSimulationEventRequest(
+                    "EVT-EXP-APPROVE",
+                    new { decision = new { } })
+            ]));
+
+        var denied = Assert.Single(result.Trace, item => !item.IsAllowed);
+        Assert.Equal("Denied", result.Status);
+        Assert.Equal(WorkflowContextSimulationFailureKinds.ProjectionFailed, denied.FailureKind);
+    }
+
+    [Fact]
+    public async Task ContextSimulation_RoleLacksCapability_ReportsRoleDenied()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        // Deliberately no tenant role/capability grant for "Clerk" - it maps to neither
+        // Approver nor FinanceManager, so it has no path to event.publish.EVT-EXP-APPROVE.
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var pluginRegistry = new Mock<IPolicyDecisionPluginRegistry>().Object;
+        var service = new WorkflowContextSimulationService(
+            unitOfWork,
+            new WorkflowContextBindingValidator(unitOfWork, pluginRegistry),
+            new WorkflowExecutionContextService(unitOfWork),
+            new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()));
+
+        var result = await service.SimulateAsync(source.TenantId, new WorkflowContextSimulationRequest(
+            ContextBindingId: binding.Id,
+            Revision: "draft",
+            InitialPayload: new { expense = new { amount = 500 } },
+            Roles: ["Clerk"],
+            Events:
+            [
+                new WorkflowContextSimulationEventRequest(
+                    "EVT-EXP-APPROVE",
+                    new { decision = new { amount = 500 } })
+            ]));
+
+        var denied = Assert.Single(result.Trace, item => !item.IsAllowed);
+        Assert.Equal("Denied", result.Status);
+        Assert.Equal(WorkflowContextSimulationFailureKinds.RoleDenied, denied.FailureKind);
+    }
+
+    [Fact]
+    public async Task ContextSimulation_EventAfterTerminal_ReportsWorkflowTerminated()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var pluginRegistry = new Mock<IPolicyDecisionPluginRegistry>().Object;
+        var service = new WorkflowContextSimulationService(
+            unitOfWork,
+            new WorkflowContextBindingValidator(unitOfWork, pluginRegistry),
+            new WorkflowExecutionContextService(unitOfWork),
+            new FlowOS.Workflows.Engine.WorkflowEngine(new FlowOS.StateMachines.Engine.StateMachineEngine()));
+
+        // The approve event completes the instance (amount within ApprovalLimit); a second event
+        // queued after it must be denied because the instance is already terminal (R7).
+        var result = await service.SimulateAsync(source.TenantId, new WorkflowContextSimulationRequest(
+            ContextBindingId: binding.Id,
+            Revision: "draft",
+            InitialPayload: new { expense = new { amount = 500 } },
+            Roles: ["FinanceManager"],
+            Events:
+            [
+                new WorkflowContextSimulationEventRequest(
+                    "EVT-EXP-APPROVE",
+                    new { decision = new { amount = 500 } }),
+                new WorkflowContextSimulationEventRequest(
+                    "EVT-EXP-APPROVE",
+                    new { decision = new { amount = 500 } })
+            ]));
+
+        var denied = Assert.Single(result.Trace, item => !item.IsAllowed);
+        Assert.Equal("Denied", result.Status);
+        Assert.Equal(WorkflowContextSimulationFailureKinds.WorkflowTerminated, denied.FailureKind);
     }
 
     [Fact]
