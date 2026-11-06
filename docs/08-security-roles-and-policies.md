@@ -277,6 +277,18 @@ Dashboard and tenant logins use JWTs signed with `FlowOS:Auth:JwtSecret` (enviro
 * Changing the secret signs everyone out once; they log in again.
 * In Development, FlowOS uses a development-only value when none is configured.
 
+## Encryption key ring for stored tenant secrets (Data Protection)
+
+Tenant secrets stored in the database, such as BYO LLM API keys on agent providers and webhook secrets, are encrypted with ASP.NET Core Data Protection. The API, the MCP server and the MCP agent worker all register it the same way (`AddFlowOsDataProtection`): one application name (`FlowOS`) and one key ring.
+
+* Set `FLOWOS_DATA_PROTECTION_KEYS_PATH` to a directory on persistent storage that every host mounts. `docker-compose.prod.yml` mounts the named volume `flowos-dataprotection-keys` at `/app/dataprotection-keys` in both `flowos-api` and `flowos-mcp`.
+* Use a named volume, not a folder in the deploy checkout: the deploy workflow runs `git clean -fd` there. The deploy workflow never prunes volumes.
+* Without the path, keys live inside the container and are lost when it is recreated, which happens on every deploy. Data Protection logs a warning at first use in that case. Only tests and local Development should run like that.
+* Deleting the volume makes every stored secret undecryptable. Back it up with the database.
+* The key files on the volume are not themselves encrypted. Anyone who can read both the volume and the database can decrypt the stored secrets.
+* A stored key that can no longer be decrypted is treated as missing: the agent run fails with `ProviderAuth` "Provider API key is not configured." instead of sending the encrypted value to the provider. Re-enter the key with `upsert_agent_provider`.
+* A key stored before encryption was enabled (plain text) is still used, and is encrypted the next time that provider is saved.
+
 ## What the current `Policy` model actually supports today — read before relying on `ConditionJson`
 
 `DefaultPolicyEvaluator` reads these `ConditionJson` rules: `{"action":"Deny"}` denies; `deniedRoles` denies callers holding any listed role; `requiredRoles` denies callers holding none of them; `allowedDays` (day names, evaluated in **UTC**) denies on other days; `deniedCommandTypes` denies the listed commands. Each rule can carry a `reason`. A policy named `"DenyAll"` still denies, and malformed JSON fails closed (deny). Rules are checked in that order and the first that denies wins. There are no general expressions (for example "amount > 1000") yet. See [Chapter 15](15-known-limitations-and-gaps.md#policy-conditionjson-evaluation-improved).

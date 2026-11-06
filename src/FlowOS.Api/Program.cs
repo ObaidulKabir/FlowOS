@@ -33,7 +33,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<FlowOSDbContext>("Database");
 
-builder.Services.AddDataProtection();
+// Shared, persisted key ring so secrets encrypted here stay readable by the MCP host and after redeploys.
+builder.Services.AddFlowOsDataProtection();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUserService>();
 

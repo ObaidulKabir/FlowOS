@@ -55,8 +55,10 @@ has been made.** See `25-trusted-agent-worker-rollout.md` for canary gates.
    connection pool limit. Audit required read/write privileges before
    provisioning the role; never copy the production superuser password.
 5. Provision provider credentials and, where needed, a secure shared Data
-   Protection key ring. Do not mount or copy the API container's incidental
-   local keys without a key-management and rotation review. Until cross-host
+   Protection key ring. On the production host, the API and MCP share the
+   `flowos-dataprotection-keys` volume (chapter 8); a worker on another VPS
+   cannot see that volume. Do not copy those keys to the worker without a
+   key-management and rotation review. Until cross-host
    decrypt is proven, limit the first canary to a provider path that does not
    rely on encrypted BYO bindings. The worker Compose example disables the
    hosted LLM by default. Enable `FLOWOS_HOSTED_LLM_ENABLED=true` only after

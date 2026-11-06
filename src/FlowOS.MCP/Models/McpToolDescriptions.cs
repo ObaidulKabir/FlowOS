@@ -213,7 +213,7 @@ public static class McpToolDescriptions
                 "Input example: {\"alias\":\"zz-probe-bad-endpoint\",\"confirmHumanApproval\":true}",
 
             ["backfill_agent_provider_key_metadata"] =
-                "Computes apiKeyFingerprint and keyUpdatedAtUtc for tenant-owned LLM providers that predate those fields (stored key present but fingerprint still null). Decrypts the existing stored key only to compute a non-reversible SHA-256-derived fingerprint; the key itself is never exposed, returned, logged, or changed. Safe to call repeatedly - providers that already have a fingerprint, or have no stored key, are left untouched. " +
+                "Computes apiKeyFingerprint and keyUpdatedAtUtc for tenant-owned LLM providers that predate those fields (stored key present but fingerprint still null). Decrypts the existing stored key only to compute a non-reversible SHA-256-derived fingerprint; the key itself is never exposed, returned, logged, or changed. Safe to call repeatedly - providers that already have a fingerprint, have no stored key, or whose stored key can no longer be decrypted (re-enter it with upsert_agent_provider) are left untouched. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{tenantId,providersBackfilled,message}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
