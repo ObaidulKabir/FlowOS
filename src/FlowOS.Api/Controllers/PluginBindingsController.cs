@@ -126,6 +126,12 @@ public class PluginBindingsController : ControllerBase
                     $"Unknown providerName '{providerName}'. Use {AgentProviderKinds.OpenAi}, {AgentProviderKinds.Anthropic}, {AgentProviderKinds.AzureOpenAi}, {AgentProviderKinds.Google}, {AgentProviderKinds.Custom}, {AgentProviderKinds.FlowosHosted}, or {AgentProviderKinds.FlowosRisk}.");
             }
 
+            if (AgentProviderKinds.IsReservedAlias(request.SourceName) && !AgentProviderKinds.IsFlowOsHosted(providerName))
+            {
+                return BadRequest(
+                    "The alias 'flowos-hosted' is platform-reserved: a step whose agentProvider resolves to it always gets the platform's hosted lease at runtime, regardless of what is saved here. Use a different alias for a BYO providerName key.");
+            }
+
             var parsedAgent = FlowOS.Core.Common.Models.AgentProviderConfiguration.Parse(configurationJson);
             var existingAgent = (await _bindings.ListAsync(
                 _currentUser.TenantId, bindingType, request.SourceName, ct: cancellationToken))
