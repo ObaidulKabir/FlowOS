@@ -129,6 +129,68 @@ public class PluginBindingRegistryServiceTests
     }
 
     [Fact]
+    public async Task Upsert_AgentBinding_StampsKeyFingerprintAndUpdatedAtOnlyWhenKeyActuallyChanges()
+    {
+        // Tenant integration finding M2: get_agent_provider/list_agent_providers previously returned
+        // only a bare hasApiKey boolean, with no way to verify which key version is active. A
+        // fingerprint (never reversible to the key) and a keyUpdatedAtUtc timestamp must now be
+        // returned, and the timestamp must only move when the key value itself actually changes -
+        // not on every unrelated field update (the binding's own UpdatedAtUtc already covers that).
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        using var db = new FlowOSDbContext(options);
+        var service = new PluginBindingRegistryService(db);
+        var tenantId = Guid.NewGuid();
+
+        await service.UpsertAsync(
+            tenantId,
+            PluginBindingTypes.Agent,
+            sourceName: "quote-llm",
+            providerName: "openai",
+            configurationJson: """{"model":"gpt-4o-mini","apiKey":"sk-key-one"}""");
+
+        var afterFirstKey = await service.GetEnabledAsync(tenantId, PluginBindingTypes.Agent, "quote-llm");
+        var settingsAfterFirstKey = Assert.IsType<AgentProviderPublicSettings>(afterFirstKey!.Configuration);
+        Assert.NotNull(settingsAfterFirstKey.ApiKeyFingerprint);
+        Assert.NotNull(settingsAfterFirstKey.ApiKeyUpdatedAtUtc);
+        var firstFingerprint = settingsAfterFirstKey.ApiKeyFingerprint;
+        var firstTimestamp = settingsAfterFirstKey.ApiKeyUpdatedAtUtc;
+
+        // Unrelated field update (model only, apiKey omitted) must not move the fingerprint/timestamp.
+        await service.UpsertAsync(
+            tenantId,
+            PluginBindingTypes.Agent,
+            sourceName: "quote-llm",
+            providerName: "openai",
+            configurationJson: """{"model":"gpt-4o"}""");
+
+        var afterUnrelatedUpdate = await service.GetEnabledAsync(tenantId, PluginBindingTypes.Agent, "quote-llm");
+        var settingsAfterUnrelatedUpdate = Assert.IsType<AgentProviderPublicSettings>(afterUnrelatedUpdate!.Configuration);
+        Assert.Equal(firstFingerprint, settingsAfterUnrelatedUpdate.ApiKeyFingerprint);
+        Assert.Equal(firstTimestamp, settingsAfterUnrelatedUpdate.ApiKeyUpdatedAtUtc);
+        Assert.Equal("gpt-4o", settingsAfterUnrelatedUpdate.Model);
+
+        // Rotating to a genuinely different key must move both the fingerprint and the timestamp.
+        await service.UpsertAsync(
+            tenantId,
+            PluginBindingTypes.Agent,
+            sourceName: "quote-llm",
+            providerName: "openai",
+            configurationJson: """{"apiKey":"sk-key-two"}""");
+
+        var afterRotation = await service.GetEnabledAsync(tenantId, PluginBindingTypes.Agent, "quote-llm");
+        var settingsAfterRotation = Assert.IsType<AgentProviderPublicSettings>(afterRotation!.Configuration);
+        Assert.NotEqual(firstFingerprint, settingsAfterRotation.ApiKeyFingerprint);
+        Assert.True(settingsAfterRotation.ApiKeyUpdatedAtUtc >= firstTimestamp);
+
+        // The fingerprint is never reversible to the key and the key is never exposed via the DTO.
+        Assert.DoesNotContain("sk-key-two", System.Text.Json.JsonSerializer.Serialize(afterRotation.Configuration));
+        Assert.DoesNotContain("sk-key-one", System.Text.Json.JsonSerializer.Serialize(afterRotation.Configuration));
+    }
+
+    [Fact]
     public async Task Upsert_PromptBinding_CreatesAndEditsInstructions()
     {
         var options = new DbContextOptionsBuilder<FlowOSDbContext>()

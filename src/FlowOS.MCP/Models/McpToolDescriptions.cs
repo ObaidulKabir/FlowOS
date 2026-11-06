@@ -183,24 +183,24 @@ public static class McpToolDescriptions
                 "apiKey is write-only: stored on the tenant, omitted from responses, and left unchanged when you omit it on update; the same unchanged-if-omitted rule applies to model, endpoint, and fallbackProviderAlias (isDefault, maxTokens, and enablePromptAudit are not sentinel fields - they are set to whatever you pass, so repeat the current value if you only mean to change something else). " +
                 "endpoint must be a full http(s) URL, not a bare host or base path - validated at write time (MCP-ARG-001) when providerName is not flowos-hosted. For providerName:\"openai\" use https://api.openai.com/v1/chat/completions, not .../v1 (that path 404s at call time). " +
                 "providerName: openai, anthropic, azure-openai, google, custom, flowos-risk (fixture), or flowos-hosted (paid FlowOS OpenAI, no tenant key; setting providerName:flowos-hosted on any alias forces apiKey/endpoint to be ignored at write time). " +
-                "Alias \"flowos-hosted\" is also platform-reserved on its own: a step whose agentProvider resolves to that exact alias always gets the platform's hosted OpenAI lease, even if you saved a different providerName/apiKey/endpoint under it - use a different alias for a BYO key provider. " +
+                "Alias \"flowos-hosted\" is also platform-reserved on its own: a step whose agentProvider resolves to that exact alias always gets the platform's hosted OpenAI lease, and saving a different (BYO) providerName under this alias is rejected at write time (AGENT-ALIAS-RESERVED) rather than silently ignored - use a different alias for a BYO key provider. " +
                 "Also supports default-provider selection, provider fallback alias, maxTokens, and opt-in prompt audit logging. Dashboard: Application → AI Context → Providers. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"flowos-hosted\",\"providerName\":\"flowos-hosted\",\"isDefault\":true,\"enablePromptAudit\":false}",
 
             ["list_agent_providers"] =
-                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey plus default/fallback/audit settings. Never returns the API key. " +
+                "Lists tenant-owned LLM providers (bindingType agent) with model/endpoint/hasApiKey plus default/fallback/audit settings. Never returns the API key - apiKeyFingerprint (non-reversible) and keyUpdatedAtUtc let you verify which key is active, e.g. after a rotation. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}]}}. " +
+                "Returns: {ok:true,data:{totalCount,providers:[{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {}",
 
             ["get_agent_provider"] =
-                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret, and includes default/fallback/audit settings. " +
+                "Reads one tenant-owned LLM provider by alias. Returns hasApiKey, never the secret, plus a non-reversible apiKeyFingerprint and keyUpdatedAtUtc to verify which key is active, and includes default/fallback/audit settings. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
+                "Returns: {ok:true,data:{alias,providerName,model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc,isDefault,maxTokens,fallbackProviderAlias,enablePromptAudit,isEnabled}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-llm\"}",
 
@@ -643,8 +643,9 @@ public static class McpToolDescriptions
             ["register_plugin_binding"] =
                 "[Plugin Binding Registry] Creates or updates a tenant-scoped mapping from blueprint aliases to server-owned plugins (action/decision), a tenant-owned LLM (bindingType agent), or a named prompt (bindingType prompt). " +
                 "Agent bindings take configuration {model,endpoint,apiKey} (apiKey write-only). Prompt bindings take {title,system,instructions} so a user can create and edit prompt text independently of the workflow template. " +
+                "For bindingType agent, saving a non-hosted (BYO) providerName under the platform-reserved sourceName \"flowos-hosted\" is rejected at write time (AGENT-ALIAS-RESERVED). " +
                 "Returns: {ok:true,data:{id,tenantId,bindingType,sourceName,providerName,isEnabled,configuration,createdAtUtc,updatedAtUtc}}. " +
-                "Errors: MCP-ARG-001, PLUGIN-BIND-001, PLUGIN-BIND-002, PLUGIN-BIND-003, PLUGIN-BIND-004, PLUGIN-BIND-005, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Errors: MCP-ARG-001, PLUGIN-BIND-001, PLUGIN-BIND-002, PLUGIN-BIND-003, PLUGIN-BIND-004, PLUGIN-BIND-005, AGENT-ALIAS-RESERVED, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"bindingType\":\"prompt\",\"sourceName\":\"quote-approval\",\"providerName\":\"markdown\",\"configuration\":{\"title\":\"Quote approval\",\"instructions\":\"Approve if within 15% of estimate.\"}}",
 
             ["list_plugin_bindings"] =

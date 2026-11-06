@@ -289,6 +289,13 @@ public class AgentContextMcpTools
                     "Unknown providerName. Use openai, anthropic, azure-openai, google, custom, flowos-risk, or flowos-hosted.");
             }
 
+            if (AgentProviderKinds.IsReservedAlias(alias) && !AgentProviderKinds.IsFlowOsHosted(providerName))
+            {
+                return McpToolResults.Fail(
+                    "AGENT-ALIAS-RESERVED",
+                    "The alias 'flowos-hosted' is platform-reserved: a step whose agentProvider resolves to it always gets the platform's hosted lease at runtime, regardless of what is saved here. Rejected to prevent silently orphaned configuration - use a different alias for a BYO providerName key.");
+            }
+
             if (!AgentProviderKinds.IsFlowOsHosted(providerName))
             {
                 var endpointCandidate = FirstNonEmpty(args, "endpoint")
@@ -772,6 +779,8 @@ public class AgentContextMcpTools
             model = settings.Model,
             endpoint = settings.Endpoint,
             hasApiKey = settings.HasApiKey,
+            apiKeyFingerprint = settings.ApiKeyFingerprint,
+            keyUpdatedAtUtc = settings.ApiKeyUpdatedAtUtc,
             isDefault = settings.IsDefault,
             maxTokens = settings.MaxTokens,
             fallbackProviderAlias = settings.FallbackProviderAlias,

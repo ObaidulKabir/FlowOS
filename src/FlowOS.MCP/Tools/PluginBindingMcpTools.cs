@@ -85,6 +85,13 @@ public class PluginBindingMcpTools
                         "PLUGIN-BIND-004",
                         $"Unknown agent provider '{providerName}'. Use openai, anthropic, azure-openai, google, custom, flowos-risk, or flowos-hosted.");
                 }
+
+                if (AgentProviderKinds.IsReservedAlias(sourceName) && !AgentProviderKinds.IsFlowOsHosted(providerName))
+                {
+                    return McpToolResults.Fail(
+                        "AGENT-ALIAS-RESERVED",
+                        "The alias 'flowos-hosted' is platform-reserved: a step whose agentProvider resolves to it always gets the platform's hosted lease at runtime, regardless of what is saved here. Rejected to prevent silently orphaned configuration - use a different alias for a BYO providerName key.");
+                }
             }
             else if (!AgentPromptKinds.IsKnown(providerName))
             {
@@ -250,7 +257,9 @@ public class PluginBindingMcpTools
             {
                 model = settings.Model,
                 endpoint = settings.Endpoint,
-                hasApiKey = settings.HasApiKey
+                hasApiKey = settings.HasApiKey,
+                apiKeyFingerprint = settings.ApiKeyFingerprint,
+                keyUpdatedAtUtc = settings.ApiKeyUpdatedAtUtc
             };
         }
 

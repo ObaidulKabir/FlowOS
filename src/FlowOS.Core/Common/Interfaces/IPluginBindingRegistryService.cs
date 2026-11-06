@@ -33,6 +33,15 @@ public static class AgentProviderKinds
     public static bool IsFlowOsHosted(string? providerName) =>
         string.Equals(providerName?.Trim(), FlowosHosted, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The alias "flowos-hosted" is platform-reserved: at runtime, a step whose <c>agentProvider</c>
+    /// resolves to that exact alias always gets the platform's hosted lease, regardless of what
+    /// providerName/apiKey/endpoint was saved under it. This check is used to reject writes that would
+    /// save a non-hosted (BYO) providerName under that alias, rather than let the write silently succeed
+    /// while the runtime ignores it.
+    /// </summary>
+    public static bool IsReservedAlias(string? alias) => IsFlowOsHosted(alias);
+
     public static bool IsByoLlm(string? providerName)
     {
         if (string.IsNullOrWhiteSpace(providerName))
