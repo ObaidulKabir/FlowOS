@@ -257,7 +257,9 @@ public class PluginBindingMcpTools
             {
                 model = settings.Model,
                 endpoint = settings.Endpoint,
-                hasApiKey = settings.HasApiKey
+                hasApiKey = settings.HasApiKey,
+                apiKeyFingerprint = settings.ApiKeyFingerprint,
+                keyUpdatedAtUtc = settings.ApiKeyUpdatedAtUtc
             };
         }
 

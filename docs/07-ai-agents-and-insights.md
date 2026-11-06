@@ -37,7 +37,7 @@ Paid tenants default to **FlowOS hosted OpenAI** (`flowos-hosted`) — see [Chap
 }
 ```
 
-Known `providerName` values: `flowos-hosted` (platform OpenAI, no tenant key), `openai`, `anthropic`, `azure-openai`, `google`, `custom`, `flowos-risk`. BYO API keys are write-only: omit on update to keep the stored secret; list/resolve return `{model,endpoint,hasApiKey}` and never the key. Step `agentProvider` is only the alias. Keys are never copied into DecisionPacket / Agent Context.
+Known `providerName` values: `flowos-hosted` (platform OpenAI, no tenant key), `openai`, `anthropic`, `azure-openai`, `google`, `custom`, `flowos-risk`. BYO API keys are write-only: omit on update to keep the stored secret; list/resolve return `{model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc}` and never the key - the fingerprint is non-reversible and only changes when the key itself changes. Step `agentProvider` is only the alias. Keys are never copied into DecisionPacket / Agent Context.
 
 Tooling is declarative, not free-form HTTP from the model. Tenants expose resources as **capability bindings** (their URL/auth). FlowOS hosts these resource plugins and prefetches read results into `DecisionPacket.Data.ToolResults` before the agent decides:
 

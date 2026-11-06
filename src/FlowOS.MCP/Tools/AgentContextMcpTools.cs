@@ -741,6 +741,8 @@ public class AgentContextMcpTools
             model = settings.Model,
             endpoint = settings.Endpoint,
             hasApiKey = settings.HasApiKey,
+            apiKeyFingerprint = settings.ApiKeyFingerprint,
+            keyUpdatedAtUtc = settings.ApiKeyUpdatedAtUtc,
             isDefault = settings.IsDefault,
             maxTokens = settings.MaxTokens,
             fallbackProviderAlias = settings.FallbackProviderAlias,
