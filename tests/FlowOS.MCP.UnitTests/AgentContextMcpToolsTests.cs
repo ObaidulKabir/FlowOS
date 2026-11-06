@@ -369,6 +369,61 @@ public sealed class AgentContextMcpToolsTests
     }
 
     [Fact]
+    public async Task BackfillAgentProviderKeyMetadata_NothingToBackfill_ReturnsZeroCount()
+    {
+        // M2 follow-up: providers created/updated after the fingerprint fields shipped already get
+        // stamped by UpsertAsync, so a backfill call on an up-to-date tenant must be a safe no-op
+        // that reports zero, not an error, and must never echo any part of the stored key.
+        McpRequestContext.Clear();
+        try
+        {
+            var tenantId = Guid.NewGuid();
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            await tools.UpsertAgentProvider(JObject.FromObject(new
+            {
+                tenantId,
+                alias = "quote-llm",
+                providerName = "openai",
+                apiKey = "sk-already-fingerprinted"
+            }));
+
+            var result = await tools.BackfillAgentProviderKeyMetadata(JObject.FromObject(new { tenantId }));
+
+            Assert.False(result.IsError);
+            var data = JObject.Parse(result.Content.Single().Text)["data"]!;
+            Assert.Equal(0, data["providersBackfilled"]?.Value<int>());
+            Assert.Contains("No providers needed backfilling", data["message"]?.ToString());
+            Assert.DoesNotContain("sk-already-fingerprinted", result.Content.Single().Text);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task BackfillAgentProviderKeyMetadata_WithoutTenantIdOrRequestContext_RequiresTenant()
+    {
+        McpRequestContext.Clear();
+        try
+        {
+            var registry = new InMemoryPromptRegistry();
+            var tools = new AgentContextMcpTools(new StubPacketBuilder(null), registry);
+
+            var result = await tools.BackfillAgentProviderKeyMetadata(new JObject());
+
+            Assert.True(result.IsError);
+            Assert.Contains("MCP-TENANT-001", result.Content.Single().Text);
+        }
+        finally
+        {
+            McpRequestContext.Clear();
+        }
+    }
+
+    [Fact]
     public async Task UpsertAgentProvider_RejectsNonUrlEndpoint()
     {
         // Tenant integration finding: an email address passed as `endpoint` was previously
@@ -719,6 +774,34 @@ public sealed class AgentContextMcpToolsTests
                 return Task.FromResult(true);
             }
             return Task.FromResult(false);
+        }
+
+        public Task<int> BackfillAgentProviderKeyMetadataAsync(
+            Guid tenantId,
+            CancellationToken ct = default)
+        {
+            var updatedCount = 0;
+            foreach (var entry in _items.Where(e =>
+                e.Value.TenantId == tenantId &&
+                string.Equals(e.Value.BindingType, PluginBindingTypes.Agent, StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                var parsed = AgentProviderConfiguration.Parse(_rawJson.GetValueOrDefault(entry.Key));
+                if (parsed == null ||
+                    string.IsNullOrWhiteSpace(parsed.ApiKey) ||
+                    !string.IsNullOrWhiteSpace(parsed.ApiKeyFingerprint))
+                {
+                    continue;
+                }
+
+                parsed.ApiKeyFingerprint = AgentProviderConfiguration.ComputeFingerprint(parsed.ApiKey);
+                parsed.ApiKeyUpdatedAtUtc ??= entry.Value.UpdatedAtUtc;
+                var merged = AgentProviderConfiguration.Serialize(parsed);
+                _rawJson[entry.Key] = merged;
+                _items[entry.Key] = entry.Value with { Configuration = AgentProviderConfiguration.Redact(merged) };
+                updatedCount++;
+            }
+
+            return Task.FromResult(updatedCount);
         }
 
         public Task<IReadOnlyList<PluginBindingDto>> ListAsync(

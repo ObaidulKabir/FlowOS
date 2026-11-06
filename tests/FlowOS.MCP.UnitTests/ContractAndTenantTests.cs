@@ -110,7 +110,8 @@ public sealed class ContractAndTenantTests
             McpToolSchemas.NewWorkflowClassVersion(),
             McpToolSchemas.WorkflowClassById(),
             McpToolSchemas.WorkflowClassById(true),
-            McpToolSchemas.DeleteAgentProvider()
+            McpToolSchemas.DeleteAgentProvider(),
+            McpToolSchemas.BackfillAgentProviderKeyMetadata()
         };
 
         Assert.All(schemas, schema =>

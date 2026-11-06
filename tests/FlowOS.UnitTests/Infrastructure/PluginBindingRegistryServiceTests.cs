@@ -191,6 +191,81 @@ public class PluginBindingRegistryServiceTests
     }
 
     [Fact]
+    public async Task BackfillAgentProviderKeyMetadataAsync_LegacyRecordWithKeyButNoFingerprint_IsBackfilledIdempotently()
+    {
+        // Tenant integration finding M2 (follow-up): providers created before the fingerprint/timestamp
+        // fields existed show apiKeyFingerprint/keyUpdatedAtUtc as null forever, because UpsertAsync only
+        // stamps them when the key value itself changes. This backfill must compute both fields for such
+        // "legacy" records by decrypting the already-stored key solely to hash it - never exposing,
+        // logging, or changing the key - and must be a safe no-op on repeat calls.
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        using var db = new FlowOSDbContext(options);
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+
+        // Simulate a pre-existing record from before fingerprinting existed: ConfigurationJson has an
+        // apiKey but no apiKeyFingerprint/keyUpdatedAtUtc, written directly (bypassing Merge, which would
+        // stamp them) via the same Update() path UpsertAsync used before M2 shipped.
+        var legacyRecord = new PluginBindingRecord(tenantId, PluginBindingTypes.Agent, "legacy-llm", "openai");
+        legacyRecord.Update("openai", isEnabled: true, configurationJson: """{"model":"gpt-4","apiKey":"sk-legacy-key"}""");
+        db.PluginBindings.Add(legacyRecord);
+
+        // A keyless agent binding must be left alone (nothing to fingerprint).
+        var keylessRecord = new PluginBindingRecord(tenantId, PluginBindingTypes.Agent, "keyless-llm", "openai");
+        keylessRecord.Update("openai", isEnabled: true, configurationJson: """{"model":"gpt-4"}""");
+        db.PluginBindings.Add(keylessRecord);
+
+        // A different tenant's legacy record must not be touched by this tenant's backfill.
+        var otherTenantRecord = new PluginBindingRecord(otherTenantId, PluginBindingTypes.Agent, "legacy-llm", "openai");
+        otherTenantRecord.Update("openai", isEnabled: true, configurationJson: """{"model":"gpt-4","apiKey":"sk-other-tenant-key"}""");
+        db.PluginBindings.Add(otherTenantRecord);
+
+        await db.SaveChangesAsync();
+        var legacyUpdatedAtBeforeBackfill = legacyRecord.UpdatedAtUtc;
+
+        var service = new PluginBindingRegistryService(db);
+
+        var firstPassCount = await service.BackfillAgentProviderKeyMetadataAsync(tenantId);
+        Assert.Equal(1, firstPassCount);
+
+        var backfilled = await service.GetEnabledAsync(tenantId, PluginBindingTypes.Agent, "legacy-llm");
+        var backfilledSettings = Assert.IsType<AgentProviderPublicSettings>(backfilled!.Configuration);
+        Assert.Equal(AgentProviderConfiguration.ComputeFingerprint("sk-legacy-key"), backfilledSettings.ApiKeyFingerprint);
+        Assert.Equal(legacyUpdatedAtBeforeBackfill, backfilledSettings.ApiKeyUpdatedAtUtc);
+
+        // Backfilling must never change UpdatedAtUtc itself - it isn't a tenant-initiated config edit.
+        var legacyRecordAfterBackfill = await db.PluginBindings.AsNoTracking()
+            .SingleAsync(x => x.TenantId == tenantId && x.SourceName == "legacy-llm");
+        Assert.Equal(legacyUpdatedAtBeforeBackfill, legacyRecordAfterBackfill.UpdatedAtUtc);
+
+        // The key itself is never exposed by the backfill.
+        Assert.DoesNotContain("sk-legacy-key", System.Text.Json.JsonSerializer.Serialize(backfilled.Configuration));
+
+        // The keyless record has nothing to backfill.
+        var keyless = await service.GetEnabledAsync(tenantId, PluginBindingTypes.Agent, "keyless-llm");
+        var keylessSettings = Assert.IsType<AgentProviderPublicSettings>(keyless!.Configuration);
+        Assert.Null(keylessSettings.ApiKeyFingerprint);
+        Assert.Null(keylessSettings.ApiKeyUpdatedAtUtc);
+
+        // The other tenant's legacy record is untouched by this tenant's backfill call.
+        var otherTenantAfter = await db.PluginBindings.AsNoTracking()
+            .SingleAsync(x => x.TenantId == otherTenantId && x.SourceName == "legacy-llm");
+        var otherTenantParsed = AgentProviderConfiguration.Parse(otherTenantAfter.ConfigurationJson);
+        Assert.Null(otherTenantParsed?.ApiKeyFingerprint);
+
+        // Idempotent: a second call finds nothing left to backfill.
+        var secondPassCount = await service.BackfillAgentProviderKeyMetadataAsync(tenantId);
+        Assert.Equal(0, secondPassCount);
+
+        var backfilledAgain = await service.GetEnabledAsync(tenantId, PluginBindingTypes.Agent, "legacy-llm");
+        var backfilledAgainSettings = Assert.IsType<AgentProviderPublicSettings>(backfilledAgain!.Configuration);
+        Assert.Equal(backfilledSettings.ApiKeyFingerprint, backfilledAgainSettings.ApiKeyFingerprint);
+    }
+
+    [Fact]
     public async Task Upsert_PromptBinding_CreatesAndEditsInstructions()
     {
         var options = new DbContextOptionsBuilder<FlowOSDbContext>()

@@ -433,6 +433,31 @@ public class AgentContextMcpTools
         }
     }
 
+    public async Task<CallToolResult> BackfillAgentProviderKeyMetadata(JObject args)
+    {
+        try
+        {
+            var tenantId = McpTenantResolver.ResolveRequired(args);
+            var updatedCount = await _pluginBindings.BackfillAgentProviderKeyMetadataAsync(tenantId);
+            return McpToolResults.Success(new
+            {
+                tenantId,
+                providersBackfilled = updatedCount,
+                message = updatedCount > 0
+                    ? $"Computed apiKeyFingerprint/keyUpdatedAtUtc for {updatedCount} provider(s) that predate those fields. The key itself was never exposed or changed."
+                    : "No providers needed backfilling - every stored key already has a fingerprint, or no agent providers have a key stored."
+            });
+        }
+        catch (McpToolException ex)
+        {
+            return McpToolResults.Fail(ex.Code, ex.Message);
+        }
+        catch (Exception)
+        {
+            return McpToolResults.Fail("MCP-INTERNAL", "Failed to backfill agent provider key metadata.");
+        }
+    }
+
     public async Task<CallToolResult> UpsertAgentTool(JObject args)
     {
         try

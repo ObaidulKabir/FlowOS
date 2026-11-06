@@ -37,7 +37,9 @@ Paid tenants default to **FlowOS hosted OpenAI** (`flowos-hosted`) — see [Chap
 }
 ```
 
-Known `providerName` values: `flowos-hosted` (platform OpenAI, no tenant key), `openai`, `anthropic`, `azure-openai`, `google`, `custom`, `flowos-risk`. BYO API keys are write-only: omit on update to keep the stored secret; list/resolve return `{model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc}` and never the key - the fingerprint is non-reversible and only changes when the key itself changes. Step `agentProvider` is only the alias. Keys are never copied into DecisionPacket / Agent Context.
+Known `providerName` values: `flowos-hosted` (platform OpenAI, no tenant key), `openai`, `anthropic`, `azure-openai`, `google`, `custom`, `flowos-risk`. BYO API keys are write-only: omit on update to keep the stored secret; list/resolve return `{model,endpoint,hasApiKey,apiKeyFingerprint,keyUpdatedAtUtc}` and never the key - the fingerprint is non-reversible and only changes when the key itself changes. Step `agentProvider` is only the alias. Keys are never copied into DecisionPacket / Agent Context. Providers saved before these two fields existed show both as `null`; call `backfill_agent_provider_key_metadata` to compute them from the already-stored key without ever exposing or changing it (safe to call repeatedly; already-stamped and keyless providers are left alone).
+
+The alias `flowos-hosted` is platform-reserved: `upsert_agent_provider` / `register_plugin_binding` reject (`AGENT-ALIAS-RESERVED`) saving any non-`flowos-hosted` `providerName` under that exact alias, since a step whose `agentProvider` resolves to it always gets the platform's hosted lease at runtime regardless of what was saved. `delete_agent_provider` permanently removes a provider binding (`confirmHumanApproval:true` required) - use `isEnabled:false` instead to only disable one.
 
 Tooling is declarative, not free-form HTTP from the model. Tenants expose resources as **capability bindings** (their URL/auth). FlowOS hosts these resource plugins and prefetches read results into `DecisionPacket.Data.ToolResults` before the agent decides:
 

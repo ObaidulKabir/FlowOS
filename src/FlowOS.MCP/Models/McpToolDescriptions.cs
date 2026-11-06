@@ -212,6 +212,13 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-APPROVAL-REQUIRED, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"zz-probe-bad-endpoint\",\"confirmHumanApproval\":true}",
 
+            ["backfill_agent_provider_key_metadata"] =
+                "Computes apiKeyFingerprint and keyUpdatedAtUtc for tenant-owned LLM providers that predate those fields (stored key present but fingerprint still null). Decrypts the existing stored key only to compute a non-reversible SHA-256-derived fingerprint; the key itself is never exposed, returned, logged, or changed. Safe to call repeatedly - providers that already have a fingerprint, or have no stored key, are left untouched. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{tenantId,providersBackfilled,message}}. " +
+                "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
+                "Input example: {}",
+
             ["upsert_agent_tool"] =
                 "Creates or edits a structured tool in the tenant Tool Registry (bindingType action). " +
                 "Maps a business-friendly alias (e.g. LookupCustomerCredit) to an underlying plugin or connector (LookupRecord, QueryRecords, FetchDocument, SearchKnowledge, CheckPolicy, connector:*). " +
@@ -950,6 +957,7 @@ public static class McpToolDescriptions
             ["list_agent_providers"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["get_agent_provider"] = new("query", "authenticated", true, true, false, "none", true, "low"),
             ["delete_agent_provider"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
+            ["backfill_agent_provider_key_metadata"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["lint_draft_workflowclass"] = new("analysis", "authenticated", true, true, false, "none", true, "low"),
             ["simulate_workflowclass"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
             ["simulate_subworkflow"] = new("analysis", "authenticated", true, false, false, "none", false, "low"),
