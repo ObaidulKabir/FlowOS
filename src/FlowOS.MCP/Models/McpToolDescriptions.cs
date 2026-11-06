@@ -319,6 +319,29 @@ public static class McpToolDescriptions
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-VALIDATION, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
+            ["new_version_workflowclass"] =
+                "Creates a new Draft version of an existing WorkflowClass (any status: Draft, Published, Deprecated...), bumping Version per bumpType and copying its blueprint Definition as the starting point. " +
+                "The new row is a separate WorkflowClass (its own id); the source is untouched and keeps running any existing instances. previousVersionId on the result links back to the source for GetWorkflowClassVersionTreeQuery-style lineage. " +
+                "Edit it with update_draft_workflowclass and publish it with publish_workflowclass like any other draft - note that publishing it will still hit WF-NAME-PINNED if its Name is unchanged and the bumped Version was already published under a different WorkflowClass id (e.g. from an earlier version-bump that was itself re-bumped). " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{id,tenantId,name,version,previousVersionId,status,message}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"bumpType\":\"Minor\",\"changeLog\":\"Added escalation step\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["deprecate_workflowclass"] =
+                "Marks a tenant-owned WorkflowClass as Deprecated: it can no longer be used to start_workflow new instances, but existing running instances are unaffected and keep executing against their already-pinned WorkflowDefinition. There is no undeprecate - create a new version with new_version_workflowclass instead. Requires confirmHumanApproval=true. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
+                "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-APPROVAL-REQUIRED, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
+            ["delete_workflowclass"] =
+                "Permanently hard-deletes a tenant-owned WorkflowClass. Only a Draft can be deleted at all (GOV-DEL-001 otherwise - use deprecate_workflowclass for a Published one instead), and even a Draft is refused if any WorkflowInstance already references it (GOV-DEL-002). This is the only way to remove leftover/throwaway drafts created while exploring the API; a Published class can never be deleted, only deprecated. Requires confirmHumanApproval=true. " +
+                "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
+                "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-APPROVAL-REQUIRED, MCP-INTERNAL. " +
+                "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+
             ["create_context_binding"] =
                 "Creates a tenant-scoped draft context binding and revision 1 from a Draft, Published, or Public workflow template. " +
                 "Draft sources are for simulate_context_binding only; activate_context_binding still requires the template to be Published or Public. " +
@@ -956,6 +979,9 @@ public static class McpToolDescriptions
             ["list_draft_workflowclasses"] = new("governance", "authenticated", true, true, false, "none", true, "low"),
             ["fork_public_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["publish_workflowclass"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
+            ["new_version_workflowclass"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
+            ["deprecate_workflowclass"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
+            ["delete_workflowclass"] = new("governance", "authenticated", true, true, true, "irreversible", true, "high", true),
             ["create_context_binding"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["update_context_binding"] = new("governance", "authenticated", true, true, true, "reversible", true, "low"),
             ["validate_context_binding"] = new("governance", "authenticated", true, true, false, "none", true, "low"),

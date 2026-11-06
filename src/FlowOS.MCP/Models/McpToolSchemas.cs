@@ -531,6 +531,54 @@ public static class McpToolSchemas
         }
         """);
 
+    public static JObject NewWorkflowClassVersion() => JObject.Parse(
+        """
+        {
+          "type":"object",
+          "required":["id"],
+          "properties":{
+            "id":{"type":"string","format":"uuid","description":"Id of the existing WorkflowClass (any status) to branch the new version from."},
+            "bumpType":{"type":"string","enum":["Build","Minor","Major","Patch"],"description":"Build/Patch: 1.0.0->1.0.1. Minor (default): 1.0.0->1.1.0. Major: 1.0.0->2.0.0."},
+            "changeLog":{"type":"string","description":"Optional free-text note describing what changed, stored on the new Draft."},
+            "tenantId":{"type":"string","format":"uuid"}
+          },
+          "additionalProperties":false
+        }
+        """);
+
+    public static JObject WorkflowClassById(bool requireConfirmation = false)
+    {
+        var properties = new JObject
+        {
+            ["id"] = new JObject
+            {
+                ["type"] = "string",
+                ["format"] = "uuid"
+            },
+            ["tenantId"] = new JObject
+            {
+                ["type"] = "string",
+                ["format"] = "uuid"
+            }
+        };
+        if (requireConfirmation)
+        {
+            properties["confirmHumanApproval"] = new JObject
+            {
+                ["type"] = "boolean",
+                ["description"] = "Explicit confirmation of human approval for this high-risk irreversible operation."
+            };
+        }
+
+        return new JObject
+        {
+            ["type"] = "object",
+            ["required"] = new JArray("id"),
+            ["properties"] = properties,
+            ["additionalProperties"] = false
+        };
+    }
+
     public static JObject WorkflowInstanceStatus() => JObject.Parse(
         """
         {

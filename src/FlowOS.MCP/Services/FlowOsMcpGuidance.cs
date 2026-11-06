@@ -67,6 +67,20 @@ public static class FlowOsMcpGuidance
             WorkflowClass roles are business-context declarations, not FlowOS tenant/IAM roles; activation never writes Roles or TenantUserRole.
           • Call `simulate_context_binding` with revision `draft` before activation, then with `active`
             to verify the exact pinned runtime. Simulation never dispatches or persists side effects.
+
+        [Step 4: Lifecycle Management]
+          • `new_version_workflowclass` branches a new Draft off any existing WorkflowClass (Draft, Published, or Deprecated),
+            bumping `bumpType` (Build/Patch 1.0.0->1.0.1, Minor 1.0.0->1.1.0, Major 1.0.0->2.0.0; default Minor) and copying its
+            blueprint as the starting point. The source row is untouched and keeps serving any running instances; the new row
+            is a separate WorkflowClass id with `previousVersionId` set. Edit it with `update_draft_workflowclass`, then
+            `publish_workflowclass` it like any other draft.
+          • `deprecate_workflowclass` (requires `confirmHumanApproval: true`) stops a Published WorkflowClass from being used
+            by `start_workflow` for new instances, without touching instances already running against it. There is no
+            undeprecate - call `new_version_workflowclass` on it instead if the template is still needed going forward.
+          • `delete_workflowclass` (requires `confirmHumanApproval: true`) permanently removes a Draft that has no
+            WorkflowInstances yet - this is how to clean up throwaway/probe drafts created while exploring the API.
+            It cannot delete anything Published (`GOV-DEL-001`: deprecate it instead) or any Draft a WorkflowInstance already
+            references (`GOV-DEL-002`).
           • Activation and archival require explicit human confirmation. Bindings never create roles or permissions.
 
         [Step 4: Instantiate Runtime Workflow]
