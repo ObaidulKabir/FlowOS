@@ -101,6 +101,11 @@ public class WorkflowEngineTests
         Assert.Equal("End", instance.CurrentStepId);
         Assert.Equal(WorkflowInstanceStatus.Completed, instance.Status);
         Assert.NotNull(instance.CompletedAt);
+        // Regression guard: WorkflowTimeTravelService.SimulateForkAsync falls back to the literal
+        // string "END" for its display step id only when NewStepId is null, to distinguish "ended
+        // via the END sentinel" (no real step) from "ended via a real step typed End." Losing this
+        // on the Completed() result silently mis-reports every such projection as "END".
+        Assert.Equal("End", result.NewStepId);
     }
 
     [Fact]

@@ -23,8 +23,16 @@ public class WorkflowAdvanceResult
     public static WorkflowAdvanceResult SlaReminderFired(string stepId, string eventType) =>
         new(true, $"[SLA Reminder Fired] Reminder event '{eventType}' dispatched. Step remains '{stepId}'.", stepId);
 
-    public static WorkflowAdvanceResult Completed() => 
-        new(true, "Workflow completed.", null);
+    /// <summary>
+    /// <paramref name="stepId"/> is the real step the instance landed on (set for an explicit
+    /// <c>StepType: End</c> step, where <see cref="FlowOS.Workflows.Domain.WorkflowInstance.CurrentStepId"/>
+    /// is that step's id) or null for the "END" sentinel transition target, which is never a real
+    /// step. Callers that infer a display step id from completion (e.g.
+    /// WorkflowTimeTravelService.SimulateForkAsync, which falls back to the literal string "END"
+    /// only when this is null) depend on that distinction.
+    /// </summary>
+    public static WorkflowAdvanceResult Completed(string? stepId = null) =>
+        new(true, "Workflow completed.", stepId);
 
     public static WorkflowAdvanceResult Failed(string reason) => 
         new(false, reason, null);
