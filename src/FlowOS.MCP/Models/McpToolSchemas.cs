@@ -794,6 +794,13 @@ public static class McpToolSchemas
               "additionalProperties":false
             }
           },
+          "oneOf":[
+            {"required":["workflowClassId"]},
+            {"required":["workflowDefinitionId"]},
+            {"required":["workflowName"]},
+            {"required":["contextBindingId"]},
+            {"required":["contextType"]}
+          ],
           "additionalProperties":false
         }
         """);
