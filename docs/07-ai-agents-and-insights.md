@@ -83,7 +83,7 @@ Do **not** replace a waiting HumanTask with a Decision `Default` skip so the AI 
 ## Agent contract
 
 1. **Input**: `DecisionPacket` (also projected as `AgentContext`) — Prompt / Data / Tools / redacted Provider. Never a raw tenant dump and never the API key.
-2. **Output**: `AgentResult` — an insight string, optional structured data, and optional `SuggestedAction`s. Only legal `nextSteps` events are kept.
+2. **Output**: `AgentResult` — an insight string, optional structured data, and optional `SuggestedAction`s. Only legal `nextSteps` events are kept. For `TenantLlmWorkflowAgent` (the hosted LLM loop), the model's JSON reply may add an optional top-level `structuredOutput` object alongside `insight`/`actions` — business data extracted or computed for this step (amounts, line items, risk scores) — which becomes `AgentResult.StructuredData`. It is best-effort: a missing or malformed `structuredOutput` never fails the suggestion, `StructuredData` is just `{}`.
 3. **Side effects during reasoning**: none. Auto-commit is hosted by FlowOS after the agent returns.
 
 ```csharp

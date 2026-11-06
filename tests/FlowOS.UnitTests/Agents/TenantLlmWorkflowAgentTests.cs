@@ -160,6 +160,134 @@ public class TenantLlmWorkflowAgentTests
         Assert.True(handler.LastRequest.Headers.Contains("anthropic-version"));
     }
 
+    /// <summary>
+    /// Tenant integration finding N4: an optional top-level "structuredOutput" object alongside
+    /// insight/actions carries business data the agent extracted for this step into
+    /// AgentResult.StructuredData.
+    /// </summary>
+    [Fact]
+    public async Task HostedAgent_StructuredOutputObject_PopulatesResultStructuredData()
+    {
+        var handler = new StubHandler("""
+            {"content":[{"type":"text","text":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.95,\"reason\":\"within limits\",\"insight\":\"approved\",\"structuredOutput\":{\"amount\":1500,\"currency\":\"USD\"}}"}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "anthropic",
+            "claude-3-5-sonnet-20241022",
+            "https://api.anthropic.com/v1/messages",
+            "sk-ant-test-key",
+            handler);
+
+        var packet = new DecisionPacket(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "ApproveQuote",
+            "Quoted",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?>(),
+            new[] { "QUOTE_APPROVED" },
+            new[] { "QUOTE_APPROVED" },
+            Array.Empty<string>(),
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Decide",
+            null);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(packet));
+        Assert.True(result.Success);
+        Assert.True(result.StructuredData.ContainsKey("amount"));
+        Assert.True(result.StructuredData.ContainsKey("currency"));
+    }
+
+    /// <summary>
+    /// A schema-constrained provider (OpenAI strict mode) must carry structuredOutput as a
+    /// JSON-encoded string rather than a nested object; the parser accepts that shape too.
+    /// </summary>
+    [Fact]
+    public async Task HostedAgent_StructuredOutputAsJsonString_IsParsed()
+    {
+        var handler = new StubHandler("""
+            {"content":[{"type":"text","text":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.95,\"reason\":\"within limits\",\"insight\":\"approved\",\"structuredOutput\":\"{\\\"amount\\\":1500}\"}"}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "anthropic",
+            "claude-3-5-sonnet-20241022",
+            "https://api.anthropic.com/v1/messages",
+            "sk-ant-test-key",
+            handler);
+
+        var packet = new DecisionPacket(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "ApproveQuote",
+            "Quoted",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?>(),
+            new[] { "QUOTE_APPROVED" },
+            new[] { "QUOTE_APPROVED" },
+            Array.Empty<string>(),
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Decide",
+            null);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(packet));
+        Assert.True(result.Success);
+        Assert.True(result.StructuredData.ContainsKey("amount"));
+    }
+
+    /// <summary>
+    /// Absent structuredOutput must not change existing behavior: StructuredData stays the
+    /// AgentResult default (empty), exactly as before this field existed.
+    /// </summary>
+    [Fact]
+    public async Task HostedAgent_NoStructuredOutput_LeavesStructuredDataEmpty()
+    {
+        var handler = new StubHandler("""
+            {"content":[{"type":"text","text":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.95,\"reason\":\"within limits\",\"insight\":\"approved\"}"}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "anthropic",
+            "claude-3-5-sonnet-20241022",
+            "https://api.anthropic.com/v1/messages",
+            "sk-ant-test-key",
+            handler);
+
+        var packet = new DecisionPacket(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "ApproveQuote",
+            "Quoted",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?>(),
+            new[] { "QUOTE_APPROVED" },
+            new[] { "QUOTE_APPROVED" },
+            Array.Empty<string>(),
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Decide",
+            null);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(packet));
+        Assert.True(result.Success);
+        Assert.Empty(result.StructuredData);
+    }
+
     [Fact]
     public async Task HostedAgent_GoogleAdapter_UsesSecretHeaderAndExtractsContent()
     {

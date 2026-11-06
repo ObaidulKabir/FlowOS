@@ -245,6 +245,10 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
                 }
 
                 var result = AgentResult.WithActions(parsed.Insight, parsed.Actions);
+                if (parsed.StructuredOutput != null)
+                {
+                    result.StructuredData = parsed.StructuredOutput;
+                }
                 result.Telemetry = telemetry;
                 if (context.RestrictToLegalEvents)
                 {
@@ -284,7 +288,7 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         var toolInfo = packet?.DeclaredTools is { Count: > 0 } tools
             ? $"\nAvailable tools: {string.Join(", ", tools.Select(t => t.Name))}"
             : string.Empty;
-        return $"{system}\nLegal events: {string.Join(", ", legal)}{toolInfo}\nReply with JSON: insight (string), actions (array of objects with eventType, confidence, reason).";
+        return $"{system}\nLegal events: {string.Join(", ", legal)}{toolInfo}\nReply with JSON: insight (string), actions (array of objects with eventType, confidence, reason), and optionally structuredOutput (a JSON object of business data extracted or computed for this step, e.g. amounts or line items - omit it if there is nothing to report).";
     }
 
     private static string BuildUserPrompt(AgentContext context)
@@ -396,12 +400,59 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
             if (actions.Count == 0)
                 return false;
 
-            parsed = new ParsedSuggestion(insight, actions);
+            parsed = new ParsedSuggestion(insight, actions, TryReadStructuredOutput(root));
             return true;
         }
         catch (JsonException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Tenant integration finding N4: an optional top-level "structuredOutput" field alongside
+    /// insight/actions, carrying business data the agent extracted or computed for this step
+    /// (amounts, line items, risk scores, etc.) into AgentResult.StructuredData. This is best-effort -
+    /// a missing, malformed, or wrongly-typed structuredOutput never fails the suggestion; it is
+    /// simply left out, the same way a provider that doesn't support it (or a model that omits it)
+    /// always behaved before this field existed.
+    /// Schema-constrained providers (OpenAI strict JSON schema, Google responseSchema) carry this as a
+    /// JSON-encoded string rather than a nested object, since their schemas require a closed shape -
+    /// so this also accepts a string containing JSON, parsing it the same way.
+    /// </summary>
+    private static Dictionary<string, object>? TryReadStructuredOutput(JsonElement root)
+    {
+        if (!root.TryGetProperty("structuredOutput", out var structuredOutputProp))
+            return null;
+
+        var candidate = structuredOutputProp;
+        if (candidate.ValueKind == JsonValueKind.String)
+        {
+            var raw = candidate.GetString();
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            try
+            {
+                using var parsedString = JsonDocument.Parse(raw);
+                candidate = parsedString.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        if (candidate.ValueKind != JsonValueKind.Object)
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, object>>(candidate.GetRawText());
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
@@ -487,5 +538,5 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
             _ => "Provider is unavailable."
         };
 
-    private sealed record ParsedSuggestion(string Insight, List<SuggestedAction> Actions);
+    private sealed record ParsedSuggestion(string Insight, List<SuggestedAction> Actions, Dictionary<string, object>? StructuredOutput = null);
 }

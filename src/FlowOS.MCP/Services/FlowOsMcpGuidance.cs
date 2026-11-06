@@ -1236,6 +1236,7 @@ public static class FlowOsMcpGuidance
         - `executionId` identifies one provider attempt and its sanitized telemetry.
         - Auto-committed events carry actor `Agent:{id}`. Human follow-up events retain human provenance.
         - `get_agent_execution_history` reads per-run status without prompt bodies, response bodies, API keys, or raw failures.
+        - `result` on a completed run/suggestion is the DecisionPacket output contract: `Insight`, `SuggestedActions`, `StructuredData`, `FailureCode`/`FailureReason`, `Telemetry`. The tenant LLM's JSON reply may add an optional top-level `structuredOutput` object alongside `insight`/`actions` for business data extracted or computed at this step (amounts, line items, risk scores); when present it becomes `result.StructuredData`. Missing or malformed `structuredOutput` never fails the run - `StructuredData` is simply `{}`, the same as before this field existed.
         - `get_agent_evaluation_metrics` reports bounded-window latency/tokens/quota/outcome calibration. Unevaluated means no immutable workflow outcome can yet be derived; it is not a negative label.
 
         ## What success looks like
