@@ -175,7 +175,7 @@ public sealed class GovernanceToolsLifecycleTests
             _mediatorMock
                 .Setup(m => m.Send(It.IsAny<DeleteWorkflowClassCommand>(), default))
                 .ThrowsAsync(new InvalidOperationException(
-                    "GOV-DEL-001: Only Drafts can be hard deleted. Use Abandon for published workflows."));
+                    "GOV-DEL-001: Only Drafts can be hard deleted. A Published WorkflowClass cannot be deleted; call deprecate_workflowclass instead."));
 
             var tools = new GovernanceTools(_mediatorMock.Object);
             var result = await tools.Delete(JObject.FromObject(new
@@ -188,6 +188,7 @@ public sealed class GovernanceToolsLifecycleTests
             Assert.True(result.IsError);
             var text = result.Content.Single().Text;
             Assert.Contains("GOV-DEL-001", text);
+            Assert.Contains("deprecate_workflowclass", text);
             Assert.DoesNotContain("MCP-INTERNAL", text);
         }
         finally
