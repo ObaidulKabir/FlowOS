@@ -58,7 +58,7 @@ public static class McpToolDescriptions
                 "Factory follows step.agentProvider (TenantLlmWorkflowAgent when a key is stored). Omit agentId unless you want the flowos-risk fixture. " +
                 "Suggestions outside legal nextSteps are dropped. Does not auto-commit. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: a completed suggestion or {ok:true,data:{jobId,status,pending:true}} if the worker is still running. Use get_agent_task_job to poll. " +
+                "Returns: a completed suggestion (the same DecisionPacket output contract as run_agent_task - insight capped at 2000 characters, uncapped structuredOutput for business data; see run_agent_task's description) or {ok:true,data:{jobId,status,pending:true}} if the worker is still running. Use get_agent_task_job to poll. " +
                 "Errors: MCP-ARG-001, MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"objective\":\"Decide the next legal event\"}",
 
@@ -69,7 +69,7 @@ public static class McpToolDescriptions
                 "HTTP uses the authenticated tenant; stdio requires tenantId. Runtime plan required. " +
                 "Returns: a completed run or {ok:true,data:{jobId,status,pending:true}} if the worker is still running. Use get_agent_task_job to poll. " +
                 "A completed run's data.result is the agent's DecisionPacket output contract: {Success,Insight,StructuredData,SuggestedActions,FailureCode,FailureReason,Telemetry}. " +
-                "The tenant LLM's JSON reply may include an optional top-level structuredOutput object next to insight/actions (business data extracted or computed for this step, for example amounts or line items); when present it becomes data.result.StructuredData. A missing or malformed structuredOutput is silently ignored - it never fails the run - and StructuredData is then {} as before this field existed. " +
+                "The tenant LLM's JSON reply is insight (string, narrative, capped at 2000 characters - a model reply over that cap fails the run with INVALID_MODEL_OUTPUT and a FailureReason naming the actual length), actions (array of {eventType,confidence,reason}), and an optional top-level structuredOutput object next to insight/actions for business data extracted or computed at this step (for example amounts, line items, or a list of records) - structuredOutput has no character cap, so put data there rather than in insight. When present, structuredOutput becomes data.result.StructuredData; a missing or malformed structuredOutput is silently ignored - it never fails the run - and StructuredData is then {} as before this field existed. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-PLAN-REQUIRED, MCP-INTERNAL. " +
                 "Input example: {\"workflowInstanceId\":\"22222222-2222-2222-2222-222222222222\"}",
 

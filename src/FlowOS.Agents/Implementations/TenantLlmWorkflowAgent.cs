@@ -18,6 +18,13 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
     /// </summary>
     private static readonly HttpClient SharedClient = new();
 
+    /// <summary>
+    /// Hard cap on the model's "insight" narrative string (DecisionPacket report, R1/R2). Business
+    /// data belongs in the uncapped "structuredOutput" object instead - see BuildSystemPrompt and
+    /// docs/07-ai-agents-and-insights.md.
+    /// </summary>
+    private const int InsightMaxLength = 2000;
+
     private readonly string _providerName;
     private readonly string _model;
     private readonly string _endpoint;
@@ -241,11 +248,12 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
                     continue;
                 }
 
-                if (!TryParseSuggestion(providerResponse.Content, out var parsed))
+                if (!TryParseSuggestion(providerResponse.Content, out var parsed, out var parseFailureDetail))
                 {
                     return AgentResult.Failure(
                         AgentFailureCodes.InvalidModelOutput,
-                        "Provider returned model output that did not match the required suggestion contract.",
+                        parseFailureDetail ??
+                            "Provider returned model output that did not match the required suggestion contract.",
                         telemetry);
                 }
 
@@ -293,7 +301,7 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         var toolInfo = packet?.DeclaredTools is { Count: > 0 } tools
             ? $"\nAvailable tools: {string.Join(", ", tools.Select(t => t.Name))}"
             : string.Empty;
-        return $"{system}\nLegal events: {string.Join(", ", legal)}{toolInfo}\nReply with JSON: insight (string), actions (array of objects with eventType, confidence, reason), and optionally structuredOutput (a JSON object of business data extracted or computed for this step, e.g. amounts or line items - omit it if there is nothing to report).";
+        return $"{system}\nLegal events: {string.Join(", ", legal)}{toolInfo}\nReply with JSON: insight (string, a short narrative, at most {InsightMaxLength} characters - the run fails if you exceed this), actions (array of objects with eventType, confidence, reason), and optionally structuredOutput (a JSON object of business data extracted or computed for this step, e.g. amounts or line items - this has no character limit, so put lists/records here rather than in insight - omit it if there is nothing to report).";
     }
 
     private static string BuildUserPrompt(AgentContext context)
@@ -348,11 +356,25 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         }
     }
 
+    /// <summary>
+    /// Tenant integration finding (DecisionPacket report, R1): "insight" has a hard 2000-character
+    /// cap (see BuildSystemPrompt/BuildUserPrompt's contract and docs/07-ai-agents-and-insights.md).
+    /// Before this, a model reply over that cap failed TryReadBoundedString and fell through to the
+    /// same generic "did not match the required suggestion contract" message as any other malformed
+    /// reply (missing fields, wrong types, bad JSON) - a caller had no way to tell "insight was too
+    /// long" apart from "the model emitted garbage" without re-parsing the raw provider payload
+    /// themselves via list_agent_prompt_audits. This never truncated or silently accepted an
+    /// over-length insight - the whole run already failed closed - but the *reason* was opaque.
+    /// failureDetail is set only for this one diagnosable case; every other parse failure keeps
+    /// returning null here, so the caller's existing generic message is unchanged for them.
+    /// </summary>
     private static bool TryParseSuggestion(
         string? content,
-        out ParsedSuggestion parsed)
+        out ParsedSuggestion parsed,
+        out string? failureDetail)
     {
         parsed = null!;
+        failureDetail = null;
         if (string.IsNullOrWhiteSpace(content))
             return false;
 
@@ -363,7 +385,20 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
             if (root.ValueKind != JsonValueKind.Object)
                 return false;
 
-            if (!TryReadBoundedString(root, "insight", 2000, out var insight))
+            if (root.TryGetProperty("insight", out var insightProp) &&
+                insightProp.ValueKind == JsonValueKind.String)
+            {
+                var rawInsightLength = insightProp.GetString()?.Trim().Length ?? 0;
+                if (rawInsightLength > InsightMaxLength)
+                {
+                    failureDetail =
+                        $"The model's \"insight\" was {rawInsightLength} characters, over the {InsightMaxLength}-character limit. " +
+                        "Put narrative under that limit and move any business data (records, line items, extracted fields) into the optional \"structuredOutput\" object instead, which has no character cap.";
+                    return false;
+                }
+            }
+
+            if (!TryReadBoundedString(root, "insight", InsightMaxLength, out var insight))
                 return false;
 
             var actions = new List<SuggestedAction>();
