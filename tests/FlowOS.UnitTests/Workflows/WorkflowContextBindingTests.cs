@@ -465,7 +465,10 @@ public class WorkflowContextBindingTests
             new Mock<IPolicyDecisionPluginRegistry>().Object);
         var materializer = new WorkflowContextMaterializer(unitOfWork, validator);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        // DX report F5/F6: this is a genuine conflict (IsTerminal mismatch), so it must still be
+        // rejected - now as the more specific WorkflowContextEventConflictException, which carries
+        // actionable context (F6) and is itself still an InvalidOperationException.
+        await Assert.ThrowsAsync<WorkflowContextEventConflictException>(
             () => materializer.ActivateAsync(binding, revision));
     }
 
@@ -745,6 +748,7 @@ public class WorkflowContextBindingTests
     public async Task Materializer_ActivatesWhenExistingEventHasNoSchema_AndEnrichesIt()
     {
         var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
         Assert.True(new WorkflowClassManager().Publish(source).IsValid);
 
         var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
@@ -797,6 +801,7 @@ public class WorkflowContextBindingTests
     public async Task Materializer_RejectsGenuineSchemaConflict_WithActionableContext()
     {
         var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
         Assert.True(new WorkflowClassManager().Publish(source).IsValid);
 
         var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
