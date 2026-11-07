@@ -458,6 +458,10 @@ public class TenantLlmWorkflowAgentTests
         Assert.False(result.Success);
         Assert.Equal(AgentFailureCodes.InvalidModelOutput, result.FailureCode);
         Assert.Empty(result.SuggestedActions);
+        // DX report F12: FailureField/Limit/ActualLength are only populated for FIELD_OVERFLOW.
+        Assert.Null(result.FailureField);
+        Assert.Null(result.FailureLimit);
+        Assert.Null(result.FailureActualLength);
     }
 
     [Fact]
@@ -519,7 +523,13 @@ public class TenantLlmWorkflowAgentTests
         var result = await agent.ExecuteAsync(AgentContext.FromPacket(Packet("QUOTE_APPROVED")));
 
         Assert.False(result.Success);
-        Assert.Equal(AgentFailureCodes.InvalidModelOutput, result.FailureCode);
+        // DX report F12: this now reports the typed FIELD_OVERFLOW code with structured context
+        // (field/limit/actualLength), not the generic INVALID_MODEL_OUTPUT every other malformed
+        // reply still gets. FailureReason keeps the same human-readable message.
+        Assert.Equal(AgentFailureCodes.FieldOverflow, result.FailureCode);
+        Assert.Equal("insight", result.FailureField);
+        Assert.Equal(2000, result.FailureLimit);
+        Assert.Equal(2001, result.FailureActualLength);
         Assert.Contains("2001 characters", result.FailureReason ?? "", StringComparison.Ordinal);
         Assert.Contains("2000-character limit", result.FailureReason ?? "", StringComparison.Ordinal);
         Assert.Contains("structuredOutput", result.FailureReason ?? "", StringComparison.Ordinal);
