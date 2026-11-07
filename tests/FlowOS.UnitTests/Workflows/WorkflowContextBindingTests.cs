@@ -319,6 +319,77 @@ public class WorkflowContextBindingTests
         Assert.Empty(prepared.Delta);
     }
 
+    /// <summary>
+    /// DX report F3: sourcePayloadSchema documents and validates the *start* payload only. An event
+    /// without its own EventSourcePayloadSchemas entry must go unvalidated, not silently fall back to
+    /// the start-payload schema - previously this broke any event whose payload shape legitimately
+    /// differs from the start payload (e.g. a review/moderation decision carrying "notes"/"gate"
+    /// instead of the start payload's required "amount").
+    /// </summary>
+    [Fact]
+    public async Task ExecutionContext_EventWithoutOwnSchema_IsNotValidatedAgainstStartPayloadSchema()
+    {
+        var source = CreateSource();
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id,
+            1,
+            source.Id,
+            source.Version,
+            new WorkflowContextBindingDefinition
+            {
+                EntityType = "ExpenseEntity",
+                EventAliases = new Dictionary<string, string>
+                {
+                    ["EVT-REVIEW"] = "EVT-EXP-REVIEW"
+                },
+                EventInputMappings = new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["EVT-REVIEW"] = new() { ["Notes"] = "notes" }
+                },
+                // The start payload requires "amount" - a review decision payload (notes/gate) would
+                // fail this schema if it were (wrongly) applied to it.
+                SourcePayloadSchema = """{"type":"object","required":["amount"]}""",
+                ConditionParameters = new Dictionary<string, JsonElement>()
+            });
+        binding.SetDraftRevision(revision.Id);
+
+        var definition = new WorkflowDefinition(source.TenantId, "ExpenseApproval", 1, "Review");
+        definition.SetContextLineage(source.Id, revision.Id, Guid.NewGuid());
+        var instanceId = Guid.NewGuid();
+        var snapshot = new WorkflowContextSnapshot(
+            instanceId,
+            source.TenantId,
+            revision.Id,
+            new Dictionary<string, JsonElement>());
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.WorkflowContextSnapshots.Add(snapshot);
+        await context.SaveChangesAsync();
+
+        var service = new WorkflowExecutionContextService(new UnitOfWork(context));
+
+        // This payload has neither "amount" (the start schema's required field) nor anything the
+        // start schema would accept - if the fallback bug were present this would throw
+        // WorkflowContextPayloadException. It must succeed, because EVT-EXP-REVIEW has no
+        // EventSourcePayloadSchemas entry of its own and so must go unvalidated.
+        var prepared = await service.PrepareForInstanceAsync(
+            source.TenantId,
+            definition,
+            instanceId,
+            "EVT-EXP-REVIEW",
+            new { notes = "looks good", gate = "approved" });
+
+        Assert.NotNull(prepared);
+        Assert.Equal("looks good", prepared!.Delta["Notes"].GetString());
+    }
+
     [Fact]
     public async Task ExecutionContext_DiscardsSourceFieldsWithoutExplicitMappings()
     {
