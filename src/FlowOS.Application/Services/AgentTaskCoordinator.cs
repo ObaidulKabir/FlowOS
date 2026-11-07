@@ -526,7 +526,11 @@ public sealed class AgentTaskCoordinator : IAgentTaskCoordinator
         reason?.Contains("not running", StringComparison.OrdinalIgnoreCase) == true ||
         reason?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true ||
         reason?.Contains("packet could not be built", StringComparison.OrdinalIgnoreCase) == true ||
-        reason?.StartsWith("Step actor is", StringComparison.OrdinalIgnoreCase) == true;
+        // DX report F2 reworded AgentTaskRunner's two step-mismatch diagnostics to name the actual
+        // cause; these two substrings replace the old "Current step is not a waiting Agent/Either
+        // task." and "Step actor is '...'." checks respectively.
+        reason?.Contains("is not an agent task", StringComparison.OrdinalIgnoreCase) == true ||
+        reason?.Contains("is waiting, but for actor", StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool IsTerminalResolutionFailure(string? reason) =>
         reason?.Contains("authentication", StringComparison.OrdinalIgnoreCase) == true ||
