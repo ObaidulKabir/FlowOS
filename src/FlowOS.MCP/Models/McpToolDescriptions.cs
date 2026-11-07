@@ -313,7 +313,7 @@ public static class McpToolDescriptions
             ["get_draft_workflowclass"] =
                 "Reads and returns the complete draft WorkflowClass definition, metadata, and full blueprint by ID. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:<WorkflowClassResponseDto>}. " +
+                "Returns: {ok:true,data:<WorkflowClassResponseDto>}. data.blueprint is the exact same object as data.Definition, ready to paste straight into update_draft_workflowclass's blueprint argument with no reshaping. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 

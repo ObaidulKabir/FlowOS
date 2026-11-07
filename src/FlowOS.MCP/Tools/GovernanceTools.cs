@@ -28,7 +28,10 @@ public class GovernanceTools
             var blueprintJson = args["blueprint"] as JObject;
 
             if (string.IsNullOrWhiteSpace(name)) return McpToolResults.Fail("MCP-ARG-001", "name is required.");
-            if (blueprintJson == null) return McpToolResults.Fail("MCP-ARG-001", "blueprint is required.");
+            if (blueprintJson == null)
+                return McpToolResults.Fail(
+                    "MCP-ARG-001",
+                    $"blueprint is required. Received: [{string.Join(", ", args.Properties().Select(p => p.Name))}].");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
 
@@ -61,7 +64,12 @@ public class GovernanceTools
 
             if (string.IsNullOrEmpty(idStr) || !Guid.TryParse(idStr, out var id))
                 return McpToolResults.Fail("MCP-ARG-002", "id must be a valid UUID.");
-            if (blueprintJson == null) return McpToolResults.Fail("MCP-ARG-001", "blueprint is required.");
+            if (blueprintJson == null)
+                // DX report F8: get_draft_workflowclass's response now also carries this same object
+                // under "blueprint" (alongside the existing "Definition"), ready to paste here as-is.
+                return McpToolResults.Fail(
+                    "MCP-ARG-001",
+                    $"blueprint is required (get_draft_workflowclass's response carries this same object under \"blueprint\" - pass it through as-is). Received: [{string.Join(", ", args.Properties().Select(p => p.Name))}].");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
 
@@ -188,7 +196,31 @@ public class GovernanceTools
                 return McpToolResults.Fail("MCP-NOTFOUND-001", "WorkflowClass not found.");
             }
 
-            return McpToolResults.Success(workflowClass);
+            // DX report F8: the read-only projection carries the blueprint under "Definition"
+            // (PascalCase, this response's own shape), but update_draft_workflowclass requires it
+            // under the top-level key "blueprint" - a passed-through read response can't be fed
+            // straight back into the setter. "blueprint" here is the exact same object as
+            // "Definition", ready to paste into update_draft_workflowclass's blueprint argument
+            // without any reshaping. Definition is kept for backward compatibility.
+            return McpToolResults.Success(new
+            {
+                workflowClass.Id,
+                workflowClass.TenantId,
+                workflowClass.Name,
+                workflowClass.Version,
+                workflowClass.Scope,
+                workflowClass.Status,
+                workflowClass.CreatedAt,
+                workflowClass.PublishedAt,
+                workflowClass.PreviousVersionId,
+                workflowClass.ChangeLog,
+                workflowClass.DeprecationReason,
+                workflowClass.DeprecationMigrationTargetId,
+                workflowClass.FlowOsVersion,
+                workflowClass.FlowOsCompatibility,
+                workflowClass.Definition,
+                blueprint = workflowClass.Definition
+            });
         }
         catch (UnauthorizedAccessException)
         {
