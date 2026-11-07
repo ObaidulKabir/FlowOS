@@ -41,9 +41,20 @@ public class InfoTools
     {
         try
         {
-            var instanceIdStr = args["instanceId"]?.ToString() ?? args["id"]?.ToString();
+            // DX report F7: every other instance-scoped tool (start_workflow's response, publish_event,
+            // ...) uses workflowInstanceId - this was the one that only accepted instanceId/id,
+            // forcing a round-trip to discover the mismatch. workflowInstanceId is now the canonical
+            // name; instanceId/id are accepted as deprecated synonyms rather than removed outright.
+            var instanceIdStr = args["workflowInstanceId"]?.ToString()
+                ?? args["instanceId"]?.ToString()
+                ?? args["id"]?.ToString();
             if (string.IsNullOrEmpty(instanceIdStr) || !Guid.TryParse(instanceIdStr, out var instanceId))
-                return McpToolResults.Fail("MCP-ARG-002", "instanceId must be a valid UUID.");
+            {
+                var received = string.Join(", ", args.Properties().Select(p => p.Name));
+                return McpToolResults.Fail(
+                    "MCP-ARG-002",
+                    $"workflowInstanceId must be a valid UUID (accepts instanceId/id as deprecated synonyms). Received arguments: [{received}].");
+            }
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
 

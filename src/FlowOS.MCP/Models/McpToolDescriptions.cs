@@ -329,8 +329,9 @@ public static class McpToolDescriptions
                 "roleAssignments maps each Assignment business role to the one person stored on this instance (for example Sales to user-123). " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
                 "Returns: {ok:true,data:{id,currentStepId,currentState,status,roleAssignments}}. " +
+                "Takes workflowInstanceId (the same name start_workflow's response and publish_event use); instanceId/id are accepted as deprecated synonyms. " +
                 "Errors: MCP-ARG-002, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
-                "Input example: {\"instanceId\":\"55555555-5555-5555-5555-555555555555\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
+                "Input example: {\"workflowInstanceId\":\"55555555-5555-5555-5555-555555555555\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["publish_workflowclass"] =
                 "[Lifecycle Step 3: Publish] Publishes a tenant-owned Draft WorkflowClass, compiling it into an executable runtime WorkflowDefinition and registering associated EventDefinitions. " +
