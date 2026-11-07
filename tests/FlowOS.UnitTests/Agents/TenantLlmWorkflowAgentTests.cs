@@ -423,6 +423,73 @@ public class TenantLlmWorkflowAgentTests
         Assert.Equal(AgentFailureCodes.InvalidModelOutput, result.FailureCode);
     }
 
+    /// <summary>
+    /// DecisionPacket report, R1: before this, an over-length insight fell through to the same
+    /// generic "did not match the required suggestion contract" message as any other malformed
+    /// reply, so a caller couldn't tell "insight was too long" apart from "the model emitted
+    /// garbage" without re-parsing the raw provider payload themselves. FailureReason must now name
+    /// the actual length and point at structuredOutput as the uncapped alternative.
+    /// </summary>
+    [Fact]
+    public async Task HostedAgent_OverLengthInsight_FailsWithASpecificDiagnosableReason()
+    {
+        var overLengthInsight = new string('x', 2001);
+        var suggestion = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            eventType = "QUOTE_APPROVED",
+            confidence = 0.9,
+            reason = "valid",
+            insight = overLengthInsight
+        });
+        var providerBody = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            choices = new[] { new { message = new { content = suggestion } } }
+        });
+        var agent = new TenantLlmWorkflowAgent(
+            "openai",
+            "gpt-4o-mini",
+            null,
+            "test-key",
+            new StubHandler(providerBody));
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(Packet("QUOTE_APPROVED")));
+
+        Assert.False(result.Success);
+        Assert.Equal(AgentFailureCodes.InvalidModelOutput, result.FailureCode);
+        Assert.Contains("2001 characters", result.FailureReason ?? "", StringComparison.Ordinal);
+        Assert.Contains("2000-character limit", result.FailureReason ?? "", StringComparison.Ordinal);
+        Assert.Contains("structuredOutput", result.FailureReason ?? "", StringComparison.Ordinal);
+    }
+
+    /// <summary>At exactly the cap, insight is accepted unchanged - the cap is inclusive.</summary>
+    [Fact]
+    public async Task HostedAgent_InsightAtExactCap_Succeeds()
+    {
+        var exactCapInsight = new string('x', 2000);
+        var suggestion = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            eventType = "QUOTE_APPROVED",
+            confidence = 0.9,
+            reason = "valid",
+            insight = exactCapInsight
+        });
+        var providerBody = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            choices = new[] { new { message = new { content = suggestion } } }
+        });
+        var agent = new TenantLlmWorkflowAgent(
+            "openai",
+            "gpt-4o-mini",
+            null,
+            "test-key",
+            new StubHandler(providerBody));
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(Packet("QUOTE_APPROVED")));
+
+        Assert.True(result.Success);
+        Assert.Equal(exactCapInsight, result.Insight);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized, AgentFailureCodes.ProviderAuth)]
     [InlineData(HttpStatusCode.TooManyRequests, AgentFailureCodes.ProviderRateLimit)]
