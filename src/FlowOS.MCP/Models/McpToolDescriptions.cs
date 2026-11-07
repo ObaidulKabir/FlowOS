@@ -387,6 +387,8 @@ public static class McpToolDescriptions
             ["activate_context_binding"] =
                 "Compiles and atomically activates the draft as immutable workflow, state-machine, and event definitions. Requires confirmHumanApproval=true. " +
                 "Existing instances remain pinned to prior revisions. Returns: {ok:true,data:<contextBinding>}. Errors: MCP-VALIDATION, MCP-NOTFOUND-001, CTX-STATE-001, MCP-APPROVAL-REQUIRED. " +
+                "A CTX-STATE-001 event conflict (one of this class's events already registered for the tenant with an incompatible status/category/terminal-flag/payload-schema) carries a context object: {conflictingEventId,classId,className,classVersion,bindingId,bindingRevisionId}. " +
+                "An event with no payload schema yet is enriched by this activation's eventSourcePayloadSchemas rather than rejected - only a genuine disagreement between two non-blank schemas conflicts. " +
                 "Input example: {\"id\":\"33333333-3333-3333-3333-333333333333\",\"confirmHumanApproval\":true,\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
 
             ["archive_context_binding"] =

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FlowOS.Application.Commands;
+using FlowOS.Application.Common.Exceptions;
 using FlowOS.Application.Common.Interfaces;
 using FlowOS.Application.DTOs;
 using FlowOS.Application.Handlers;
@@ -464,7 +465,10 @@ public class WorkflowContextBindingTests
             new Mock<IPolicyDecisionPluginRegistry>().Object);
         var materializer = new WorkflowContextMaterializer(unitOfWork, validator);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        // DX report F5/F6: this is a genuine conflict (IsTerminal mismatch), so it must still be
+        // rejected - now as the more specific WorkflowContextEventConflictException, which carries
+        // actionable context (F6) and is itself still an InvalidOperationException.
+        await Assert.ThrowsAsync<WorkflowContextEventConflictException>(
             () => materializer.ActivateAsync(binding, revision));
     }
 
@@ -729,6 +733,116 @@ public class WorkflowContextBindingTests
             item.IsAllowed);
         Assert.Empty(context.WorkflowInstances);
         Assert.Empty(context.WorkflowContextSnapshots);
+    }
+
+    /// <summary>
+    /// DX report F5: publish_workflowclass/new_version_workflowclass always registers a class's
+    /// declared events for the tenant with no payload schema (WorkflowClassCommandHandlers passes
+    /// payloadSchema: null unconditionally). Before this fix, activating a context binding whose
+    /// eventSourcePayloadSchemas describes a schema for that same event always failed CTX-STATE-001,
+    /// because the materialized candidate's (now non-null) schema never matched the existing (null)
+    /// one - there was no legal way to use eventSourcePayloadSchemas at all. This asserts activation
+    /// now succeeds and enriches the existing tenant EventDefinition with the declared schema.
+    /// </summary>
+    [Fact]
+    public async Task Materializer_ActivatesWhenExistingEventHasNoSchema_AndEnrichesIt()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
+
+        // The bare registration a class publish would have produced: the canonical/aliased event id,
+        // Published, matching category, and - critically - no payload schema.
+        var bareEvent = new EventDefinition(
+            "EVT-EXP-APPROVE",
+            source.TenantId,
+            "Approve",
+            "Approve",
+            "ExpenseEntity",
+            EventCategory.Human,
+            1,
+            null,
+            false);
+        bareEvent.Publish();
+        context.EventDefinitions.Add(bareEvent);
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var validator = new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object);
+
+        // Must not throw: no legal authoring path existed for this before the fix.
+        await new WorkflowContextMaterializer(unitOfWork, validator).ActivateAsync(binding, revision);
+
+        var enriched = await context.EventDefinitions.SingleAsync(e => e.EventId == "EVT-EXP-APPROVE");
+        Assert.NotNull(enriched.PayloadSchema);
+        Assert.Contains("decision", enriched.PayloadSchema);
+    }
+
+    /// <summary>
+    /// DX report F5/F6: enrichment only applies when the existing event has no schema yet. A genuine
+    /// disagreement between two non-blank schemas must still be rejected - and now carries enough
+    /// context (conflicting event id, class id/name/version, binding id/revision) to act on, instead
+    /// of only naming the event (F6).
+    /// </summary>
+    [Fact]
+    public async Task Materializer_RejectsGenuineSchemaConflict_WithActionableContext()
+    {
+        var source = CreateSource();
+        source.Definition.Workflow.Steps.Single().OnEntry.Clear();
+        Assert.True(new WorkflowClassManager().Publish(source).IsValid);
+
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = CreateSimulationRevision(binding, source);
+        binding.SetDraftRevision(revision.Id);
+
+        var options = new DbContextOptionsBuilder<FlowOSDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new FlowOSDbContext(options);
+        context.WorkflowClasses.Add(source);
+        context.WorkflowContextBindings.Add(binding);
+        context.WorkflowContextBindingRevisions.Add(revision);
+        context.Roles.Add(CreateTenantRole(source.TenantId, "FinanceManager"));
+
+        var conflictingEvent = new EventDefinition(
+            "EVT-EXP-APPROVE",
+            source.TenantId,
+            "Approve",
+            "Approve",
+            "ExpenseEntity",
+            EventCategory.Human,
+            1,
+            """{"type":"object","required":["somethingElse"]}""",
+            false);
+        conflictingEvent.Publish();
+        context.EventDefinitions.Add(conflictingEvent);
+        await context.SaveChangesAsync();
+
+        var unitOfWork = new UnitOfWork(context);
+        var validator = new WorkflowContextBindingValidator(unitOfWork, new Mock<IPolicyDecisionPluginRegistry>().Object);
+
+        var ex = await Assert.ThrowsAsync<WorkflowContextEventConflictException>(() =>
+            new WorkflowContextMaterializer(unitOfWork, validator).ActivateAsync(binding, revision));
+
+        Assert.Equal("EVT-EXP-APPROVE", ex.ConflictingEventId);
+        Assert.Equal(source.Id, ex.ClassId);
+        Assert.Equal(source.Name, ex.ClassName);
+        Assert.Equal(source.Version, ex.ClassVersion);
+        Assert.Equal(binding.Id, ex.BindingId);
+        Assert.Equal(revision.Id, ex.BindingRevisionId);
     }
 
     [Fact]

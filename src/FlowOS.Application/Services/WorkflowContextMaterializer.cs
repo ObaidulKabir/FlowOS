@@ -41,7 +41,13 @@ public class WorkflowContextMaterializer : IWorkflowContextMaterializer
             ?? throw new KeyNotFoundException("Source workflow template was not found.");
 
         var package = WorkflowClassCompiler.MapToContextRuntimePackage(source, binding, revision);
-        await ValidateEventCompatibilityAsync(package.EventDefinitions, binding.TenantId, cancellationToken);
+        await ValidateEventCompatibilityAsync(
+            package.EventDefinitions,
+            binding.TenantId,
+            source,
+            binding.Id,
+            revision.Id,
+            cancellationToken);
 
         if (binding.ActiveRevisionId.HasValue)
         {
@@ -78,6 +84,16 @@ public class WorkflowContextMaterializer : IWorkflowContextMaterializer
             {
                 _unitOfWork.EventDefinitions.Add(eventDefinition);
             }
+            else
+            {
+                // DX report F5: a class's own publish_workflowclass/new_version_workflowclass step
+                // always registers its declared events with no payload schema (see
+                // WorkflowClassCommandHandlers). This binding's eventSourcePayloadSchemas may be the
+                // first thing to describe one - fill it in now that ValidateEventCompatibilityAsync has
+                // confirmed it isn't a conflicting redefinition. No-ops if existing already has a
+                // schema (nothing to enrich) or this binding doesn't declare one either.
+                existing.EnrichPayloadSchema(eventDefinition.PayloadSchema);
+            }
         }
 
         // Business-context roles (source.Definition.Roles) are NOT provisioned into FlowOS's own
@@ -100,6 +116,9 @@ public class WorkflowContextMaterializer : IWorkflowContextMaterializer
     private async Task ValidateEventCompatibilityAsync(
         IReadOnlyList<EventDefinition> materializedEvents,
         Guid tenantId,
+        WorkflowClass source,
+        Guid bindingId,
+        Guid bindingRevisionId,
         CancellationToken cancellationToken)
     {
         foreach (var candidate in materializedEvents)
@@ -108,13 +127,35 @@ public class WorkflowContextMaterializer : IWorkflowContextMaterializer
                 .GetByEventIdAndTenantAsync(candidate.EventId, tenantId, cancellationToken);
             if (existing == null) continue;
 
+            // DX report F5: an event registered with no payload schema (the default from
+            // publish_workflowclass/new_version_workflowclass - see WorkflowClassCommandHandlers)
+            // imposed no shape constraint, so a context binding that is the first to declare one via
+            // eventSourcePayloadSchemas is enriching that event, not redefining it. Only a genuine
+            // disagreement between two *non-blank* schemas - or a mismatched status/category/terminal
+            // flag - is a real conflict.
+            var schemaConflicts =
+                !string.IsNullOrWhiteSpace(existing.PayloadSchema) &&
+                !string.IsNullOrWhiteSpace(candidate.PayloadSchema) &&
+                !EquivalentJson(existing.PayloadSchema, candidate.PayloadSchema);
+
             if (existing.Status != StateMachineStatus.Published ||
                 existing.Category != candidate.Category ||
                 existing.IsTerminal != candidate.IsTerminal ||
-                !EquivalentJson(existing.PayloadSchema, candidate.PayloadSchema))
+                schemaConflicts)
             {
-                throw new InvalidOperationException(
-                    $"Context event '{candidate.EventId}' conflicts with an existing tenant event definition.");
+                // DX report F6: name enough to act on, not just the event id - which class/version and
+                // which binding revision tried to introduce the conflicting definition. This cannot
+                // also name which *earlier* definition it conflicts with (status/category/schema from
+                // an unrelated class publish or binding) because EventDefinition does not record its
+                // own origin - that would need a separate change to track provenance.
+                throw new WorkflowContextEventConflictException(
+                    $"Context event '{candidate.EventId}' conflicts with an existing tenant event definition.",
+                    candidate.EventId,
+                    source.Id,
+                    source.Name,
+                    source.Version,
+                    bindingId,
+                    bindingRevisionId);
             }
         }
     }

@@ -340,6 +340,19 @@ public class ContextBindingMcpTools
         {
             return McpToolResults.Fail("MCP-ARG-001", ex.Message);
         }
+        catch (WorkflowContextEventConflictException ex)
+        {
+            // DX report F6: CTX-STATE-001 named the conflicting event but nothing else actionable.
+            return McpToolResults.Fail("CTX-STATE-001", ex.Message, new
+            {
+                conflictingEventId = ex.ConflictingEventId,
+                classId = ex.ClassId,
+                className = ex.ClassName,
+                classVersion = ex.ClassVersion,
+                bindingId = ex.BindingId,
+                bindingRevisionId = ex.BindingRevisionId
+            });
+        }
         catch (InvalidOperationException ex)
         {
             return McpToolResults.Fail("CTX-STATE-001", ex.Message);

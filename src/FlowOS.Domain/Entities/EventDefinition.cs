@@ -58,4 +58,19 @@ public class EventDefinition
     {
         Status = StateMachineStatus.Published;
     }
+
+    /// <summary>
+    /// Fills in a payload schema for an event that was registered with none (DX report F5). This is a
+    /// backward-compatible enrichment, not a redefinition: an event with no declared schema imposed no
+    /// shape constraint, so a context binding that is the first to describe one for it is adding
+    /// information, not changing a contract anyone already relied on. Only callable while the schema is
+    /// still unset - a schema that was already declared can only be changed through
+    /// WorkflowContextMaterializer's conflict check, which still rejects a genuine redefinition.
+    /// </summary>
+    public void EnrichPayloadSchema(string? schema)
+    {
+        if (!string.IsNullOrWhiteSpace(PayloadSchema) || string.IsNullOrWhiteSpace(schema))
+            return;
+        PayloadSchema = schema;
+    }
 }
