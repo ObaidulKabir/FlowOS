@@ -80,8 +80,19 @@ public class WorkflowClassValidator : IWorkflowClassValidator
         foreach (var t in bp.StateMachine.Transitions)
         {
             if (!declaredEvents.Contains(t.EventId))
-                result.AddError("CON-001", "Consistency", $"Transition references undeclared event '{t.EventId}'", "StateMachine");
-            
+            {
+                // DX report F10: "Default"/"true" are the unconditional-advance sentinels recognized
+                // only as a Step.NextSteps *key* - they are never declared events and have no meaning
+                // as a state-machine transition's EventId. Name that distinction here instead of
+                // leaving the reader to infer it from a generic "undeclared event" message.
+                var sentinelNote =
+                    string.Equals(t.EventId, "Default", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t.EventId, "true", StringComparison.OrdinalIgnoreCase)
+                        ? $" '{t.EventId}' is the unconditional-advance sentinel recognized in a step's nextSteps keys, not a declared event - it has no meaning as a state-machine transition's EventId and must not be declared here."
+                        : string.Empty;
+                result.AddError("CON-001", "Consistency", $"Transition references undeclared event '{t.EventId}'.{sentinelNote}", "StateMachine");
+            }
+
             if (!bp.StateMachine.States.Contains(t.FromState))
                 result.AddError("CON-002", "Consistency", $"Transition references unknown FromState '{t.FromState}'", "StateMachine");
             
