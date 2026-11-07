@@ -249,6 +249,70 @@ public class TenantLlmWorkflowAgentTests
     }
 
     /// <summary>
+    /// StructuredOutput defect report: AgentResult.StructuredData's nested values must be plain CLR
+    /// types (string/List&lt;object&gt;/Dictionary&lt;string,object&gt;/etc.), never a boxed
+    /// System.Text.Json.JsonElement. Deserializing structuredOutput straight into
+    /// Dictionary&lt;string, object&gt; boxes every nested value as a JsonElement, which the
+    /// Newtonsoft.Json serializer on the MCP response path cannot read by value - it reflects over
+    /// JsonElement's only public property instead, producing {"ValueKind":2}/{"ValueKind":3} stubs in
+    /// place of the real array/string data. This reproduces the report's exact shape: a nested array
+    /// ("questions") and a nested string ("notes"), carried as a JSON-encoded structuredOutput string
+    /// the way a schema-constrained provider emits it.
+    /// </summary>
+    [Fact]
+    public async Task HostedAgent_StructuredOutputWithNestedArrayAndString_YieldsPlainClrValues()
+    {
+        var handler = new StubHandler("""
+            {"content":[{"type":"text","text":"{\"eventType\":\"QUOTE_APPROVED\",\"confidence\":0.95,\"reason\":\"within limits\",\"insight\":\"approved\",\"structuredOutput\":\"{\\\"questions\\\":[{\\\"stem\\\":\\\"What was the fuel burn?\\\"}],\\\"notes\\\":\\\"all good\\\"}\"}"}]}
+            """);
+
+        var agent = new TenantLlmWorkflowAgent(
+            "anthropic",
+            "claude-3-5-sonnet-20241022",
+            "https://api.anthropic.com/v1/messages",
+            "sk-ant-test-key",
+            handler);
+
+        var packet = new DecisionPacket(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "ApproveQuote",
+            "Quoted",
+            "HumanTask",
+            "Agent",
+            null,
+            null,
+            new Dictionary<string, object?>(),
+            new[] { "QUOTE_APPROVED" },
+            new[] { "QUOTE_APPROVED" },
+            Array.Empty<string>(),
+            Array.Empty<SlaReminderFact>(),
+            null,
+            new Dictionary<string, object>(),
+            "Decide",
+            null);
+
+        var result = await agent.ExecuteAsync(AgentContext.FromPacket(packet));
+        Assert.True(result.Success);
+
+        // The array value must be a real List<object> (or similar enumerable of plain values), never a
+        // boxed JsonElement whose only public property is ValueKind.
+        var questions = Assert.IsType<List<object>>(result.StructuredData["questions"]);
+        Assert.Single(questions);
+        var firstQuestion = Assert.IsType<Dictionary<string, object>>(questions[0]);
+        Assert.Equal("What was the fuel burn?", firstQuestion["stem"]);
+
+        // The string value must be a real string, never a boxed JsonElement.
+        var notes = Assert.IsType<string>(result.StructuredData["notes"]);
+        Assert.Equal("all good", notes);
+
+        // Nothing in StructuredData should be a System.Text.Json.JsonElement - that is precisely the
+        // defect this test guards against.
+        Assert.All(result.StructuredData.Values, value =>
+            Assert.False(value is System.Text.Json.JsonElement, "StructuredData must not contain boxed JsonElement values."));
+    }
+
+    /// <summary>
     /// Absent structuredOutput must not change existing behavior: StructuredData stays the
     /// AgentResult default (empty), exactly as before this field existed.
     /// </summary>
