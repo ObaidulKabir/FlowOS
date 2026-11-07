@@ -621,9 +621,10 @@ public static class McpToolSchemas
         """
         {
           "type":"object",
-          "required":["instanceId"],
           "properties":{
-            "instanceId":{"type":"string","format":"uuid"},
+            "workflowInstanceId":{"type":"string","format":"uuid","description":"The canonical name - matches start_workflow's response and publish_event. Exactly one of workflowInstanceId/instanceId/id is required."},
+            "instanceId":{"type":"string","format":"uuid","description":"Deprecated synonym for workflowInstanceId."},
+            "id":{"type":"string","format":"uuid","description":"Deprecated synonym for workflowInstanceId."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
