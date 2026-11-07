@@ -143,6 +143,10 @@ public class IncidentAlertEscalationSimulationTests
                 ["Summary"] = "Checkout latency"
             },
             ["role"] = role,
+            // DX report F1 fix: ReportIncident's Command/non-agent-actor wait now also enforces
+            // EVT-OPEN's declared AllowedRoles=["Reporter"], so opening the incident needs a
+            // roleMap override distinct from whichever role the rest of this sequence uses.
+            ["roleMap"] = new JObject { ["EVT-OPEN"] = "Reporter" },
             ["events"] = new JArray(events),
             ["autoAdvanceTimers"] = autoAdvanceTimers
         });

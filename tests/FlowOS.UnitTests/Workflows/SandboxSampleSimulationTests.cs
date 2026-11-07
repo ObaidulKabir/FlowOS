@@ -28,21 +28,21 @@ public class SandboxSampleSimulationTests
         SeedExpenseSamples(db, tenantId);
         await DataSeeder.SeedFlagshipWorkflowsAsync(db, tenantId);
 
-        var cases = new (string Name, JObject Payload, string Role, JArray Events, bool AutoAdvanceTimers, string FinalState)[]
+        var cases = new (string Name, JObject Payload, string Role, JArray Events, bool AutoAdvanceTimers, string FinalState, JObject? RoleMap)[]
         {
             ("ExpenseApproval", new JObject { ["Amount"] = 50 }, "Approver",
-                new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved"),
+                new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved", null),
             ("ExpenseApprovalV2", new JObject { ["Amount"] = 50 }, "Manager",
-                new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved"),
+                new JArray("EVT-SUBMIT", "EVT-APPROVE"), false, "Approved", null),
             ("ExpenseApprovalV2", new JObject { ["Amount"] = 7500 }, "Director",
-                new JArray("EVT-SUBMIT", "EVT-DIRECTOR-APPROVE"), false, "Approved"),
+                new JArray("EVT-SUBMIT", "EVT-DIRECTOR-APPROVE"), false, "Approved", null),
             ("OrderSagaFulfillment", new JObject
             {
                 ["OrderId"] = "ORD-1",
                 ["Amount"] = 120,
                 ["ItemSku"] = "SKU-9",
                 ["Quantity"] = 2
-            }, "User", new JArray("EVT-PAY-SUCCESS", "EVT-STOCK-LOCKED"), false, "InventoryReserved"),
+            }, "User", new JArray("EVT-PAY-SUCCESS", "EVT-STOCK-LOCKED"), false, "InventoryReserved", null),
             ("LoanUnderwritingFlow", new JObject
             {
                 ["ApplicantName"] = "Ada",
@@ -50,7 +50,11 @@ public class SandboxSampleSimulationTests
                 ["CreditScore"] = 750,
                 ["DebtToIncome"] = 0.2,
                 ["AccountNum"] = "ACC-1"
-            }, "User", new JArray("EVT-APPLY", "EVT-AUTO-APPROVE"), false, "Approved"),
+            }, "User", new JArray("EVT-APPLY", "EVT-AUTO-APPROVE"), false, "Approved", null),
+            // DX report F1 fix: IntakeApplication (Command, default "Human" actor) now correctly
+            // waits for EVT-APPLY instead of auto-advancing, matching runtime - and EVT-APPLY
+            // declares AllowedRoles=["User","Employee"], which this case's "Manager" role (used for
+            // the later UnderwriterReview HumanTask step) does not satisfy.
             ("LoanUnderwritingFlow", new JObject
             {
                 ["ApplicantName"] = "Ben",
@@ -58,36 +62,44 @@ public class SandboxSampleSimulationTests
                 ["CreditScore"] = 640,
                 ["DebtToIncome"] = 0.4,
                 ["AccountNum"] = "ACC-2"
-            }, "Manager", new JArray("EVT-APPLY", "EVT-MANUAL-REVIEW", "EVT-FINAL-APPROVE"), false, "Approved"),
+            }, "Manager", new JArray("EVT-APPLY", "EVT-MANUAL-REVIEW", "EVT-FINAL-APPROVE"), false, "Approved",
+                new JObject { ["EVT-APPLY"] = "User" }),
             ("SecOpsAccessGovernance", new JObject
             {
                 ["UserEmail"] = "ops@example.com",
                 ["Environment"] = "prod"
-            }, "Manager", new JArray("EVT-REQUEST-ACCESS", "EVT-APPROVE"), true, "Revoked"),
+            }, "Manager", new JArray("EVT-REQUEST-ACCESS", "EVT-APPROVE"), true, "Revoked", null),
+            // DX report F1 fix: ReportIncident (Command, default "Human" actor) now correctly
+            // waits for EVT-OPEN instead of auto-advancing, and EVT-OPEN declares
+            // AllowedRoles=["Reporter"], which neither "Support" nor "OnCall" (used for the later
+            // L1Review/OnCallEscalation HumanTask steps) satisfies - same fixup already applied to
+            // IncidentAlertEscalationSimulationTests.cs.
             ("IncidentAlertEscalation", new JObject
             {
                 ["TicketId"] = "INC-9",
                 ["Severity"] = "Medium",
                 ["Summary"] = "Checkout latency"
-            }, "Support", new JArray("EVT-OPEN", "EVT-RESOLVE"), false, "Resolved"),
+            }, "Support", new JArray("EVT-OPEN", "EVT-RESOLVE"), false, "Resolved",
+                new JObject { ["EVT-OPEN"] = "Reporter" }),
             ("IncidentAlertEscalation", new JObject
             {
                 ["TicketId"] = "INC-1",
                 ["Severity"] = "Critical",
                 ["Summary"] = "Payments down"
-            }, "OnCall", new JArray("EVT-OPEN", "EVT-CLOSE"), false, "Resolved"),
+            }, "OnCall", new JArray("EVT-OPEN", "EVT-CLOSE"), false, "Resolved",
+                new JObject { ["EVT-OPEN"] = "Reporter" }),
             ("QuoteAutoReview", new JObject
             {
                 ["QuoteId"] = "Q-100",
                 ["Amount"] = 900,
                 ["Estimate"] = 900
-            }, "Submitter", new JArray("EVT-SUBMIT"), false, "Accepted")
+            }, "Submitter", new JArray("EVT-SUBMIT"), false, "Accepted", null)
         };
 
-        foreach (var (name, payload, role, events, autoAdvance, expectedState) in cases)
+        foreach (var (name, payload, role, events, autoAdvance, expectedState, roleMap) in cases)
         {
             var workflowClass = await db.WorkflowClasses.FirstAsync(w => w.TenantId == tenantId && w.Name == name);
-            var result = await Simulate(workflowClass.Definition, name, payload, role, events, autoAdvance);
+            var result = await Simulate(workflowClass.Definition, name, payload, role, events, autoAdvance, roleMap);
             Assert.True(result.Ok, $"{name} simulation failed: {result.Error}");
             Assert.True(result.Status == "Completed", $"{name} status {result.Status} at {result.CurrentStepId}");
             Assert.Equal("END", result.CurrentStepId);
@@ -318,9 +330,10 @@ public class SandboxSampleSimulationTests
         JObject payload,
         string role,
         JArray events,
-        bool autoAdvanceTimers)
+        bool autoAdvanceTimers,
+        JObject? roleMap = null)
     {
-        var call = await _tools.SimulateWorkflowClass(new JObject
+        var args = new JObject
         {
             ["blueprint"] = JObject.FromObject(blueprint),
             ["name"] = name,
@@ -328,7 +341,11 @@ public class SandboxSampleSimulationTests
             ["role"] = role,
             ["events"] = events,
             ["autoAdvanceTimers"] = autoAdvanceTimers
-        });
+        };
+        if (roleMap != null)
+            args["roleMap"] = roleMap;
+
+        var call = await _tools.SimulateWorkflowClass(args);
 
         var json = JObject.Parse(call.Content[0].Text);
         if (call.IsError || json["ok"]?.Value<bool>() != true)
