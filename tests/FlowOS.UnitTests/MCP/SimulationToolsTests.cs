@@ -104,7 +104,10 @@ public class SimulationToolsTests
                 ["Department"] = "Engineering"
             },
             ["role"] = "Director",
-            ["events"] = new JArray("EVT-APPROVE")
+            // DX report F1 fix: SubmitStep (Command, default "Human" actor) now correctly waits for
+            // its own nextSteps event instead of auto-advancing, matching runtime - EVT-SUBMIT must
+            // be queued explicitly to leave it.
+            ["events"] = new JArray("EVT-SUBMIT", "EVT-APPROVE")
         };
 
         // Act
@@ -140,7 +143,10 @@ public class SimulationToolsTests
             ["blueprint"] = blueprint,
             ["payload"] = new JObject { ["Amount"] = 8000 },
             ["role"] = "JuniorAccountant", // Not Director
-            ["events"] = new JArray("EVT-APPROVE")
+            // DX report F1 fix: SubmitStep (Command, default "Human" actor) now correctly waits for
+            // its own nextSteps event instead of auto-advancing, matching runtime - EVT-SUBMIT must
+            // be queued explicitly to leave it.
+            ["events"] = new JArray("EVT-SUBMIT", "EVT-APPROVE")
         };
 
         // Act
@@ -174,7 +180,10 @@ public class SimulationToolsTests
             ["blueprint"] = blueprint,
             ["payload"] = new JObject { ["Amount"] = 450 },
             ["role"] = "Director",
-            ["events"] = new JArray("EVT-APPROVE")
+            // DX report F1 fix: SubmitStep (Command, default "Human" actor) now correctly waits for
+            // its own nextSteps event instead of auto-advancing, matching runtime - EVT-SUBMIT must
+            // be queued explicitly to leave it.
+            ["events"] = new JArray("EVT-SUBMIT", "EVT-APPROVE")
         };
 
         var result = await _tools.SimulateWorkflowClass(args);
@@ -207,7 +216,10 @@ public class SimulationToolsTests
                 ["ApprovedByBoard"] = false // Fails guard
             },
             ["role"] = "Director",
-            ["events"] = new JArray("EVT-APPROVE")
+            // DX report F1 fix: SubmitStep (Command, default "Human" actor) now correctly waits for
+            // its own nextSteps event instead of auto-advancing, matching runtime - EVT-SUBMIT must
+            // be queued explicitly to leave it.
+            ["events"] = new JArray("EVT-SUBMIT", "EVT-APPROVE")
         };
 
         // Act
@@ -292,7 +304,10 @@ public class SimulationToolsTests
             ["tenantId"] = tenantId.ToString(),
             ["payload"] = new JObject { ["Amount"] = 3000 },
             ["role"] = "Manager",
-            ["events"] = new JArray("EVT-APPROVE")
+            // DX report F1 fix: SubmitStep (Command, default "Human" actor) now correctly waits for
+            // its own nextSteps event instead of auto-advancing, matching runtime - EVT-SUBMIT must
+            // be queued explicitly to leave it.
+            ["events"] = new JArray("EVT-SUBMIT", "EVT-APPROVE")
         };
 
         // Act

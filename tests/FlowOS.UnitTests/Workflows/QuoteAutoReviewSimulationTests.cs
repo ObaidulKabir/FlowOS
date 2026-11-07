@@ -92,7 +92,13 @@ public class QuoteAutoReviewSimulationTests
     [Fact]
     public async Task Seeded_InBound_AdvisorOverrideRequestsRevision()
     {
-        var data = await Simulate(900, "Advisor", timers: false, agents: true, null, "EVT-SUBMIT", "EVT-REQUEST-REVISION");
+        // DX report F1 fix: the submit step's Command/non-agent-actor wait now also enforces
+        // EVT-SUBMIT's declared AllowedRoles (Submitter), so submitting it needs a roleMap override
+        // distinct from the "Advisor" role this test uses for the override event.
+        var data = await Simulate(
+            900, "Advisor", timers: false, agents: true, null,
+            roleMap: new JObject { ["EVT-SUBMIT"] = "Submitter" },
+            "EVT-SUBMIT", "EVT-REQUEST-REVISION");
 
         Assert.Equal("Completed", data["status"]?.ToString());
         Assert.Equal("END", data["currentStepId"]?.ToString());
@@ -149,6 +155,16 @@ public class QuoteAutoReviewSimulationTests
         bool agents,
         JObject? simulatedAgent,
         params string[] events)
+        => await Simulate(amount, role, timers, agents, simulatedAgent, roleMap: null, events);
+
+    private async Task<JObject> Simulate(
+        long amount,
+        string role,
+        bool timers,
+        bool agents,
+        JObject? simulatedAgent,
+        JObject? roleMap,
+        params string[] events)
     {
         var tenantId = Guid.NewGuid();
         await using var db = new FlowOSDbContext(new DbContextOptionsBuilder<FlowOSDbContext>()
@@ -175,6 +191,8 @@ public class QuoteAutoReviewSimulationTests
         };
         if (simulatedAgent != null)
             callArgs["simulatedAgent"] = simulatedAgent;
+        if (roleMap != null)
+            callArgs["roleMap"] = roleMap;
 
         var call = await _tools.SimulateWorkflowClass(callArgs);
         Assert.False(call.IsError);
