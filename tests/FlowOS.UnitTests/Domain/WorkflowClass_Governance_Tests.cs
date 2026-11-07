@@ -56,6 +56,9 @@ namespace FlowOS.UnitTests.Domain
             
             var ex = Assert.Throws<InvalidOperationException>(() => wc.Delete(hasInstances: false));
             Assert.Contains("GOV-DEL-001", ex.Message);
+            // DX report F11: the message must direct the caller to the actual remedy
+            // (deprecate_workflowclass), not the internal domain method name.
+            Assert.Contains("deprecate_workflowclass", ex.Message);
         }
 
         [Fact]

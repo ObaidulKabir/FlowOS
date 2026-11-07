@@ -80,7 +80,10 @@ public class WorkflowClass
     public void Delete(bool hasInstances)
     {
         if (Status != WorkflowClassStatus.Draft)
-            throw new InvalidOperationException("GOV-DEL-001: Only Drafts can be hard deleted. Use Abandon for published workflows.");
+            // DX report F11: this used to say "Use Abandon", naming the internal domain method
+            // rather than the MCP tool an agent can actually call. deprecate_workflowclass is the
+            // directive an agent needs here.
+            throw new InvalidOperationException("GOV-DEL-001: Only Drafts can be hard deleted. A Published WorkflowClass cannot be deleted; call deprecate_workflowclass instead.");
         
         if (hasInstances)
             throw new InvalidOperationException("GOV-DEL-002: Cannot delete a workflow class that has existing instances.");
