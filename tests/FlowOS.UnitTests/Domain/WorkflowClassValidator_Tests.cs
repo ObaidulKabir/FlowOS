@@ -213,6 +213,37 @@ public class WorkflowClassValidator_Tests
         Assert.Contains(result.Errors, e => e.Code == "CON-001");
     }
 
+    /// <summary>
+    /// DX report F10: "Default"/"true" are nextSteps-key-only sentinels and have no meaning as a
+    /// state-machine transition's EventId. A user who mistakenly declares one as a transition's
+    /// EventId used to get the same generic "undeclared event" message as any other typo; this
+    /// asserts CON-001 now names the sentinel explicitly in that specific case.
+    /// </summary>
+    [Theory]
+    [InlineData("Default")]
+    [InlineData("true")]
+    public void Validate_TransitionWithSentinelAsEventId_NamesTheSentinelExplicitly(string sentinel)
+    {
+        var validator = new WorkflowClassValidator();
+        var blueprint = CreateValidBlueprint() with
+        {
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Created",
+                States = new List<string> { "Created", "Done" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new TransitionBlueprint { FromState = "Created", ToState = "Done", EventId = sentinel }
+                }
+            }
+        };
+
+        var result = validator.Validate(CreateWorkflowClass(blueprint));
+
+        var error = Assert.Single(result.Errors, e => e.Code == "CON-001");
+        Assert.Contains("nextSteps keys, not a declared event", error.Message);
+    }
+
     [Fact]
     public void Validate_TransitionWithUnknownFromState_ReturnsConsistencyError()
     {
