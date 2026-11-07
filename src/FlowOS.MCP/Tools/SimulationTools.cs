@@ -541,6 +541,7 @@ public class SimulationTools
                 {
                     var queuedState = TryApplyQueuedSystemStateEvent(
                         blueprint, eventsQueue, payload, ref currentState, stateTransitions,
+                        winningTarget,
                         out var appliedEvent, out var guardReason);
                     if (queuedState == QueuedStateApplyKind.GuardBlocked)
                     {
@@ -1555,6 +1556,7 @@ public class SimulationTools
                     {
                         var queuedState = TryApplyQueuedSystemStateEvent(
                             blueprint, eventsQueue, payload, ref currentState, stateTransitions,
+                            targetStep,
                             out var appliedEvent, out var queuedGuardReason);
                         if (queuedState == QueuedStateApplyKind.GuardBlocked)
                         {
@@ -2242,12 +2244,37 @@ public class SimulationTools
         GuardBlocked
     }
 
+    private static StepBlueprint? FindStep(WorkflowClassBlueprint blueprint, string? stepId)
+        => string.IsNullOrWhiteSpace(stepId)
+            ? null
+            : blueprint.Workflow?.Steps?.FirstOrDefault(s =>
+                string.Equals(s.StepId, stepId, StringComparison.OrdinalIgnoreCase));
+
+    // Bug found while implementing DX report F1 (reported here per AGENTS.md rule 4; fixed in a
+    // separate PR, not this one): TryApplyQueuedSystemStateEvent is called when a Decision step or
+    // a Command step's "Default" route advances without itself consuming a queued event, so it can
+    // opportunistically record a state-machine transition for an *unrelated, concurrent* queued
+    // system event. But with no way to tell "unrelated/concurrent" apart from "this is the event the
+    // very next step is waiting for", it was consuming the next queued event unconditionally whenever
+    // the current state had a transition for it - stealing the event a downstream waiting Command
+    // step needed (e.g. OrderSagaFulfillment's ValidateOrder->AuthorizePayment: ValidateOrder's
+    // "Default" advance was silently eating EVT-PAY-SUCCESS before AuthorizePayment ever got a turn
+    // to wait for it). upcomingStepId lets the caller name the step about to run next; if that step's
+    // own nextSteps already names the peeked event, this method now defers to it instead.
+    private static bool UpcomingStepWillConsumeEvent(WorkflowClassBlueprint blueprint, string? upcomingStepId, string eventId)
+    {
+        var upcoming = FindStep(blueprint, upcomingStepId);
+        var nextSteps = upcoming?.NextSteps;
+        return nextSteps != null && nextSteps.Keys.Any(k => string.Equals(k, eventId, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static QueuedStateApplyKind TryApplyQueuedSystemStateEvent(
         WorkflowClassBlueprint blueprint,
         Queue<string> eventsQueue,
         Dictionary<string, object> payload,
         ref string currentState,
         List<object> stateTransitions,
+        string? upcomingStepId,
         out string? appliedEvent,
         out string? guardReason)
     {
@@ -2258,6 +2285,9 @@ public class SimulationTools
 
         var peek = eventsQueue.Peek();
         if (IsEventReservedForHumanOrTimer(blueprint, peek))
+            return QueuedStateApplyKind.None;
+
+        if (UpcomingStepWillConsumeEvent(blueprint, upcomingStepId, peek))
             return QueuedStateApplyKind.None;
 
         var (smTrans, blocked, reason) = FindTransition(blueprint.StateMachine, currentState, peek, payload);

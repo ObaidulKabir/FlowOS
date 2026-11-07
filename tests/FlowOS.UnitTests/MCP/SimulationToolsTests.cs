@@ -1334,4 +1334,78 @@ public class SimulationToolsTests
 
         return JObject.FromObject(blueprint);
     }
+
+    // Bug found while fixing DX report F1 (not F1 itself - F1 only made isWaitingCommand
+    // actor-agnostic): a Command step that auto-advances via its reserved "Default" nextSteps key,
+    // when the state machine has no explicit transition literally named "Default", opportunistically
+    // applies the *next queued event* to the state machine via TryApplyQueuedSystemStateEvent. That
+    // was unconditional, so it could steal an event a downstream waiting Command step still needed -
+    // exactly the OrderSagaFulfillment shape below: ValidateOrder (Command, Default route, no "Default"
+    // transition) advances straight to AuthorizePayment (Command, waits for EVT-PAY-SUCCESS). Before the
+    // fix, ValidateOrder's "Default" step silently consumed EVT-PAY-SUCCESS off the queue to record the
+    // Draft->Authorized transition, leaving AuthorizePayment stuck waiting forever. The fix defers to the
+    // upcoming step whenever that step's own nextSteps already names the peeked event.
+    private static WorkflowClassBlueprint CreateTwoStepAutoAdvanceThenWaitingCommandBlueprint()
+    {
+        return new WorkflowClassBlueprint
+        {
+            Events = new List<EventBlueprint>
+            {
+                new() { EventId = "EVT-READY", Name = "Ready" }
+            },
+            StateMachine = new StateMachineBlueprint
+            {
+                InitialState = "Draft",
+                States = new List<string> { "Draft", "Authorized", "Done" },
+                Transitions = new List<TransitionBlueprint>
+                {
+                    new() { FromState = "Draft", ToState = "Authorized", EventId = "EVT-READY" }
+                }
+            },
+            Workflow = new WorkflowBlueprint
+            {
+                StartStepId = "ValidateStep",
+                Steps = new List<StepBlueprint>
+                {
+                    new()
+                    {
+                        StepId = "ValidateStep",
+                        StepType = "Command",
+                        NextSteps = new Dictionary<string, string> { { "Default", "AuthorizeStep" } }
+                    },
+                    new()
+                    {
+                        StepId = "AuthorizeStep",
+                        StepType = "Command",
+                        NextSteps = new Dictionary<string, string> { { "EVT-READY", "END" } }
+                    }
+                }
+            }
+        };
+    }
+
+    [Fact]
+    public async Task Simulate_AutoAdvanceCommandStep_DoesNotStealEventNeededByNextWaitingCommand()
+    {
+        // Arrange
+        var blueprint = JObject.FromObject(CreateTwoStepAutoAdvanceThenWaitingCommandBlueprint());
+        var args = new JObject
+        {
+            ["blueprint"] = blueprint,
+            ["payload"] = new JObject(),
+            ["role"] = "User",
+            ["events"] = new JArray("EVT-READY")
+        };
+
+        // Act
+        var result = await _tools.SimulateWorkflowClass(args);
+
+        // Assert
+        Assert.False(result.IsError);
+        var data = JObject.Parse(result.Content[0].Text)["data"] as JObject;
+        Assert.NotNull(data);
+        Assert.Equal("Completed", data["status"]?.ToString());
+        Assert.Equal("Authorized", data["finalState"]?.ToString());
+        Assert.Equal("END", data["currentStepId"]?.ToString());
+    }
 }
