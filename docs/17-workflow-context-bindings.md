@@ -308,6 +308,10 @@ Role and capability overrides rename business-context vocabulary; they do not pr
 
 FlowOS validates the optional source schema, projects source fields, merges typed parameters, validates the template `contextSchema`, and stores only the canonical snapshot. Later events merge mapped deltas only after a successful transition. Task completions and timers load the same snapshot even without payload. Audit metadata records binding revision, canonical delta, canonical/contextual event IDs, and business reference so replay and fork simulation remain deterministic.
 
+### Supported schema keywords
+
+Payload/context schema validation (source schema, `contextSchema`, `payloadSchema`, `eventSourcePayloadSchemas`) enforces: `type`, `required`, `properties` (recursing into nested object/array schemas via `items`), `enum`, `minLength`/`maxLength`, `pattern` (a regular expression, matched with a 250ms timeout; an invalid pattern is treated as non-restrictive rather than rejecting every payload), `minimum`/`maximum`, and `additionalProperties: false` (any object property not listed under `properties` is rejected). An unsupported keyword found elsewhere in the JSON Schema vocabulary (for example `multipleOf`, `uniqueItems`, `oneOf`) is currently ignored rather than rejected.
+
 ## Migration behavior
 
 The migration is additive: it creates binding, revision, and snapshot tables; adds nullable lineage columns to workflow definitions; and persists state-transition constraints. Existing rows require no backfill. Legacy starts and existing instances are unchanged.
