@@ -33,7 +33,11 @@ public class ExpenseApprovalV3ClientDecisionTests
     [Fact]
     public async Task LowAmount_SingleApproveEvent_FinalizesWithoutEscalation()
     {
-        var data = await Simulate(50, "Manager", "EVT-SUBMIT", "EVT-APPROVE");
+        // DX report F1 fix: the Draft step's Command/non-agent-actor wait now also enforces
+        // EVT-SUBMIT's declared AllowedRoles ("Employee"/"User"), so submitting it needs a roleMap
+        // override distinct from the "Manager" role used for the rest of this sequence.
+        var data = await Simulate(
+            50, "Manager", new JObject { ["EVT-SUBMIT"] = "User" }, "EVT-SUBMIT", "EVT-APPROVE");
 
         Assert.Equal("Completed", data["status"]?.ToString());
         Assert.Equal("END", data["currentStepId"]?.ToString());
@@ -47,7 +51,8 @@ public class ExpenseApprovalV3ClientDecisionTests
         // amount-aware branching on the client side - yet FlowOS lands the instance on
         // PendingDirector, not Approved, because the blueprint's own Decision step and guarded
         // Law transition read Amount from the payload.
-        var data = await Simulate(500, "Manager", "EVT-SUBMIT", "EVT-APPROVE");
+        var data = await Simulate(
+            500, "Manager", new JObject { ["EVT-SUBMIT"] = "User" }, "EVT-SUBMIT", "EVT-APPROVE");
 
         Assert.Equal("WaitingForHumanTask", data["status"]?.ToString());
         Assert.Equal("PendingDirector", data["currentStepId"]?.ToString());
@@ -80,7 +85,8 @@ public class ExpenseApprovalV3ClientDecisionTests
     {
         // A Manager may still choose to escalate a low-value request on their own judgment -
         // EVT-ESCALATE is not removed by moving the automatic threshold into the blueprint.
-        var data = await Simulate(50, "Manager", "EVT-SUBMIT", "EVT-ESCALATE");
+        var data = await Simulate(
+            50, "Manager", new JObject { ["EVT-SUBMIT"] = "User" }, "EVT-SUBMIT", "EVT-ESCALATE");
 
         Assert.Equal("WaitingForHumanTask", data["status"]?.ToString());
         Assert.Equal("PendingDirector", data["currentStepId"]?.ToString());
@@ -89,7 +95,8 @@ public class ExpenseApprovalV3ClientDecisionTests
     [Fact]
     public async Task ManagerReject_EndsAtRejected()
     {
-        var data = await Simulate(50, "Manager", "EVT-SUBMIT", "EVT-REJECT");
+        var data = await Simulate(
+            50, "Manager", new JObject { ["EVT-SUBMIT"] = "User" }, "EVT-SUBMIT", "EVT-REJECT");
 
         Assert.Equal("Completed", data["status"]?.ToString());
         Assert.Equal("END", data["currentStepId"]?.ToString());

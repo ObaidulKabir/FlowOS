@@ -192,6 +192,11 @@ public class ExpenseApprovalAmountRoleTests
             ["name"] = v2.Name,
             ["payload"] = new JObject { ["Amount"] = amount, ["Currency"] = "USD" },
             ["role"] = role,
+            // DX report F1 fix: the Draft step's "Command"/non-agent-actor nextSteps now also
+            // enforces EVT-SUBMIT's declared AllowedRoles=["User"] (previously skipped by the same
+            // bug this fix corrects), so submitting EVT-SUBMIT needs role "User" regardless of which
+            // role this test uses for the later approval event.
+            ["roleMap"] = new JObject { ["EVT-SUBMIT"] = "User" },
             ["events"] = new JArray(events)
         });
 
