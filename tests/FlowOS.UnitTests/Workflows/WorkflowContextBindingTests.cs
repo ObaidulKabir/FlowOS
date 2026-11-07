@@ -391,6 +391,110 @@ public class WorkflowContextBindingTests
         Assert.Equal("looks good", prepared!.Delta["Notes"].GetString());
     }
 
+    /// <summary>
+    /// DX report F4: only required/type were enforced on a declared payload schema - minLength,
+    /// maxLength, pattern, enum, minimum, maximum, and additionalProperties:false were silently
+    /// accepted but never checked, so the documented "fail-closed gate" wasn't actually fail-closed.
+    /// This asserts each of those keywords is now enforced together.
+    /// </summary>
+    [Fact]
+    public void PrepareSimulationStep_EnforcesExtendedSchemaKeywords_OnInvalidPayload()
+    {
+        var source = CreateSource();
+        const string schema = """
+            {
+              "type": "object",
+              "required": ["Email"],
+              "properties": {
+                "Email": { "type": "string", "minLength": 5, "maxLength": 50, "pattern": "^[^@]+@[^@]+$" },
+                "Priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+                "Score": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            }
+            """;
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id, 1, source.Id, source.Version,
+            new WorkflowContextBindingDefinition
+            {
+                EntityType = "ExpenseEntity",
+                SourcePayloadSchema = schema,
+                ConditionParameters = new Dictionary<string, JsonElement>()
+            });
+        binding.SetDraftRevision(revision.Id);
+
+        var service = new WorkflowExecutionContextService(null!);
+
+        var ex = Assert.Throws<WorkflowContextPayloadException>(() => service.PrepareSimulationStep(
+            revision,
+            source,
+            new Dictionary<string, object?>(),
+            contextualEventType: null,
+            sourcePayload: new
+            {
+                Email = "x@y", // violates minLength (5) and pattern needs at least one char after '@'... actually 3 chars, fails minLength
+                Priority = "Urgent", // not in enum
+                Score = 150, // exceeds maximum
+                Extra = "not declared" // additionalProperties:false
+            },
+            isInitial: true));
+
+        Assert.Contains(ex.Errors, e => e.Contains("minimum length"));
+        Assert.Contains(ex.Errors, e => e.Contains("enum"));
+        Assert.Contains(ex.Errors, e => e.Contains("less than or equal to"));
+        Assert.Contains(ex.Errors, e => e.Contains("Extra") && e.Contains("additionalProperties"));
+    }
+
+    /// <summary>
+    /// DX report F4: the same extended-keyword schema accepts a payload that satisfies every
+    /// constraint, proving the new checks are additive (not overly strict).
+    /// </summary>
+    [Fact]
+    public void PrepareSimulationStep_EnforcesExtendedSchemaKeywords_OnValidPayload()
+    {
+        var source = CreateSource();
+        const string schema = """
+            {
+              "type": "object",
+              "required": ["Email"],
+              "properties": {
+                "Email": { "type": "string", "minLength": 5, "maxLength": 50, "pattern": "^[^@]+@[^@]+$" },
+                "Priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+                "Score": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            }
+            """;
+        var binding = new WorkflowContextBinding(source.TenantId, "Expense", "ExpenseApproval");
+        var revision = new WorkflowContextBindingRevision(
+            binding.Id, 1, source.Id, source.Version,
+            new WorkflowContextBindingDefinition
+            {
+                EntityType = "ExpenseEntity",
+                SourcePayloadSchema = schema,
+                ConditionParameters = new Dictionary<string, JsonElement>()
+            });
+        binding.SetDraftRevision(revision.Id);
+
+        var service = new WorkflowExecutionContextService(null!);
+
+        var prepared = service.PrepareSimulationStep(
+            revision,
+            source,
+            new Dictionary<string, object?>(),
+            contextualEventType: null,
+            sourcePayload: new
+            {
+                Email = "person@example.com",
+                Priority = "Medium",
+                Score = 42
+            },
+            isInitial: true);
+
+        Assert.NotNull(prepared);
+    }
+
     [Fact]
     public async Task ExecutionContext_DiscardsSourceFieldsWithoutExplicitMappings()
     {

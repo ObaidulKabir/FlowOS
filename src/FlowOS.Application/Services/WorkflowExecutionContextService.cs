@@ -511,8 +511,79 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
             return;
         }
 
+        // DX report F4: minLength/maxLength/minimum/maximum/pattern/enum/additionalProperties were
+        // silently accepted in a declared schema but never checked, so the documented "fail-closed
+        // gate" enforced only required/type. These are additive checks alongside the existing ones.
+        if (schema.TryGetProperty("enum", out var enumValues) && enumValues.ValueKind == JsonValueKind.Array)
+        {
+            var matchesEnum = enumValues.EnumerateArray().Any(candidate => JsonElementEquals(candidate, value));
+            if (!matchesEnum)
+            {
+                errors.Add($"{path} must be one of the declared enum values.");
+            }
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var str = value.GetString() ?? string.Empty;
+            if (schema.TryGetProperty("minLength", out var minLengthEl) && minLengthEl.TryGetInt32(out var minLength) &&
+                str.Length < minLength)
+            {
+                errors.Add($"{path} must have a minimum length of {minLength}.");
+            }
+            if (schema.TryGetProperty("maxLength", out var maxLengthEl) && maxLengthEl.TryGetInt32(out var maxLength) &&
+                str.Length > maxLength)
+            {
+                errors.Add($"{path} must have a maximum length of {maxLength}.");
+            }
+            if (schema.TryGetProperty("pattern", out var patternEl) && patternEl.ValueKind == JsonValueKind.String)
+            {
+                var pattern = patternEl.GetString();
+                if (!string.IsNullOrEmpty(pattern) && !SafeRegexIsMatch(str, pattern))
+                {
+                    errors.Add($"{path} must match pattern '{pattern}'.");
+                }
+            }
+        }
+
+        if (value.ValueKind == JsonValueKind.Number)
+        {
+            if (schema.TryGetProperty("minimum", out var minimumEl) && minimumEl.TryGetDouble(out var minimum) &&
+                value.TryGetDouble(out var numForMin) && numForMin < minimum)
+            {
+                errors.Add($"{path} must be greater than or equal to {minimum}.");
+            }
+            if (schema.TryGetProperty("maximum", out var maximumEl) && maximumEl.TryGetDouble(out var maximum) &&
+                value.TryGetDouble(out var numForMax) && numForMax > maximum)
+            {
+                errors.Add($"{path} must be less than or equal to {maximum}.");
+            }
+        }
+
         if (value.ValueKind == JsonValueKind.Object)
         {
+            if (schema.TryGetProperty("additionalProperties", out var additionalProperties) &&
+                additionalProperties.ValueKind == JsonValueKind.False)
+            {
+                var declared = new HashSet<string>(StringComparer.Ordinal);
+                if (schema.TryGetProperty("properties", out var declaredProperties) &&
+                    declaredProperties.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var declaredProperty in declaredProperties.EnumerateObject())
+                    {
+                        declared.Add(declaredProperty.Name);
+                    }
+                }
+
+                foreach (var presentProperty in value.EnumerateObject())
+                {
+                    if (!declared.Contains(presentProperty.Name))
+                    {
+                        errors.Add($"{path}.{presentProperty.Name} is not an allowed property (additionalProperties is false).");
+                    }
+                }
+            }
+
             if (schema.TryGetProperty("required", out var required) &&
                 required.ValueKind == JsonValueKind.Array)
             {
@@ -605,5 +676,41 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
         }
         value = default;
         return false;
+    }
+
+    private static bool JsonElementEquals(JsonElement a, JsonElement b)
+    {
+        if (a.ValueKind == JsonValueKind.Number && b.ValueKind == JsonValueKind.Number)
+        {
+            return a.TryGetDouble(out var da) && b.TryGetDouble(out var db) && da == db;
+        }
+
+        if (a.ValueKind != b.ValueKind) return false;
+
+        return a.ValueKind switch
+        {
+            JsonValueKind.String => string.Equals(a.GetString(), b.GetString(), StringComparison.Ordinal),
+            JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null => true,
+            _ => a.GetRawText() == b.GetRawText()
+        };
+    }
+
+    private static bool SafeRegexIsMatch(string input, string pattern)
+    {
+        try
+        {
+            return System.Text.RegularExpressions.Regex.IsMatch(
+                input, pattern, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(250));
+        }
+        catch (ArgumentException)
+        {
+            // An invalid regex in a declared schema is a schema-authoring error, not a payload
+            // validation failure - don't let it crash the gate or reject every payload outright.
+            return true;
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            return true;
+        }
     }
 }
