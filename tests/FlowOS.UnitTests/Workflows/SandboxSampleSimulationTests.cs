@@ -69,18 +69,25 @@ public class SandboxSampleSimulationTests
                 ["UserEmail"] = "ops@example.com",
                 ["Environment"] = "prod"
             }, "Manager", new JArray("EVT-REQUEST-ACCESS", "EVT-APPROVE"), true, "Revoked", null),
+            // DX report F1 fix: ReportIncident (Command, default "Human" actor) now correctly
+            // waits for EVT-OPEN instead of auto-advancing, and EVT-OPEN declares
+            // AllowedRoles=["Reporter"], which neither "Support" nor "OnCall" (used for the later
+            // L1Review/OnCallEscalation HumanTask steps) satisfies - same fixup already applied to
+            // IncidentAlertEscalationSimulationTests.cs.
             ("IncidentAlertEscalation", new JObject
             {
                 ["TicketId"] = "INC-9",
                 ["Severity"] = "Medium",
                 ["Summary"] = "Checkout latency"
-            }, "Support", new JArray("EVT-OPEN", "EVT-RESOLVE"), false, "Resolved", null),
+            }, "Support", new JArray("EVT-OPEN", "EVT-RESOLVE"), false, "Resolved",
+                new JObject { ["EVT-OPEN"] = "Reporter" }),
             ("IncidentAlertEscalation", new JObject
             {
                 ["TicketId"] = "INC-1",
                 ["Severity"] = "Critical",
                 ["Summary"] = "Payments down"
-            }, "OnCall", new JArray("EVT-OPEN", "EVT-CLOSE"), false, "Resolved", null),
+            }, "OnCall", new JArray("EVT-OPEN", "EVT-CLOSE"), false, "Resolved",
+                new JObject { ["EVT-OPEN"] = "Reporter" }),
             ("QuoteAutoReview", new JObject
             {
                 ["QuoteId"] = "Q-100",
