@@ -669,8 +669,15 @@ public class SimulationTools
                 break;
             }
 
-            var isWaitingCommand = StepActor.IsAgentHandled(step.Actor) &&
-                                   stepTypeLower.Contains("command") &&
+            // DX report F1: this used to also require StepActor.IsAgentHandled(step.Actor), so a
+            // Command step with a non-agent actor (e.g. "Human") fell through to the generic
+            // AUTOMATED STEP block below and auto-fired its single named-event nextSteps key as if
+            // it were "Default" - diverging from DecisionPacketFactory.IsWaitingStep at runtime,
+            // which treats any Command step with a non-reserved nextSteps key as waiting for an
+            // inbound event, regardless of actor. isWaitingCommand now matches that runtime check
+            // exactly; isWaitingAgentTask below still gates simulated-agent evaluation on the actor
+            // being agent-handled, which is unaffected by this change.
+            var isWaitingCommand = stepTypeLower.Contains("command") &&
                                    !(step.NextSteps ?? new Dictionary<string, string>())
                                        .Keys
                                        .Any(DecisionPacketFactory.IsReservedRoute);
