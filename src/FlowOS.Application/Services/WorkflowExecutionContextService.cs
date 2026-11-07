@@ -132,10 +132,17 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
         if (sourcePayload != null)
         {
             var sourceRoot = ToObjectElement(sourcePayload);
+            // StructuredOutput/DX report F3: this method only ever runs for an inbound event
+            // (PublishEvent, CompleteTask) - sourcePayloadSchema documents and validates the
+            // *start* payload only. An event without its own entry in EventSourcePayloadSchemas
+            // must go unvalidated here, not silently fall back to the start-payload schema -
+            // that fallback broke every event whose payload shape legitimately differs from the
+            // start payload (e.g. a review/moderation decision), failing closed on fields the
+            // event was never supposed to have.
             var sourceSchema = canonicalEvent != null &&
                                TryGetValue(revision.Definition.EventSourcePayloadSchemas, canonicalEvent, out var eventSchema)
                 ? eventSchema
-                : revision.Definition.SourcePayloadSchema;
+                : null;
             ValidatePayload(sourceSchema, sourceRoot, "event source payload");
             delta = Project(
                 sourceRoot,
@@ -256,10 +263,14 @@ public class WorkflowExecutionContextService : IWorkflowExecutionContextService
             if (sourcePayload != null)
             {
                 var sourceRoot = ToObjectElement(sourcePayload);
+                // Same fix as the runtime path above (PrepareForInstanceAsync): an event payload
+                // without its own EventSourcePayloadSchemas entry must go unvalidated, not fall
+                // back to the start-payload schema, so the simulator stays decision-equivalent to
+                // runtime for this case.
                 var sourceSchema = canonicalEvent != null &&
                                    TryGetValue(definition.EventSourcePayloadSchemas, canonicalEvent, out var eventSchema)
                     ? eventSchema
-                    : definition.SourcePayloadSchema;
+                    : null;
                 ValidatePayload(sourceSchema, sourceRoot, "simulation event source payload");
                 delta = Project(
                     sourceRoot,
