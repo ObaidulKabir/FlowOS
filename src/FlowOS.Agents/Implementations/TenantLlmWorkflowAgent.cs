@@ -249,8 +249,26 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
                     continue;
                 }
 
-                if (!TryParseSuggestion(providerResponse.Content, out var parsed, out var parseFailureDetail))
+                if (!TryParseSuggestion(providerResponse.Content, out var parsed, out var parseFailureDetail, out var overflow))
                 {
+                    if (overflow != null)
+                    {
+                        // DX report F12: a typed code plus structured context for this one
+                        // diagnosable parse failure, instead of the generic InvalidModelOutput a
+                        // caller otherwise can't distinguish from "the model emitted garbage"
+                        // without re-parsing FailureReason's free text.
+                        return new AgentResult
+                        {
+                            Success = false,
+                            FailureCode = AgentFailureCodes.FieldOverflow,
+                            FailureReason = parseFailureDetail,
+                            FailureField = overflow.Value.Field,
+                            FailureLimit = overflow.Value.Limit,
+                            FailureActualLength = overflow.Value.ActualLength,
+                            Telemetry = telemetry
+                        };
+                    }
+
                     return AgentResult.Failure(
                         AgentFailureCodes.InvalidModelOutput,
                         parseFailureDetail ??
@@ -368,14 +386,20 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
     /// over-length insight - the whole run already failed closed - but the *reason* was opaque.
     /// failureDetail is set only for this one diagnosable case; every other parse failure keeps
     /// returning null here, so the caller's existing generic message is unchanged for them.
+    ///
+    /// DX report F12: overflow additionally carries the (field, limit, actualLength) tuple for this
+    /// same case, so the caller can surface AgentFailureCodes.FieldOverflow with typed context
+    /// instead of only the free-text failureDetail message.
     /// </summary>
     private static bool TryParseSuggestion(
         string? content,
         out ParsedSuggestion parsed,
-        out string? failureDetail)
+        out string? failureDetail,
+        out (string Field, int Limit, int ActualLength)? overflow)
     {
         parsed = null!;
         failureDetail = null;
+        overflow = null;
         if (string.IsNullOrWhiteSpace(content))
             return false;
 
@@ -395,6 +419,7 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
                     failureDetail =
                         $"The model's \"insight\" was {rawInsightLength} characters, over the {InsightMaxLength}-character limit. " +
                         "Put narrative under that limit and move any business data (records, line items, extracted fields) into the optional \"structuredOutput\" object instead, which has no character cap.";
+                    overflow = ("insight", InsightMaxLength, rawInsightLength);
                     return false;
                 }
             }
