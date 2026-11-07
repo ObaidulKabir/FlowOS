@@ -156,12 +156,23 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
 
         if (requireAgentActor)
         {
+            // DX report F2: name the actual mismatch (current step id/type, and what would advance
+            // it) instead of a message that reads like the wrong cause - the original "Step actor is
+            // 'Human'." below, reported for a Command step, named the actor without ever saying the
+            // step wasn't a waiting agent/either task in the first place.
             if (!DecisionPacketFactory.IsWaitingStep(step))
             {
+                var expectedEvents = step?.NextSteps.Keys
+                    .Where(key => !DecisionPacketFactory.IsReservedRoute(key))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList() ?? new List<string>();
+                var expectation = expectedEvents.Count > 0
+                    ? $"an inbound event ({string.Join(", ", expectedEvents)}) to advance it"
+                    : "no agent task is waiting here";
                 return new AgentTaskRunResult(
                     false,
                     false,
-                    "Current step is not a waiting Agent/Either task.",
+                    $"Current step '{packet.CurrentStepId}' ({packet.StepType}) is not an agent task. Expected {expectation}.",
                     null,
                     fallbackAgentId,
                     null,
@@ -174,7 +185,8 @@ public sealed class AgentTaskRunner : IAgentTaskRunner
                 return new AgentTaskRunResult(
                     false,
                     false,
-                    $"Step actor is '{packet.Actor}'.",
+                    $"Current step '{packet.CurrentStepId}' ({packet.StepType}) is waiting, but for actor '{packet.Actor}', not an agent. " +
+                    $"Expected an inbound event ({string.Join(", ", packet.LegalNextStepEvents)}) from that actor to advance it.",
                     null,
                     fallbackAgentId,
                     null,
