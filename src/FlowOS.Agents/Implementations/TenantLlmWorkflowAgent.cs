@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using FlowOS.Agents.Abstractions;
 using FlowOS.Agents.Implementations.Adapters;
@@ -486,15 +487,43 @@ public sealed class TenantLlmWorkflowAgent : IConversationalAgent
         if (candidate.ValueKind != JsonValueKind.Object)
             return null;
 
-        try
-        {
-            return JsonSerializer.Deserialize<Dictionary<string, object>>(candidate.GetRawText());
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        // Deserializing straight into Dictionary<string, object> would box every nested value as a
+        // System.Text.Json.JsonElement (System.Text.Json has no default converter that unwraps `object`
+        // into plain CLR types). AgentResult.StructuredData is later serialized by Newtonsoft.Json
+        // (McpToolResults.Success -> JsonConvert.SerializeObject), which does not know how to read a
+        // boxed JsonElement by value and instead reflects over its only public property, ValueKind -
+        // producing exactly the "{"questions":{"ValueKind":2}}" artifacts from the StructuredOutput
+        // defect report. ConvertJsonElement below walks the tree itself so every value handed to the
+        // caller is a plain string/long/double/bool/null/List<object>/Dictionary<string,object> that any
+        // serializer can read correctly.
+        return candidate.EnumerateObject().ToDictionary(
+            property => property.Name,
+            property => ConvertJsonElement(property.Value)!,
+            StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Recursively converts a JsonElement tree into plain CLR objects (Dictionary&lt;string, object&gt;,
+    /// List&lt;object&gt;, string, long/double, bool, or null) so that no boxed JsonElement survives
+    /// into AgentResult.StructuredData. See the comment in TryReadStructuredOutput for why this matters.
+    /// Mirrors WorkflowContextSimulationService.ConvertJson, which solves the same problem for simulated
+    /// context deltas.
+    /// </summary>
+    private static object? ConvertJsonElement(JsonElement value)
+        => value.ValueKind switch
+        {
+            JsonValueKind.Object => value.EnumerateObject().ToDictionary(
+                property => property.Name,
+                property => ConvertJsonElement(property.Value),
+                StringComparer.OrdinalIgnoreCase),
+            JsonValueKind.Array => value.EnumerateArray().Select(ConvertJsonElement).ToList(),
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number when value.TryGetInt64(out var integer) => integer,
+            JsonValueKind.Number => value.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null
+        };
 
     /// <summary>
     /// Strips markdown code fences that some LLMs (Anthropic, Google) wrap around JSON output.
