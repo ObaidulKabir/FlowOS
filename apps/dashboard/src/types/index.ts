@@ -38,6 +38,8 @@ export interface WorkflowClass {
   previousVersionId?: string;
   flowOsVersion?: string;
   flowOsCompatibility?: string;
+  /** Applications (2/4): the TenantApplication this workflow belongs to, or undefined when unassigned. */
+  applicationId?: string;
   definition: any; // We can type this strictly later if needed, for now 'any' allows rendering JSON
 }
 
@@ -142,6 +144,10 @@ export interface TenantApiKeyDto {
   id: string;
   name: string;
   applicationName?: string;
+  /** Applications (1/4): set when this key was issued for a TenantApplication (see TenantApplicationDto). */
+  applicationId?: string;
+  /** Applications (4/4): true when this key is confined to its own application on WorkflowClassesController routes. */
+  isApplicationRestricted?: boolean;
   environment?: string;
   scopes?: string[];
   maskedKey: string;
@@ -152,6 +158,29 @@ export interface TenantApiKeyDto {
   isRevoked: boolean;
   isExpired?: boolean;
   isActive?: boolean;
+}
+
+/**
+ * Applications (1/4): something the tenant builds on FlowOS. Groups that application's workflows
+ * (WorkflowClass.applicationId) and FlowOS API keys (TenantApiKeyDto.applicationId) - see
+ * docs/14-api-reference.md section 12.
+ */
+export interface TenantApplicationDto {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+  /** Keys not revoked or expired. */
+  activeKeyCount: number;
+  /** Distinct workflows; all versions of one workflow count once. */
+  workflowCount: number;
+}
+
+export interface ApplicationRequest {
+  name: string;
+  description?: string;
 }
 
 export interface PlanRequestDto {
@@ -199,6 +228,10 @@ export interface CreateKeyResponse {
   tenantId: string;
   name: string;
   applicationName: string;
+  /** Applications (1/4): set when the key was issued with an applicationId. */
+  applicationId?: string;
+  /** Applications (4/4): true when the key is confined to its own application on WorkflowClassesController routes. */
+  isApplicationRestricted?: boolean;
   environment: string;
   scopes: string[];
   apiKey: string;
