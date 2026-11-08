@@ -13,6 +13,7 @@ vi.mock('../api/client', () => ({
     getAgentEvaluationMetrics: vi.fn(),
     listTenants: vi.fn(),
     startInstance: vi.fn(),
+    listApplications: vi.fn(),
   },
   setActiveTenantId: vi.fn(),
 }));
@@ -49,6 +50,7 @@ describe('TenantDashboard - Launch Instance Modal', () => {
     api.list.mockResolvedValue(mockBlueprints);
     api.getAgentEvaluationMetrics.mockResolvedValue({ tokens: { inputTokens: 0, outputTokens: 0 }, runs: 0, commits: 0, overrides: 0 });
     api.listTenants.mockResolvedValue([]);
+    api.listApplications.mockResolvedValue([]);
   });
 
   test('launch modal opens and renders dynamic workflow list correctly', async () => {

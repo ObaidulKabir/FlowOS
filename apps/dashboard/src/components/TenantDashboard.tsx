@@ -8,7 +8,8 @@ import {
   ValidationResult,
   CreateDraftRequest,
   TenantDto,
-  PlanRequestDto
+  PlanRequestDto,
+  TenantApplicationDto
 } from '../types';
 import { api, setActiveTenantId } from '../api/client';
 import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
@@ -23,6 +24,7 @@ import { CapabilitiesShowcase } from './CapabilitiesShowcase';
 import { CompetitiveComparison } from './CompetitiveComparison';
 import { SystemArchitecture } from './SystemArchitecture';
 import { ApplicationWorkspace } from './ApplicationWorkspace';
+import { ApplicationDetailView } from './ApplicationDetailView';
 import { DemoVisualSimulator } from './DemoVisualSimulator';
 import { TenantMcpConfiguration } from './TenantMcpConfiguration';
 import { TenantBackupDialog } from './TenantBackupDialog';
@@ -99,6 +101,10 @@ export const TenantDashboard: React.FC<Props> = ({
   const [govTab, setGovTab] = useState<GovTab>('keys');
 
   const [blueprints, setBlueprints] = useState<WorkflowClass[]>([]);
+  const [applications, setApplications] = useState<TenantApplicationDto[]>([]);
+  // Applications (4/4): set to drill into one application's scoped workspace (ApplicationDetailView)
+  // from the governance tab's flat applications list; null shows that flat list.
+  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [agentMetrics, setAgentMetrics] = useState<AgentEvaluationMetrics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -171,17 +177,19 @@ export const TenantDashboard: React.FC<Props> = ({
     try {
       const toUtc = new Date();
       const fromUtc = new Date(toUtc.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const [instResult, bpResult, metricsResult] = await Promise.allSettled([
+      const [instResult, bpResult, metricsResult, appsResult] = await Promise.allSettled([
         api.listInstances('Tenant'),
         api.list(undefined, undefined, 'Tenant'),
-        api.getAgentEvaluationMetrics(fromUtc.toISOString(), toUtc.toISOString(), 'Tenant')
+        api.getAgentEvaluationMetrics(fromUtc.toISOString(), toUtc.toISOString(), 'Tenant'),
+        api.listApplications()
       ]);
 
       if (instResult.status === 'fulfilled') setInstances(instResult.value);
       if (bpResult.status === 'fulfilled') setBlueprints(bpResult.value);
       if (metricsResult.status === 'fulfilled') setAgentMetrics(metricsResult.value);
+      if (appsResult.status === 'fulfilled') setApplications(appsResult.value);
 
-      const results = [instResult, bpResult, metricsResult];
+      const results = [instResult, bpResult, metricsResult, appsResult];
       const failed = results.find(result => result.status === 'rejected') as PromiseRejectedResult | undefined;
       if (failed && results.every(result => result.status === 'rejected')) {
         throw failed.reason;
@@ -985,6 +993,7 @@ export const TenantDashboard: React.FC<Props> = ({
                 <ApplicationWorkspace
                   tenantName={session.tenantName}
                   blueprints={blueprints}
+                  applications={applications}
                   instances={instances}
                   onView={handleViewBlueprint}
                   onEdit={handleEditBlueprint}
@@ -1315,14 +1324,85 @@ export const TenantDashboard: React.FC<Props> = ({
                 </div>
               )}
 
-              {govTab === 'applications' && (
-                <TenantApplicationManager
-                  tenantId={session.tenantId}
-                  tenantName={session.tenantName}
-                  blueprints={blueprints}
-                  onBlueprintsChanged={loadData}
-                />
-              )}
+              {govTab === 'applications' && (() => {
+                const selectedApplication = selectedApplicationId
+                  ? applications.find(a => a.id === selectedApplicationId)
+                  : null;
+
+                if (selectedApplication) {
+                  return (
+                    <ApplicationDetailView
+                      application={selectedApplication}
+                      tenantId={session.tenantId}
+                      tenantName={session.tenantName}
+                      blueprints={blueprints}
+                      instances={instances}
+                      onBack={() => setSelectedApplicationId(null)}
+                      onRefreshApplications={loadData}
+                      onView={handleViewBlueprint}
+                      onEdit={handleEditBlueprint}
+                      onCreate={() => setIsCreatingBlueprint(true)}
+                      onDelete={async (id) => {
+                        if (confirm('Delete this draft?')) {
+                          await api.delete(id, 'Tenant');
+                          await loadData();
+                        }
+                      }}
+                      onPublish={async (id) => {
+                        await api.publish(id, 'Tenant');
+                        await loadData();
+                      }}
+                      onSubmit={async (id) => {
+                        await api.submit(id, 'Tenant');
+                        await loadData();
+                      }}
+                      onWithdraw={async (id) => {
+                        await api.withdraw(id, 'Tenant');
+                        await loadData();
+                      }}
+                      onDeprecate={async (id) => {
+                        await api.deprecate(id, 'Tenant');
+                        await loadData();
+                      }}
+                      onAbandon={async (id) => {
+                        await api.abandon(id, 'Tenant');
+                        await loadData();
+                      }}
+                      onNewVersion={async (id) => {
+                        const nv = await api.newVersion(id, 'Tenant');
+                        setEditorBlueprint(nv);
+                        await loadData();
+                      }}
+                      onSimulate={(bindingId, revision) => {
+                        setSimulationTarget({ bindingId, revision });
+                        setActiveHub('design');
+                        setDesignTab('simulator');
+                      }}
+                      onLaunch={() => setShowStartModal(true)}
+                      onOpenSimulator={() => {
+                        setSimulationTarget({});
+                        setActiveHub('design');
+                        setDesignTab('simulator');
+                      }}
+                      onInspectInstance={(instanceId) => {
+                        setAuditFocus({ instanceId, requestId: Date.now() });
+                        setActiveHub('operations');
+                        setOpsTab('instances');
+                      }}
+                    />
+                  );
+                }
+
+                return (
+                  <TenantApplicationManager
+                    tenantId={session.tenantId}
+                    tenantName={session.tenantName}
+                    blueprints={blueprints}
+                    onBlueprintsChanged={loadData}
+                    onOpenApplication={(app) => setSelectedApplicationId(app.id)}
+                  />
+                );
+              })()}
 
               {govTab === 'mcp' && (
                 <TenantMcpConfiguration

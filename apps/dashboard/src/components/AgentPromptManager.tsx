@@ -5,6 +5,12 @@ import { MessageSquarePlus, Plus, Pencil, RefreshCw, Check, X } from 'lucide-rea
 interface Props {
   tenantName: string;
   compact?: boolean;
+  /**
+   * Applications (3/4): when set, lists only this application's prompts (plus shows none of the
+   * tenant-shared or other applications' ones) and new prompts are created scoped to it. Editing an
+   * existing prompt keeps its own original scope regardless of this prop - see editingApplicationId.
+   */
+  applicationId?: string;
 }
 
 interface PromptForm {
@@ -32,12 +38,14 @@ const promptBody = (binding: PluginBindingDto) => {
   };
 };
 
-export const AgentPromptManager: React.FC<Props> = ({ tenantName, compact = false }) => {
+export const AgentPromptManager: React.FC<Props> = ({ tenantName, compact = false, applicationId }) => {
   const [prompts, setPrompts] = useState<PluginBindingDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<PromptForm | null>(null);
   const [isCreate, setIsCreate] = useState(true);
+  // The scope of the binding being edited - the original item's own applicationId, not the view's.
+  const [editingApplicationId, setEditingApplicationId] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [savedAlias, setSavedAlias] = useState<string | null>(null);
 
@@ -45,7 +53,7 @@ export const AgentPromptManager: React.FC<Props> = ({ tenantName, compact = fals
     setLoading(true);
     setError(null);
     try {
-      const result = await api.listPluginBindings('prompt');
+      const result = await api.listPluginBindings('prompt', undefined, applicationId);
       setPrompts(result.bindings);
     } catch (err: any) {
       setError(err.message || 'Failed to load prompts');
@@ -56,16 +64,18 @@ export const AgentPromptManager: React.FC<Props> = ({ tenantName, compact = fals
 
   useEffect(() => {
     loadPrompts();
-  }, []);
+  }, [applicationId]);
 
   const openCreate = () => {
     setIsCreate(true);
+    setEditingApplicationId(applicationId);
     setEditing(emptyForm());
   };
 
   const openEdit = (binding: PluginBindingDto) => {
     const body = promptBody(binding);
     setIsCreate(false);
+    setEditingApplicationId(binding.applicationId);
     setEditing({
       sourceName: binding.sourceName,
       title: body.title,
@@ -84,6 +94,7 @@ export const AgentPromptManager: React.FC<Props> = ({ tenantName, compact = fals
         sourceName: editing.sourceName,
         providerName: 'markdown',
         isEnabled: true,
+        applicationId: editingApplicationId,
         configuration: {
           title: editing.title,
           system: editing.system,

@@ -16,16 +16,29 @@ import {
   Edit2,
   History,
   Copy,
-  Check
+  Check,
+  AppWindow
 } from 'lucide-react';
-import { WorkflowClass, WorkflowClassStatus, WorkflowInstance } from '../types';
+import { TenantApplicationDto, WorkflowClass, WorkflowClassStatus, WorkflowInstance } from '../types';
 import { ContextBindingsView } from './ContextBindingsView';
 import { AiContextView } from './AiContextView';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 
+/** Applications (2/4): special values for the application filter, alongside a real TenantApplication id. */
+const APP_FILTER_ALL = 'all';
+const APP_FILTER_UNASSIGNED = 'unassigned';
+
 interface Props {
   tenantName: string;
   blueprints: WorkflowClass[];
+  /** Applications (1/4): the tenant's applications, for filtering the workflow list by one. May be empty if none exist yet. */
+  applications?: TenantApplicationDto[];
+  /**
+   * Applications (4/4): when set, pins the application filter to this TenantApplication id and hides
+   * the picker, instead of the user-selectable APP_FILTER_ALL default - used by ApplicationDetailView's
+   * Workflows tab so it only ever shows this one application's workflows.
+   */
+  lockedApplicationId?: string;
   instances: WorkflowInstance[];
   onView: (id: string) => void;
   onEdit: (id: string) => void;
@@ -68,6 +81,8 @@ const matchesFilter = (item: WorkflowClass, filter: 'All' | 'Published' | 'Draft
 export const ApplicationWorkspace: React.FC<Props> = ({
   tenantName,
   blueprints,
+  applications = [],
+  lockedApplicationId,
   instances,
   onView,
   onEdit,
@@ -87,6 +102,14 @@ export const ApplicationWorkspace: React.FC<Props> = ({
   const [selectedId, setSelectedId] = useState<string>();
   const [listFilter, setListFilter] = useState<'All' | 'Published' | 'Drafts' | 'Shared'>('All');
   const [searchTerm, setSearchTerm] = useState('');
+  // Applications (2/4): APP_FILTER_ALL, APP_FILTER_UNASSIGNED, or a TenantApplicationDto.id.
+  const [appFilter, setAppFilter] = useState<string>(lockedApplicationId ?? APP_FILTER_ALL);
+
+  // Applications (4/4): if a locked application is handed to us (or changes), always follow it -
+  // this view is then only ever showing that one application's workflows.
+  useEffect(() => {
+    if (lockedApplicationId) setAppFilter(lockedApplicationId);
+  }, [lockedApplicationId]);
   const [detailTab, setDetailTab] = useState<'graph' | 'business' | 'ai' | 'instances'>('graph');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -94,11 +117,16 @@ export const ApplicationWorkspace: React.FC<Props> = ({
     return blueprints
       .filter(item => matchesFilter(item, listFilter))
       .filter(item => {
+        if (appFilter === APP_FILTER_ALL) return true;
+        if (appFilter === APP_FILTER_UNASSIGNED) return !item.applicationId;
+        return item.applicationId === appFilter;
+      })
+      .filter(item => {
         if (!searchTerm.trim()) return true;
         const q = searchTerm.toLowerCase();
         return item.name.toLowerCase().includes(q) || item.version.toLowerCase().includes(q);
       });
-  }, [blueprints, listFilter, searchTerm]);
+  }, [blueprints, listFilter, appFilter, searchTerm]);
 
   const selected = useMemo(
     () => filtered.find(item => item.id === selectedId) || filtered[0] || blueprints.find(item => item.id === selectedId),
@@ -224,6 +252,25 @@ export const ApplicationWorkspace: React.FC<Props> = ({
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
               />
             </div>
+
+            {/* Application Filter - Applications (2/4): WorkflowClass.applicationId */}
+            {applications.length > 0 && !lockedApplicationId && (
+              <div className="relative">
+                <AppWindow size={13} className="absolute left-2.5 top-2.5 text-slate-500" />
+                <select
+                  value={appFilter}
+                  onChange={e => setAppFilter(e.target.value)}
+                  title="Filter workflows by application"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 appearance-none"
+                >
+                  <option value={APP_FILTER_ALL}>All applications</option>
+                  <option value={APP_FILTER_UNASSIGNED}>Unassigned</option>
+                  {applications.map(app => (
+                    <option key={app.id} value={app.id}>{app.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Workflow List */}

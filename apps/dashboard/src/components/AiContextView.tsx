@@ -27,6 +27,12 @@ interface Props {
   onOpenBusinessContext?: () => void;
   workflowClass?: WorkflowClass;
   compact?: boolean;
+  /**
+   * Applications (3/4): when set, the Agents and Prompts tabs list only this application's
+   * prompt/profile bindings and new ones are created scoped to it - see ApplicationDetailView.
+   * Providers and Tools stay tenant-wide regardless (only prompt/profile bindings can be scoped).
+   */
+  applicationId?: string;
 }
 
 type AiSubTab = 'compose' | 'agents' | 'prompts' | 'providers' | 'tools' | 'history';
@@ -68,7 +74,7 @@ const declaredAgentAliases = (workflowClass?: WorkflowClass) => {
   return { prompts, providers, tools, roles, stepCount: steps.length };
 };
 
-export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessContext, workflowClass, compact = false }) => {
+export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessContext, workflowClass, compact = false, applicationId }) => {
   const [subTab, setSubTab] = useState<AiSubTab>('compose');
   const [agents, setAgents] = useState<PluginBindingDto[]>([]);
   const [prompts, setPrompts] = useState<PluginBindingDto[]>([]);
@@ -81,11 +87,13 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
     setLoading(true);
     setError(null);
     try {
+      // Applications (3/4): only prompt/profile bindings can be application-scoped - agent (provider)
+      // and action (tool) bindings stay tenant-wide, so applicationId is never passed for those two.
       const [promptList, providerList, toolList, agentList] = await Promise.all([
-        api.listPluginBindings('prompt'),
+        api.listPluginBindings('prompt', undefined, applicationId),
         api.listPluginBindings('agent'),
         api.listPluginBindings('action'),
-        api.listPluginBindings('profile')
+        api.listPluginBindings('profile', undefined, applicationId)
       ]);
       setPrompts(promptList.bindings);
       setProviders(providerList.bindings);
@@ -100,7 +108,8 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationId]);
 
   const declared = declaredAgentAliases(workflowClass);
   const usedAgents = agents.filter(a =>
@@ -293,11 +302,12 @@ export const AiContextView: React.FC<Props> = ({ tenantName, onOpenBusinessConte
           prompts={prompts}
           tools={tools}
           onChanged={load}
+          applicationId={applicationId}
         />
       )}
 
       {subTab === 'prompts' && (
-        <AgentPromptManager tenantName={tenantName} compact />
+        <AgentPromptManager tenantName={tenantName} compact applicationId={applicationId} />
       )}
 
       {subTab === 'providers' && (
@@ -373,8 +383,16 @@ const AgentProfileManager: React.FC<{
   prompts: PluginBindingDto[];
   tools: PluginBindingDto[];
   onChanged: () => Promise<void>;
-}> = ({ items, providers, prompts, tools, onChanged }) => {
+  /**
+   * Applications (3/4): when set, new profiles are created scoped to it. Editing an existing profile
+   * keeps its own original scope regardless of this prop - see editingApplicationId.
+   */
+  applicationId?: string;
+}> = ({ items, providers, prompts, tools, onChanged, applicationId }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The scope of the profile being edited - the original item's own applicationId, not the view's.
+  // Starts as the view's applicationId since the form opens in "create new" mode by default.
+  const [editingApplicationId, setEditingApplicationId] = useState<string | undefined>(applicationId);
   const [form, setForm] = useState({
     sourceName: '',
     role: '',
@@ -386,11 +404,19 @@ const AgentProfileManager: React.FC<{
     allowedEvents: '',
     isEnabled: true
   });
+
+  // If the view's applicationId scope changes while we're in "create new" mode (not editing an
+  // existing item), follow it - otherwise a stale scope from a previous application could leak in.
+  useEffect(() => {
+    if (editingId === null) setEditingApplicationId(applicationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationId]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const resetForm = () => {
     setEditingId(null);
+    setEditingApplicationId(applicationId);
     setValidationError(null);
     setForm({
       sourceName: '',
@@ -408,6 +434,7 @@ const AgentProfileManager: React.FC<{
   const startEdit = (item: PluginBindingDto) => {
     const cfg = asRecord(item.configuration);
     setEditingId(item.id);
+    setEditingApplicationId(item.applicationId);
     setValidationError(null);
     setForm({
       sourceName: item.sourceName,
@@ -471,6 +498,7 @@ const AgentProfileManager: React.FC<{
         bindingType: 'profile',
         sourceName: alias,
         providerName: role,
+        applicationId: editingApplicationId,
         isEnabled: form.isEnabled,
         configuration: {
           role,
