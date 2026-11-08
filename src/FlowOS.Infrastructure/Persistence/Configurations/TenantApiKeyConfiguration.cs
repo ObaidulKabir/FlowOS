@@ -58,5 +58,12 @@ public class TenantApiKeyConfiguration : IEntityTypeConfiguration<TenantApiKey>
         builder.HasIndex(k => k.TenantId);
         builder.HasIndex(k => new { k.TenantId, k.ApplicationName });
         builder.HasIndex(k => k.KeyHash).IsUnique();
+
+        // A key keeps its application while it exists; an application with keys cannot be deleted
+        // (TenantApplicationService detaches revoked/expired keys first).
+        builder.HasOne<TenantApplication>()
+            .WithMany()
+            .HasForeignKey(k => k.ApplicationId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

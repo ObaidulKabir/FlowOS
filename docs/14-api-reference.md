@@ -271,11 +271,28 @@ Platform administration endpoints (an Admin of the platform tenant). An integrat
 | `POST /api/tenants` | Body `{name, externalTenantRef?, keyName?, scopes?, expiresInDays?}`. Creates the tenant and its first API key (returned once as `apiKey`). With `externalTenantRef`, a retry finds the existing tenant instead: `409 {code:"TENANT-EXISTS", tenantId}`. |
 | `GET /api/tenants?externalRef=` | Finds the tenant mapped to the caller's reference (empty array if none). |
 | `PUT /api/tenants/{id}/external-ref` | Body `{externalTenantRef}`; set or clear (`null`) the reference of an existing tenant. `409` if another tenant uses it. |
-| `POST /api/tenants/{id}/keys` | A scoped key for acting inside that tenant (`scopes`, `expiresInDays`). Store it in a secret store. |
+| `POST /api/tenants/{id}/keys` | A scoped key for acting inside that tenant (`scopes`, `expiresInDays`). Store it in a secret store. With `applicationId`, the key is issued for that application (see section 12): its `applicationName` follows the application's name and it is returned with `isApplicationRestricted: true`. Without it, `applicationName` is a free-text label as before. |
+| `GET /api/tenants/{id}/keys?applicationId=` | Lists keys, optionally only one application's. Each key has `applicationId` (or `null`) and `isApplicationRestricted`. |
 
 `externalTenantRef` is an opaque string (up to 200 characters, unique), for example `learning-os:board-dhaka/school-123`. A tenant key only works inside its own tenant; sending another tenant's id returns `403`.
 
 To share one workflow template with many institutions, publish it as a **Public** workflow class (approved by a platform administrator) and start or bind it in each tenant.
+
+## 12. Applications — `ApplicationsController` (`/api/applications`, `[Authorize]`)
+
+An application is something the tenant builds on FlowOS. It groups that application's FlowOS API keys; one application usually has several keys over its life (production, a replacement during rotation). AI provider configuration, including model API keys, stays tenant-level. Every route works inside the caller's tenant.
+
+| Method & Route | Description |
+|---|---|
+| `GET /api/applications` | The tenant's applications, ordered by name. Each has `id`, `name`, `description`, `createdAtUtc`, `updatedAtUtc`, and `activeKeyCount` (keys not revoked or expired). |
+| `GET /api/applications/{id}` | One application, or `404 {code:"APP-NOTFOUND-001"}`. |
+| `POST /api/applications` | Body `{name, description?}`. Names are unique per tenant, ignoring case (`409 {code:"APP-NAME-001"}`); a blank name or one over 150 characters is `400 {code:"APP-ARG-001"}`. |
+| `PUT /api/applications/{id}` | Body `{name, description?}`. Renaming also updates `applicationName` on the application's keys. |
+| `DELETE /api/applications/{id}` | `409 {code:"APP-INUSE-001"}` while the application has an active key; revoke them first. Revoked and expired keys are unlinked, then the application is removed. |
+
+**Existing keys.** When applications were introduced, each distinct `applicationName` label already on a tenant's keys became an application, and those keys were linked to it. Keys still labelled `Default Application` were left unlinked (`applicationId: null`). Linked existing keys have `isApplicationRestricted: false`.
+
+**`isApplicationRestricted`.** A key issued with `applicationId` is marked restricted, meaning it is intended to work only inside its application. FlowOS does not limit access by this flag yet: today every key, restricted or not, still works across its whole tenant.
 
 ## Error format
 
