@@ -291,6 +291,7 @@ public static class McpToolDescriptions
             ["create_draft_workflowclass"] =
                 "Creates a private Draft WorkflowClass after authoritative blueprint validation; it does not publish it. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "This tool has no applicationId argument, so every draft it creates is unassigned to a tenant application, regardless of whether the caller's key is application-restricted; assign one afterward with POST /api/workflow-classes/{id}/application (REST only; see docs/14-api-reference.md section 8). " +
                 "Returns: {ok:true,data:{id,tenantId,status,message}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-VALIDATION, MCP-INTERNAL. " +
                 "Input example: {\"name\":\"Student Leave\",\"version\":\"1.0.0\",\"tenantId\":\"11111111-1111-1111-1111-111111111111\",\"blueprint\":{\"events\":[],\"stateMachine\":{\"initialState\":\"Draft\",\"states\":[\"Draft\"],\"transitions\":[]},\"workflow\":{\"startStepId\":\"Start\",\"steps\":[{\"stepId\":\"Start\",\"stepType\":\"End\"}]},\"roles\":[],\"capabilities\":[]}}",
@@ -326,6 +327,7 @@ public static class McpToolDescriptions
             ["list_draft_workflowclasses"] =
                 "Lists all private Draft WorkflowClasses owned by the tenant. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
+                "This tool has no applicationId filter and its rows carry no applicationId field, so it always lists every tenant draft regardless of which application each belongs to (including an application-restricted key's own drafts outside its application) - use GET /api/workflow-classes?applicationId=... (REST) when the application matters. " +
                 "Returns: {ok:true,data:{drafts:[{id,name,version,status,scope,createdAt,updatedAt}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"tenantId\":\"11111111-1111-1111-1111-111111111111\"}",
