@@ -52,8 +52,8 @@ public interface ITenantApplicationService
     Task<TenantApplicationDto> UpdateAsync(Guid tenantId, Guid applicationId, string name, string? description, CancellationToken ct = default);
 
     /// <summary>
-    /// Refused with APP-INUSE-001 while the application has an active key or any workflow. Revoked or
-    /// expired keys are unlinked first, so they never block deletion.
+    /// Refused with APP-INUSE-001 while the application has an active key, any workflow, or any prompt or
+    /// agent profile binding. Revoked or expired keys are unlinked first, so they never block deletion.
     /// </summary>
     Task DeleteAsync(Guid tenantId, Guid applicationId, CancellationToken ct = default);
 

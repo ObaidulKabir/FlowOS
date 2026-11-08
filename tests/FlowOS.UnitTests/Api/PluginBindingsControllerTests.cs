@@ -184,4 +184,82 @@ public sealed class PluginBindingsControllerTests
 
         Assert.IsType<OkObjectResult>(result);
     }
+
+    [Fact]
+    public async Task List_ApplicationId_ReturnsOnlyThatApplicationsBindings()
+    {
+        var tenantId = Guid.NewGuid();
+        var applicationId = Guid.NewGuid();
+        var (controller, bindings, _) = CreateController(tenantId);
+        var shared = new PluginBindingDto(Guid.NewGuid(), tenantId, "prompt", "shared-prompt", "markdown",
+            true, DateTime.UtcNow, DateTime.UtcNow, ApplicationId: null);
+        var scoped = new PluginBindingDto(Guid.NewGuid(), tenantId, "prompt", "app-prompt", "markdown",
+            true, DateTime.UtcNow, DateTime.UtcNow, ApplicationId: applicationId);
+        bindings
+            .Setup(b => b.ListAsync(tenantId, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { shared, scoped });
+
+        var result = Assert.IsType<OkObjectResult>(await controller.List(null, null, null, CancellationToken.None, applicationId, null));
+        var json = JsonSerializer.SerializeToElement(result.Value!);
+        Assert.Equal(1, json.GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task List_Shared_ReturnsOnlyTenantSharedBindings()
+    {
+        var tenantId = Guid.NewGuid();
+        var applicationId = Guid.NewGuid();
+        var (controller, bindings, _) = CreateController(tenantId);
+        var shared = new PluginBindingDto(Guid.NewGuid(), tenantId, "prompt", "shared-prompt", "markdown",
+            true, DateTime.UtcNow, DateTime.UtcNow, ApplicationId: null);
+        var scoped = new PluginBindingDto(Guid.NewGuid(), tenantId, "prompt", "app-prompt", "markdown",
+            true, DateTime.UtcNow, DateTime.UtcNow, ApplicationId: applicationId);
+        bindings
+            .Setup(b => b.ListAsync(tenantId, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { shared, scoped });
+
+        var result = Assert.IsType<OkObjectResult>(await controller.List(null, null, null, CancellationToken.None, null, true));
+        var json = JsonSerializer.SerializeToElement(result.Value!);
+        Assert.Equal(1, json.GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task Delete_PromptOrProfileBinding_CallsDeleteScopedWithTheGivenScope()
+    {
+        var tenantId = Guid.NewGuid();
+        var applicationId = Guid.NewGuid();
+        var (controller, bindings, _) = CreateController(tenantId);
+        bindings
+            .Setup(b => b.DeleteScopedAsync(tenantId, applicationId, "prompt", "quote-approval", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await controller.Delete("prompt", "quote-approval", applicationId, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task Delete_UnknownScope_ReturnsNotFound()
+    {
+        var tenantId = Guid.NewGuid();
+        var (controller, bindings, _) = CreateController(tenantId);
+        bindings
+            .Setup(b => b.DeleteScopedAsync(tenantId, null, "profile", "CreditUnderwriter", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await controller.Delete("profile", "CreditUnderwriter", null, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task Delete_NonPromptOrProfileBindingType_ReturnsBadRequest()
+    {
+        var tenantId = Guid.NewGuid();
+        var (controller, _, _) = CreateController(tenantId);
+
+        var result = await controller.Delete("agent", "quote-llm", null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
 }

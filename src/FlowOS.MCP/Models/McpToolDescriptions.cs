@@ -163,20 +163,23 @@ public static class McpToolDescriptions
             ["upsert_agent_prompt"] =
                 "Creates or edits a tenant-owned named prompt (title, system, instructions). Point a waiting step at it with agentPrompt. " +
                 "Does not bake the prompt into the workflow JSON. HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,kind,title,system,instructions,isEnabled}}. " +
+                "Optional applicationId saves the prompt in that tenant application instead of tenant-shared: a step in that application's workflows uses its own prompt first, then the tenant-shared prompt with the same alias. Omit it for a tenant-shared prompt. " +
+                "Returns: {ok:true,data:{alias,kind,title,system,instructions,isEnabled,applicationId}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, PLUGIN-BIND-005, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-approval\",\"title\":\"Quote approval\",\"instructions\":\"Approve if within 15% of estimate.\"}",
 
             ["list_agent_prompts"] =
                 "Lists tenant-owned agent prompts (bindingType prompt) with title/system/instructions. Does not return LLM API keys. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{totalCount,prompts:[{alias,kind,title,system,instructions,isEnabled}]}}. " +
+                "Each prompt has applicationId (null when tenant-shared). Filter with applicationId (that application's prompts) or shared:true (tenant-shared only). " +
+                "Returns: {ok:true,data:{totalCount,prompts:[{alias,kind,title,system,instructions,isEnabled,applicationId}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {}",
 
             ["get_agent_prompt"] =
                 "Reads one tenant-owned agent prompt by alias. HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,kind,title,system,instructions,isEnabled}}. " +
+                "Without applicationId it reads the tenant-shared prompt; with applicationId it returns what a step in that application would use (its own prompt, else the tenant-shared one). " +
+                "Returns: {ok:true,data:{alias,kind,title,system,instructions,isEnabled,applicationId}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"quote-approval\"}",
 
@@ -252,20 +255,23 @@ public static class McpToolDescriptions
                 "Bundles role, providerAlias, promptAlias, curated toolAliases, and autoCommitThreshold into a cohesive Agent. " +
                 "WORKFLOW BINDING: Workflow waiting steps (actor: Agent or Either) bind to this agent either by agentProvider: alias OR by matching requiredRoles/allowedRoles: [role]. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled}}. " +
+                "Optional applicationId saves the agent in that tenant application: steps in that application's workflows find it before a tenant-shared agent with the same alias or role, and its promptAlias also resolves in that application first. The provider it names (providerAlias) is always tenant-wide. " +
+                "Returns: {ok:true,data:{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled,applicationId}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"CreditUnderwriter\",\"role\":\"LoanOfficer\",\"description\":\"Automated underwriter\",\"providerAlias\":\"claude-reasoner\",\"promptAlias\":\"loan-audit-v2\",\"toolAliases\":[\"LookupCustomerCredit\"],\"autoCommitThreshold\":0.90}",
 
             ["list_agent_profiles"] =
                 "Lists composite AI Agent personas (bindingType profile) in tenant AI Context. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{totalCount,profiles:[{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled}]}}. " +
+                "Each agent has applicationId (null when tenant-shared). Filter with applicationId (that application's agents) or shared:true (tenant-shared only). " +
+                "Returns: {ok:true,data:{totalCount,profiles:[{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled,applicationId}]}}. " +
                 "Errors: MCP-TENANT-001, MCP-TENANT-002, MCP-INTERNAL. Input example: {}",
 
             ["get_agent_profile"] =
                 "Reads one composite AI Agent persona by alias or role. " +
                 "HTTP uses the authenticated tenant; stdio requires tenantId. " +
-                "Returns: {ok:true,data:{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled}}. " +
+                "Without applicationId it reads the tenant-shared agent; with applicationId it returns what a step in that application would use (its own agent, else the tenant-shared one). " +
+                "Returns: {ok:true,data:{alias,role,description,providerAlias,promptAlias,toolAliases,autoCommitThreshold,allowedEvents,isEnabled,applicationId}}. " +
                 "Errors: MCP-ARG-001, MCP-TENANT-001, MCP-TENANT-002, MCP-NOTFOUND-001, MCP-INTERNAL. " +
                 "Input example: {\"alias\":\"CreditUnderwriter\"}",
 

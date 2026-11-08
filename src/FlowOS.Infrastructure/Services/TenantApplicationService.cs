@@ -97,6 +97,15 @@ public sealed class TenantApplicationService : ITenantApplicationService
                 $"Application '{application.Name}' still has {workflows} workflow(s). Move or unassign them first.");
         }
 
+        var bindings = await _db.PluginBindings
+            .CountAsync(b => b.TenantId == tenantId && b.ApplicationId == applicationId, ct);
+        if (bindings > 0)
+        {
+            throw new TenantApplicationException(
+                TenantApplicationErrorCodes.InUse,
+                $"Application '{application.Name}' still has {bindings} prompt or agent profile binding(s). Delete them first.");
+        }
+
         foreach (var key in keys)
             key.DetachFromApplication();
 

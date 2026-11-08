@@ -53,16 +53,52 @@ public class PluginBindingsController : ControllerBase
         [FromQuery] string? bindingType,
         [FromQuery] string? sourceName,
         [FromQuery] bool? enabledOnly,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] Guid? applicationId = null,
+        [FromQuery] bool? shared = null)
     {
         if (_currentUser.TenantId == Guid.Empty) return Unauthorized("TenantId is missing.");
-        var items = await _bindings.ListAsync(
+        IReadOnlyList<PluginBindingDto> items = await _bindings.ListAsync(
             _currentUser.TenantId,
             bindingType,
             sourceName,
             enabledOnly,
             cancellationToken);
+        // Applications (3/4): applicationId lists only that application's prompts/profiles;
+        // shared=true only tenant-shared bindings. Each binding carries applicationId either way.
+        if (applicationId.HasValue && applicationId.Value != Guid.Empty)
+            items = items.Where(b => b.ApplicationId == applicationId).ToList();
+        else if (shared == true)
+            items = items.Where(b => b.ApplicationId == null).ToList();
         return Ok(new { totalCount = items.Count, bindings = items });
+    }
+
+    /// <summary>
+    /// Applications (3/4): deletes a prompt or agent profile binding in exactly one scope - an
+    /// application's (applicationId) or tenant-shared (no applicationId). AI providers are deleted with
+    /// the MCP tool delete_agent_provider, which enforces agent.manage.
+    /// </summary>
+    [HttpDelete]
+    public async Task<IActionResult> Delete(
+        [FromQuery] string bindingType,
+        [FromQuery] string sourceName,
+        [FromQuery] Guid? applicationId,
+        CancellationToken cancellationToken)
+    {
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized("TenantId is missing.");
+        var normalizedType = bindingType?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalizedType) || string.IsNullOrWhiteSpace(sourceName))
+            return BadRequest("bindingType and sourceName are required.");
+        if (normalizedType != PluginBindingTypes.Prompt && normalizedType != PluginBindingTypes.Profile)
+            return BadRequest("Only prompt and profile bindings can be deleted here.");
+
+        var deleted = await _bindings.DeleteScopedAsync(
+            _currentUser.TenantId,
+            applicationId == Guid.Empty ? null : applicationId,
+            normalizedType,
+            sourceName,
+            cancellationToken);
+        return deleted ? NoContent() : NotFound();
     }
 
     [HttpPut]
@@ -138,7 +174,7 @@ public class PluginBindingsController : ControllerBase
             var parsed = FlowOS.Core.Common.Models.AgentPromptConfiguration.Parse(configurationJson);
             var existing = (await _bindings.ListAsync(
                 _currentUser.TenantId, bindingType, request.SourceName, ct: cancellationToken))
-                .FirstOrDefault();
+                .FirstOrDefault(b => b.ApplicationId == PluginBindingRequestScope.Of(request));
             var existingPrompt = existing?.Configuration as FlowOS.Core.Common.Models.AgentPromptConfiguration;
             if ((parsed == null || string.IsNullOrWhiteSpace(parsed.Body)) &&
                 (existingPrompt == null || string.IsNullOrWhiteSpace(existingPrompt.Body)))
@@ -228,14 +264,25 @@ public class PluginBindingsController : ControllerBase
 
         try
         {
-            var binding = await _bindings.UpsertAsync(
-                _currentUser.TenantId,
-                bindingType,
-                request.SourceName,
-                providerName,
-                request.IsEnabled,
-                configurationJson,
-                cancellationToken);
+            var applicationId = PluginBindingRequestScope.Of(request);
+            var binding = applicationId.HasValue
+                ? await _bindings.UpsertScopedAsync(
+                    _currentUser.TenantId,
+                    applicationId,
+                    bindingType,
+                    request.SourceName,
+                    providerName,
+                    request.IsEnabled,
+                    configurationJson,
+                    cancellationToken)
+                : await _bindings.UpsertAsync(
+                    _currentUser.TenantId,
+                    bindingType,
+                    request.SourceName,
+                    providerName,
+                    request.IsEnabled,
+                    configurationJson,
+                    cancellationToken);
             return Ok(binding);
         }
         catch (ArgumentException ex)
@@ -245,8 +292,20 @@ public class PluginBindingsController : ControllerBase
     }
 }
 
+internal static class PluginBindingRequestScope
+{
+    public static Guid? Of(UpsertPluginBindingRequest request) =>
+        request.ApplicationId == Guid.Empty ? null : request.ApplicationId;
+}
+
 public sealed class UpsertPluginBindingRequest
 {
+    /// <summary>
+    /// Applications (3/4): set for a prompt or profile that belongs to a tenant application; omit for a
+    /// tenant-shared binding. Any other binding type with an applicationId is rejected.
+    /// </summary>
+    public Guid? ApplicationId { get; set; }
+
     public string BindingType { get; set; } = string.Empty;
     public string SourceName { get; set; } = string.Empty;
     public string? ProviderName { get; set; }

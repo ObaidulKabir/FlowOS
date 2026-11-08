@@ -28,8 +28,19 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         _time = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<PluginBindingDto> UpsertAsync(
+    public Task<PluginBindingDto> UpsertAsync(
         Guid tenantId,
+        string bindingType,
+        string sourceName,
+        string providerName,
+        bool isEnabled = true,
+        string? configurationJson = null,
+        CancellationToken ct = default) =>
+        UpsertScopedAsync(tenantId, null, bindingType, sourceName, providerName, isEnabled, configurationJson, ct);
+
+    public async Task<PluginBindingDto> UpsertScopedAsync(
+        Guid tenantId,
+        Guid? applicationId,
         string bindingType,
         string sourceName,
         string providerName,
@@ -37,6 +48,8 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         string? configurationJson = null,
         CancellationToken ct = default)
     {
+        if (applicationId == Guid.Empty)
+            applicationId = null;
         var normalizedType = NormalizeBindingType(bindingType);
         var normalizedSource = NormalizeKey(sourceName);
         var normalizedProvider = providerName?.Trim() ?? string.Empty;
@@ -53,10 +66,25 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             throw new ArgumentException("sourceName is required.");
         if (string.IsNullOrWhiteSpace(normalizedProvider))
             throw new ArgumentException("providerName is required.");
+        if (applicationId.HasValue)
+        {
+            if (!PluginBindingRecord.CanBelongToApplication(normalizedType))
+            {
+                throw new ArgumentException(
+                    $"Only '{PluginBindingTypes.Prompt}' and '{PluginBindingTypes.Profile}' bindings can belong to an application. " +
+                    $"'{normalizedType}' bindings (AI providers, tools, decision plugins) are tenant-wide; omit applicationId.");
+            }
+
+            var applicationExists = await _dbContext.TenantApplications
+                .AnyAsync(a => a.TenantId == tenantId && a.Id == applicationId.Value, ct);
+            if (!applicationExists)
+                throw new ArgumentException("applicationId does not name one of this tenant's applications.");
+        }
 
         var existing = await _dbContext.PluginBindings
             .FirstOrDefaultAsync(x =>
                 x.TenantId == tenantId &&
+                x.ApplicationId == applicationId &&
                 x.BindingType == normalizedType &&
                 x.SourceName == normalizedSource, ct);
 
@@ -68,7 +96,8 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                 normalizedType,
                 normalizedSource,
                 normalizedProvider,
-                isEnabled);
+                isEnabled,
+                applicationId);
             _dbContext.PluginBindings.Add(existing);
             if (configurationJson != null)
             {
@@ -110,12 +139,22 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         return ToDto(existing);
     }
 
-    public async Task<bool> DeleteAsync(
+    public Task<bool> DeleteAsync(
         Guid tenantId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default) =>
+        DeleteScopedAsync(tenantId, null, bindingType, sourceName, ct);
+
+    public async Task<bool> DeleteScopedAsync(
+        Guid tenantId,
+        Guid? applicationId,
         string bindingType,
         string sourceName,
         CancellationToken ct = default)
     {
+        if (applicationId == Guid.Empty)
+            applicationId = null;
         var normalizedType = NormalizeBindingType(bindingType);
         var normalizedSource = NormalizeKey(sourceName);
         if (string.IsNullOrWhiteSpace(normalizedType) || string.IsNullOrWhiteSpace(normalizedSource))
@@ -124,6 +163,7 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
         var existing = await _dbContext.PluginBindings
             .FirstOrDefaultAsync(x =>
                 x.TenantId == tenantId &&
+                x.ApplicationId == applicationId &&
                 x.BindingType == normalizedType &&
                 x.SourceName == normalizedSource, ct);
 
@@ -222,6 +262,7 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             .AsNoTracking()
             .FirstOrDefaultAsync(x =>
                 x.TenantId == tenantId &&
+                x.ApplicationId == null &&
                 x.BindingType == normalizedType &&
                 x.SourceName == normalizedSource &&
                 x.IsEnabled, ct);
@@ -242,6 +283,7 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             .AsNoTracking()
             .Where(x =>
                 x.TenantId == tenantId &&
+                x.ApplicationId == null &&
                 x.BindingType == normalizedType &&
                 x.IsEnabled)
             .ToListAsync(ct);
@@ -273,12 +315,78 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             .AsNoTracking()
             .FirstOrDefaultAsync(x =>
                 x.TenantId == tenantId &&
+                x.ApplicationId == null &&
                 x.BindingType == normalizedType &&
                 x.SourceName == normalizedSource &&
                 x.IsEnabled, ct);
 
         return record == null ? null : ToDto(record);
     }
+
+    public async Task<PluginBindingDto?> ResolveForApplicationAsync(
+        Guid tenantId,
+        Guid? applicationId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default)
+    {
+        if (applicationId == Guid.Empty)
+            applicationId = null;
+        var normalizedType = NormalizeBindingType(bindingType);
+        var normalizedSource = NormalizeKey(sourceName);
+        if (string.IsNullOrWhiteSpace(normalizedType) || string.IsNullOrWhiteSpace(normalizedSource))
+            return null;
+
+        var candidates = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .Where(x =>
+                x.TenantId == tenantId &&
+                (x.ApplicationId == null || x.ApplicationId == applicationId) &&
+                x.BindingType == normalizedType &&
+                x.SourceName == normalizedSource &&
+                x.IsEnabled)
+            .ToListAsync(ct);
+
+        var record = PreferApplication(candidates, applicationId).FirstOrDefault();
+        return record == null ? null : ToDto(record);
+    }
+
+    public async Task<PluginBindingDto?> ResolveAgentProfileForApplicationAsync(
+        Guid tenantId,
+        Guid? applicationId,
+        string aliasOrRole,
+        CancellationToken ct = default)
+    {
+        if (applicationId == Guid.Empty)
+            applicationId = null;
+        var normalizedKey = NormalizeKey(aliasOrRole);
+        if (string.IsNullOrWhiteSpace(normalizedKey))
+            return null;
+
+        var records = await _dbContext.PluginBindings
+            .AsNoTracking()
+            .Where(x =>
+                x.TenantId == tenantId &&
+                (x.ApplicationId == null || x.ApplicationId == applicationId) &&
+                x.BindingType == PluginBindingTypes.Profile &&
+                x.IsEnabled)
+            .ToListAsync(ct);
+
+        // Same alias-or-role match as GetAgentProfileAsync, checked in the application first.
+        var match = PreferApplication(records, applicationId).FirstOrDefault(r =>
+            string.Equals(r.SourceName, normalizedKey, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r.ProviderName, normalizedKey, StringComparison.OrdinalIgnoreCase));
+
+        return match == null ? null : ToDto(match);
+    }
+
+    /// <summary>The application's own bindings first, then the tenant-shared ones.</summary>
+    private static IEnumerable<PluginBindingRecord> PreferApplication(
+        IEnumerable<PluginBindingRecord> records,
+        Guid? applicationId) =>
+        applicationId.HasValue
+            ? records.OrderBy(r => r.ApplicationId == applicationId ? 0 : 1)
+            : records.Where(r => r.ApplicationId == null);
 
     public async Task<AgentProviderConfiguration?> GetAgentSecretsAsync(
         Guid tenantId,
@@ -351,6 +459,7 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
             .AsNoTracking()
             .Where(x =>
                 x.TenantId == tenantId &&
+                x.ApplicationId == null &&
                 x.BindingType == PluginBindingTypes.Profile &&
                 x.IsEnabled)
             .ToListAsync(ct);
@@ -431,7 +540,8 @@ public class PluginBindingRegistryService : IPluginBindingRegistryService
                         : x.BindingType == PluginBindingTypes.Action
                             ? AgentToolConfiguration.Public(x.ConfigurationJson)
                             : null,
-            x.FlowOsVersion);
+            x.FlowOsVersion,
+            x.ApplicationId);
 
     private string? MergeConfiguration(string bindingType, string? existing, string? incoming)
     {

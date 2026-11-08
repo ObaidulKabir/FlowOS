@@ -284,6 +284,7 @@ public static class McpToolSchemas
               "additionalProperties":false
             },
             "isEnabled":{"type":"boolean","default":true},
+            "applicationId":{"type":"string","format":"uuid","description":"Optional. Save this binding in that tenant application instead of tenant-shared. A step in the application's workflows uses its own binding first, then the tenant-shared one with the same alias."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -297,6 +298,8 @@ public static class McpToolSchemas
           "properties":{
             "alias":{"type":"string"},
             "enabledOnly":{"type":"boolean"},
+            "applicationId":{"type":"string","format":"uuid","description":"Optional. Only that application's bindings."},
+            "shared":{"type":"boolean","description":"true: only tenant-shared bindings (not in any application). Omit both filters to list every binding; each has applicationId (null when shared)."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -311,6 +314,7 @@ public static class McpToolSchemas
           "properties":{
             "alias":{"type":"string","minLength":1},
             "sourceName":{"type":"string"},
+            "applicationId":{"type":"string","format":"uuid","description":"Optional. Resolve as a step in that application would: the application's own binding first, then the tenant-shared one."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -493,6 +497,7 @@ public static class McpToolSchemas
             },
             "configuration":{"type":"object","description":"Nested profile configuration object (optional alternative to top-level fields)."},
             "isEnabled":{"type":"boolean","default":true},
+            "applicationId":{"type":"string","format":"uuid","description":"Optional. Save this binding in that tenant application instead of tenant-shared. A step in the application's workflows uses its own binding first, then the tenant-shared one with the same alias."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -506,6 +511,8 @@ public static class McpToolSchemas
           "properties":{
             "alias":{"type":"string","description":"Optional agent name filter."},
             "enabledOnly":{"type":"boolean"},
+            "applicationId":{"type":"string","format":"uuid","description":"Optional. Only that application's bindings."},
+            "shared":{"type":"boolean","description":"true: only tenant-shared bindings (not in any application). Omit both filters to list every binding; each has applicationId (null when shared)."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false
@@ -520,6 +527,7 @@ public static class McpToolSchemas
           "properties":{
             "alias":{"type":"string","minLength":1,"description":"Agent persona name or matching workflow role."},
             "sourceName":{"type":"string"},
+            "applicationId":{"type":"string","format":"uuid","description":"Optional. Resolve as a step in that application would: the application's own binding first, then the tenant-shared one."},
             "tenantId":{"type":"string","format":"uuid"}
           },
           "additionalProperties":false

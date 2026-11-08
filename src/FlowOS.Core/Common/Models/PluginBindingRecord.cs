@@ -18,6 +18,14 @@ public class PluginBindingRecord
     /// <summary>FlowOS release this AI Context binding was last authored against.</summary>
     public string FlowOsVersion { get; private set; } = FlowOsRelease.Version;
 
+    /// <summary>
+    /// The tenant application this binding belongs to, or null for a tenant-shared binding. Only prompt
+    /// and profile (agent) bindings can belong to an application; providers, tools and decision
+    /// bindings are always tenant-shared. A step in an application's workflow resolves an alias in that
+    /// application first, then among the tenant-shared bindings.
+    /// </summary>
+    public Guid? ApplicationId { get; private set; }
+
     private PluginBindingRecord()
     {
     }
@@ -27,7 +35,8 @@ public class PluginBindingRecord
         string bindingType,
         string sourceName,
         string providerName,
-        bool isEnabled = true)
+        bool isEnabled = true,
+        Guid? applicationId = null)
     {
         TenantId = tenantId;
         BindingType = Normalize(bindingType);
@@ -36,6 +45,20 @@ public class PluginBindingRecord
         IsEnabled = isEnabled;
         ConfigurationJson = null;
         FlowOsVersion = FlowOsRelease.Version;
+        ApplicationId = applicationId == Guid.Empty ? null : applicationId;
+    }
+
+    /// <summary>Re-points the binding at an application (tenant backup restore maps application ids).</summary>
+    public void AssignToApplication(Guid? applicationId)
+    {
+        ApplicationId = applicationId == Guid.Empty ? null : applicationId;
+    }
+
+    /// <summary>Binding types that may belong to an application. Everything else is tenant-shared.</summary>
+    public static bool CanBelongToApplication(string? bindingType)
+    {
+        var normalized = Normalize(bindingType);
+        return normalized == "prompt" || normalized == "profile";
     }
 
     public void Update(string providerName, bool isEnabled, string? configurationJson = null)

@@ -71,7 +71,8 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
             objective);
 
         var step = definition.Steps.FirstOrDefault(s => s.StepId == instance.CurrentStepId);
-        return await AttachBindingsAsync(packet, tenantId, step, cancellationToken);
+        var applicationId = await ResolveApplicationIdAsync(tenantId, instance.WorkflowClassId, cancellationToken);
+        return await AttachBindingsAsync(packet, tenantId, step, applicationId, cancellationToken);
     }
 
     public async Task<DecisionPacket?> PreviewAsync(
@@ -116,13 +117,37 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
         var definition = WorkflowClassCompiler.MapToRuntimeDefinition(workflowClass);
         var step = definition.Steps.FirstOrDefault(s =>
             string.Equals(s.StepId, stepId, StringComparison.OrdinalIgnoreCase));
-        return await AttachBindingsAsync(packet, tenantId, step, cancellationToken);
+        var applicationId = workflowClass.TenantId == tenantId ? workflowClass.ApplicationId : null;
+        return await AttachBindingsAsync(packet, tenantId, step, applicationId, cancellationToken);
     }
+
+    /// <summary>
+    /// Applications (3/4): the tenant application the instance's workflow class belongs to, so the step's
+    /// prompt and agent profile aliases resolve in that application first. Null for an unassigned
+    /// workflow, or a Public class owned by another tenant (its application is not this tenant's).
+    /// </summary>
+    private async Task<Guid?> ResolveApplicationIdAsync(
+        Guid tenantId,
+        Guid workflowClassId,
+        CancellationToken cancellationToken)
+    {
+        if (workflowClassId == Guid.Empty) return null;
+        var workflowClass = await _unitOfWork.WorkflowClasses
+            .GetByIdAsNoTrackingAsync(workflowClassId, cancellationToken);
+        return workflowClass != null && workflowClass.TenantId == tenantId ? workflowClass.ApplicationId : null;
+    }
+
+    private Task<PluginBindingDto?> GetProfileAsync(
+        Guid tenantId, Guid? applicationId, string aliasOrRole, CancellationToken cancellationToken) =>
+        applicationId.HasValue
+            ? _pluginBindings!.ResolveAgentProfileForApplicationAsync(tenantId, applicationId, aliasOrRole, cancellationToken)
+            : _pluginBindings!.GetAgentProfileAsync(tenantId, aliasOrRole, cancellationToken);
 
     private async Task<DecisionPacket> AttachBindingsAsync(
         DecisionPacket packet,
         Guid tenantId,
         WorkflowStepDefinition? step,
+        Guid? applicationId,
         CancellationToken cancellationToken)
     {
         Dictionary<string, string>? actionBindings = null;
@@ -157,8 +182,8 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
                 !AgentProviderKinds.IsFlowOsHosted(providerAlias) &&
                 !string.Equals(providerAlias, AgentProviderKinds.FlowosRisk, StringComparison.OrdinalIgnoreCase))
             {
-                var profileBinding = await _pluginBindings.GetAgentProfileAsync(
-                    tenantId, providerAlias, cancellationToken);
+                var profileBinding = await GetProfileAsync(
+                    tenantId, applicationId, providerAlias, cancellationToken);
                 profile = profileBinding?.Configuration as AgentProfilePublicSettings;
             }
 
@@ -179,8 +204,8 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
                 {
                     foreach (var role in rolesToCheck)
                     {
-                        var profileBinding = await _pluginBindings.GetAgentProfileAsync(
-                            tenantId, role, cancellationToken);
+                        var profileBinding = await GetProfileAsync(
+                            tenantId, applicationId, role, cancellationToken);
                         if (profileBinding?.Configuration is AgentProfilePublicSettings foundProfile)
                         {
                             profile = foundProfile;
@@ -268,8 +293,11 @@ public sealed class DecisionPacketBuilder : IDecisionPacketBuilder
 
             if (!string.IsNullOrWhiteSpace(effectivePromptAlias))
             {
-                var binding = await _pluginBindings.GetEnabledAsync(
-                    tenantId, PluginBindingTypes.Prompt, effectivePromptAlias, cancellationToken);
+                var binding = applicationId.HasValue
+                    ? await _pluginBindings.ResolveForApplicationAsync(
+                        tenantId, applicationId, PluginBindingTypes.Prompt, effectivePromptAlias, cancellationToken)
+                    : await _pluginBindings.GetEnabledAsync(
+                        tenantId, PluginBindingTypes.Prompt, effectivePromptAlias, cancellationToken);
                 if (binding != null)
                 {
                     var prompt = binding.Configuration as AgentPromptConfiguration

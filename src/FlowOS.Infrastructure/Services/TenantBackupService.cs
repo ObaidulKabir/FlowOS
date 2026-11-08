@@ -155,7 +155,7 @@ public sealed class TenantBackupService : ITenantBackupService
                 timer.MarkAsProcessed();
         }
 
-        var newApplications = await MapApplicationsAsync(applications, classes, destinationTenantId, cancellationToken);
+        var newApplications = await MapApplicationsAsync(applications, classes, plugins, destinationTenantId, cancellationToken);
         await EnsureIdsFreeAsync(newApplications.Select(x => x.Id), _db.TenantApplications.Select(x => x.Id), "application", cancellationToken);
         await EnsureIdsFreeAsync(classes.Select(x => x.Id), _db.WorkflowClasses.Select(x => x.Id), "workflow class", cancellationToken);
         await EnsureIdsFreeAsync(bindings.Select(x => x.Id), _db.WorkflowContextBindings.Select(x => x.Id), "business context", cancellationToken);
@@ -214,11 +214,13 @@ public sealed class TenantBackupService : ITenantBackupService
     /// Application names are unique per tenant, so a backed-up application whose name already exists on
     /// the destination is reused rather than inserted, and its workflow classes are pointed at the
     /// existing one. A workflow class that names an application missing from the file is restored
-    /// unassigned. Returns the applications that still need inserting.
+    /// unassigned. Application-scoped prompt and agent profile bindings are re-pointed the same way.
+    /// Returns the applications that still need inserting.
     /// </summary>
     private async Task<List<TenantApplication>> MapApplicationsAsync(
         List<TenantApplication> applications,
         List<WorkflowClass> classes,
+        List<PluginBindingRecord> plugins,
         Guid destinationTenantId,
         CancellationToken cancellationToken)
     {
@@ -246,6 +248,12 @@ public sealed class TenantBackupService : ITenantBackupService
         {
             if (workflowClass.ApplicationId is Guid applicationId)
                 workflowClass.AssignToApplication(idMap.TryGetValue(applicationId, out var mapped) ? mapped : null);
+        }
+
+        foreach (var plugin in plugins)
+        {
+            if (plugin.ApplicationId is Guid applicationId)
+                plugin.AssignToApplication(idMap.TryGetValue(applicationId, out var mapped) ? mapped : null);
         }
 
         return toInsert;
