@@ -10,7 +10,8 @@ import {
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
   WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
   TenantApiKeyDto, CreateKeyResponse, TenantRoleDto, AgentEvaluationMetrics,
-  PlanRequestDto, TenantPlanRequestItem
+  PlanRequestDto, TenantPlanRequestItem,
+  TenantApplicationDto, ApplicationRequest
 } from '../types';
 
 export { isPlatformAdminToken, platformAdminHomeSession, PLATFORM_TENANT_ID } from '../auth/platformAdminSession';
@@ -643,26 +644,86 @@ export const api = {
   },
 
   generateTenantKey: async (
-    tenantId: string, 
-    name?: string, 
-    applicationName?: string, 
-    environment?: string, 
-    scopes?: string[], 
-    expiresInDays?: number
+    tenantId: string,
+    name?: string,
+    applicationName?: string,
+    environment?: string,
+    scopes?: string[],
+    expiresInDays?: number,
+    applicationId?: string
   ): Promise<CreateKeyResponse> => {
     const headers = getHeaders();
     const response = await fetch(`/api/tenants/${tenantId}/keys`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         name: name || 'API Key',
+        // Applications (1/4): with applicationId, the server derives applicationName from the
+        // application and ignores this value - still sent for the Default-Application fallback.
         applicationName: applicationName || 'Default Application',
         environment: environment || 'Production',
         scopes: scopes || ['*'],
-        expiresInDays
+        expiresInDays,
+        applicationId
       })
     });
     return handleResponse(response, 'Failed to generate API key');
+  },
+
+  // Applications (1/4): TenantApplication CRUD - ApplicationsController (/api/applications).
+  listApplications: async (): Promise<TenantApplicationDto[]> => {
+    const response = await authorizedFetch('/api/applications');
+    return handleResponse(response, 'Failed to list applications');
+  },
+
+  createApplication: async (req: ApplicationRequest): Promise<TenantApplicationDto> => {
+    const headers = getHeaders();
+    const response = await fetch('/api/applications', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Failed to create application');
+  },
+
+  updateApplication: async (id: string, req: ApplicationRequest): Promise<TenantApplicationDto> => {
+    const headers = getHeaders();
+    const response = await fetch(`/api/applications/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Failed to update application');
+  },
+
+  deleteApplication: async (id: string): Promise<void> => {
+    const headers = getHeaders();
+    const response = await fetch(`/api/applications/${id}`, { method: 'DELETE', headers });
+    // 204 No Content on success - do not call response.json() on an empty body.
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try {
+        const body = await response.json();
+        detail = body.message || body.code || detail;
+      } catch { /* no parseable error body */ }
+      throw new Error(`Failed to delete application: ${detail}`);
+    }
+  },
+
+  // Applications (2/4): move a workflow (all of its versions) to an application, or null to unassign.
+  // Reserved for an unrestricted caller - see WorkflowClassesController.AssignApplication.
+  assignWorkflowApplication: async (
+    workflowClassId: string,
+    applicationId: string | null
+  ): Promise<{ workflowClassId: string; applicationId: string | null; versionsMoved: number }> => {
+    const headers = getHeaders();
+    const tenantId = getActiveTenantId();
+    const response = await fetch(`${API_BASE}/${workflowClassId}/application?tenantId=${tenantId}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ applicationId })
+    });
+    return handleResponse(response, 'Failed to assign workflow to application');
   },
 
   revokeTenantKey: async (tenantId: string, keyId: string): Promise<void> => {

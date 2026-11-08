@@ -15,6 +15,7 @@ import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { TenantApiKeyManager } from './TenantApiKeyManager';
+import { TenantApplicationManager } from './TenantApplicationManager';
 import { TenantRuntimeRolesPanel } from './TenantRuntimeRolesPanel';
 import { DetailView } from './DetailView';
 import { EditorView } from './EditorView';
@@ -33,10 +34,10 @@ import { LegalFooterLinks } from './LegalFooterLinks';
 import { DashboardChrome, sidebarItemClass } from './DashboardChrome';
 import { McpAgentGuideline } from './McpAgentGuideline';
 import { 
-  Building2, Plus, RefreshCw, Key, Activity, 
+  Building2, Plus, RefreshCw, Key, Activity,
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
   Bot, AlertTriangle, ShieldAlert,
-  UserCheck, Clock, Shield, SendHorizontal, X, ChevronDown, Network
+  UserCheck, Clock, Shield, SendHorizontal, X, ChevronDown, Network, AppWindow
 } from 'lucide-react';
 
 interface Props {
@@ -53,7 +54,7 @@ interface Props {
 type HubId = 'design' | 'agents' | 'operations' | 'governance';
 type DesignTab = 'workflows' | 'simulator';
 type OpsTab = 'instances' | 'inbox' | 'events' | 'dlq';
-type GovTab = 'keys' | 'mcp' | 'capabilities' | 'comparison' | 'architecture';
+type GovTab = 'keys' | 'applications' | 'mcp' | 'capabilities' | 'comparison' | 'architecture';
 
 const countFormatter = new Intl.NumberFormat();
 
@@ -440,6 +441,17 @@ export const TenantDashboard: React.FC<Props> = ({
         >
           <Key size={14} />
           <span className="truncate">API Keys & RBAC</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveHub('governance');
+            setGovTab('applications');
+          }}
+          className={sidebarItemClass(activeHub === 'governance' && govTab === 'applications')}
+        >
+          <AppWindow size={14} />
+          <span className="truncate">Applications</span>
         </button>
         <button
           type="button"
@@ -1227,6 +1239,18 @@ export const TenantDashboard: React.FC<Props> = ({
                   </button>
 
                   <button
+                    onClick={() => setGovTab('applications')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      govTab === 'applications'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <AppWindow size={13} />
+                    <span>Applications</span>
+                  </button>
+
+                  <button
                     onClick={() => setGovTab('mcp')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                       govTab === 'mcp'
@@ -1289,6 +1313,15 @@ export const TenantDashboard: React.FC<Props> = ({
                   <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
                   <TenantRuntimeRolesPanel />
                 </div>
+              )}
+
+              {govTab === 'applications' && (
+                <TenantApplicationManager
+                  tenantId={session.tenantId}
+                  tenantName={session.tenantName}
+                  blueprints={blueprints}
+                  onBlueprintsChanged={loadData}
+                />
               )}
 
               {govTab === 'mcp' && (

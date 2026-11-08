@@ -287,6 +287,8 @@ To share one workflow template with many institutions, publish it as a **Public*
 
 An application is something the tenant builds on FlowOS. It groups that application's workflows and FlowOS API keys; one application usually has several workflows, and several keys over its life (production, a replacement during rotation). Assign a workflow with `POST /api/workflow-classes/{id}/application` (section 8). AI provider configuration, including model API keys, stays tenant-level. Every route works inside the caller's tenant.
 
+**Dashboard.** Governance → Applications manages this CRUD, assigns an existing workflow to an application (or unassigns it) through the same endpoint, and issues application-scoped keys through `POST /api/tenants/{id}/keys` (section 11) with `applicationId` set - the one way, outside this REST surface, to reach any of it. There is still no MCP tool for any of this (`FlowOsMcpGuidance.cs`).
+
 | Method & Route | Description |
 |---|---|
 | `GET /api/applications` | The tenant's applications, ordered by name. Each has `id`, `name`, `description`, `createdAtUtc`, `updatedAtUtc`, `activeKeyCount` (keys not revoked or expired), and `workflowCount` (distinct workflows; all versions of one workflow count once). |
