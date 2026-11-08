@@ -236,6 +236,9 @@ namespace FlowOS.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ApplicationId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("BindingType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -275,10 +278,17 @@ namespace FlowOS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ApplicationId");
+
                     b.HasIndex("TenantId", "BindingType", "IsEnabled");
 
                     b.HasIndex("TenantId", "BindingType", "SourceName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"ApplicationId\" IS NULL");
+
+                    b.HasIndex("TenantId", "ApplicationId", "BindingType", "SourceName")
+                        .IsUnique()
+                        .HasFilter("\"ApplicationId\" IS NOT NULL");
 
                     b.ToTable("PluginBindings", (string)null);
                 });
@@ -2163,6 +2173,14 @@ namespace FlowOS.Infrastructure.Migrations
                         });
 
                     b.Navigation("Hierarchy");
+                });
+
+            modelBuilder.Entity("FlowOS.Core.Common.Models.PluginBindingRecord", b =>
+                {
+                    b.HasOne("FlowOS.Domain.Entities.TenantApplication", null)
+                        .WithMany()
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("FlowOS.Domain.Entities.TeamMember", b =>

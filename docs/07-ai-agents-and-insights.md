@@ -76,7 +76,9 @@ Users create and edit prompts independently of the workflow JSON. Dashboard: **A
 }
 ```
 
-Point the waiting step at it with `agentPrompt: "quote-approval"`. FlowOS loads title/system/instructions into `DecisionPacket.Prompt`. Template `decisionGuideline` remains an optional fallback. REST: `GET/PUT /api/plugin-bindings`.
+Point the waiting step at it with `agentPrompt: "quote-approval"`. FlowOS loads title/system/instructions into `DecisionPacket.Prompt`. Template `decisionGuideline` remains an optional fallback. REST: `GET/PUT/DELETE /api/plugin-bindings` (see [Chapter 14](14-api-reference.md) section 13).
+
+**Application scope.** A prompt (`upsert_agent_prompt`) or agent profile (`upsert_agent_profile`) saved with `applicationId` belongs to that tenant application instead of being tenant-shared. For a waiting step in a workflow assigned to an application (section 12 of [Chapter 14](14-api-reference.md)), FlowOS resolves `agentPrompt`, `agentProvider` (as a profile alias), and role-matched profiles in that application first, then among tenant-shared bindings with the same alias — so one application can define its own agent instead of reusing the tenant's. Workflows not assigned to any application, and `Public` templates, resolve tenant-shared bindings only. `list_agent_prompts` / `list_agent_profiles` accept `applicationId` (only that application) or `shared: true` (tenant-shared only); `get_agent_prompt` / `get_agent_profile` with `applicationId` return what such a step would actually use. AI providers (`upsert_agent_provider`) stay tenant-wide regardless of `applicationId` — a provider's model and key are rotated once for every application that uses it.
 
 Do **not** replace a waiting HumanTask with a Decision `Default` skip so the AI "advances" the graph. That reopens dual-kernel drift.
 

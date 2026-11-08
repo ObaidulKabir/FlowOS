@@ -82,7 +82,8 @@ public record PluginBindingDto(
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
     object? Configuration = null,
-    string? FlowOsVersion = null);
+    string? FlowOsVersion = null,
+    Guid? ApplicationId = null);
 
 public interface IPluginBindingRegistryService
 {
@@ -187,4 +188,63 @@ public interface IPluginBindingRegistryService
     Task<IReadOnlyList<PluginBindingDto>> ListAgentProfilesAsync(
         Guid tenantId,
         CancellationToken ct = default);
+
+    // ---- Applications (3/4) -------------------------------------------------------------------------
+    // Prompt and profile (agent) bindings may belong to a tenant application. The tenant-only methods
+    // above read and write tenant-shared bindings (ApplicationId null); ListAsync returns both kinds,
+    // each carrying its ApplicationId. These defaults keep other implementations (test fakes) working
+    // with tenant-shared bindings only; PluginBindingRegistryService implements the application scope.
+
+    /// <summary>
+    /// Creates or updates a binding in an application (applicationId set) or tenant-shared (null). Only
+    /// prompt and profile bindings may belong to an application: anything else, or an application
+    /// that is not the tenant's, throws ArgumentException.
+    /// </summary>
+    Task<PluginBindingDto> UpsertScopedAsync(
+        Guid tenantId,
+        Guid? applicationId,
+        string bindingType,
+        string sourceName,
+        string providerName,
+        bool isEnabled = true,
+        string? configurationJson = null,
+        CancellationToken ct = default) =>
+        applicationId == null
+            ? UpsertAsync(tenantId, bindingType, sourceName, providerName, isEnabled, configurationJson, ct)
+            : throw new NotSupportedException("This binding registry does not support application-scoped bindings.");
+
+    /// <summary>Deletes the binding in exactly that scope (an application's, or tenant-shared for null).</summary>
+    Task<bool> DeleteScopedAsync(
+        Guid tenantId,
+        Guid? applicationId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default) =>
+        applicationId == null
+            ? DeleteAsync(tenantId, bindingType, sourceName, ct)
+            : Task.FromResult(false);
+
+    /// <summary>
+    /// The enabled binding a step of that application uses for this alias: the application's own
+    /// binding if it has one, otherwise the tenant-shared binding. With a null applicationId, only the
+    /// tenant-shared binding.
+    /// </summary>
+    Task<PluginBindingDto?> ResolveForApplicationAsync(
+        Guid tenantId,
+        Guid? applicationId,
+        string bindingType,
+        string sourceName,
+        CancellationToken ct = default) =>
+        GetEnabledAsync(tenantId, bindingType, sourceName, ct);
+
+    /// <summary>
+    /// Like <see cref="GetAgentProfileAsync"/> (alias or role), but the application's own profile wins
+    /// over a tenant-shared one.
+    /// </summary>
+    Task<PluginBindingDto?> ResolveAgentProfileForApplicationAsync(
+        Guid tenantId,
+        Guid? applicationId,
+        string aliasOrRole,
+        CancellationToken ct = default) =>
+        GetAgentProfileAsync(tenantId, aliasOrRole, ct);
 }

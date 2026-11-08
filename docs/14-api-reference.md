@@ -291,11 +291,23 @@ An application is something the tenant builds on FlowOS. It groups that applicat
 | `GET /api/applications/{id}` | One application, or `404 {code:"APP-NOTFOUND-001"}`. |
 | `POST /api/applications` | Body `{name, description?}`. Names are unique per tenant, ignoring case (`409 {code:"APP-NAME-001"}`); a blank name or one over 150 characters is `400 {code:"APP-ARG-001"}`. |
 | `PUT /api/applications/{id}` | Body `{name, description?}`. Renaming also updates `applicationName` on the application's keys. |
-| `DELETE /api/applications/{id}` | `409 {code:"APP-INUSE-001"}` while the application has an active key or any workflow; revoke the keys and move or unassign the workflows first. Revoked and expired keys are unlinked, then the application is removed. |
+| `DELETE /api/applications/{id}` | `409 {code:"APP-INUSE-001"}` while the application has an active key, any workflow, or any agent prompt or profile binding (section 13); revoke the keys, move or unassign the workflows, and delete or move the bindings first. Revoked and expired keys are unlinked, then the application is removed. |
 
 **Existing keys.** When applications were introduced, each distinct `applicationName` label already on a tenant's keys became an application, and those keys were linked to it. Keys still labelled `Default Application` were left unlinked (`applicationId: null`). Linked existing keys have `isApplicationRestricted: false`.
 
 **`isApplicationRestricted`.** A key issued with `applicationId` is marked restricted, meaning it is intended to work only inside its application. FlowOS does not limit access by this flag yet: today every key, restricted or not, still works across its whole tenant.
+
+## 13. Agent Context bindings — `PluginBindingsController` (`/api/plugin-bindings`, `[Authorize]`)
+
+Tenant-owned prompts (`bindingType: prompt`) and agent profiles (`bindingType: profile`) — see [Chapter 7](07-ai-agents-and-insights.md#tenant-owned-prompts-create--edit) — may belong to a tenant application instead of being tenant-shared. AI providers (`bindingType: agent`) and other binding types are always tenant-shared; the `applicationId` field described below rejects them.
+
+| Method & Route | Description |
+|---|---|
+| `GET /api/plugin-bindings?applicationId=` | Only that application's prompt/profile bindings. `?shared=true` returns only tenant-shared bindings instead. Neither filter returns both kinds; every binding reports `applicationId` (`null` when tenant-shared). |
+| `PUT /api/plugin-bindings` | Body gains an optional `applicationId`. Set on a `prompt` or `profile` binding, it is saved in that application instead of tenant-shared — a step in the application's workflows resolves it before a tenant-shared binding with the same alias. Any other `bindingType` with `applicationId` set is `400`. |
+| `DELETE /api/plugin-bindings?bindingType=&sourceName=&applicationId=` | Deletes a `prompt` or `profile` binding in exactly the scope named — that application's (with `applicationId`) or tenant-shared (without). `400` for any other `bindingType`; `404` if no binding exists in that exact scope. |
+
+Deleting an application (section 12) is refused while it still has a prompt or profile binding.
 
 ## Error format
 

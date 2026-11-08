@@ -123,6 +123,48 @@ public class TenantBackupServiceTests
     }
 
     [Fact]
+    public async Task Restore_RePointsAnApplicationScopedPromptAtTheSameNamedApplication()
+    {
+        // Applications (3/4): a prompt/profile binding scoped to an application is re-pointed the same
+        // way AssignToApplication re-points a workflow class on restore (see the test above).
+        var sourceId = Guid.NewGuid();
+        var destinationId = Guid.NewGuid();
+        await using var source = CreateContext();
+        await using var destination = CreateContext();
+
+        var tenant = new Tenant("Source Org");
+        Set(tenant, "TenantId", sourceId);
+        source.Tenants.Add(tenant);
+        var finance = new TenantApplication(sourceId, "Finance Approvals", null, DateTime.UtcNow);
+        source.TenantApplications.Add(finance);
+        var sharedPrompt = new PluginBindingRecord(sourceId, "prompt", "quote-approval", "markdown");
+        sharedPrompt.Update("markdown", true, "{\"instructions\":\"Shared.\"}");
+        var scopedPrompt = new PluginBindingRecord(sourceId, "prompt", "quote-approval", "markdown", applicationId: finance.Id);
+        scopedPrompt.Update("markdown", true, "{\"instructions\":\"App-specific.\"}");
+        source.PluginBindings.AddRange(sharedPrompt, scopedPrompt);
+        await source.SaveChangesAsync();
+
+        var exported = await new TenantBackupService(source).ExportJsonAsync(sourceId);
+
+        var other = new Tenant("Destination Org");
+        Set(other, "TenantId", destinationId);
+        destination.Tenants.Add(other);
+        var existingFinance = new TenantApplication(destinationId, "finance approvals", null, DateTime.UtcNow);
+        destination.TenantApplications.Add(existingFinance);
+        await destination.SaveChangesAsync();
+
+        var restored = await new TenantBackupService(destination).RestoreJsonAsync(destinationId, exported);
+        Assert.Equal(2, restored.PluginBindings);
+
+        var bindings = await destination.PluginBindings.Where(b => b.TenantId == destinationId).ToListAsync();
+        var restoredShared = Assert.Single(bindings, b => b.ApplicationId == null);
+        Assert.Equal("Shared.", AgentPromptConfiguration.Parse(restoredShared.ConfigurationJson)!.Body);
+        var restoredScoped = Assert.Single(bindings, b => b.ApplicationId != null);
+        Assert.Equal(existingFinance.Id, restoredScoped.ApplicationId);
+        Assert.Equal("App-specific.", AgentPromptConfiguration.Parse(restoredScoped.ConfigurationJson)!.Body);
+    }
+
+    [Fact]
     public async Task Restore_RefusesANewerFlowOsRelease()
     {
         var destinationId = Guid.NewGuid();

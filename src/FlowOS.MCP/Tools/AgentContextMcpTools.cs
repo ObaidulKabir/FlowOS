@@ -220,12 +220,13 @@ public class AgentContextMcpTools
             }
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
+            var applicationId = ReadApplicationId(args);
             var configuration = BuildPromptConfiguration(args);
             var parsed = AgentPromptConfiguration.Parse(configuration);
             if (parsed == null || string.IsNullOrWhiteSpace(parsed.Body))
             {
                 var existing = (await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Prompt, alias))
-                    .FirstOrDefault();
+                    .FirstOrDefault(b => b.ApplicationId == applicationId);
                 var existingPrompt = existing?.Configuration as AgentPromptConfiguration;
                 if (existingPrompt == null || string.IsNullOrWhiteSpace(existingPrompt.Body))
                 {
@@ -236,8 +237,9 @@ public class AgentContextMcpTools
             }
 
             var isEnabled = args["isEnabled"]?.Value<bool>() ?? true;
-            var binding = await _pluginBindings.UpsertAsync(
+            var binding = await _pluginBindings.UpsertScopedAsync(
                 tenantId,
+                applicationId,
                 PluginBindingTypes.Prompt,
                 alias,
                 kind,
@@ -266,11 +268,13 @@ public class AgentContextMcpTools
         {
             var tenantId = McpTenantResolver.ResolveRequired(args);
             bool? enabledOnly = args["enabledOnly"]?.Value<bool>();
-            var bindings = await _pluginBindings.ListAsync(
-                tenantId,
-                PluginBindingTypes.Prompt,
-                args["alias"]?.ToString()?.Trim(),
-                enabledOnly);
+            var bindings = FilterByApplication(
+                await _pluginBindings.ListAsync(
+                    tenantId,
+                    PluginBindingTypes.Prompt,
+                    args["alias"]?.ToString()?.Trim(),
+                    enabledOnly),
+                args);
 
             return McpToolResults.Success(new
             {
@@ -297,11 +301,15 @@ public class AgentContextMcpTools
                 return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
-            var binding = await _pluginBindings.GetEnabledAsync(tenantId, PluginBindingTypes.Prompt, alias);
+            var applicationId = ReadApplicationId(args);
+            var binding = applicationId.HasValue
+                ? await _pluginBindings.ResolveForApplicationAsync(tenantId, applicationId, PluginBindingTypes.Prompt, alias)
+                : await _pluginBindings.GetEnabledAsync(tenantId, PluginBindingTypes.Prompt, alias);
             if (binding == null)
             {
                 var listed = await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Prompt, alias);
-                binding = listed.FirstOrDefault();
+                binding = listed.FirstOrDefault(b => b.ApplicationId == applicationId)
+                          ?? listed.FirstOrDefault(b => b.ApplicationId == null);
             }
 
             if (binding == null)
@@ -666,7 +674,11 @@ public class AgentContextMcpTools
                 return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
-            var existing = await _pluginBindings.GetAgentProfileAsync(tenantId, alias);
+            var applicationId = ReadApplicationId(args);
+            var existing = applicationId.HasValue
+                ? (await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Profile, alias))
+                    .FirstOrDefault(b => b.ApplicationId == applicationId)
+                : await _pluginBindings.GetAgentProfileAsync(tenantId, alias);
 
             var role = FirstNonEmpty(args, "role") ?? existing?.ProviderName;
             if (string.IsNullOrWhiteSpace(role))
@@ -676,8 +688,9 @@ public class AgentContextMcpTools
 
             var isEnabled = args["isEnabled"]?.Value<bool>() ?? existing?.IsEnabled ?? true;
             var configuration = BuildProfileConfiguration(args, role);
-            var binding = await _pluginBindings.UpsertAsync(
+            var binding = await _pluginBindings.UpsertScopedAsync(
                 tenantId,
+                applicationId,
                 PluginBindingTypes.Profile,
                 alias,
                 role,
@@ -706,11 +719,13 @@ public class AgentContextMcpTools
         {
             var tenantId = McpTenantResolver.ResolveRequired(args);
             bool? enabledOnly = args["enabledOnly"]?.Value<bool>();
-            var bindings = await _pluginBindings.ListAsync(
-                tenantId,
-                PluginBindingTypes.Profile,
-                args["alias"]?.ToString()?.Trim(),
-                enabledOnly);
+            var bindings = FilterByApplication(
+                await _pluginBindings.ListAsync(
+                    tenantId,
+                    PluginBindingTypes.Profile,
+                    args["alias"]?.ToString()?.Trim(),
+                    enabledOnly),
+                args);
 
             return McpToolResults.Success(new
             {
@@ -737,11 +752,15 @@ public class AgentContextMcpTools
                 return McpToolResults.Fail("MCP-ARG-001", "alias is required.");
 
             var tenantId = McpTenantResolver.ResolveRequired(args);
-            var binding = await _pluginBindings.GetAgentProfileAsync(tenantId, alias);
+            var applicationId = ReadApplicationId(args);
+            var binding = applicationId.HasValue
+                ? await _pluginBindings.ResolveAgentProfileForApplicationAsync(tenantId, applicationId, alias)
+                : await _pluginBindings.GetAgentProfileAsync(tenantId, alias);
             if (binding == null)
             {
                 var listed = await _pluginBindings.ListAsync(tenantId, PluginBindingTypes.Profile, alias);
-                binding = listed.FirstOrDefault();
+                binding = listed.FirstOrDefault(b => b.ApplicationId == applicationId)
+                          ?? listed.FirstOrDefault(b => b.ApplicationId == null);
             }
 
             if (binding == null)
@@ -796,6 +815,7 @@ public class AgentContextMcpTools
             toolAliases = settings.ToolAliases,
             autoCommitThreshold = settings.AutoCommitThreshold,
             allowedEvents = settings.AllowedEvents,
+            applicationId = binding.ApplicationId,
             binding.Id,
             binding.TenantId,
             binding.CreatedAtUtc,
@@ -913,6 +933,7 @@ public class AgentContextMcpTools
             title = prompt.Title,
             system = prompt.System,
             instructions = prompt.Body,
+            applicationId = binding.ApplicationId,
             binding.Id,
             binding.TenantId,
             binding.CreatedAtUtc,
@@ -969,6 +990,34 @@ public class AgentContextMcpTools
             ["system"] = system,
             ["instructions"] = instructions
         }.ToString(Newtonsoft.Json.Formatting.None);
+    }
+
+    /// <summary>
+    /// Applications (3/4): optional applicationId on prompt/profile tools. Absent or empty means the
+    /// tenant-shared binding; an unparseable value is MCP-ARG-002.
+    /// </summary>
+    private static Guid? ReadApplicationId(JObject args)
+    {
+        var raw = args["applicationId"]?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(raw))
+            return null;
+        if (!Guid.TryParse(raw, out var id))
+            throw new McpToolException("MCP-ARG-002", "applicationId must be a valid UUID.");
+        return id == Guid.Empty ? null : id;
+    }
+
+    /// <summary>
+    /// List filters: applicationId returns only that application's bindings; shared:true only the
+    /// tenant-shared ones; neither returns both kinds.
+    /// </summary>
+    private static IReadOnlyList<PluginBindingDto> FilterByApplication(IReadOnlyList<PluginBindingDto> bindings, JObject args)
+    {
+        var applicationId = ReadApplicationId(args);
+        if (applicationId.HasValue)
+            return bindings.Where(b => b.ApplicationId == applicationId).ToList();
+        if (args["shared"]?.Type == JTokenType.Boolean && args["shared"]!.Value<bool>())
+            return bindings.Where(b => b.ApplicationId == null).ToList();
+        return bindings;
     }
 
     private static string? FirstNonEmpty(JObject args, params string[] names)
