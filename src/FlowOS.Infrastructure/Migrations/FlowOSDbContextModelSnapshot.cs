@@ -1202,6 +1202,9 @@ namespace FlowOS.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ApplicationId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ApplicationName")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1221,6 +1224,9 @@ namespace FlowOS.Infrastructure.Migrations
 
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsApplicationRestricted")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsRevoked")
                         .HasColumnType("boolean");
@@ -1257,6 +1263,8 @@ namespace FlowOS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ApplicationId");
+
                     b.HasIndex("KeyHash")
                         .IsUnique();
 
@@ -1265,6 +1273,38 @@ namespace FlowOS.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ApplicationName");
 
                     b.ToTable("TenantApiKeys", (string)null);
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.TenantApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TenantApplications", (string)null);
                 });
 
             modelBuilder.Entity("FlowOS.Domain.Entities.TenantUser", b =>
@@ -2133,6 +2173,14 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasForeignKey("TenantUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.TenantApiKey", b =>
+                {
+                    b.HasOne("FlowOS.Domain.Entities.TenantApplication", null)
+                        .WithMany()
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("FlowOS.Domain.Entities.TenantUser", b =>

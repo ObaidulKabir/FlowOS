@@ -89,6 +89,8 @@ public class TenantsController : ControllerBase
             {
                 Id = k.Id,
                 Name = k.Name,
+                ApplicationId = k.ApplicationId,
+                IsApplicationRestricted = k.IsApplicationRestricted,
                 ApplicationName = k.ApplicationName,
                 Environment = k.Environment,
                 Scopes = k.Scopes,
@@ -212,6 +214,8 @@ public class TenantsController : ControllerBase
             {
                 Id = k.Id,
                 Name = k.Name,
+                ApplicationId = k.ApplicationId,
+                IsApplicationRestricted = k.IsApplicationRestricted,
                 ApplicationName = k.ApplicationName,
                 Environment = k.Environment,
                 Scopes = k.Scopes,
@@ -275,7 +279,7 @@ public class TenantsController : ControllerBase
     }
 
     [HttpGet("{id}/keys")]
-    public async Task<IActionResult> ListKeys(Guid id)
+    public async Task<IActionResult> ListKeys(Guid id, [FromQuery] Guid? applicationId = null)
     {
         if (!CanAccessTenant(id))
             return Forbid();
@@ -283,13 +287,18 @@ public class TenantsController : ControllerBase
         var tenantExists = await _context.Tenants.AnyAsync(t => t.TenantId == id);
         if (!tenantExists) return NotFound("Tenant not found.");
 
-        var keys = await _context.TenantApiKeys
-            .Where(k => k.TenantId == id)
+        var query = _context.TenantApiKeys.Where(k => k.TenantId == id);
+        if (applicationId.HasValue)
+            query = query.Where(k => k.ApplicationId == applicationId.Value);
+
+        var keys = await query
             .OrderByDescending(k => k.CreatedAt)
             .Select(k => new TenantApiKeyDto
             {
                 Id = k.Id,
                 Name = k.Name,
+                ApplicationId = k.ApplicationId,
+                IsApplicationRestricted = k.IsApplicationRestricted,
                 ApplicationName = k.ApplicationName,
                 Environment = k.Environment,
                 Scopes = k.Scopes,
@@ -326,6 +335,14 @@ public class TenantsController : ControllerBase
             : null;
 
         var apiKey = new TenantApiKey(id, keyName, rawKey, appName, env, scopes, expiresAt);
+        if (request.ApplicationId.HasValue)
+        {
+            var application = await _context.TenantApplications
+                .FirstOrDefaultAsync(a => a.TenantId == id && a.Id == request.ApplicationId.Value);
+            if (application == null)
+                return NotFound(new { code = TenantApplicationErrorCodes.NotFound, message = "Application not found." });
+            apiKey.IssueForApplication(application);
+        }
         _context.TenantApiKeys.Add(apiKey);
 
         await _context.SaveChangesAsync();
@@ -335,6 +352,8 @@ public class TenantsController : ControllerBase
             Id = apiKey.Id,
             TenantId = id,
             Name = apiKey.Name,
+            ApplicationId = apiKey.ApplicationId,
+            IsApplicationRestricted = apiKey.IsApplicationRestricted,
             ApplicationName = apiKey.ApplicationName,
             Environment = apiKey.Environment,
             Scopes = apiKey.Scopes,
@@ -503,6 +522,11 @@ public class GenerateKeyRequest
 {
     [Required]
     public string Name { get; set; } = "API Key";
+    /// <summary>
+    /// Issues the key for this application: its ApplicationName follows the application's name and the
+    /// key is marked application-restricted. When set, ApplicationName is ignored.
+    /// </summary>
+    public Guid? ApplicationId { get; set; }
     public string? ApplicationName { get; set; }
     public string? Environment { get; set; }
     public List<string>? Scopes { get; set; }
@@ -528,6 +552,8 @@ public class TenantApiKeyDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public Guid? ApplicationId { get; set; }
+    public bool IsApplicationRestricted { get; set; }
     public string ApplicationName { get; set; } = string.Empty;
     public string Environment { get; set; } = string.Empty;
     public List<string> Scopes { get; set; } = new();
@@ -552,6 +578,8 @@ public class CreateKeyResponse
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public Guid? ApplicationId { get; set; }
+    public bool IsApplicationRestricted { get; set; }
     public string ApplicationName { get; set; } = string.Empty;
     public string Environment { get; set; } = string.Empty;
     public List<string> Scopes { get; set; } = new();

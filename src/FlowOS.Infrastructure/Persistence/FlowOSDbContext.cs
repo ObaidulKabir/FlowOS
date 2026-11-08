@@ -14,6 +14,7 @@ public class FlowOSDbContext : DbContext
 {
     public DbSet<Tenant> Tenants { get; set; }
     public DbSet<TenantApiKey> TenantApiKeys { get; set; }
+    public DbSet<TenantApplication> TenantApplications { get; set; }
     public DbSet<TenantUser> TenantUsers { get; set; }
     public DbSet<TenantUserRole> TenantUserRoles { get; set; }
     public DbSet<DomainEvent> Events { get; set; }

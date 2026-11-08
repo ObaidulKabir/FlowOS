@@ -22,6 +22,16 @@ public class TenantApiKey
     public DateTime? LastUsedAt { get; private set; }
     public bool IsRevoked { get; private set; }
 
+    /// <summary>The application this key was issued for, or null for a key not linked to one.</summary>
+    public Guid? ApplicationId { get; private set; }
+
+    /// <summary>
+    /// True for a key issued for an application (IssueForApplication). Such keys are meant to be limited
+    /// to that application; keys that existed before applications were introduced keep tenant-wide
+    /// access. This flag only records the intent - nothing reads it for authorization yet.
+    /// </summary>
+    public bool IsApplicationRestricted { get; private set; }
+
     public bool IsExpired => ExpiresAt.HasValue && ExpiresAt.Value <= DateTime.UtcNow;
     public bool IsActive => !IsRevoked && !IsExpired;
 
@@ -104,6 +114,34 @@ public class TenantApiKey
     public void Revoke()
     {
         IsRevoked = true;
+    }
+
+    /// <summary>
+    /// Links a newly issued key to its application: the key's ApplicationName label follows the
+    /// application's name, and the key is marked application-restricted.
+    /// </summary>
+    public void IssueForApplication(TenantApplication application)
+    {
+        ArgumentNullException.ThrowIfNull(application);
+        if (application.TenantId != TenantId)
+            throw new ArgumentException("The application belongs to a different tenant.", nameof(application));
+
+        ApplicationId = application.Id;
+        ApplicationName = application.Name;
+        IsApplicationRestricted = true;
+    }
+
+    /// <summary>Keeps the ApplicationName label in step when the linked application is renamed.</summary>
+    public void RelabelApplication(string applicationName)
+    {
+        if (ApplicationId.HasValue && !string.IsNullOrWhiteSpace(applicationName))
+            ApplicationName = applicationName.Trim();
+    }
+
+    /// <summary>Unlinks a revoked or expired key so its application can be deleted.</summary>
+    public void DetachFromApplication()
+    {
+        ApplicationId = null;
     }
 
     /// <summary>

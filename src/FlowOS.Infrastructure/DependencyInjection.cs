@@ -57,6 +57,7 @@ public static class DependencyInjection
         services.AddScoped<FlowOS.Core.Common.Interfaces.ICompensationPlannerService, CompensationPlannerService>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.ICapabilityRegistryService, CapabilityRegistryService>();
         services.AddScoped<FlowOS.Core.Common.Interfaces.IPluginBindingRegistryService, PluginBindingRegistryService>();
+        services.AddScoped<FlowOS.Core.Common.Interfaces.ITenantApplicationService, TenantApplicationService>();
         services.AddScoped<IActivityAuthorizationService, FlowOS.Application.Services.ActivityAuthorizationService>();
         services.AddScoped<IWorkflowContextBindingValidator, FlowOS.Application.Services.WorkflowContextBindingValidator>();
         services.AddScoped<IWorkflowContextMaterializer, FlowOS.Application.Services.WorkflowContextMaterializer>();
