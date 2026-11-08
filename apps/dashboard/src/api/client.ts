@@ -1016,27 +1016,34 @@ export const api = {
 
   listPluginBindings: async (
     bindingType?: string,
-    role?: 'Tenant' | 'Admin'
+    role?: 'Tenant' | 'Admin',
+    // Applications (3/4): only meaningful for bindingType "prompt"/"profile" - see PluginBindingsController.List.
+    applicationId?: string
   ): Promise<{ totalCount: number; bindings: PluginBindingDto[] }> => {
     const headers = getHeaders(role);
     const params = new URLSearchParams();
     if (bindingType) params.append('bindingType', bindingType);
+    if (applicationId) params.append('applicationId', applicationId);
     const response = await fetch(`/api/plugin-bindings?${params.toString()}`, { headers });
     const data = await handleResponse(response, 'Failed to list plugin bindings');
     const raw = data.bindings ?? data.Bindings ?? [];
     return {
       totalCount: data.totalCount ?? data.TotalCount ?? raw.length,
-      bindings: raw.map((item: Record<string, unknown>) => ({
-        id: String(item.id ?? item.Id ?? ''),
-        tenantId: String(item.tenantId ?? item.TenantId ?? ''),
-        bindingType: String(item.bindingType ?? item.BindingType ?? ''),
-        sourceName: String(item.sourceName ?? item.SourceName ?? ''),
-        providerName: String(item.providerName ?? item.ProviderName ?? ''),
-        isEnabled: Boolean(item.isEnabled ?? item.IsEnabled ?? true),
-        configuration: (item.configuration ?? item.Configuration ?? null) as Record<string, unknown> | null,
-        createdAtUtc: String(item.createdAtUtc ?? item.CreatedAtUtc ?? ''),
-        updatedAtUtc: String(item.updatedAtUtc ?? item.UpdatedAtUtc ?? '')
-      }))
+      bindings: raw.map((item: Record<string, unknown>) => {
+        const appId = item.applicationId ?? item.ApplicationId;
+        return {
+          id: String(item.id ?? item.Id ?? ''),
+          tenantId: String(item.tenantId ?? item.TenantId ?? ''),
+          bindingType: String(item.bindingType ?? item.BindingType ?? ''),
+          sourceName: String(item.sourceName ?? item.SourceName ?? ''),
+          providerName: String(item.providerName ?? item.ProviderName ?? ''),
+          isEnabled: Boolean(item.isEnabled ?? item.IsEnabled ?? true),
+          configuration: (item.configuration ?? item.Configuration ?? null) as Record<string, unknown> | null,
+          createdAtUtc: String(item.createdAtUtc ?? item.CreatedAtUtc ?? ''),
+          updatedAtUtc: String(item.updatedAtUtc ?? item.UpdatedAtUtc ?? ''),
+          applicationId: appId ? String(appId) : undefined
+        };
+      })
     };
   },
 
@@ -1116,6 +1123,12 @@ export interface PluginBindingDto {
   createdAtUtc: string;
   updatedAtUtc: string;
   flowOsVersion?: string;
+  /**
+   * Applications (3/4): set for a prompt/profile binding scoped to one TenantApplication, undefined
+   * when it's tenant-shared. Only bindingType "prompt" and "profile" can carry this - "agent"
+   * (providers) and "action" (tools) stay tenant-wide always.
+   */
+  applicationId?: string;
 }
 
 export interface UpsertPluginBindingRequest {
@@ -1124,4 +1137,6 @@ export interface UpsertPluginBindingRequest {
   providerName?: string;
   isEnabled?: boolean;
   configuration?: Record<string, unknown>;
+  /** Applications (3/4): see PluginBindingDto.applicationId. Omit to target the tenant-shared binding. */
+  applicationId?: string;
 }

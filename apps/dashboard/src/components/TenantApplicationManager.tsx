@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import { CreateKeyResponse, TenantApplicationDto, WorkflowClass } from '../types';
 import {
   AppWindow, Plus, RefreshCw, Trash2, Pencil, AlertCircle, X,
-  ChevronRight, ChevronDown, Workflow, Key, Check, Copy, ShieldCheck, LockKeyhole
+  ChevronRight, ChevronDown, Workflow, Key, Check, Copy, ShieldCheck, LockKeyhole, ArrowRight
 } from 'lucide-react';
 import { ApiKeyScopePicker } from './ApiKeyScopePicker';
 import { API_KEY_SCOPE_PRESETS } from '../lib/apiKeyScopes';
@@ -15,6 +15,8 @@ interface Props {
   blueprints: WorkflowClass[];
   /** Re-fetches blueprints after an assign/unassign so WorkflowClass.applicationId stays in sync elsewhere. */
   onBlueprintsChanged?: () => void | Promise<void>;
+  /** Applications (4/4): opens the scoped ApplicationDetailView (Workflows/AI Context/API Keys) for this row. */
+  onOpenApplication?: (app: TenantApplicationDto) => void;
 }
 
 /**
@@ -24,7 +26,7 @@ interface Props {
  * docs/14-api-reference.md sections 8, 11 and 12. There was previously no dashboard UI for any of this;
  * it is REST-only and, per FlowOsMcpGuidance.cs, also has no MCP tool.
  */
-export const TenantApplicationManager: React.FC<Props> = ({ tenantId, tenantName, blueprints, onBlueprintsChanged }) => {
+export const TenantApplicationManager: React.FC<Props> = ({ tenantId, tenantName, blueprints, onBlueprintsChanged, onOpenApplication }) => {
   const [applications, setApplications] = useState<TenantApplicationDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +98,8 @@ export const TenantApplicationManager: React.FC<Props> = ({ tenantId, tenantName
       }
       setShowFormModal(false);
       await loadApplications();
+      // Keeps the parent's own applications list (used by ApplicationWorkspace's filter) in sync too.
+      if (onBlueprintsChanged) await onBlueprintsChanged();
     } catch (err: any) {
       alert(`Failed to save application: ${err.message}`);
     } finally {
@@ -113,6 +117,7 @@ export const TenantApplicationManager: React.FC<Props> = ({ tenantId, tenantName
     try {
       await api.deleteApplication(app.id);
       await loadApplications();
+      if (onBlueprintsChanged) await onBlueprintsChanged();
     } catch (err: any) {
       alert(err.message);
     }
@@ -264,7 +269,16 @@ export const TenantApplicationManager: React.FC<Props> = ({ tenantId, tenantName
                         </button>
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-white text-xs">{app.name}</div>
+                        {onOpenApplication ? (
+                          <button
+                            onClick={() => onOpenApplication(app)}
+                            className="font-bold text-white text-xs hover:text-blue-300 hover:underline text-left"
+                          >
+                            {app.name}
+                          </button>
+                        ) : (
+                          <div className="font-bold text-white text-xs">{app.name}</div>
+                        )}
                         {app.description && <div className="text-[11px] text-slate-400">{app.description}</div>}
                       </td>
                       <td className="py-3.5 px-4 font-mono">{app.workflowCount}</td>
@@ -274,6 +288,15 @@ export const TenantApplicationManager: React.FC<Props> = ({ tenantId, tenantName
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {onOpenApplication && (
+                            <button
+                              onClick={() => onOpenApplication(app)}
+                              className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1"
+                              title="Open workflows, AI context and keys for this application"
+                            >
+                              Open <ArrowRight size={12} />
+                            </button>
+                          )}
                           <button
                             onClick={() => openKeyModal(app.id)}
                             className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors"

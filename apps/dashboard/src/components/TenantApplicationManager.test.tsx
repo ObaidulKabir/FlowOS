@@ -126,4 +126,21 @@ describe('TenantApplicationManager', () => {
     ));
     await waitFor(() => expect(screen.getByText('flowos_live_full_key_value')).toBeInTheDocument());
   });
+
+  test('opening an application calls onOpenApplication with that row\'s application', async () => {
+    const onOpenApplication = vi.fn();
+    render(
+      <TenantApplicationManager
+        tenantId="t-1"
+        tenantName="Test Tenant"
+        blueprints={mockBlueprints}
+        onOpenApplication={onOpenApplication}
+      />
+    );
+    await waitFor(() => expect(screen.getByText('Customer Portal')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle('Open workflows, AI context and keys for this application'));
+
+    expect(onOpenApplication).toHaveBeenCalledWith(mockApplications[0]);
+  });
 });
