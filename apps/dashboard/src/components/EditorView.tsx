@@ -3,6 +3,7 @@ import { WorkflowClass, CreateDraftRequest, ValidationResult, GenerateBlueprintC
 import { X, Save, AlertTriangle, CheckCircle, Info, Layers, Sparkles } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { DraftSimulator } from './DraftSimulator';
+import { FullscreenSimulatorShell } from './FullscreenSimulatorShell';
 import { StepActionBuilder, StepAction } from './StepActionBuilder';
 import { CopilotDrawer } from './CopilotDrawer';
 import { applySimulationGovernance } from '../lib/simulationGovernance';
@@ -1425,11 +1426,13 @@ export const EditorView: React.FC<Props> = ({ item, validation, onClose, onSave 
                             initialView="both" 
                         />
                     ) : (
-                        <DraftSimulator 
-                            definition={(() => {
-                                try { return JSON.parse(rawJson); } catch (e) { return null; }
-                            })()}
-                        />
+                        <FullscreenSimulatorShell label="Sandbox Simulator" className="h-full">
+                            <DraftSimulator 
+                                definition={(() => {
+                                    try { return JSON.parse(rawJson); } catch (e) { return null; }
+                                })()}
+                            />
+                        </FullscreenSimulatorShell>
                     )}
                 </div>
             </div>

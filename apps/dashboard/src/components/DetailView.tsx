@@ -3,6 +3,7 @@ import { WorkflowClass, ValidationResult, WorkflowClassScope, WorkflowClassStatu
 import { X, CheckCircle, AlertTriangle, ShieldCheck, FileCode, Tag } from 'lucide-react';
 import { WorkflowGraphVisualizer } from './WorkflowGraphVisualizer';
 import { DraftSimulator } from './DraftSimulator';
+import { FullscreenSimulatorShell } from './FullscreenSimulatorShell';
 import { VersionDiffVisualizer } from './VersionDiffVisualizer';
 import { api } from '../api/client';
 
@@ -165,7 +166,9 @@ export const DetailView: React.FC<Props> = ({ item, validation, onClose, onValid
           {viewMode === 'visual' ? (
             <WorkflowGraphVisualizer definition={item.definition} />
           ) : viewMode === 'simulate' ? (
-            <DraftSimulator definition={item.definition} />
+            <FullscreenSimulatorShell label="Sandbox Simulator" className="h-full">
+              <DraftSimulator definition={item.definition} />
+            </FullscreenSimulatorShell>
           ) : viewMode === 'compare' && previousItem ? (
             <div className="flex flex-col h-full overflow-hidden">
                 <div className="flex-1 overflow-auto">
