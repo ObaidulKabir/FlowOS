@@ -13,6 +13,7 @@ using FlowOS.API.Filters;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using static FlowOS.Core.Security.ApplicationScopeRules;
 
 namespace FlowOS.Api.Controllers;
 
@@ -37,10 +38,18 @@ public class WorkflowClassesController : ControllerBase
     {
         if (_currentUser.TenantId == Guid.Empty) return Unauthorized("TenantId is missing.");
 
+        var applicationId = request.ApplicationId;
+        if (_currentUser.ApplicationId.HasValue)
+        {
+            if (applicationId.HasValue && applicationId.Value != _currentUser.ApplicationId.Value)
+                return ApplicationScopeForbidden();
+            applicationId = _currentUser.ApplicationId;
+        }
+
         try
         {
             var result = await _mediator.Send(new CreateWorkflowClassCommand(
-                _currentUser.TenantId, request.Name, request.Version, request.Definition, request.ApplicationId));
+                _currentUser.TenantId, request.Name, request.Version, request.Definition, applicationId));
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
         catch (WorkflowClassValidationException ex)
@@ -55,11 +64,14 @@ public class WorkflowClassesController : ControllerBase
 
     /// <summary>
     /// Moves a workflow, with all of its versions, to an application; a null applicationId unassigns it.
+    /// Reserved for an unrestricted caller - moving a workflow between applications is an
+    /// administrative action, not something an application-restricted key does on its own behalf.
     /// </summary>
     [HttpPost("{id}/application")]
     public async Task<IActionResult> AssignApplication(Guid id, [FromBody] AssignWorkflowClassApplicationRequest request)
     {
         if (_currentUser.TenantId == Guid.Empty) return Unauthorized("TenantId is missing.");
+        if (_currentUser.ApplicationId.HasValue) return ApplicationScopeForbidden();
         try
         {
             var moved = await _applications.AssignWorkflowClassAsync(_currentUser.TenantId, id, request.ApplicationId);
@@ -74,6 +86,9 @@ public class WorkflowClassesController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateDraft(Guid id, [FromBody] CreateWorkflowClassRequest request)
     {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        if (scopeError != null) return scopeError;
+
         try
         {
             var result = await _mediator.Send(new UpdateWorkflowClassCommand(
@@ -95,6 +110,12 @@ public class WorkflowClassesController : ControllerBase
         [FromQuery] bool unassigned = false)
     {
         var effectiveTenant = ResolveEffectiveTenant(tenantId);
+        // An application-restricted key sees only its own application's workflow classes, whatever it asks for.
+        if (_currentUser.ApplicationId.HasValue)
+        {
+            applicationId = _currentUser.ApplicationId;
+            unassigned = false;
+        }
         var list = await _mediator.Send(new ListWorkflowClassesQuery(effectiveTenant, scope, status, applicationId, unassigned));
         return Ok(list);
     }
@@ -117,6 +138,7 @@ public class WorkflowClassesController : ControllerBase
 
             var result = await _mediator.Send(new GetWorkflowClassByIdQuery(effectiveTenant, id));
             if (result == null) return NotFound();
+            if (!Allows(_currentUser.ApplicationId, result.ApplicationId)) return NotFound();
             return Ok(result);
         }
         catch (UnauthorizedAccessException) { return Forbid(); }
@@ -126,6 +148,9 @@ public class WorkflowClassesController : ControllerBase
     [RequireRuntimePlan]
     public async Task<IActionResult> Publish(Guid id)
     {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        if (scopeError != null) return scopeError;
+
         try
         {
             var result = await _mediator.Send(new PublishWorkflowClassCommand(_currentUser.TenantId, id));
@@ -139,11 +164,17 @@ public class WorkflowClassesController : ControllerBase
 
     [HttpPost("{id}/submit")]
     public async Task<IActionResult> SubmitForReview(Guid id)
-        => await Mutate(new SubmitWorkflowClassCommand(_currentUser.TenantId, id));
+    {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        return scopeError ?? await Mutate(new SubmitWorkflowClassCommand(_currentUser.TenantId, id));
+    }
 
     [HttpPost("{id}/withdraw")]
     public async Task<IActionResult> WithdrawSubmission(Guid id)
-        => await Mutate(new WithdrawWorkflowClassCommand(_currentUser.TenantId, id));
+    {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        return scopeError ?? await Mutate(new WithdrawWorkflowClassCommand(_currentUser.TenantId, id));
+    }
 
     [HttpPost("{id}/validate")]
     public async Task<IActionResult> Validate(Guid id, [FromQuery] Guid? tenantId)
@@ -155,6 +186,11 @@ public class WorkflowClassesController : ControllerBase
             {
                 var existing = await _mediator.Send(new GetWorkflowClassByIdQuery(Guid.Empty, id));
                 if (existing != null) effectiveTenant = existing.TenantId;
+            }
+            else
+            {
+                var scopeError = await EnsureApplicationAccessAsync(id, effectiveTenant);
+                if (scopeError != null) return scopeError;
             }
 
             var result = await _mediator.Send(new ValidateWorkflowClassCommand(effectiveTenant, id));
@@ -198,11 +234,17 @@ public class WorkflowClassesController : ControllerBase
 
     [HttpPost("{id}/deprecate")]
     public async Task<IActionResult> Deprecate(Guid id)
-        => await Mutate(new DeprecateWorkflowClassCommand(_currentUser.TenantId, id));
+    {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        return scopeError ?? await Mutate(new DeprecateWorkflowClassCommand(_currentUser.TenantId, id));
+    }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        if (scopeError != null) return scopeError;
+
         try
         {
             await _mediator.Send(new DeleteWorkflowClassCommand(_currentUser.TenantId, id));
@@ -216,6 +258,9 @@ public class WorkflowClassesController : ControllerBase
     [HttpPost("{id}/abandon")]
     public async Task<IActionResult> Abandon(Guid id)
     {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        if (scopeError != null) return scopeError;
+
         try
         {
             var result = await _mediator.Send(new AbandonWorkflowClassCommand(_currentUser.TenantId, id));
@@ -230,11 +275,17 @@ public class WorkflowClassesController : ControllerBase
     [Authorize(Roles = "Admin,SuperAdmin")]
     [RequireRuntimePlan]
     public async Task<IActionResult> ApproveAsPublic(Guid id)
-        => await Mutate(new ApproveWorkflowClassCommand(_currentUser.TenantId, id));
+    {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        return scopeError ?? await Mutate(new ApproveWorkflowClassCommand(_currentUser.TenantId, id));
+    }
 
     [HttpPost("{id}/copy")]
     public async Task<IActionResult> CopyToTenant(Guid id, [FromBody] CopyWorkflowClassRequest request)
     {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        if (scopeError != null) return scopeError;
+
         try
         {
             var result = await _mediator.Send(new CopyWorkflowClassCommand(_currentUser.TenantId, id, request.NewTenantId));
@@ -248,6 +299,9 @@ public class WorkflowClassesController : ControllerBase
     [HttpPost("{id}/new-version")]
     public async Task<IActionResult> CreateNewVersion(Guid id, [FromQuery] VersionBumpType bump = VersionBumpType.Minor, [FromBody] NewVersionRequest? request = null)
     {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        if (scopeError != null) return scopeError;
+
         try
         {
             var result = await _mediator.Send(new CreateNewWorkflowClassVersionCommand(
@@ -261,6 +315,9 @@ public class WorkflowClassesController : ControllerBase
     [HttpPost("{id}/rollback")]
     public async Task<IActionResult> Rollback(Guid id)
     {
+        var scopeError = await EnsureApplicationAccessAsync(id, _currentUser.TenantId);
+        if (scopeError != null) return scopeError;
+
         try
         {
             var result = await _mediator.Send(new RollbackWorkflowClassCommand(_currentUser.TenantId, id));
@@ -293,6 +350,24 @@ public class WorkflowClassesController : ControllerBase
 
         return _currentUser.TenantId;
     }
+
+    /// <summary>
+    /// Applications (4/4): null when the caller may act on this workflow class; otherwise the response
+    /// to return instead (404 for an unknown or, for a restricted caller, out-of-scope class - the same
+    /// response either way, so a restricted key cannot tell "not found" from "not yours" apart).
+    /// </summary>
+    private async Task<IActionResult?> EnsureApplicationAccessAsync(Guid workflowClassId, Guid tenantId)
+    {
+        if (!_currentUser.ApplicationId.HasValue) return null;
+
+        var existing = await _mediator.Send(new GetWorkflowClassByIdQuery(tenantId, workflowClassId));
+        if (existing == null) return NotFound();
+        if (!Allows(_currentUser.ApplicationId, existing.ApplicationId)) return NotFound();
+        return null;
+    }
+
+    private IActionResult ApplicationScopeForbidden() =>
+        StatusCode(403, new { code = "APP-SCOPE-001", message = "This API key is restricted to one application and cannot act outside it." });
 
     private async Task<IActionResult> Mutate(IRequest<WorkflowClassResponseDto> command)
     {

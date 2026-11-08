@@ -14,6 +14,7 @@ public sealed class AgentWorkerCurrentUser : ICurrentUser
     public List<string> Roles => new() { "Admin" };
     public IReadOnlyCollection<string> Scopes => Array.Empty<string>();
     public bool IsApiKey => false;
+    public Guid? ApplicationId => null;
 
     public void SetTenant(Guid tenantId)
     {
