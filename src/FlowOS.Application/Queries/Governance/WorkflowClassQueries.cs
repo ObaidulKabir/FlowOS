@@ -6,7 +6,9 @@ using MediatR;
 
 namespace FlowOS.Application.Queries.Governance;
 
-public record ListWorkflowClassesQuery(Guid TenantId, WorkflowClassScope? Scope, WorkflowClassStatus? Status)
+/// <param name="ApplicationId">Only this application's workflows.</param>
+/// <param name="Unassigned">Only workflows not assigned to any application (ignored when ApplicationId is set).</param>
+public record ListWorkflowClassesQuery(Guid TenantId, WorkflowClassScope? Scope, WorkflowClassStatus? Status, Guid? ApplicationId = null, bool Unassigned = false)
     : IRequest<List<WorkflowClassResponseDto>>;
 
 public record GetWorkflowClassByIdQuery(Guid TenantId, Guid Id)

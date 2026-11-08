@@ -37,6 +37,7 @@ public sealed class TenantBackupService : ITenantBackupService
         var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken)
             ?? throw new TenantBackupException("BACKUP-NOT-FOUND", $"Tenant {tenantId} was not found.", 404);
 
+        var applications = await _db.TenantApplications.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
         var classes = await _db.WorkflowClasses.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
         var bindings = await _db.WorkflowContextBindings.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
         var bindingIds = bindings.Select(x => x.Id).ToList();
@@ -66,6 +67,7 @@ public sealed class TenantBackupService : ITenantBackupService
             ["sourceTenantId"] = tenantId,
             ["sourceTenantName"] = tenant.Name,
             ["policy"] = "Point-in-time Designed App and running-instance snapshot. Pending timers are restored as already processed so the destination does not repeat side effects. Outbox deliveries, API keys, and user passwords are not included.",
+            ["applications"] = WriteAll(applications),
             ["workflowClasses"] = WriteAll(classes),
             ["stateMachines"] = WriteAll(machines),
             ["workflowDefinitions"] = WriteAll(definitions),
@@ -122,6 +124,7 @@ public sealed class TenantBackupService : ITenantBackupService
         var takenAt = bundle["takenAtUtc"]!.GetValue<DateTime>();
 
         var machines = ReadAll<StateMachineDefinition>(bundle["stateMachines"] as JsonArray);
+        var applications = ReadAll<TenantApplication>(bundle["applications"] as JsonArray);
         var classes = ReadAll<WorkflowClass>(bundle["workflowClasses"] as JsonArray);
         var definitions = ReadAll<WorkflowDefinition>(bundle["workflowDefinitions"] as JsonArray);
         var bindings = ReadAll<WorkflowContextBinding>(bundle["contextBindings"] as JsonArray);
@@ -135,6 +138,7 @@ public sealed class TenantBackupService : ITenantBackupService
         var timers = ReadAll<WorkflowTimerJob>(bundle["timerJobs"] as JsonArray);
 
         Retarget(machines, destinationTenantId);
+        Retarget(applications, destinationTenantId);
         Retarget(classes, destinationTenantId);
         Retarget(definitions, destinationTenantId);
         Retarget(bindings, destinationTenantId);
@@ -151,12 +155,15 @@ public sealed class TenantBackupService : ITenantBackupService
                 timer.MarkAsProcessed();
         }
 
+        var newApplications = await MapApplicationsAsync(applications, classes, destinationTenantId, cancellationToken);
+        await EnsureIdsFreeAsync(newApplications.Select(x => x.Id), _db.TenantApplications.Select(x => x.Id), "application", cancellationToken);
         await EnsureIdsFreeAsync(classes.Select(x => x.Id), _db.WorkflowClasses.Select(x => x.Id), "workflow class", cancellationToken);
         await EnsureIdsFreeAsync(bindings.Select(x => x.Id), _db.WorkflowContextBindings.Select(x => x.Id), "business context", cancellationToken);
         await EnsureIdsFreeAsync(instances.Select(x => x.Id), _db.WorkflowInstances.Select(x => x.Id), "workflow instance", cancellationToken);
         await EnsureIdsFreeAsync(events.Select(x => x.EventId), _db.Events.Select(x => x.EventId), "event", cancellationToken);
 
         _db.StateMachineDefinitions.AddRange(machines);
+        _db.TenantApplications.AddRange(newApplications);
         _db.WorkflowClasses.AddRange(classes);
         _db.WorkflowDefinitions.AddRange(definitions);
         _db.WorkflowContextBindings.AddRange(bindings);
@@ -201,6 +208,47 @@ public sealed class TenantBackupService : ITenantBackupService
                 tracked.IsTemporary = false;
             }
         }
+    }
+
+    /// <summary>
+    /// Application names are unique per tenant, so a backed-up application whose name already exists on
+    /// the destination is reused rather than inserted, and its workflow classes are pointed at the
+    /// existing one. A workflow class that names an application missing from the file is restored
+    /// unassigned. Returns the applications that still need inserting.
+    /// </summary>
+    private async Task<List<TenantApplication>> MapApplicationsAsync(
+        List<TenantApplication> applications,
+        List<WorkflowClass> classes,
+        Guid destinationTenantId,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _db.TenantApplications.AsNoTracking()
+            .Where(x => x.TenantId == destinationTenantId)
+            .ToListAsync(cancellationToken);
+
+        var idMap = new Dictionary<Guid, Guid>();
+        var toInsert = new List<TenantApplication>();
+        foreach (var application in applications)
+        {
+            var match = existing.FirstOrDefault(x => string.Equals(x.Name, application.Name, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+            {
+                idMap[application.Id] = match.Id;
+            }
+            else
+            {
+                idMap[application.Id] = application.Id;
+                toInsert.Add(application);
+            }
+        }
+
+        foreach (var workflowClass in classes)
+        {
+            if (workflowClass.ApplicationId is Guid applicationId)
+                workflowClass.AssignToApplication(idMap.TryGetValue(applicationId, out var mapped) ? mapped : null);
+        }
+
+        return toInsert;
     }
 
     private static FlowOsCompatibility AssessBundle(JsonObject bundle, string hostStamp)

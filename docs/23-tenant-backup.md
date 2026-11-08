@@ -17,6 +17,8 @@ The file format is `flowos-tenant-backup`, format version 1. It records `flowOsV
 
 Restore keeps the original record ids and rewrites `tenantId` to the destination. Restore onto a site that already has any of those workflow classes, business contexts, instances, or events is refused (`BACKUP-CONFLICT`). Use another site, or an empty tenant.
 
+The file also holds the tenant's applications (name and description), so each workflow class keeps its application. An application whose name already exists on the destination tenant (ignoring case) is reused rather than duplicated. FlowOS API keys are never in the file, so after a restore you create new keys for each application. Backups taken before applications existed restore with every workflow unassigned.
+
 ## Encryption (CR-15)
 
 A backup holds the tenant's AI provider settings, running-instance data and the event log, so it is encrypted with a passphrase you choose.

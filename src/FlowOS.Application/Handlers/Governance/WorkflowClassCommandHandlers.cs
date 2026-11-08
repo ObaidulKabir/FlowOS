@@ -7,6 +7,7 @@ using FlowOS.Application.Commands.Governance;
 using FlowOS.Application.Common.Interfaces.Persistence;
 using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Services;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
 using FlowOS.Core.Security;
 using FlowOS.Domain;
@@ -40,24 +41,36 @@ public class WorkflowClassCommandHandlers :
     private readonly IWorkflowClassVersionManager _versionManager;
     private readonly IWorkflowJsonLinter _linter;
     private readonly ICurrentUser _currentUser;
+    private readonly ITenantApplicationService? _applications;
 
     public WorkflowClassCommandHandlers(
         IUnitOfWork unitOfWork,
         IWorkflowClassManager manager,
         IWorkflowClassVersionManager versionManager,
         IWorkflowJsonLinter linter,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        ITenantApplicationService? applications = null)
     {
         _unitOfWork = unitOfWork;
         _manager = manager;
         _versionManager = versionManager;
         _linter = linter;
         _currentUser = currentUser;
+        _applications = applications;
     }
 
     public async Task<WorkflowClassResponseDto> Handle(CreateWorkflowClassCommand request, CancellationToken cancellationToken)
     {
         var workflowClass = new WorkflowClass(request.TenantId, request.Name, request.Version, request.Definition);
+        if (request.ApplicationId.HasValue && request.ApplicationId.Value != Guid.Empty)
+        {
+            var application = _applications == null
+                ? null
+                : await _applications.GetAsync(request.TenantId, request.ApplicationId.Value, cancellationToken);
+            if (application == null)
+                throw new TenantApplicationException(TenantApplicationErrorCodes.NotFound, "Application not found.");
+            workflowClass.AssignToApplication(application.Id);
+        }
         var validationResult = _manager.CreateDraft(workflowClass);
         if (!validationResult.IsValid)
             throw new WorkflowClassValidationException(validationResult);
@@ -321,6 +334,7 @@ public class WorkflowClassCommandHandlers :
         CreatedAt = wc.CreatedAt,
         PublishedAt = wc.PublishedAt,
         PreviousVersionId = wc.PreviousVersionId,
+        ApplicationId = wc.ApplicationId,
         ChangeLog = wc.ChangeLog,
         DeprecationReason = wc.DeprecationReason,
         DeprecationMigrationTargetId = wc.DeprecationMigrationTargetId,

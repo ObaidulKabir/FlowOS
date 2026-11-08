@@ -28,5 +28,11 @@ public class WorkflowClassConfiguration : IEntityTypeConfiguration<WorkflowClass
                 v => JsonSerializer.Serialize(v, JsonOptions),
                 v => JsonSerializer.Deserialize<WorkflowClassBlueprint>(v, JsonOptions) ?? new WorkflowClassBlueprint()
             );
+
+        // An application with workflows cannot be deleted; move or unassign them first.
+        builder.HasOne<TenantApplication>()
+            .WithMany()
+            .HasForeignKey(e => e.ApplicationId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

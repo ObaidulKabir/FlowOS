@@ -16,6 +16,8 @@ public record WorkflowClassResponseDto
     public DateTime CreatedAt { get; init; }
     public DateTime? PublishedAt { get; init; }
     public Guid? PreviousVersionId { get; init; }
+    /// <summary>The tenant application this workflow belongs to, or null when unassigned.</summary>
+    public Guid? ApplicationId { get; init; }
     public string? ChangeLog { get; init; }
     public string? DeprecationReason { get; init; }
     public Guid? DeprecationMigrationTargetId { get; init; }

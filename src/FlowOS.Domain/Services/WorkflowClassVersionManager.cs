@@ -19,6 +19,7 @@ public class WorkflowClassVersionManager : IWorkflowClassVersionManager
         
         var newClass = new WorkflowClass(sourceClass.TenantId, sourceClass.Name, newVersion, sourceClass.Definition);
         newClass.PreviousVersionId = sourceClass.Id;
+        newClass.AssignToApplication(sourceClass.ApplicationId);
         return newClass;
     }
 

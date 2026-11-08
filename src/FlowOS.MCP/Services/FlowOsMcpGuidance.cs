@@ -860,6 +860,7 @@ public static class FlowOsMcpGuidance
         ## What is in the file
 
         - DesignedApp: blueprint, business-context revisions, AI Context prompt and provider bindings
+        - The tenant's applications (name, description) and which application each workflow class belongs to
         - Compiled workflow definitions and state machines
         - Every workflow instance and its context snapshot
         - Event log, action history, and timer jobs

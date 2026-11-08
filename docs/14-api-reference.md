@@ -232,6 +232,9 @@ Verify it over the raw response bytes before parsing, with a constant-time compa
 * `POST /api/workflow-classes/{id}/copy` — clone a `Public` template into caller's tenant with version reset to `1.0.0`.
 * `POST /api/workflow-classes/{id}/validate` — run authoritative validation without modifying anything.
 * `POST /api/workflow-classes/lint` — structural advisory linting.
+* `GET /api/workflow-classes?applicationId=` — only that application's workflow classes; `?unassigned=true` returns only those not in any application. Every workflow class has `applicationId` (or `null`).
+* `POST /api/workflow-classes/{id}/application` — body `{ "applicationId": "<guid>" | null }`. Moves the workflow to an application (see section 12), or unassigns it with `null`. Every version of the workflow (the tenant's workflow classes with the same name) moves together; the response reports `versionsMoved`. `404 {code:"APP-NOTFOUND-001"}` if the application or workflow class is not in the caller's tenant. Allowed in any status: it does not change the blueprint.
+* `POST /api/workflow-classes` also accepts an optional `applicationId` for the new draft. A new version (`new-version`) stays in its source's application; a `copy` from a `Public` template starts unassigned.
 
 See the full lifecycle diagram and blueprint schema in [Chapter 9 — WorkflowClass Governance](09-workflow-class-governance.md#rest-api--verified-against-workflowclassescontroller).
 
@@ -280,15 +283,15 @@ To share one workflow template with many institutions, publish it as a **Public*
 
 ## 12. Applications — `ApplicationsController` (`/api/applications`, `[Authorize]`)
 
-An application is something the tenant builds on FlowOS. It groups that application's FlowOS API keys; one application usually has several keys over its life (production, a replacement during rotation). AI provider configuration, including model API keys, stays tenant-level. Every route works inside the caller's tenant.
+An application is something the tenant builds on FlowOS. It groups that application's workflows and FlowOS API keys; one application usually has several workflows, and several keys over its life (production, a replacement during rotation). Assign a workflow with `POST /api/workflow-classes/{id}/application` (section 8). AI provider configuration, including model API keys, stays tenant-level. Every route works inside the caller's tenant.
 
 | Method & Route | Description |
 |---|---|
-| `GET /api/applications` | The tenant's applications, ordered by name. Each has `id`, `name`, `description`, `createdAtUtc`, `updatedAtUtc`, and `activeKeyCount` (keys not revoked or expired). |
+| `GET /api/applications` | The tenant's applications, ordered by name. Each has `id`, `name`, `description`, `createdAtUtc`, `updatedAtUtc`, `activeKeyCount` (keys not revoked or expired), and `workflowCount` (distinct workflows; all versions of one workflow count once). |
 | `GET /api/applications/{id}` | One application, or `404 {code:"APP-NOTFOUND-001"}`. |
 | `POST /api/applications` | Body `{name, description?}`. Names are unique per tenant, ignoring case (`409 {code:"APP-NAME-001"}`); a blank name or one over 150 characters is `400 {code:"APP-ARG-001"}`. |
 | `PUT /api/applications/{id}` | Body `{name, description?}`. Renaming also updates `applicationName` on the application's keys. |
-| `DELETE /api/applications/{id}` | `409 {code:"APP-INUSE-001"}` while the application has an active key; revoke them first. Revoked and expired keys are unlinked, then the application is removed. |
+| `DELETE /api/applications/{id}` | `409 {code:"APP-INUSE-001"}` while the application has an active key or any workflow; revoke the keys and move or unassign the workflows first. Revoked and expired keys are unlinked, then the application is removed. |
 
 **Existing keys.** When applications were introduced, each distinct `applicationName` label already on a tenant's keys became an application, and those keys were linked to it. Keys still labelled `Default Application` were left unlinked (`applicationId: null`). Linked existing keys have `isApplicationRestricted: false`.
 

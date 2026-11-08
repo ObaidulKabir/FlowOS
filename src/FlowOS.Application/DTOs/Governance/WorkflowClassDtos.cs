@@ -14,6 +14,15 @@ public record CreateWorkflowClassRequest
     
     [Required]
     public WorkflowClassBlueprint Definition { get; init; } = new();
+
+    /// <summary>Optional tenant application for a new workflow. Ignored on update.</summary>
+    public Guid? ApplicationId { get; init; }
+}
+
+/// <summary>Body of POST /api/workflow-classes/{id}/application. Null unassigns the workflow.</summary>
+public record AssignWorkflowClassApplicationRequest
+{
+    public Guid? ApplicationId { get; init; }
 }
 
 public record CopyWorkflowClassRequest
