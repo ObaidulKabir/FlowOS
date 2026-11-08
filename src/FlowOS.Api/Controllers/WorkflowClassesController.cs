@@ -5,6 +5,7 @@ using FlowOS.Application.Commands.Governance;
 using FlowOS.Application.DTOs.Governance;
 using FlowOS.Application.Handlers.Governance;
 using FlowOS.Application.Queries.Governance;
+using FlowOS.Core.Common.Interfaces;
 using FlowOS.Core.Interfaces;
 using FlowOS.Core.Security;
 using FlowOS.Domain.Enums;
@@ -22,11 +23,13 @@ public class WorkflowClassesController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
+    private readonly ITenantApplicationService _applications;
 
-    public WorkflowClassesController(IMediator mediator, ICurrentUser currentUser)
+    public WorkflowClassesController(IMediator mediator, ICurrentUser currentUser, ITenantApplicationService applications)
     {
         _mediator = mediator;
         _currentUser = currentUser;
+        _applications = applications;
     }
 
     [HttpPost]
@@ -37,12 +40,34 @@ public class WorkflowClassesController : ControllerBase
         try
         {
             var result = await _mediator.Send(new CreateWorkflowClassCommand(
-                _currentUser.TenantId, request.Name, request.Version, request.Definition));
+                _currentUser.TenantId, request.Name, request.Version, request.Definition, request.ApplicationId));
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
         catch (WorkflowClassValidationException ex)
         {
             return BadRequest(new { Errors = ex.ValidationResult.Errors });
+        }
+        catch (TenantApplicationException ex)
+        {
+            return NotFound(new { code = ex.Code, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Moves a workflow, with all of its versions, to an application; a null applicationId unassigns it.
+    /// </summary>
+    [HttpPost("{id}/application")]
+    public async Task<IActionResult> AssignApplication(Guid id, [FromBody] AssignWorkflowClassApplicationRequest request)
+    {
+        if (_currentUser.TenantId == Guid.Empty) return Unauthorized("TenantId is missing.");
+        try
+        {
+            var moved = await _applications.AssignWorkflowClassAsync(_currentUser.TenantId, id, request.ApplicationId);
+            return Ok(new { workflowClassId = id, applicationId = request.ApplicationId, versionsMoved = moved });
+        }
+        catch (TenantApplicationException ex)
+        {
+            return NotFound(new { code = ex.Code, message = ex.Message });
         }
     }
 
@@ -65,10 +90,12 @@ public class WorkflowClassesController : ControllerBase
     public async Task<IActionResult> List(
         [FromQuery] WorkflowClassScope? scope,
         [FromQuery] WorkflowClassStatus? status,
-        [FromQuery] Guid? tenantId)
+        [FromQuery] Guid? tenantId,
+        [FromQuery] Guid? applicationId,
+        [FromQuery] bool unassigned = false)
     {
         var effectiveTenant = ResolveEffectiveTenant(tenantId);
-        var list = await _mediator.Send(new ListWorkflowClassesQuery(effectiveTenant, scope, status));
+        var list = await _mediator.Send(new ListWorkflowClassesQuery(effectiveTenant, scope, status, applicationId, unassigned));
         return Ok(list);
     }
 

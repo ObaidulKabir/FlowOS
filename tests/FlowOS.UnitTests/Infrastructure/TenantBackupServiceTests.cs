@@ -83,6 +83,46 @@ public class TenantBackupServiceTests
     }
 
     [Fact]
+    public async Task Restore_KeepsEachWorkflowInItsApplication_AndReusesASameNamedApplication()
+    {
+        var sourceId = Guid.NewGuid();
+        var destinationId = Guid.NewGuid();
+        await using var source = CreateContext();
+        await using var destination = CreateContext();
+
+        var tenant = new Tenant("Source Org");
+        Set(tenant, "TenantId", sourceId);
+        source.Tenants.Add(tenant);
+        var finance = new TenantApplication(sourceId, "Finance Approvals", null, DateTime.UtcNow);
+        var commerce = new TenantApplication(sourceId, "Commerce", "Orders", DateTime.UtcNow);
+        var expense = new WorkflowClass(sourceId, "Expense", "1.0.0", new WorkflowClassBlueprint());
+        expense.AssignToApplication(finance.Id);
+        var order = new WorkflowClass(sourceId, "Order", "1.0.0", new WorkflowClassBlueprint());
+        order.AssignToApplication(commerce.Id);
+        source.TenantApplications.AddRange(finance, commerce);
+        source.WorkflowClasses.AddRange(expense, order);
+        await source.SaveChangesAsync();
+
+        var exported = await new TenantBackupService(source).ExportJsonAsync(sourceId);
+
+        var other = new Tenant("Destination Org");
+        Set(other, "TenantId", destinationId);
+        destination.Tenants.Add(other);
+        var existingFinance = new TenantApplication(destinationId, "finance approvals", null, DateTime.UtcNow);
+        destination.TenantApplications.Add(existingFinance);
+        await destination.SaveChangesAsync();
+
+        await new TenantBackupService(destination).RestoreJsonAsync(destinationId, exported);
+
+        var applications = await destination.TenantApplications.Where(a => a.TenantId == destinationId).ToListAsync();
+        Assert.Equal(2, applications.Count);
+        var restoredCommerce = Assert.Single(applications, a => a.Name == "Commerce");
+        Assert.Equal(commerce.Id, restoredCommerce.Id);
+        Assert.Equal(existingFinance.Id, (await destination.WorkflowClasses.SingleAsync(w => w.Name == "Expense")).ApplicationId);
+        Assert.Equal(commerce.Id, (await destination.WorkflowClasses.SingleAsync(w => w.Name == "Order")).ApplicationId);
+    }
+
+    [Fact]
     public async Task Restore_RefusesANewerFlowOsRelease()
     {
         var destinationId = Guid.NewGuid();

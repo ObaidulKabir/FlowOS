@@ -29,7 +29,8 @@ public sealed class TenantApplicationService : ITenantApplicationService
             .OrderBy(a => a.Name)
             .ToListAsync(ct);
         var counts = await ActiveKeyCountsAsync(tenantId, ct);
-        return applications.Select(a => ToDto(a, counts)).ToList();
+        var workflows = await WorkflowCountsAsync(tenantId, ct);
+        return applications.Select(a => ToDto(a, counts, workflows)).ToList();
     }
 
     public async Task<TenantApplicationDto?> GetAsync(Guid tenantId, Guid applicationId, CancellationToken ct = default)
@@ -39,7 +40,7 @@ public sealed class TenantApplicationService : ITenantApplicationService
             .FirstOrDefaultAsync(a => a.TenantId == tenantId && a.Id == applicationId, ct);
         if (application == null)
             return null;
-        return ToDto(application, await ActiveKeyCountsAsync(tenantId, ct));
+        return ToDto(application, await ActiveKeyCountsAsync(tenantId, ct), await WorkflowCountsAsync(tenantId, ct));
     }
 
     public async Task<TenantApplicationDto> CreateAsync(Guid tenantId, string name, string? description, CancellationToken ct = default)
@@ -49,7 +50,7 @@ public sealed class TenantApplicationService : ITenantApplicationService
 
         _db.TenantApplications.Add(application);
         await _db.SaveChangesAsync(ct);
-        return ToDto(application, new Dictionary<Guid, int>());
+        return ToDto(application, new Dictionary<Guid, int>(), new Dictionary<Guid, int>());
     }
 
     public async Task<TenantApplicationDto> UpdateAsync(Guid tenantId, Guid applicationId, string name, string? description, CancellationToken ct = default)
@@ -65,7 +66,7 @@ public sealed class TenantApplicationService : ITenantApplicationService
             key.RelabelApplication(application.Name);
 
         await _db.SaveChangesAsync(ct);
-        return ToDto(application, await ActiveKeyCountsAsync(tenantId, ct));
+        return ToDto(application, await ActiveKeyCountsAsync(tenantId, ct), await WorkflowCountsAsync(tenantId, ct));
     }
 
     public async Task DeleteAsync(Guid tenantId, Guid applicationId, CancellationToken ct = default)
@@ -84,11 +85,46 @@ public sealed class TenantApplicationService : ITenantApplicationService
                 $"Application '{application.Name}' still has {active} active API key(s). Revoke them first.");
         }
 
+        var workflows = await _db.WorkflowClasses
+            .Where(w => w.TenantId == tenantId && w.ApplicationId == applicationId)
+            .Select(w => w.Name)
+            .Distinct()
+            .CountAsync(ct);
+        if (workflows > 0)
+        {
+            throw new TenantApplicationException(
+                TenantApplicationErrorCodes.InUse,
+                $"Application '{application.Name}' still has {workflows} workflow(s). Move or unassign them first.");
+        }
+
         foreach (var key in keys)
             key.DetachFromApplication();
 
         _db.TenantApplications.Remove(application);
         await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<int> AssignWorkflowClassAsync(Guid tenantId, Guid workflowClassId, Guid? applicationId, CancellationToken ct = default)
+    {
+        if (applicationId == Guid.Empty)
+            applicationId = null;
+        if (applicationId.HasValue)
+            await FindAsync(tenantId, applicationId.Value, ct);
+
+        var workflowClass = await _db.WorkflowClasses
+                                .FirstOrDefaultAsync(w => w.TenantId == tenantId && w.Id == workflowClassId, ct)
+                            ?? throw new TenantApplicationException(
+                                TenantApplicationErrorCodes.NotFound,
+                                "Workflow class not found in this tenant.");
+
+        var versions = await _db.WorkflowClasses
+            .Where(w => w.TenantId == tenantId && w.Name == workflowClass.Name)
+            .ToListAsync(ct);
+        foreach (var version in versions)
+            version.AssignToApplication(applicationId);
+
+        await _db.SaveChangesAsync(ct);
+        return versions.Count;
     }
 
     private async Task<TenantApplication> FindAsync(Guid tenantId, Guid applicationId, CancellationToken ct)
@@ -128,6 +164,18 @@ public sealed class TenantApplicationService : ITenantApplicationService
             .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
     }
 
+    /// <summary>Distinct workflow names per application: all versions of a workflow count once.</summary>
+    private async Task<Dictionary<Guid, int>> WorkflowCountsAsync(Guid tenantId, CancellationToken ct)
+    {
+        var pairs = await _db.WorkflowClasses
+            .AsNoTracking()
+            .Where(w => w.TenantId == tenantId && w.ApplicationId != null)
+            .Select(w => new { ApplicationId = w.ApplicationId!.Value, w.Name })
+            .Distinct()
+            .ToListAsync(ct);
+        return pairs.GroupBy(p => p.ApplicationId).ToDictionary(g => g.Key, g => g.Count());
+    }
+
     private static TenantApplication Build(Func<TenantApplication> action)
     {
         try
@@ -142,7 +190,11 @@ public sealed class TenantApplicationService : ITenantApplicationService
 
     private DateTime Now() => _time.GetUtcNow().UtcDateTime;
 
-    private static TenantApplicationDto ToDto(TenantApplication a, IReadOnlyDictionary<Guid, int> counts) =>
+    private static TenantApplicationDto ToDto(
+        TenantApplication a,
+        IReadOnlyDictionary<Guid, int> keyCounts,
+        IReadOnlyDictionary<Guid, int> workflowCounts) =>
         new(a.Id, a.TenantId, a.Name, a.Description, a.CreatedAtUtc, a.UpdatedAtUtc,
-            counts.TryGetValue(a.Id, out var count) ? count : 0);
+            keyCounts.TryGetValue(a.Id, out var keys) ? keys : 0,
+            workflowCounts.TryGetValue(a.Id, out var workflows) ? workflows : 0);
 }

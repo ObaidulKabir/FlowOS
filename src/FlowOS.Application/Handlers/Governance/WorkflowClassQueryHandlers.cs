@@ -26,7 +26,13 @@ public class WorkflowClassQueryHandlers :
         var list = await _unitOfWork.WorkflowClasses.ListAsync(
             request.TenantId, request.Scope, request.Status, cancellationToken);
 
-        return list.Select(WorkflowClassCommandHandlers.MapToDto).ToList();
+        IEnumerable<FlowOS.Domain.Entities.WorkflowClass> filtered = list;
+        if (request.ApplicationId.HasValue)
+            filtered = filtered.Where(wc => wc.ApplicationId == request.ApplicationId.Value);
+        else if (request.Unassigned)
+            filtered = filtered.Where(wc => wc.ApplicationId == null);
+
+        return filtered.Select(WorkflowClassCommandHandlers.MapToDto).ToList();
     }
 
     public async Task<WorkflowClassResponseDto?> Handle(GetWorkflowClassByIdQuery request, CancellationToken cancellationToken)

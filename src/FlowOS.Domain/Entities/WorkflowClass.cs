@@ -33,6 +33,13 @@ public class WorkflowClass
     /// <summary>FlowOS release this blueprint was last authored against. Not the blueprint's own <see cref="Version"/>.</summary>
     public string FlowOsVersion { get; private set; } = FlowOsRelease.Version;
 
+    /// <summary>
+    /// The tenant application this workflow belongs to, or null when unassigned. Organizational metadata,
+    /// not part of the blueprint, so it can change in any status. All versions of one workflow (same
+    /// tenant and name) are kept in the same application, and a new version inherits it.
+    /// </summary>
+    public Guid? ApplicationId { get; private set; }
+
     // The Configuration Pack (Immutable after publish)
     public WorkflowClassBlueprint Definition { get; private set; }
 
@@ -75,6 +82,12 @@ public class WorkflowClass
         Definition = definition;
         ChangeLog = changeLog;
         FlowOsVersion = FlowOsRelease.Version;
+    }
+
+    /// <summary>Moves this version to an application, or unassigns it with null.</summary>
+    public void AssignToApplication(Guid? applicationId)
+    {
+        ApplicationId = applicationId == Guid.Empty ? null : applicationId;
     }
 
     public void Delete(bool hasInstances)

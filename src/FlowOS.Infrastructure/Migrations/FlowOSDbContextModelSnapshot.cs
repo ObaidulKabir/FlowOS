@@ -1477,6 +1477,9 @@ namespace FlowOS.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ApplicationId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ChangeLog")
                         .HasColumnType("text");
 
@@ -1526,6 +1529,8 @@ namespace FlowOS.Infrastructure.Migrations
                         .HasColumnType("character varying(50)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ApplicationId");
 
                     b.ToTable("WorkflowClasses");
                 });
@@ -2192,6 +2197,14 @@ namespace FlowOS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowClass", b =>
+                {
+                    b.HasOne("FlowOS.Domain.Entities.TenantApplication", null)
+                        .WithMany()
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("FlowOS.Domain.Entities.WorkflowContextBindingRevision", b =>

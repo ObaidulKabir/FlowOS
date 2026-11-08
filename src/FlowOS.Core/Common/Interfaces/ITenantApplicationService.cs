@@ -12,7 +12,8 @@ public sealed record TenantApplicationDto(
     string? Description,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
-    int ActiveKeyCount);
+    int ActiveKeyCount,
+    int WorkflowCount = 0);
 
 public static class TenantApplicationErrorCodes
 {
@@ -51,8 +52,15 @@ public interface ITenantApplicationService
     Task<TenantApplicationDto> UpdateAsync(Guid tenantId, Guid applicationId, string name, string? description, CancellationToken ct = default);
 
     /// <summary>
-    /// Refused with APP-INUSE-001 while the application has an active key. Revoked or expired keys are
-    /// unlinked first, so they never block deletion.
+    /// Refused with APP-INUSE-001 while the application has an active key or any workflow. Revoked or
+    /// expired keys are unlinked first, so they never block deletion.
     /// </summary>
     Task DeleteAsync(Guid tenantId, Guid applicationId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves a workflow to an application (or unassigns it with null). Every version of that workflow -
+    /// the tenant's workflow classes with the same name - moves together. Returns the versions moved.
+    /// APP-NOTFOUND-001 when the application or the tenant's workflow class does not exist.
+    /// </summary>
+    Task<int> AssignWorkflowClassAsync(Guid tenantId, Guid workflowClassId, Guid? applicationId, CancellationToken ct = default);
 }

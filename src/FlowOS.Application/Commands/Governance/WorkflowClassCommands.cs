@@ -10,7 +10,8 @@ using MediatR;
 
 namespace FlowOS.Application.Commands.Governance;
 
-public record CreateWorkflowClassCommand(Guid TenantId, string Name, string Version, WorkflowClassBlueprint Definition)
+/// <param name="ApplicationId">Optional tenant application the new workflow belongs to.</param>
+public record CreateWorkflowClassCommand(Guid TenantId, string Name, string Version, WorkflowClassBlueprint Definition, Guid? ApplicationId = null)
     : IRequest<WorkflowClassResponseDto>, IPolicySecuredCommand;
 
 public record UpdateWorkflowClassCommand(Guid TenantId, Guid Id, string Name, string Version, WorkflowClassBlueprint Definition)
