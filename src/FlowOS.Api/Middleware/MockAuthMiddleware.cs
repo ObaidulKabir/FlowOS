@@ -225,6 +225,10 @@ public class MockAuthMiddleware
 
             extraClaims.Add(new Claim("app_name", apiKeyRecord.ApplicationName));
             extraClaims.Add(new Claim("environment", apiKeyRecord.Environment));
+            if (apiKeyRecord.IsApplicationRestricted && apiKeyRecord.ApplicationId.HasValue)
+            {
+                extraClaims.Add(new Claim("application_id", apiKeyRecord.ApplicationId.Value.ToString()));
+            }
             foreach (var scope in apiKeyRecord.Scopes)
             {
                 extraClaims.Add(new Claim("scope", scope));

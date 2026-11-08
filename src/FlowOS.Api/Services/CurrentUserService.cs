@@ -94,4 +94,13 @@ public class CurrentUserService : ICurrentUser
             _httpContextAccessor.HttpContext?.User?.Identity?.AuthenticationType,
             "ApiKey",
             StringComparison.OrdinalIgnoreCase);
+
+    public Guid? ApplicationId
+    {
+        get
+        {
+            var raw = _httpContextAccessor.HttpContext?.User?.FindFirst("application_id")?.Value;
+            return Guid.TryParse(raw, out var parsed) && parsed != Guid.Empty ? parsed : null;
+        }
+    }
 }

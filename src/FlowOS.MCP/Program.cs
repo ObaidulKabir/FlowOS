@@ -236,6 +236,7 @@ public partial class Program
             Guid? dbResolvedTenantId = null;
             IReadOnlyCollection<string> resolvedScopes = Array.Empty<string>();
             var isTenantApiKeyCredential = false;
+            Guid? resolvedApplicationId = null;
             var demoKeyAccepted = false;
             string? jwtRole = null;
             string? jwtCallerId = null;
@@ -322,6 +323,9 @@ public partial class Program
                                 dbResolvedTenantId = apiKeyRecord.TenantId;
                                 resolvedScopes = apiKeyRecord.Scopes.ToArray();
                                 isTenantApiKeyCredential = true;
+                                resolvedApplicationId = apiKeyRecord.IsApplicationRestricted
+                                    ? apiKeyRecord.ApplicationId
+                                    : null;
                                 apiKeyRecord.RecordUsage();
                                 await db.SaveChangesAsync();
                             }
@@ -406,6 +410,7 @@ public partial class Program
             McpRequestContext.CallerId = jwtCallerId;
             McpRequestContext.Scopes = resolvedScopes;
             McpRequestContext.IsApiKey = isTenantApiKeyCredential;
+            McpRequestContext.ApplicationId = isTenantApiKeyCredential ? resolvedApplicationId : null;
             McpRequestContext.IsAuthenticatedTransport = true;
             try
             {

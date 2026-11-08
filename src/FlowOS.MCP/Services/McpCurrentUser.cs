@@ -16,6 +16,7 @@ public static class McpRequestContext
     private static readonly AsyncLocal<IReadOnlyCollection<string>?> ScopesCurrent = new();
     private static readonly AsyncLocal<bool> ApiKeyCurrent = new();
     private static readonly AsyncLocal<bool> AuthenticatedTransportCurrent = new();
+    private static readonly AsyncLocal<Guid?> ApplicationIdCurrent = new();
 
     public static Guid TenantId
     {
@@ -53,6 +54,13 @@ public static class McpRequestContext
         set => AuthenticatedTransportCurrent.Value = value;
     }
 
+    /// <summary>Applications (4/4): set when the caller authenticated with an application-restricted API key.</summary>
+    public static Guid? ApplicationId
+    {
+        get => ApplicationIdCurrent.Value;
+        set => ApplicationIdCurrent.Value = value;
+    }
+
     public static void Clear()
     {
         TenantIdCurrent.Value = Guid.Empty;
@@ -61,6 +69,7 @@ public static class McpRequestContext
         ScopesCurrent.Value = null;
         ApiKeyCurrent.Value = false;
         AuthenticatedTransportCurrent.Value = false;
+        ApplicationIdCurrent.Value = null;
     }
 }
 
@@ -83,4 +92,6 @@ public class McpCurrentUser : ICurrentUser
     public IReadOnlyCollection<string> Scopes => McpRequestContext.Scopes;
 
     public bool IsApiKey => McpRequestContext.IsApiKey;
+
+    public Guid? ApplicationId => McpRequestContext.ApplicationId;
 }

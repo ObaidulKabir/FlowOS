@@ -26,9 +26,13 @@ public class TenantApiKey
     public Guid? ApplicationId { get; private set; }
 
     /// <summary>
-    /// True for a key issued for an application (IssueForApplication). Such keys are meant to be limited
-    /// to that application; keys that existed before applications were introduced keep tenant-wide
-    /// access. This flag only records the intent - nothing reads it for authorization yet.
+    /// True for a key issued for an application (IssueForApplication). Such keys are limited to that
+    /// application on the REST WorkflowClassesController surface (a workflow class in a different
+    /// application, or unassigned, is 404 for this key - see docs/14-api-reference.md section 8) via
+    /// the "application_id" auth claim and ICurrentUser.ApplicationId. The MCP governance tools
+    /// (GovernanceTools, LifecycleActionMcpTools) do not yet enforce this - a restricted key used over
+    /// MCP still has tenant-wide reach there. Keys that existed before applications were introduced keep
+    /// tenant-wide access everywhere.
     /// </summary>
     public bool IsApplicationRestricted { get; private set; }
 
