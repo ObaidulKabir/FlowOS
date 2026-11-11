@@ -7,7 +7,7 @@ import {
   Sparkles, CheckCircle2, AlertCircle, X, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 
-export type AuthModalMode = 'login' | 'register' | 'verify';
+export type AuthModalMode = 'login' | 'register' | 'verify' | 'accept-invite';
 
 export const dashboardRoleForLogin = (role?: string, tenantId?: string): 'Tenant' | 'Admin' =>
   isPrivilegedRole(role) && tenantId?.trim().toLowerCase() === PLATFORM_TENANT_ID
@@ -62,6 +62,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showVerifyPassword, setShowVerifyPassword] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [devToken, setDevToken] = useState<string | null>(null);
+
+  // Accept-invite form state (organizational team access - see docs/29-organizational-team-access.md)
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteToken, setInviteToken] = useState('');
+  const [invitePassword, setInvitePassword] = useState('');
+  const [inviteConfirmPassword, setInviteConfirmPassword] = useState('');
+  const [showInvitePassword, setShowInvitePassword] = useState(false);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -136,7 +143,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           username: res.user.fullName || res.user.email,
           email: res.user.email,
           isSandbox: false,
-          isEmailVerified: res.user.isEmailVerified
+          isEmailVerified: res.user.isEmailVerified,
+          userRole: res.user.role
         }, res.user);
         onSuccess(setAuthSession(session));
         onClose();
@@ -297,7 +305,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           username: loginRes.user.fullName || loginRes.user.email,
           email: loginRes.user.email,
           isSandbox: false,
-          isEmailVerified: true
+          isEmailVerified: true,
+          userRole: loginRes.user.role
         }, loginRes.user);
         setTimeout(() => {
           onSuccess(setAuthSession(session));
@@ -310,6 +319,71 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     } catch (err: any) {
       setError(err.message || 'Verification failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAcceptInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetMessages();
+
+    if (!inviteEmail.trim() || !inviteToken.trim()) {
+      setError('Both email and invite code are required.');
+      return;
+    }
+    if (invitePassword.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (invitePassword !== inviteConfirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await api.acceptInvite({
+        email: inviteEmail.trim(),
+        token: inviteToken.trim(),
+        password: invitePassword
+      });
+
+      if (!res.ok) {
+        setError(res.message || 'Could not accept invite. Please check the code.');
+        return;
+      }
+
+      setSuccessMessage('Invite accepted! Signing you in...');
+
+      const loginRes = await api.loginTenantUser({
+        email: inviteEmail.trim(),
+        password: invitePassword
+      });
+
+      if (loginRes.ok && loginRes.user && loginRes.token) {
+        const session = applyTenantEntitlement({
+          role: dashboardRoleForLogin(loginRes.user.role, loginRes.user.tenantId),
+          tenantId: loginRes.user.tenantId,
+          tenantName: loginRes.user.tenantName,
+          token: loginRes.token,
+          username: loginRes.user.fullName || loginRes.user.email,
+          email: loginRes.user.email,
+          isSandbox: false,
+          isEmailVerified: true,
+          userRole: loginRes.user.role
+        }, loginRes.user);
+        setTimeout(() => {
+          onSuccess(setAuthSession(session));
+          onClose();
+        }, 600);
+      } else {
+        setLoginEmail(inviteEmail.trim());
+        setLoginPassword(invitePassword);
+        setMode('login');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Accepting the invite failed.');
     } finally {
       setLoading(false);
     }
@@ -354,11 +428,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {mode === 'login' && 'Sign In to FlowOS'}
               {mode === 'register' && 'Register New Tenant'}
               {mode === 'verify' && 'Verify Email Address'}
+              {mode === 'accept-invite' && 'Accept Teammate Invite'}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               {mode === 'login' && 'Use your tenant account. A platform administrator signs in here too; the admin panel opens only for that account.'}
               {mode === 'register' && 'Provision an isolated multi-tenant environment with private API keys.'}
               {mode === 'verify' && 'Verification dispatched from official address: admin@flowosbd.com'}
+              {mode === 'accept-invite' && 'Your organization invited you to FlowOS. Choose your own password - nobody else, including whoever invited you, will know it.'}
             </p>
           </div>
         </div>
@@ -541,6 +617,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="text-cyan-400 hover:text-cyan-300 font-semibold hover:underline flex items-center gap-1"
                   >
                     <span>Verify email explicitly</span>
+                    <ArrowRight size={11} />
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center text-[11px] text-slate-400">
+                  <span>Invited by a teammate?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (loginEmail.trim()) setInviteEmail(loginEmail.trim());
+                      setMode('accept-invite');
+                      resetMessages();
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <span>Accept your invite</span>
                     <ArrowRight size={11} />
                   </button>
                 </div>
@@ -924,6 +1016,118 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
           </div>
+        )}
+
+        {/* MODE 4: ACCEPT TEAMMATE INVITE */}
+        {mode === 'accept-invite' && (
+          <form onSubmit={handleAcceptInviteSubmit} className="space-y-3.5">
+            <div className="p-2.5 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-[11px] text-cyan-300 flex items-start gap-2">
+              <Mail size={14} className="text-cyan-400 mt-0.5 shrink-0" />
+              <div>
+                Enter the email and invite code your admin shared with you, then choose a password of
+                your own - only you will know it.
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                <Mail size={13} className="text-cyan-400" />
+                <span>Email Address</span>
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="you@yourcompany.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                <span>Invite Code</span>
+                <span className="text-[10px] text-slate-500">From your admin</span>
+              </label>
+              <input
+                type="text"
+                required
+                maxLength={128}
+                placeholder="123456"
+                value={inviteToken}
+                onChange={(e) => setInviteToken(e.target.value.trim().toUpperCase())}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-widest text-white focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Lock size={13} className="text-cyan-400" />
+                    <span>New Password</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowInvitePassword(!showInvitePassword)}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1"
+                  >
+                    {showInvitePassword ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                </label>
+                <input
+                  type={showInvitePassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={invitePassword}
+                  onChange={(e) => setInvitePassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                  <Lock size={13} className="text-cyan-400" />
+                  <span>Confirm Password</span>
+                </label>
+                <input
+                  type={showInvitePassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={inviteConfirmPassword}
+                  onChange={(e) => setInviteConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  <span>Accepting Invite...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} />
+                  <span>Accept Invite & Sign In</span>
+                </>
+              )}
+            </button>
+
+            <div className="flex justify-center items-center text-xs text-slate-400 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => { setMode('login'); resetMessages(); }}
+                className="text-cyan-400 hover:underline flex items-center gap-1"
+              >
+                <span>Back to Sign In</span>
+              </button>
+            </div>
+          </form>
         )}
 
       </div>

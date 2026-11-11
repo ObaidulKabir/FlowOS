@@ -7,6 +7,8 @@ import {
   VerifyEmailRequest, VerifyEmailResponse,
   LoginRequest, LoginResponse,
   ResendVerificationResponse, TenantUserDto, TenantDto,
+  TenantTeammateDto, InviteTeammateRequest, InviteTeammateResponse,
+  AcceptInviteRequest, AcceptInviteResponse,
   WorkflowContextBinding, WorkflowContextBindingDefinition, CreateContextBindingRequest,
   WorkflowContextSimulationRequest, WorkflowContextSimulationResult,
   TenantApiKeyDto, CreateKeyResponse, TenantRoleDto, AgentEvaluationMetrics,
@@ -1012,6 +1014,44 @@ export const api = {
     const headers = getHeaders();
     const response = await fetch('/api/auth/me', { headers });
     return handleResponse(response, 'Failed to get current user profile');
+  },
+
+  acceptInvite: async (req: AcceptInviteRequest): Promise<AcceptInviteResponse> => {
+    const response = await fetch('/api/auth/accept-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Failed to accept invite');
+  },
+
+  // Organizational team access (see docs/29-organizational-team-access.md): teammate logins
+  // (TenantUsers) of one tenant, distinct from its shared TenantApiKey(s).
+  listTeammates: async (tenantId: string): Promise<TenantTeammateDto[]> => {
+    const headers = getHeaders();
+    const response = await fetch(`/api/tenants/${tenantId}/users`, { headers });
+    return handleResponse(response, 'Failed to list teammates');
+  },
+
+  inviteTeammate: async (tenantId: string, req: InviteTeammateRequest): Promise<InviteTeammateResponse> => {
+    const headers = getHeaders();
+    const response = await fetch(`/api/tenants/${tenantId}/users`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req)
+    });
+    return handleResponse(response, 'Failed to invite teammate');
+  },
+
+  removeTeammate: async (tenantId: string, userId: string): Promise<void> => {
+    const headers = getHeaders();
+    const response = await fetch(`/api/tenants/${tenantId}/users/${userId}`, {
+      method: 'DELETE',
+      headers
+    });
+    if (!response.ok) {
+      await handleResponse(response, 'Failed to remove teammate');
+    }
   },
 
   listPluginBindings: async (

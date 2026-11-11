@@ -185,4 +185,94 @@ public class Tenant_Registration_And_Auth_E2E_Tests : IClassFixture<WebApplicati
         var res2 = await _client.PostAsJsonAsync("/api/auth/register-tenant", request2);
         Assert.Equal(HttpStatusCode.Conflict, res2.StatusCode);
     }
+
+    /// <summary>
+    /// Organizational team access (see docs/29-organizational-team-access.md): an existing tenant
+    /// Admin invites a teammate into the SAME tenant; the teammate accepts the invite with their own
+    /// password, logs in with their own credentials, and - because they hold a non-privileged role -
+    /// is forbidden from inviting further teammates. (A companion test on the API-key-attribution CR
+    /// covers the equivalent 403 for tenant API-key management, which that CR gates separately.)
+    /// </summary>
+    [Fact]
+    public async Task Invite_Accept_Login_And_NonAdmin_Forbidden_Lifecycle_Succeeds()
+    {
+        var tenantName = "Beacon Logistics Group";
+        var adminEmail = $"admin_{Guid.NewGuid():N}@beaconlogistics.com";
+        var adminPassword = "SecurePassword#2026";
+
+        // 1. Register the tenant and its first (Admin) teammate.
+        var regResponse = await _client.PostAsJsonAsync("/api/auth/register-tenant", new RegisterTenantUserRequest(
+            TenantName: tenantName,
+            Email: adminEmail,
+            Password: adminPassword,
+            FullName: "Beacon Administrator"));
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
+        using var regJson = JsonDocument.Parse(await regResponse.Content.ReadAsStringAsync());
+        var tenantId = Guid.Parse(regJson.RootElement.GetProperty("tenantId").GetString()!);
+        var adminVerificationToken = regJson.RootElement.GetProperty("verificationToken").GetString();
+
+        await _client.PostAsJsonAsync("/api/auth/verify-email", new VerifyEmailRequest(adminEmail, adminVerificationToken!));
+
+        var adminLogin = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(adminEmail, adminPassword));
+        Assert.Equal(HttpStatusCode.OK, adminLogin.StatusCode);
+        using var adminLoginJson = JsonDocument.Parse(await adminLogin.Content.ReadAsStringAsync());
+        var adminToken = adminLoginJson.RootElement.GetProperty("token").GetString();
+
+        // 2. The Admin invites a teammate into the SAME tenant.
+        var teammateEmail = $"teammate_{Guid.NewGuid():N}@beaconlogistics.com";
+        using var inviteRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/tenants/{tenantId}/users")
+        {
+            Content = JsonContent.Create(new { email = teammateEmail, fullName = "Beacon Teammate", role = "Employee" })
+        };
+        inviteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        inviteRequest.Headers.Add("x-tenant-id", tenantId.ToString());
+        var inviteResponse = await _client.SendAsync(inviteRequest);
+        Assert.Equal(HttpStatusCode.Created, inviteResponse.StatusCode);
+        using var inviteJson = JsonDocument.Parse(await inviteResponse.Content.ReadAsStringAsync());
+        Assert.True(inviteJson.RootElement.GetProperty("ok").GetBoolean());
+        var inviteToken = inviteJson.RootElement.GetProperty("inviteToken").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(inviteToken));
+
+        // 3. The teammate accepts the invite and chooses their own password.
+        var teammatePassword = "TeammatesOwnPassword#1";
+        var acceptResponse = await _client.PostAsJsonAsync("/api/auth/accept-invite", new AcceptInviteRequest(
+            Email: teammateEmail,
+            Token: inviteToken!,
+            Password: teammatePassword));
+        Assert.Equal(HttpStatusCode.OK, acceptResponse.StatusCode);
+        using var acceptJson = JsonDocument.Parse(await acceptResponse.Content.ReadAsStringAsync());
+        Assert.True(acceptJson.RootElement.GetProperty("ok").GetBoolean());
+
+        // 4. The teammate logs in with their own credentials (never the admin's).
+        var teammateLogin = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(teammateEmail, teammatePassword));
+        Assert.Equal(HttpStatusCode.OK, teammateLogin.StatusCode);
+        using var teammateLoginJson = JsonDocument.Parse(await teammateLogin.Content.ReadAsStringAsync());
+        var teammateToken = teammateLoginJson.RootElement.GetProperty("token").GetString();
+        Assert.Equal("Employee", teammateLoginJson.RootElement.GetProperty("user").GetProperty("role").GetString());
+
+        // 5. The non-admin teammate is forbidden from inviting further teammates in their own tenant.
+        using var teammateInviteAttempt = new HttpRequestMessage(HttpMethod.Post, $"/api/tenants/{tenantId}/users")
+        {
+            Content = JsonContent.Create(new { email = $"other_{Guid.NewGuid():N}@beaconlogistics.com", fullName = "Someone Else", role = "Employee" })
+        };
+        teammateInviteAttempt.Headers.Authorization = new AuthenticationHeaderValue("Bearer", teammateToken);
+        teammateInviteAttempt.Headers.Add("x-tenant-id", tenantId.ToString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.SendAsync(teammateInviteAttempt)).StatusCode);
+
+        // 6. The Admin can list teammates and sees both themself and the new teammate.
+        using var listRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/tenants/{tenantId}/users");
+        listRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        listRequest.Headers.Add("x-tenant-id", tenantId.ToString());
+        var listResponse = await _client.SendAsync(listRequest);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        Assert.Equal(2, listJson.RootElement.GetArrayLength());
+
+        // 7. The tenant can never be left with no administrator: removing the sole Admin is rejected.
+        var adminUserId = Guid.Parse(adminLoginJson.RootElement.GetProperty("user").GetProperty("id").GetString()!);
+        using var removeLastAdmin = new HttpRequestMessage(HttpMethod.Delete, $"/api/tenants/{tenantId}/users/{adminUserId}");
+        removeLastAdmin.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        removeLastAdmin.Headers.Add("x-tenant-id", tenantId.ToString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(removeLastAdmin)).StatusCode);
+    }
 }

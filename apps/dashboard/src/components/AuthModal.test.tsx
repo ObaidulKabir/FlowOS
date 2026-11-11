@@ -58,3 +58,28 @@ describe('sign-in notice and dashboard routing', () => {
     expect(dashboardRoleForLogin('Member', PLATFORM_TENANT_ID)).toBe('Tenant');
   });
 });
+
+// Organizational team access (see docs/29-organizational-team-access.md): a teammate who was invited
+// into an existing tenant accepts their invite and sets their own password from this modal.
+describe('accept teammate invite', () => {
+  test('the sign-in form links to the accept-invite form, which requires an email, code and password', () => {
+    render(
+      <AuthModal
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        onLaunchSandbox={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Accept your invite'));
+
+    expect(screen.getByText('Accept Teammate Invite')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('you@yourcompany.com')).toBeRequired();
+    expect(screen.getByPlaceholderText('123456')).toBeRequired();
+
+    fireEvent.click(screen.getByText('Accept Invite & Sign In'));
+    // Required-field validation stops the native form submit before our handler runs.
+    expect(screen.queryByText('Invite accepted! Signing you in...')).not.toBeInTheDocument();
+  });
+});

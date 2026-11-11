@@ -269,6 +269,13 @@ export interface AuthSession {
   plan?: string;
   billingStatus?: string;
   canRunRuntime?: boolean;
+  /**
+   * The signed-in TenantUser's own Role (e.g. "Admin", "Employee") within their own tenant - distinct
+   * from `role` above, which is only the dashboard's own Tenant/Admin session kind and collapses this
+   * away for a non-platform tenant. Used to gate teammate/API-key management UI. Undefined for a
+   * sandbox session or a session authenticated by a shared API key rather than an individual login.
+   */
+  userRole?: string;
 }
 
 export interface RegisterTenantUserRequest {
@@ -340,6 +347,47 @@ export interface ResendVerificationResponse {
   ok: boolean;
   message: string;
   verificationToken?: string;
+}
+
+/**
+ * Organizational team access (see docs/29-organizational-team-access.md): a teammate login
+ * (TenantUser) of one tenant, distinct from the tenant's shared TenantApiKey(s).
+ */
+export interface TenantTeammateDto {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  isEmailVerified: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface InviteTeammateRequest {
+  email: string;
+  fullName: string;
+  role: string;
+}
+
+export interface InviteTeammateResponse {
+  ok: boolean;
+  message: string;
+  userId?: string;
+  email?: string;
+  inviteToken?: string;
+}
+
+export interface AcceptInviteRequest {
+  email: string;
+  token: string;
+  password: string;
+}
+
+export interface AcceptInviteResponse {
+  ok: boolean;
+  message: string;
+  tenantId?: string;
+  email?: string;
 }
 
 

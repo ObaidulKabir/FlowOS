@@ -332,8 +332,185 @@ public class TenantAuthService : ITenantAuthService
             tenant?.CanRunRuntime ?? false);
     }
 
+    public async Task<InviteTenantUserResult> InviteUserAsync(InviteTenantUserRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return new InviteTenantUserResult(false, "Email address is required.");
+
+        var role = string.IsNullOrWhiteSpace(request.Role) ? "Employee" : request.Role.Trim();
+        var fullName = string.IsNullOrWhiteSpace(request.FullName) ? request.Email.Trim() : request.FullName.Trim();
+
+        var tenant = await _context.Tenants.FindAsync(new object[] { request.TenantId }, ct);
+        if (tenant == null)
+            return new InviteTenantUserResult(false, "Tenant not found.");
+        if (tenant.Status == TenantStatus.Suspended || tenant.Status == TenantStatus.Archived)
+            return new InviteTenantUserResult(false, $"Tenant account is {tenant.Status}.");
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var userExists = await _context.TenantUsers.AnyAsync(u => u.Email == normalizedEmail, ct);
+        if (userExists)
+            return new InviteTenantUserResult(false, $"A user with email '{normalizedEmail}' is already registered.");
+
+        // The teammate sets their own password when they accept the invite (AcceptInviteAsync) -
+        // this placeholder is a random secret nobody is ever told, so the account can't be logged
+        // into with it, only with the real password the teammate later chooses.
+        var placeholderPasswordHash = _passwordHasher.HashPassword(Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"));
+
+        var user = new TenantUser(
+            tenant.TenantId,
+            normalizedEmail,
+            placeholderPasswordHash,
+            fullName,
+            role: role,
+            isEmailVerified: false);
+        _context.TenantUsers.Add(user);
+
+        await _context.SaveChangesAsync(ct);
+        await SendInviteEmailInternalAsync(tenant, user, user.EmailVerificationToken!, ct);
+
+        return new InviteTenantUserResult(
+            Success: true,
+            Message: $"Invited {normalizedEmail} to {tenant.Name} as {role}. An invite email has been sent from {GetOfficialEmail()}.",
+            UserId: user.Id,
+            Email: user.Email,
+            InviteToken: user.EmailVerificationToken);
+    }
+
+    public async Task<AcceptInviteResult> AcceptInviteAsync(AcceptInviteRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Token))
+            return new AcceptInviteResult(false, "Email and invite code are required.");
+        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
+            return new AcceptInviteResult(false, "Password must be at least 6 characters.");
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var user = await _context.TenantUsers.FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+        if (user == null)
+            return new AcceptInviteResult(false, "Invite not found for this email address.");
+
+        if (user.IsEmailVerified)
+            return new AcceptInviteResult(false, "This invite was already accepted. Try logging in instead.");
+
+        var accepted = user.VerifyEmail(request.Token);
+        if (!accepted)
+        {
+            if (user.EmailVerificationTokenExpiresAt.HasValue &&
+                user.EmailVerificationTokenExpiresAt.Value < _timeProvider.GetUtcNow().UtcDateTime)
+            {
+                return new AcceptInviteResult(false, "Invite code has expired. Ask an admin to invite you again.");
+            }
+            return new AcceptInviteResult(false, "Invalid invite code.");
+        }
+
+        user.UpdatePassword(_passwordHasher.HashPassword(request.Password));
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Tenant {TenantId} teammate {Email} accepted their invite.", user.TenantId, user.Email);
+
+        return new AcceptInviteResult(true, "Invite accepted. You can now log in.", user.TenantId, user.Email);
+    }
+
+    public async Task<IReadOnlyList<TenantTeammateDto>> ListTeammatesAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        return await _context.TenantUsers
+            .AsNoTracking()
+            .Where(u => u.TenantId == tenantId)
+            .OrderByDescending(u => u.CreatedAt)
+            .Select(u => new TenantTeammateDto(u.Id, u.Email, u.FullName, u.Role, u.IsEmailVerified, u.CreatedAt, u.LastLoginAt))
+            .ToListAsync(ct);
+    }
+
+    public async Task<TeammateActionResult> RemoveTeammateAsync(Guid tenantId, Guid userId, CancellationToken ct = default)
+    {
+        var teammates = await _context.TenantUsers
+            .Where(u => u.TenantId == tenantId)
+            .ToListAsync(ct);
+
+        var target = teammates.FirstOrDefault(u => u.Id == userId);
+        if (target == null)
+            return new TeammateActionResult(false, "Teammate not found in this tenant.");
+
+        // A tenant must always keep at least one administrator able to manage it. This only looks at
+        // each teammate's primary role (not any additional custom roles assigned via Runtime RBAC),
+        // which is the same signal used to grant the very first Admin at tenant registration.
+        var remainingAdmins = teammates.Count(u => u.Id != userId && FlowOS.Core.Security.TenantIdentityRules.IsPrivilegedRole(u.Role));
+        if (remainingAdmins == 0 && FlowOS.Core.Security.TenantIdentityRules.IsPrivilegedRole(target.Role))
+        {
+            return new TeammateActionResult(false, "Cannot remove the tenant's last administrator. Promote another teammate to Admin first.");
+        }
+
+        _context.TenantUsers.Remove(target);
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Tenant {TenantId} removed teammate {Email}.", tenantId, target.Email);
+
+        return new TeammateActionResult(true, $"Removed {target.Email} from the tenant.");
+    }
+
     private string GetOfficialEmail() =>
         _configuration["FlowOS:Communications:Email:OfficialEmail"] ?? OfficialFlowOsEmail;
+
+    private async Task SendInviteEmailInternalAsync(Tenant tenant, TenantUser user, string token, CancellationToken ct)
+    {
+        var officialEmail = GetOfficialEmail();
+        var subject = $"You've been invited to {tenant.Name} on FlowOS (Code: {token})";
+
+        var body = $"You've been invited to join '{tenant.Name}' on FlowOS as {user.Role}.\n\n" +
+                   $"Your 6-Digit Invite Code: {token}\n\n" +
+                   $"Open the FlowOS dashboard, choose \"Accept Invite\", and enter this code with the email " +
+                   $"{user.Email} to set your own password and sign in.\n\n" +
+                   $"This code will expire in 24 hours.\n\n" +
+                   $"Best regards,\n" +
+                   $"FlowOS Team ({officialEmail})";
+
+        var htmlBody = $@"<!DOCTYPE html>
+<html>
+<head><meta charset=""utf-8""><title>You're invited to FlowOS</title></head>
+<body style=""font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px;"">
+    <div style=""background: #0f172a; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;"">
+        <h1 style=""color: #38bdf8; margin: 0; font-size: 24px; letter-spacing: -0.5px;"">FlowOS</h1>
+        <p style=""color: #94a3b8; margin: 6px 0 0 0; font-size: 13px;"">State-Machine-Governed Workflow Operating System</p>
+    </div>
+    <div style=""border: 1px solid #e2e8f0; border-top: none; padding: 28px; border-radius: 0 0 8px 8px; background: #ffffff;"">
+        <h2 style=""color: #0f172a; margin-top: 0;"">You're invited to {tenant.Name}!</h2>
+        <p>You've been invited to join <strong>{tenant.Name}</strong> on FlowOS as <strong>{user.Role}</strong>.</p>
+        <p>Your 6-digit invite code is:</p>
+        <div style=""background: #f0f9ff; border: 2px dashed #0284c7; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 32px; font-weight: bold; text-align: center; color: #0284c7; letter-spacing: 6px; margin: 20px 0;"">
+            {token}
+        </div>
+        <p>Open the FlowOS dashboard, choose &quot;Accept Invite&quot;, and enter this code with your email
+        ({user.Email}) to set your own password and sign in.</p>
+        <hr style=""border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;"" />
+        <p style=""color: #64748b; font-size: 12px; margin: 0;"">
+            This invite code will expire in 24 hours.<br/>
+            If you weren't expecting this, you can safely ignore this email, or reach us at <a href=""mailto:{officialEmail}"" style=""color: #2563eb;"">{officialEmail}</a>.
+        </p>
+    </div>
+</body>
+</html>";
+
+        var headers = new Dictionary<string, string>
+        {
+            ["From"] = officialEmail,
+            ["Sender"] = officialEmail,
+            ["Reply-To"] = officialEmail
+        };
+
+        try
+        {
+            await _emailSender.SendEmailAsync(new EmailSendRequest(
+                tenant.TenantId,
+                user.Email,
+                subject,
+                body,
+                htmlBody,
+                Headers: headers), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send invite email to {Email}", user.Email);
+        }
+    }
 
     private async Task SendVerificationEmailInternalAsync(Tenant tenant, TenantUser user, string token, CancellationToken ct)
     {
