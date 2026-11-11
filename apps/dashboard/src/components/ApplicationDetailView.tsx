@@ -130,6 +130,7 @@ const ApplicationKeysPanel: React.FC<{
   const [keys, setKeys] = useState<TenantApiKeyDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [keyName, setKeyName] = useState('App Key');
@@ -144,11 +145,16 @@ const ApplicationKeysPanel: React.FC<{
   const load = async () => {
     setLoading(true);
     setError(null);
+    setForbidden(false);
     try {
       const all = await api.listTenantKeys(tenantId);
       setKeys(all.filter(k => k.applicationId === application.id));
     } catch (err: any) {
-      setError(err.message || 'Failed to load keys');
+      if (String(err?.message || '').includes('HTTP 403')) {
+        setForbidden(true);
+      } else {
+        setError(err.message || 'Failed to load keys');
+      }
     } finally {
       setLoading(false);
     }
@@ -188,7 +194,9 @@ const ApplicationKeysPanel: React.FC<{
       await load();
       if (onChanged) await onChanged();
     } catch (err: any) {
-      alert(`Failed to generate key: ${err.message}`);
+      alert(String(err?.message || '').includes('HTTP 403')
+        ? 'Only tenant Admins can generate API keys for this tenant.'
+        : `Failed to generate key: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -202,7 +210,9 @@ const ApplicationKeysPanel: React.FC<{
       await load();
       if (onChanged) await onChanged();
     } catch (err: any) {
-      alert(err.message);
+      alert(String(err?.message || '').includes('HTTP 403')
+        ? 'Only tenant Admins can revoke API keys for this tenant.'
+        : err.message);
     } finally {
       setRevokingId(null);
     }
@@ -235,12 +245,20 @@ const ApplicationKeysPanel: React.FC<{
           </button>
           <button
             onClick={openCreate}
-            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5"
+            disabled={forbidden}
+            title={forbidden ? 'Only tenant Admins can manage API keys' : undefined}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-xs flex items-center gap-1.5"
           >
             <Plus size={14} /> Generate key
           </button>
         </div>
       </div>
+
+      {forbidden && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-200 flex items-center gap-2">
+          <AlertCircle size={14} /> Only tenant Admins can manage API keys for this tenant.
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-rose-900/30 border border-rose-700 rounded-xl text-xs text-rose-300 flex items-center gap-2">
@@ -293,7 +311,8 @@ const ApplicationKeysPanel: React.FC<{
                       {!key.isRevoked && (
                         <button
                           onClick={() => handleRevoke(key)}
-                          disabled={revokingId === key.id}
+                          disabled={revokingId === key.id || forbidden}
+                          title={forbidden ? 'Only tenant Admins can manage API keys' : undefined}
                           className="text-rose-400 hover:text-rose-300 text-[11px] font-semibold disabled:opacity-50"
                         >
                           {revokingId === key.id ? 'Revoking…' : 'Revoke'}

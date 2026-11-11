@@ -181,7 +181,9 @@ export const TenantApplicationManager: React.FC<Props> = ({ tenantId, tenantName
       setCreatedKey(res);
       await loadApplications();
     } catch (err: any) {
-      alert(`Failed to generate application key: ${err.message}`);
+      alert(String(err?.message || '').includes('HTTP 403')
+        ? 'Only tenant Admins can generate API keys for this tenant.'
+        : `Failed to generate application key: ${err.message}`);
     } finally {
       setKeySubmitting(false);
     }

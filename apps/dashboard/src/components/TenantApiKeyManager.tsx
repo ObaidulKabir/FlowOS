@@ -15,6 +15,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
   const [keys, setKeys] = useState<TenantApiKeyDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Modal State
@@ -32,11 +33,16 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
   const loadKeys = async () => {
     setLoading(true);
     setError(null);
+    setForbidden(false);
     try {
       const data = await api.listTenantKeys(tenantId);
       setKeys(data);
     } catch (err: any) {
-      setError(err.message || 'Failed to load application API keys');
+      if (String(err?.message || '').includes('HTTP 403')) {
+        setForbidden(true);
+      } else {
+        setError(err.message || 'Failed to load application API keys');
+      }
     } finally {
       setLoading(false);
     }
@@ -78,7 +84,9 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
       setShowCreateModal(false);
       await loadKeys();
     } catch (err: any) {
-      alert(`Failed to create API key: ${err.message}`);
+      alert(String(err?.message || '').includes('HTTP 403')
+        ? 'Only tenant Admins can generate API keys for this tenant.'
+        : `Failed to create API key: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -92,7 +100,9 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
       await api.revokeTenantKey(tenantId, keyId);
       await loadKeys();
     } catch (err: any) {
-      alert(`Failed to revoke key: ${err.message}`);
+      alert(String(err?.message || '').includes('HTTP 403')
+        ? 'Only tenant Admins can revoke API keys for this tenant.'
+        : `Failed to revoke key: ${err.message}`);
     }
   };
 
@@ -120,13 +130,22 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-blue-500/25 transition-all"
+            disabled={forbidden}
+            title={forbidden ? 'Only tenant Admins can manage API keys' : undefined}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-blue-500/25 transition-all"
           >
             <Plus size={15} />
             <span>Generate New Application Key</span>
           </button>
         </div>
       </div>
+
+      {forbidden && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-200 flex items-center gap-2">
+          <LockKeyhole size={16} />
+          <span>Only tenant Admins can manage API keys for this tenant. Ask an Admin on the Team tab to generate or revoke keys for you.</span>
+        </div>
+      )}
 
       {/* Newly Created Key Banner Alert */}
       {createdKey && (
@@ -221,6 +240,7 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
                 <th className="py-3.5 px-4">Environment</th>
                 <th className="py-3.5 px-4">Scopes</th>
                 <th className="py-3.5 px-4">Created / Last Used</th>
+                <th className="py-3.5 px-4">Created By</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -279,11 +299,22 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
                       {k.lastUsedAt ? `Used: ${new Date(k.lastUsedAt).toLocaleDateString()}` : 'Never used'}
                     </div>
                   </td>
+                  <td className="py-3.5 px-4 text-slate-400 text-[11px]">
+                    {k.createdByName ? (
+                      <div>
+                        <div className="text-slate-300">{k.createdByName}</div>
+                        {k.createdByEmail && <div className="text-slate-500 text-[10px]">{k.createdByEmail}</div>}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500">Shared credential</span>
+                    )}
+                  </td>
                   <td className="py-3.5 px-4 text-right">
                     <button
                       onClick={() => handleRevokeKey(k.id)}
-                      className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
-                      title="Revoke API key"
+                      disabled={forbidden}
+                      title={forbidden ? 'Only tenant Admins can manage API keys' : 'Revoke API key'}
+                      className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -291,9 +322,9 @@ export const TenantApiKeyManager: React.FC<Props> = ({ tenantId, tenantName }) =
                 </tr>
               ))}
 
-              {keys.length === 0 && !loading && (
+              {keys.length === 0 && !loading && !forbidden && (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-500 text-xs">
+                  <td colSpan={7} className="py-12 text-center text-slate-500 text-xs">
                     No active API keys found for this tenant. Click "Generate New Application Key" above to connect your apps.
                   </td>
                 </tr>
