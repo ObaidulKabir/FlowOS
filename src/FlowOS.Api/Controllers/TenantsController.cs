@@ -75,6 +75,7 @@ public class TenantsController : ControllerBase
             .ToListAsync();
 
         var keyLookup = keys.ToLookup(k => k.TenantId);
+        var creators = await ResolveCreatorsAsync(keys);
 
         var result = tenants.Select(t => new TenantDto
         {
@@ -88,24 +89,9 @@ public class TenantsController : ControllerBase
             CreatedAt = t.CreatedAt,
             PlanRequest = t.GetPlanRequest(),
             KeyCount = keyLookup[t.TenantId].Count(),
-            Keys = keyLookup[t.TenantId].Select(k => new TenantApiKeyDto
-            {
-                Id = k.Id,
-                Name = k.Name,
-                ApplicationId = k.ApplicationId,
-                IsApplicationRestricted = k.IsApplicationRestricted,
-                ApplicationName = k.ApplicationName,
-                Environment = k.Environment,
-                Scopes = k.Scopes,
-                MaskedKey = k.MaskedKey,
-                KeyPrefix = k.KeyPrefix,
-                CreatedAt = k.CreatedAt,
-                ExpiresAt = k.ExpiresAt,
-                LastUsedAt = k.LastUsedAt,
-                IsRevoked = k.IsRevoked,
-                IsExpired = k.IsExpired,
-                IsActive = k.IsActive
-            }).ToList()
+            Keys = keyLookup[t.TenantId]
+                .Select(k => ToKeyDto(k, k.CreatedByUserId.HasValue && creators.TryGetValue(k.CreatedByUserId.Value, out var creator) ? creator : null))
+                .ToList()
         });
 
         return Ok(result);
@@ -177,25 +163,9 @@ public class TenantsController : ControllerBase
                 CanRunRuntime = tenant.CanRunRuntime,
                 CreatedAt = tenant.CreatedAt,
                 KeyCount = 1,
-                Keys = new List<TenantApiKeyDto>
-                {
-                    new()
-                    {
-                        Id = apiKey.Id,
-                        Name = apiKey.Name,
-                        ApplicationName = apiKey.ApplicationName,
-                        Environment = apiKey.Environment,
-                        Scopes = apiKey.Scopes,
-                        MaskedKey = apiKey.MaskedKey,
-                        KeyPrefix = apiKey.KeyPrefix,
-                        CreatedAt = apiKey.CreatedAt,
-                        ExpiresAt = apiKey.ExpiresAt,
-                        LastUsedAt = null,
-                        IsRevoked = false,
-                        IsExpired = false,
-                        IsActive = true
-                    }
-                }
+                // The platform admin provisioning this tenant is not one of its own teammates, so this
+                // bootstrap key has no creator on record - see docs/29-organizational-team-access.md.
+                Keys = new List<TenantApiKeyDto> { ToKeyDto(apiKey, null) }
             },
             ApiKey = rawKey
         });
@@ -210,28 +180,13 @@ public class TenantsController : ControllerBase
         var tenant = await _context.Tenants.FindAsync(id);
         if (tenant == null) return NotFound("Tenant not found.");
 
+        // Materialized first: creator attribution is resolved in memory below, which a direct
+        // TenantApiKeyDto projection on the IQueryable cannot express as SQL.
         var keys = await _context.TenantApiKeys
             .Where(k => k.TenantId == id && !k.IsRevoked)
             .OrderByDescending(k => k.CreatedAt)
-            .Select(k => new TenantApiKeyDto
-            {
-                Id = k.Id,
-                Name = k.Name,
-                ApplicationId = k.ApplicationId,
-                IsApplicationRestricted = k.IsApplicationRestricted,
-                ApplicationName = k.ApplicationName,
-                Environment = k.Environment,
-                Scopes = k.Scopes,
-                MaskedKey = k.MaskedKey,
-                KeyPrefix = k.KeyPrefix,
-                CreatedAt = k.CreatedAt,
-                ExpiresAt = k.ExpiresAt,
-                LastUsedAt = k.LastUsedAt,
-                IsRevoked = k.IsRevoked,
-                IsExpired = k.IsExpired,
-                IsActive = k.IsActive
-            })
             .ToListAsync();
+        var creators = await ResolveCreatorsAsync(keys);
 
         return Ok(new TenantDto
         {
@@ -246,6 +201,8 @@ public class TenantsController : ControllerBase
             PlanRequest = tenant.GetPlanRequest(),
             KeyCount = keys.Count,
             Keys = keys
+                .Select(k => ToKeyDto(k, k.CreatedByUserId.HasValue && creators.TryGetValue(k.CreatedByUserId.Value, out var creator) ? creator : null))
+                .ToList()
         });
     }
 
@@ -286,6 +243,8 @@ public class TenantsController : ControllerBase
     {
         if (!CanAccessTenant(id))
             return Forbid();
+        if (!CanManageTenantKeys(id))
+            return Forbid();
 
         var tenantExists = await _context.Tenants.AnyAsync(t => t.TenantId == id);
         if (!tenantExists) return NotFound("Tenant not found.");
@@ -294,35 +253,23 @@ public class TenantsController : ControllerBase
         if (applicationId.HasValue)
             query = query.Where(k => k.ApplicationId == applicationId.Value);
 
+        // Materialized first: creator attribution is resolved in memory below.
         var keys = await query
             .OrderByDescending(k => k.CreatedAt)
-            .Select(k => new TenantApiKeyDto
-            {
-                Id = k.Id,
-                Name = k.Name,
-                ApplicationId = k.ApplicationId,
-                IsApplicationRestricted = k.IsApplicationRestricted,
-                ApplicationName = k.ApplicationName,
-                Environment = k.Environment,
-                Scopes = k.Scopes,
-                MaskedKey = k.MaskedKey,
-                KeyPrefix = k.KeyPrefix,
-                CreatedAt = k.CreatedAt,
-                ExpiresAt = k.ExpiresAt,
-                LastUsedAt = k.LastUsedAt,
-                IsRevoked = k.IsRevoked,
-                IsExpired = k.IsExpired,
-                IsActive = k.IsActive
-            })
             .ToListAsync();
+        var creators = await ResolveCreatorsAsync(keys);
 
-        return Ok(keys);
+        return Ok(keys
+            .Select(k => ToKeyDto(k, k.CreatedByUserId.HasValue && creators.TryGetValue(k.CreatedByUserId.Value, out var creator) ? creator : null))
+            .ToList());
     }
 
     [HttpPost("{id}/keys")]
     public async Task<IActionResult> GenerateKey(Guid id, [FromBody] GenerateKeyRequest request)
     {
         if (!CanAccessTenant(id))
+            return Forbid();
+        if (!CanManageTenantKeys(id))
             return Forbid();
 
         var tenant = await _context.Tenants.FindAsync(id);
@@ -337,7 +284,8 @@ public class TenantsController : ControllerBase
             ? DateTime.UtcNow.AddDays(request.ExpiresInDays.Value)
             : null;
 
-        var apiKey = new TenantApiKey(id, keyName, rawKey, appName, env, scopes, expiresAt);
+        var createdByUserId = CurrentCallerUserId();
+        var apiKey = new TenantApiKey(id, keyName, rawKey, appName, env, scopes, expiresAt, createdByUserId);
         if (request.ApplicationId.HasValue)
         {
             var application = await _context.TenantApplications
@@ -349,6 +297,10 @@ public class TenantsController : ControllerBase
         _context.TenantApiKeys.Add(apiKey);
 
         await _context.SaveChangesAsync();
+
+        var creator = createdByUserId.HasValue
+            ? await _context.TenantUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == createdByUserId.Value)
+            : null;
 
         return Ok(new CreateKeyResponse
         {
@@ -363,7 +315,10 @@ public class TenantsController : ControllerBase
             ApiKey = rawKey,
             MaskedKey = apiKey.MaskedKey,
             CreatedAt = apiKey.CreatedAt,
-            ExpiresAt = apiKey.ExpiresAt
+            ExpiresAt = apiKey.ExpiresAt,
+            CreatedByUserId = apiKey.CreatedByUserId,
+            CreatedByName = creator?.FullName,
+            CreatedByEmail = creator?.Email
         });
     }
 
@@ -371,6 +326,8 @@ public class TenantsController : ControllerBase
     public async Task<IActionResult> RevokeKey(Guid id, Guid keyId)
     {
         if (!CanAccessTenant(id))
+            return Forbid();
+        if (!CanManageTenantKeys(id))
             return Forbid();
 
         var key = await _context.TenantApiKeys.FirstOrDefaultAsync(k => k.TenantId == id && k.Id == keyId);
@@ -582,6 +539,57 @@ public class TenantsController : ControllerBase
            (!_currentUser.IsApiKey &&
             _currentUser.TenantId == tenantId &&
             _currentUser.Roles.Any(TenantIdentityRules.IsPrivilegedRole));
+
+    /// <summary>
+    /// Gate for managing this tenant's shared API keys. Unlike IsPrivilegedTenantCaller, a shared
+    /// TenantApiKey of this same tenant keeps the access it always had here (existing automation that
+    /// uses a key to rotate or mint other keys keeps working unchanged). What is new is that an
+    /// individual TenantUser login must hold an Admin/SuperAdmin role to manage keys - previously any
+    /// signed-in teammate of the tenant, regardless of role, could. See
+    /// docs/29-organizational-team-access.md.
+    /// </summary>
+    private bool CanManageTenantKeys(Guid tenantId)
+        => IsPlatformAdmin() ||
+           (_currentUser.TenantId == tenantId &&
+            (_currentUser.IsApiKey || _currentUser.Roles.Any(TenantIdentityRules.IsPrivilegedRole)));
+
+    /// <summary>The TenantUser of the caller who generated a key, from an authenticated individual
+    /// login - null for a shared-credential caller (IsApiKey), or an unparsable id.</summary>
+    private Guid? CurrentCallerUserId()
+        => !_currentUser.IsApiKey && Guid.TryParse(_currentUser.Id, out var uid) ? uid : (Guid?)null;
+
+    /// <summary>Batch-resolves the TenantUser creators for a set of keys, to avoid one query per key.</summary>
+    private async Task<Dictionary<Guid, TenantUser>> ResolveCreatorsAsync(IEnumerable<TenantApiKey> keys)
+    {
+        var userIds = keys.Where(k => k.CreatedByUserId.HasValue).Select(k => k.CreatedByUserId!.Value).Distinct().ToList();
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, TenantUser>();
+
+        var users = await _context.TenantUsers.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToListAsync();
+        return users.ToDictionary(u => u.Id);
+    }
+
+    private static TenantApiKeyDto ToKeyDto(TenantApiKey k, TenantUser? creator) => new()
+    {
+        Id = k.Id,
+        Name = k.Name,
+        ApplicationId = k.ApplicationId,
+        IsApplicationRestricted = k.IsApplicationRestricted,
+        ApplicationName = k.ApplicationName,
+        Environment = k.Environment,
+        Scopes = k.Scopes,
+        MaskedKey = k.MaskedKey,
+        KeyPrefix = k.KeyPrefix,
+        CreatedAt = k.CreatedAt,
+        ExpiresAt = k.ExpiresAt,
+        LastUsedAt = k.LastUsedAt,
+        IsRevoked = k.IsRevoked,
+        IsExpired = k.IsExpired,
+        IsActive = k.IsActive,
+        CreatedByUserId = k.CreatedByUserId,
+        CreatedByName = creator?.FullName,
+        CreatedByEmail = creator?.Email
+    };
 }
 
 public class RegisterTenantRequest
@@ -644,6 +652,11 @@ public class TenantApiKeyDto
     public bool IsRevoked { get; set; }
     public bool IsExpired { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>Who generated this key - see docs/29-organizational-team-access.md. Null for a key
+    /// generated by a shared credential, or generated before this field existed.</summary>
+    public Guid? CreatedByUserId { get; set; }
+    public string? CreatedByName { get; set; }
+    public string? CreatedByEmail { get; set; }
 }
 
 public class RegisterTenantResponse
@@ -666,4 +679,7 @@ public class CreateKeyResponse
     public string MaskedKey { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
+    public Guid? CreatedByUserId { get; set; }
+    public string? CreatedByName { get; set; }
+    public string? CreatedByEmail { get; set; }
 }

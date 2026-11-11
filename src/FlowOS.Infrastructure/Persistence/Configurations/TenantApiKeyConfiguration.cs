@@ -65,5 +65,12 @@ public class TenantApiKeyConfiguration : IEntityTypeConfiguration<TenantApiKey>
             .WithMany()
             .HasForeignKey(k => k.ApplicationId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Attribution only: removing the teammate who created a key nulls CreatedByUserId rather than
+        // blocking the removal or the key - see docs/29-organizational-team-access.md.
+        builder.HasOne<TenantUser>()
+            .WithMany()
+            .HasForeignKey(k => k.CreatedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

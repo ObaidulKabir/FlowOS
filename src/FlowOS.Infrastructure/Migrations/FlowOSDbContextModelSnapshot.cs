@@ -1225,6 +1225,9 @@ namespace FlowOS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Environment")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1274,6 +1277,8 @@ namespace FlowOS.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId");
+
+                    b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("KeyHash")
                         .IsUnique();
@@ -2204,6 +2209,11 @@ namespace FlowOS.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("ApplicationId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FlowOS.Domain.Entities.TenantUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("FlowOS.Domain.Entities.TenantUser", b =>

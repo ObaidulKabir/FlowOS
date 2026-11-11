@@ -144,4 +144,28 @@ public class TenantApiKeyTests
         Assert.True(activeKey.IsRevoked);
         Assert.False(activeKey.IsActive);
     }
+
+    // Organizational team access (see docs/29-organizational-team-access.md): a key records which
+    // teammate generated it, so the dashboard can show "Created by" for each key.
+    [Fact]
+    public void Constructor_WithCreatedByUserId_RecordsTheCreator()
+    {
+        var creatorId = Guid.NewGuid();
+
+        var key = new TenantApiKey(
+            Guid.NewGuid(),
+            "Attributed Key",
+            TenantApiKey.GenerateRawKey(),
+            createdByUserId: creatorId);
+
+        Assert.Equal(creatorId, key.CreatedByUserId);
+    }
+
+    [Fact]
+    public void Constructor_WithoutCreatedByUserId_LeavesCreatorNull()
+    {
+        var key = new TenantApiKey(Guid.NewGuid(), "Unattributed Key", TenantApiKey.GenerateRawKey());
+
+        Assert.Null(key.CreatedByUserId);
+    }
 }
