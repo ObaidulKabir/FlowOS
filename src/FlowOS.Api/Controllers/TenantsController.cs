@@ -30,6 +30,7 @@ public class TenantsController : ControllerBase
     private readonly ITenantBackupService _backups;
     private readonly ITenantSecretProtector _secretProtector;
     private readonly ITenantPlanActivationService _planActivation;
+    private readonly ITenantAuthService _authService;
 
     public TenantsController(
         FlowOSDbContext context,
@@ -37,7 +38,8 @@ public class TenantsController : ControllerBase
         TenantSecurityProvisioningService securityProvisioning,
         ITenantBackupService backups,
         ITenantSecretProtector secretProtector,
-        ITenantPlanActivationService planActivation)
+        ITenantPlanActivationService planActivation,
+        ITenantAuthService authService)
     {
         _context = context;
         _currentUser = currentUser;
@@ -45,6 +47,7 @@ public class TenantsController : ControllerBase
         _backups = backups;
         _secretProtector = secretProtector;
         _planActivation = planActivation;
+        _authService = authService;
     }
 
     [HttpGet]
@@ -379,6 +382,70 @@ public class TenantsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Lists the tenant's teammate logins (TenantUsers), distinct from its shared TenantApiKey(s).</summary>
+    [HttpGet("{id}/users")]
+    public async Task<IActionResult> ListUsers(Guid id)
+    {
+        if (!CanAccessTenant(id))
+            return Forbid();
+
+        var tenantExists = await _context.Tenants.AnyAsync(t => t.TenantId == id);
+        if (!tenantExists) return NotFound("Tenant not found.");
+
+        var teammates = await _authService.ListTeammatesAsync(id);
+        return Ok(teammates);
+    }
+
+    public sealed record InviteUserRequest(string Email, string FullName, string Role);
+
+    /// <summary>
+    /// Invites a new teammate login into this tenant. Only an Admin/SuperAdmin of the tenant (or a
+    /// platform administrator) may invite; the invited person sets their own password when they accept.
+    /// </summary>
+    [HttpPost("{id}/users")]
+    public async Task<IActionResult> InviteUser(Guid id, [FromBody] InviteUserRequest request)
+    {
+        if (!CanAccessTenant(id))
+            return Forbid();
+        if (!IsPrivilegedTenantCaller(id))
+            return Forbid();
+
+        var tenantExists = await _context.Tenants.AnyAsync(t => t.TenantId == id);
+        if (!tenantExists) return NotFound("Tenant not found.");
+
+        var result = await _authService.InviteUserAsync(new InviteTenantUserRequest(id, request.Email, request.FullName, request.Role));
+        if (!result.Success)
+            return BadRequest(new { ok = false, message = result.Message });
+
+        return StatusCode(201, new
+        {
+            ok = true,
+            message = result.Message,
+            userId = result.UserId,
+            email = result.Email,
+            inviteToken = result.InviteToken
+        });
+    }
+
+    /// <summary>
+    /// Removes a teammate's login. Only an Admin/SuperAdmin of the tenant (or a platform administrator)
+    /// may remove; fails rather than leaving the tenant with no one able to manage it.
+    /// </summary>
+    [HttpDelete("{id}/users/{userId}")]
+    public async Task<IActionResult> RemoveUser(Guid id, Guid userId)
+    {
+        if (!CanAccessTenant(id))
+            return Forbid();
+        if (!IsPrivilegedTenantCaller(id))
+            return Forbid();
+
+        var result = await _authService.RemoveTeammateAsync(id, userId);
+        if (!result.Success)
+            return BadRequest(new { ok = false, message = result.Message });
+
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/plan-request")]
     public async Task<IActionResult> SubmitPlanRequest(Guid id, [FromBody] SubmitPlanRequest request)
     {
@@ -503,6 +570,18 @@ public class TenantsController : ControllerBase
 
     private bool IsPlatformAdmin()
         => TenantIdentityRules.IsPlatformAdministrator(_currentUser.TenantId, _currentUser.Roles);
+
+    /// <summary>
+    /// Gate for tenant-administrative actions (inviting/removing teammates, managing API keys): the
+    /// caller must be a platform administrator, or an Admin/SuperAdmin TenantUser of this same tenant.
+    /// A caller authenticated via a shared TenantApiKey (IsApiKey) is never treated as a teammate here,
+    /// since a key has no individual role to check - see docs/29-organizational-team-access.md.
+    /// </summary>
+    private bool IsPrivilegedTenantCaller(Guid tenantId)
+        => IsPlatformAdmin() ||
+           (!_currentUser.IsApiKey &&
+            _currentUser.TenantId == tenantId &&
+            _currentUser.Roles.Any(TenantIdentityRules.IsPrivilegedRole));
 }
 
 public class RegisterTenantRequest

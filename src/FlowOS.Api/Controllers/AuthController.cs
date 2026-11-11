@@ -191,6 +191,29 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Accepts an invite to join an existing tenant as a teammate: verifies the invite code and sets
+    /// the teammate's own password, which nobody else - including whoever invited them - ever sees.
+    /// </summary>
+    [HttpPost("accept-invite")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AcceptInvite([FromBody] AcceptInviteRequest request, CancellationToken ct)
+    {
+        var result = await _authService.AcceptInviteAsync(request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(new { ok = false, message = result.Message });
+        }
+
+        return Ok(new
+        {
+            ok = true,
+            message = result.Message,
+            tenantId = result.TenantId,
+            email = result.Email
+        });
+    }
+
+    /// <summary>
     /// Returns the currently authenticated user and tenant profile.
     /// </summary>
     [HttpGet("me")]

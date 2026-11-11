@@ -16,6 +16,7 @@ import { resolveWorkflowInstanceId } from '../audit/resolveWorkflowInstance';
 import { WorkflowInstanceTable } from './WorkflowInstanceTable';
 import { EventAuditViewer } from './EventAuditViewer';
 import { TenantApiKeyManager } from './TenantApiKeyManager';
+import { TenantTeamManager } from './TenantTeamManager';
 import { TenantApplicationManager } from './TenantApplicationManager';
 import { TenantRuntimeRolesPanel } from './TenantRuntimeRolesPanel';
 import { DetailView } from './DetailView';
@@ -39,7 +40,7 @@ import {
   Building2, Plus, RefreshCw, Key, Activity,
   Copy, Check, Filter, Sparkles, Scale, Layers, FlaskConical,
   Bot, AlertTriangle, ShieldAlert,
-  UserCheck, Clock, Shield, SendHorizontal, X, ChevronDown, Network, AppWindow
+  UserCheck, Clock, Shield, SendHorizontal, X, ChevronDown, Network, AppWindow, Users
 } from 'lucide-react';
 
 interface Props {
@@ -56,7 +57,7 @@ interface Props {
 type HubId = 'design' | 'agents' | 'operations' | 'governance';
 type DesignTab = 'workflows' | 'simulator';
 type OpsTab = 'instances' | 'inbox' | 'events' | 'dlq';
-type GovTab = 'keys' | 'applications' | 'mcp' | 'capabilities' | 'comparison' | 'architecture';
+type GovTab = 'keys' | 'team' | 'applications' | 'mcp' | 'capabilities' | 'comparison' | 'architecture';
 
 const countFormatter = new Intl.NumberFormat();
 
@@ -1248,6 +1249,18 @@ export const TenantDashboard: React.FC<Props> = ({
                   </button>
 
                   <button
+                    onClick={() => setGovTab('team')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      govTab === 'team'
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Users size={13} />
+                    <span>Team</span>
+                  </button>
+
+                  <button
                     onClick={() => setGovTab('applications')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                       govTab === 'applications'
@@ -1322,6 +1335,14 @@ export const TenantDashboard: React.FC<Props> = ({
                   <TenantApiKeyManager tenantId={session.tenantId} tenantName={session.tenantName} />
                   <TenantRuntimeRolesPanel />
                 </div>
+              )}
+
+              {govTab === 'team' && (
+                <TenantTeamManager
+                  tenantId={session.tenantId}
+                  tenantName={session.tenantName}
+                  currentUserRole={session.userRole}
+                />
               )}
 
               {govTab === 'applications' && (() => {
