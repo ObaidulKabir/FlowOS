@@ -190,7 +190,8 @@ public class Tenant_Registration_And_Auth_E2E_Tests : IClassFixture<WebApplicati
     /// Organizational team access (see docs/29-organizational-team-access.md): an existing tenant
     /// Admin invites a teammate into the SAME tenant; the teammate accepts the invite with their own
     /// password, logs in with their own credentials, and - because they hold a non-privileged role -
-    /// is forbidden from managing the tenant's teammates or API keys.
+    /// is forbidden from inviting further teammates. (A companion test on the API-key-attribution CR
+    /// covers the equivalent 403 for tenant API-key management, which that CR gates separately.)
     /// </summary>
     [Fact]
     public async Task Invite_Accept_Login_And_NonAdmin_Forbidden_Lifecycle_Succeeds()
@@ -258,13 +259,7 @@ public class Tenant_Registration_And_Auth_E2E_Tests : IClassFixture<WebApplicati
         teammateInviteAttempt.Headers.Add("x-tenant-id", tenantId.ToString());
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.SendAsync(teammateInviteAttempt)).StatusCode);
 
-        // 6. The non-admin teammate is forbidden from listing/managing tenant API keys too.
-        using var teammateKeysAttempt = new HttpRequestMessage(HttpMethod.Get, $"/api/tenants/{tenantId}/keys");
-        teammateKeysAttempt.Headers.Authorization = new AuthenticationHeaderValue("Bearer", teammateToken);
-        teammateKeysAttempt.Headers.Add("x-tenant-id", tenantId.ToString());
-        Assert.Equal(HttpStatusCode.Forbidden, (await _client.SendAsync(teammateKeysAttempt)).StatusCode);
-
-        // 7. The Admin can list teammates and sees both themself and the new teammate.
+        // 6. The Admin can list teammates and sees both themself and the new teammate.
         using var listRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/tenants/{tenantId}/users");
         listRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
         listRequest.Headers.Add("x-tenant-id", tenantId.ToString());
@@ -273,7 +268,7 @@ public class Tenant_Registration_And_Auth_E2E_Tests : IClassFixture<WebApplicati
         using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
         Assert.Equal(2, listJson.RootElement.GetArrayLength());
 
-        // 8. The tenant can never be left with no administrator: removing the sole Admin is rejected.
+        // 7. The tenant can never be left with no administrator: removing the sole Admin is rejected.
         var adminUserId = Guid.Parse(adminLoginJson.RootElement.GetProperty("user").GetProperty("id").GetString()!);
         using var removeLastAdmin = new HttpRequestMessage(HttpMethod.Delete, $"/api/tenants/{tenantId}/users/{adminUserId}");
         removeLastAdmin.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
