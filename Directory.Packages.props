@@ -44,7 +44,7 @@
     <PackageVersion Include="System.Linq.Dynamic.Core" Version="1.7.4" />
 
     <!-- Tests -->
-    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="Moq" Version="4.21.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
